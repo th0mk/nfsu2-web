@@ -64,7 +64,8 @@ pub(crate) const LOBBIES_MAX: usize = 96;
 pub(crate) const LOBBY_PLAYERS: usize = 6;
 /// a MAPD entry (roam_core.h RC_MAPD_*): a player's key (u16 LE: the hub's slot, MAPD_GONE set when it went), then,
 /// unless gone, x, y (i16 LE, m), heading (u8, 256 a turn), its velocity's x and y (i8, m/s); at most MAPD_BYTES of
-/// entries a datagram, MAPD_PARTS datagrams an answer (2048 placed in all)
+/// entries a datagram, MAPD_PARTS datagrams an answer (2048 placed in all), MAPD_PARTS_WIDE to a MAPREQ with
+/// MAPREQ_WIDE in its flags (a page before it takes 16 at most; the game's 4096 with heights take 40)
 pub(crate) const MAPD_GONE: u16 = 0x8000;
 /// ...and, to a MAPREQ with MAPREQ_PARKED in its flags, MAPD_PARKED set in a placed player's key when it has stood at
 /// one spot for a minute (hub.rs PARKED_MS: the world map's car meets count those)
@@ -77,6 +78,8 @@ pub(crate) const MAPD_PLACE_Z: usize = 11;
 pub(crate) const HF_MAPZ: u16 = 0x0800;
 pub(crate) const MAPD_BYTES: usize = 1152;
 pub(crate) const MAPD_PARTS: usize = 16;
+pub(crate) const MAPREQ_WIDE: u16 = 2;
+pub(crate) const MAPD_PARTS_WIDE: usize = 48;
 pub(crate) const HDR: usize = 16;
 pub(crate) const CRC: usize = 4;
 
@@ -248,9 +251,16 @@ pub(crate) struct RaceRes {
     pub race: u32,
     pub mode: u8,
     pub laps: u8,
+    /// a URL race of heats: this report's heat (1 ..) of heats; 0 and 0 for a race of one heat, and from a game before
+    /// them (its last heat's alone)
+    pub heat: u8,
+    pub heats: u8,
     pub n: usize,
     pub rows: [ResRow; LOBBY_PLAYERS],
 }
+
+/// a URL race's heats at most (roam_core.h RC_RACERES_HEATS)
+pub(crate) const RACE_HEATS: u8 = 3;
 
 /// one racer's row: its player's id (0: one the reporter could not name), RS_* flags, its time (s, a finisher's), how
 /// far it came (laps) and the way it drove (m: its average speed for its time, as the reporter's game counted it)
@@ -261,6 +271,9 @@ pub(crate) struct ResRow {
     pub time: f64,
     pub done: f64,
     pub dist: f64,
+    /// the largest jump of its car as the reporter's game had it (m: a frame's move unlike the frame before's, not right
+    /// after a stall; racenet.c), 0 for the reporter's own row and from a game before it
+    pub jump: f64,
 }
 
 /// a RACERES's payload (at o, `len` bytes), or None where roam_core.c's decoder would not take it
@@ -276,6 +289,11 @@ fn raceres(d: &[u8], o: usize, len: usize) -> Option<RaceRes> {
     if lobby == 0 || race == 0 {
         return None;
     }
+    let (heat, heats) = (d[o + 11] & 15, d[o + 11] >> 4);
+    let heat_ok = if heats == 0 { heat == 0 } else { (2..=RACE_HEATS).contains(&heats) && (1..=heats).contains(&heat) };
+    if !heat_ok {
+        return None;
+    }
     let mut rows = [ResRow::default(); LOBBY_PLAYERS];
     for (k, row) in rows.iter_mut().enumerate().take(n) {
         let at = o + RACERES_HEAD + RACERES_ROW * k;
@@ -285,12 +303,12 @@ fn raceres(d: &[u8], o: usize, len: usize) -> Option<RaceRes> {
         if flags & !(RS_FINISHED | RS_OURS) != 0 || !fits(time, 100_000.0) || !fits(done, 1000.0) || !fits(dist, 1e6) {
             return None;
         }
-        *row = ResRow { id: u32_le(d, at), flags, time, done, dist };
+        *row = ResRow { id: u32_le(d, at), flags, time, done, dist, jump: u16_le(d, at + 5) as f64 };
     }
     if rows[..n].iter().filter(|r| r.flags & RS_OURS != 0).count() > 1 {
         return None;
     }
-    Some(RaceRes { lobby, race, mode: d[o + 8], laps: d[o + 9], n, rows })
+    Some(RaceRes { lobby, race, mode: d[o + 8], laps: d[o + 9], heat, heats, n, rows })
 }
 
 fn u16_le(d: &[u8], o: usize) -> u16 {

@@ -13,6 +13,7 @@
 +60   tappad DRIGHT
 +60   tappad DRIGHT
 +60   tappad DRIGHT
++60   tappad DRIGHT        # (Split Screen, after Quick Race)
 +120  tappad A
 +0    waitfng UI_OptionsMain.fng 600
 +300  tappad DRIGHT

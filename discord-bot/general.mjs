@@ -1,5 +1,6 @@
-// The general channels (text channels named general*): about 2,000 short messages a day, so nothing goes to a model
-// one by one.
+// The general channels (text channels named general*, and #help): about 2,000 short messages a day, so nothing goes to
+// a model one by one.  In #help, help.mjs answers the questions the FAQ covers at once; the rest is as below, but
+// without ANSWERS (the FAQ's are #help's).
 //   - Pointers: a local filter picks messages that may tell of a problem (any language); after 4 quiet minutes, one
 //     cheap call (Haiku) reads them in the chat around them (what they reply to, who answered them, their pictures) and
 //     sorts each author: a problem of their own that nobody is helping with, or anything else (questions, chat,
@@ -69,12 +70,12 @@ const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 // `en` is the reply (the model translates it for other languages).  Anything less certain gets the forum pointer.
 const FIXES = {
   'page-not-isolated': {
-    when: 'PAGE-NOT-ISOLATED, "Secure, isolated page": "The page is not cross-origin isolated (no SharedArrayBuffer)"',
-    re: /PAGE-NOT-ISOLATED|cross.?origin|isolated/i,
+    when: 'PAGE-NOT-ISOLATED, "Secure, isolated page": "Something in this browser changes the page, most often an extension" (before 4 November: "The page is not cross-origin isolated (no SharedArrayBuffer)")',
+    re: /PAGE-NOT-ISOLATED|cross.?origin|isolated|changes the page/i,
     en: 'Something in your browser changes the page, most often an extension: open nfsu2.xyz in a guest or incognito window, and if it works there, turn your extensions off one by one.',
   },
   'gpu-accel-off': {
-    when: 'GPU-ACCEL-OFF: "Chrome is not using this computer\'s graphics at all"',
+    when: 'GPU-ACCEL-OFF: "isn\'t using this computer\'s graphics card" (or "graphics"), naming Chrome, Edge, Opera or Brave',
     re: /GPU-ACCEL-OFF|acceleration|graphics at all/i,
     en: 'Turn on "Use graphics acceleration when available" in chrome://settings/system, then restart Chrome.',
   },
@@ -84,9 +85,9 @@ const FIXES = {
     en: 'Update Android and Chrome. If that does not help, type chrome://flags/#enable-unsafe-webgpu into Chrome\'s address bar (or open chrome://flags and search "Unsafe WebGPU"), set it to Enabled and tap Relaunch: on some phones, Samsungs among them, the game then runs.',
   },
   'gpu-adapter-win': {
-    when: 'GPU-ADAPTER-WIN: "Chrome could not use this computer\'s graphics. On Windows it needs graphics with DirectX 12"',
+    when: 'GPU-ADAPTER-WIN: "This computer\'s graphics are too old for the game: it needs graphics with DirectX 12 support" (before 4 November: "Chrome couldn\'t use this computer\'s graphics. On Windows it needs DirectX 12")',
     re: /GPU-ADAPTER-WIN(?!-)|DirectX|Direct3D/i,
-    en: 'Update the graphics driver (from Intel, AMD or NVIDIA), then quit Chrome completely and start it again; graphics without DirectX 12, such as Intel HD 4000 and older, cannot run the game.',
+    en: 'Update the graphics driver (from Intel, AMD or NVIDIA), then quit Chrome completely and start it again; graphics without DirectX 12, such as Intel HD 4000, 4400, 4600 and older, cannot run the game.',
   },
   'gpu-adapter-after-lost': {
     when: 'GPU-ADAPTER-AFTER-LOST: "The graphics stopped during your last game, and Chrome has not given them back to this page yet"',
@@ -124,8 +125,8 @@ const FIXES = {
     en: 'TV and game console browsers have no WebGPU, which the game needs, so it cannot run there. A PC with Chrome or Firefox, or a phone or tablet with Chrome (Android 12 or newer) or Safari (iOS 26), can play it.',
   },
   'cannot-reach': {
-    when: 'the page says "This device can\'t reach the server" (or Offline, not connected) while others play',
-    re: /reach|offline|not connected|connect|conex|conect|подключ|соедин|sunucu|serwer|servidor|server/i,
+    when: 'the start page says "This device can\'t reach the server" or "No connection to the server", or the browser cannot open nfsu2.xyz at all ("This site can\'t be reached", an ERR_ code), while others play. Never a problem inside the game: no other players in free roam, a Room, a race that will not join, a controller, the game\'s GPS',
+    re: /reach|no connection|not connected|ERR_|took too long|server|servidor|serwer|sunucu|сервер|conex|подключ|соедин/i,
     en: 'Your network is blocking the server (some providers block Cloudflare; in Spain they do during football matches, and it works again after the match): try mobile data or another Wi-Fi, or turn off an ad blocker, a web filter or private DNS.',
   },
   'iphone-full-screen': {
@@ -177,14 +178,14 @@ const SORT_SYSTEM = `You read the general chat of "Underground 2 Revived" (Need 
 
 For each marked author:
 - why: a few words on what they say in the chat.
-- kind: "report" when the author says something goes wrong for them, now, in the game or on the page: a crash, a freeze, an error message or code, the game or the site will not start, load or connect, a controller, sound, graphics or saves not working, something broken since an update. "Is anyone else having X?" counts when they have X. Asking how to fix or get past such a thing ("how do I fix this?", "how to get past this error?") is a report too. Everything else is "other": how-to questions (controls, settings, progress, cars, tuning, saves, multiplayer, "how do I ..."), wishes and suggestions, opinions about the game or a device, chat and jokes, a problem mentioned in passing ("lol it crashes on my phone") or one they explain themselves ("must be all the players"), how the career or the game is meant to work (no races left, unlocking parts, the map), an answer or advice to someone else, someone else's problem, a problem from long ago or one they solved, a line quoted from someone else. When unsure, "other".
-- handled: true when someone else in the chat already answered them with something that fits their problem (an explanation, something to try, a question back about it, a pointer to a channel), or they said it works now or found the cause themselves ("nvm", "got it", "found it", "it was my VPN"). A wild guess ("maybe a VPN? idk"), a joke or "same here" is not an answer.
+- kind: "report" when the author says something goes wrong for them, now, in the game or on the page: a crash, a freeze, an error message or code, the game or the site will not start, load or connect, a controller, sound, graphics or saves not working, something broken since an update. "Is anyone else having X?" counts when they have X and say what X is. A bare "is it just me?", "is the server down?" or "why can't I play?" with no detail and no picture is "other": the chat answers those. Asking how to fix or get past such a thing ("how do I fix this?", "how to get past this error?") is a report too. Everything else is "other": how-to questions (controls, settings, progress, cars, tuning, saves, multiplayer, "how do I ..."), wishes and suggestions, opinions about the game or a device, chat and jokes, a problem mentioned in passing ("lol it crashes on my phone") or one they explain themselves ("must be all the players"), how the career or the game is meant to work (no races left, unlocking parts, the map), an answer or advice to someone else, someone else's problem, a problem from long ago or one they solved, a line quoted from someone else. When unsure, "other".
+- handled: true when someone else in the chat already answered them with something that fits their problem (an explanation, something to try, a question back about it, a pointer to a channel), or they said it works now or found the cause themselves ("nvm", "got it", "found it", "it was my VPN"). A line to the whole channel counts too: staff or a member saying where such problems go (#bug-reports, a thread), that the problem is known, or that a fix is out answers every author with that same problem in the chat shown. A wild guess ("maybe a VPN? idk"), a joke or "same here" is not an answer.
 - fix: the id of a fix below when their problem is unmistakably that one: the page's code or its message, or exactly the case the fix names, is in their words or their picture. Else "". Never on a guess: a fix that does not fit is worse than none.
 - fix_text: when fix or answer is set and they don't write in English, its text in their language, nothing added or left out; else "".
 - answer: the id of an answer below when the author asks it themselves, as a question of their own (any kind, "other" too): exactly what the answer names. Not when they tell others how it works, give an opinion, show their car, answer or quote someone else, or ask about something near it that the answer does not cover. Else "".
-- need: what a forum post about it needs: "log" (a crash, freeze, glitch, lag, disconnect or anything else in the game), "screenshot" (a message or error the page shows), "saves" (only when their own saves or profile were lost or will not load).
-- thread: when their problem is clearly the one an open forum thread in the list is about, that thread's id; else "". Judge by what the thread is about, not by words its title shares with theirs ("Black screen" may be a black world in free roam, not a game that won't open).
-- lang: the language of their own words, as a two-letter code (en, pt, es, ru, tr, pl, fr, de, it, ...); never a guess from their name, nor from the language of a screenshot.
+- need: what a forum post about it needs: "log" (a crash, freeze, glitch, lag, disconnect or anything else in the game; a glitch on screen, such as flicker or a screen that will not go on, too), "screenshot" (only a message or error code the page or the game shows), "saves" (only when their saves or profile are already gone or will not load, not a worry about losing them).
+- thread: when their problem is clearly the one an open forum thread in the list is about, that thread's id; else "". Judge by what the thread is about, not by words its title shares with theirs ("Black screen" may be a black world in free roam, not a game that won't open). It must be the same symptom at the same moment (on start, in a shop, after a race) and, when either names one, the same kind of device: a crash thread does not fit a black screen, a loading screen or a page message.
+- lang: the language their own words are written in, as a two-letter code (en, pt, es, ru, tr, pl, fr, de, it, ...). Words in English are "en", whatever the letters of their name; never a guess from their name or the channel, nor from the language of a screenshot.
 
 Fixes:
 ${Object.entries(FIXES).map(([id, f]) => `- ${id}, for ${f.when}: ${f.en}`).join('\n')}
@@ -216,7 +217,11 @@ const T = {
   it: { thread: 'C’è già una discussione sul forum: {link}. Aggiungi lì {what}, così viene seguito.', forum: 'I problemi vengono seguiti in {forum}: scrivilo lì, con {what}.', log: 'il log (F9, Scarica il log) e cosa stavi facendo', screenshot: 'uno screenshot del messaggio, il tuo dispositivo e il browser', saves: 'cosa è successo, il browser e il dispositivo, e se i salvataggi cloud erano attivi', foot: 'Messaggio automatico', fixFoot: 'Messaggio automatico. Se non basta, scrivilo in {forum}.' },
 };
 
+/** the "Automated message" line in this language (English for one the replies don't have) */
+export const footOf = lang => (T[lang] ?? T.en).foot;
+
 const name = m => m.member?.displayName ?? m.author.displayName ?? m.author.username;
+const HELP = /^help(?![\p{L}\p{N}])/iu;          // #help, #help-español; not #helpers
 const hhmm = ms => new Date(ms).toISOString().slice(11, 16);
 
 export class General {
@@ -256,8 +261,12 @@ export class General {
     fs.renameSync(this.file + '.tmp', this.file);
   }
 
-  /** a text channel named general*: not a thread, not a voice channel's chat */
-  static isGeneral(ch) { return ch?.type === ChannelType.GuildText && /^general/i.test(ch.name ?? ''); }
+  /** a text channel named general*, or #help: not a thread, not a voice channel's chat */
+  static isGeneral(ch) { return ch?.type === ChannelType.GuildText && (/^general/i.test(ch.name ?? '') || HELP.test(ch.name ?? '')); }
+  static isHelp(ch) { return ch?.type === ChannelType.GuildText && HELP.test(ch.name ?? ''); }
+
+  /** someone help.mjs answered: no pointer on top of it for the same messages */
+  skip(id) { this.pending.delete(id); }
 
   /** a message for the staff channel, split between its parts when it is too long for one; a forum staff channel
    *  gets it as a post named `name` */
@@ -272,7 +281,7 @@ export class General {
   }
 
   onMessage(m) {
-    if (!General.isGeneral(m.channel)) return;
+    if (!General.isGeneral(m.channel) || m.channelId === this.staffChannel) return;
     const now = this.now();
     const staff = !m.author.bot && this.isStaff(m.member, m.channel);
     this.remember(m, now, staff);
@@ -400,8 +409,8 @@ export class General {
       if (!p || now - (this.saved.nudged[author] ?? 0) <= USER_COOLDOWN_MS) continue;     // also an id listed twice
       const m = p.msgs.at(-1);
       const own = lines.filter(l => l.author === author), words = own.map(l => l.text).join('\n');
-      // an answer only to the author's own question in their own words (a picture is no question)
-      const answer = ANSWERS[s.answer] && ANSWERS[s.answer].re.test(words) ? s.answer : '';
+      // an answer only to the author's own question in their own words (a picture is no question); #help has the FAQ's
+      const answer = !General.isHelp(channel) && ANSWERS[s.answer] && ANSWERS[s.answer].re.test(words) ? s.answer : '';
       const said = `${s.id} ${name(m)}: ${s.kind}${s.handled ? ', handled' : ''}${s.fix ? `, ${s.fix}` : ''}${s.answer ? `, answer ${s.answer}` : ''} (${s.why})`;
       if ((s.kind !== 'report' && !answer) || s.handled) { console.log(`[general] #${channel.name} ${said}`); continue; }
       if (this.full(m.channelId)) { console.log(`[general] #${channel.name} ${said}: the channel had its pointers this hour`); continue; }
@@ -460,18 +469,27 @@ export class General {
     }
   }
 
-  /** once a day at DIGEST_HOUR_UTC: what the general channels kept bringing up */
+  /** the #help answers' votes for the digest (help.mjs's votes(), as `help`), or '' */
+  async helpVotes() {
+    return this.help ? this.help.votes().catch(e => { console.error(`[help] votes: ${e.message}`); return ''; }) : '';
+  }
+
+  /** once a day at DIGEST_HOUR_UTC: what the general channels kept bringing up, and the #help answers' votes */
   async digest(now) {
     const day = new Date(now).toISOString().slice(0, 10);
     if (!this.staffChannel || new Date(now).getUTCHours() !== DIGEST_HOUR_UTC || this.saved.digest === day) return;
     // the day is marked done first, so a digest that fails is not tried again every minute; the counts start over
     const st = this.saved.stats, flagged = this.saved.flagged;
-    Object.assign(this.saved, { digest: day, stats: { nudges: 0, fixes: 0, answers: 0, dry: 0, sorted: 0 } });
+    Object.assign(this.saved, { digest: day, stats: { nudges: 0, fixes: 0, answers: 0, faq: 0, dry: 0, sorted: 0 } });
     this.save();
-    if (flagged.length < 5) return console.log(`[general] no digest: ${flagged.length} flagged messages`);
+    if (flagged.length < 5) {
+      const votes = await this.helpVotes();
+      if (votes) await this.toStaff(`#help answers, ${day}`, votes);
+      return console.log(`[general] no digest: ${flagged.length} flagged messages`);
+    }
     const counts = {};
     for (const f of flagged) for (const k of f.kinds) counts[k] = (counts[k] ?? 0) + 1;
-    const input = `Counts: ${JSON.stringify(counts)}; pointers sent ${st.nudges} (${st.fixes ?? 0} of them a fix, ${st.answers ?? 0} an answer)${this.dryRun ? `, in the dry run would have sent ${st.dry}` : ''}.\n\n` +
+    const input = `Counts: ${JSON.stringify(counts)}; pointers sent ${st.nudges} (${st.fixes ?? 0} of them a fix, ${st.answers ?? 0} an answer)${this.dryRun ? `, in the dry run would have sent ${st.dry}` : ''}; FAQ answers in #help ${st.faq ?? 0}.\n\n` +
       `<threads>\n${this.forumThreads().map(t => t.line).join('\n') || 'none'}\n</threads>\n\n<messages>\n` +
       flagged.slice(-400).map(f => `#${f.channel} ${f.link} ${f.text}${f.files.length ? ` [files: ${f.files.join(', ')}]` : ''}`).join('\n') + '\n</messages>';
     const res = await this.anthropic.messages.create({
@@ -482,7 +500,9 @@ export class General {
     if (!text) return console.log(`[general] no digest: the model stopped with ${res.stop_reason} and no text`);
     const hours = Math.min(24, Math.round((now - this.saved.since) / 3600_000));
     const cut = res.stop_reason === 'end_turn' ? '' : `\nCut short: ${res.stop_reason}`;
-    await this.toStaff(`General channels, ${day}`, `**General channels, last ${hours} hours** (${flagged.length} flagged messages)\n${text}${cut}`);
+    const votes = await this.helpVotes();
+    await this.toStaff(`General channels, ${day}`,
+      `**General channels, last ${hours} hours** (${flagged.length} flagged messages)\n${text}${cut}${votes ? `\n\n${votes}` : ''}`);
     console.log(`[general] digest posted (${flagged.length} messages)`);
   }
 }

@@ -40,7 +40,7 @@
 #define G_FLOW       0x008654a4u   /* 6: in the world */
 #define G_NETMODE    0x00850078u   /* 8 Online, 0x200 LAN (1 career) */
 #define G_WORLD      0x00890080u   /* World*: +0 the cars' list (a car's first two dwords are its node) */
-#define G_PLAYER1    0x008900acu   /* Player*: +4 car */
+#define G_PLAYER1    SPLIT_PLAYERS_INDEX   /* Player*: +4 car */
 #define G_WORLDDT    0x00865154u   /* float: this frame's world dt (s) */
 #define G_VIEW1      0x00832e50u   /* eView 1: +0x40 camera (+0x40 position, +0x50 forward) */
 #define G_NETPLAYERS 0x0089cf50u   /* the network race's players: 6 pointers (0x89CF48 + 8), name at +0x12 */

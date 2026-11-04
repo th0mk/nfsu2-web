@@ -1,4 +1,5 @@
-/* drift.c -- drift mode in free roam: X turns on the game's own drift-event
+/* drift.c -- drift mode in free roam: X (a controller's D-pad down held a
+ * second while driving, showoff.c) turns on the game's own drift-event
  * handling, its drift camera and its drift scoring while the player drives
  * around the city, and off again.
  *
@@ -129,7 +130,9 @@
  *   drift_total  points banked in drift mode since the game started
  *   drift_best   the most of one drift
  *   drift_st     STYLE_DRIFT's state: 0 a drift that counts, 1 starting, 2 none, 3 banked, 4 lost (a wall)
- *   drift_pend   its points so far (the page counts them up, as the drift event's HUD does) */
+ *   drift_pend   its points so far (the page counts them up, as the drift event's HUD does)
+ *
+ * Drift battles between players (roam_game.c du_*, db_*) are drift mode with a clock: drift_battle_* below. */
 #include "cpu.h"
 #include "kbd.h"
 #include "widescreen.h"           /* HOOK_SITE */
@@ -155,7 +158,7 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define G_TXT_ON       0x0083a9c0u   /* byte: the game's text entry (0x83A7B0) takes the typing ... */
 #define G_TXT_REC      0x0083a9c4u   /* ... for this record (0: none) */
 #define G_CAREER_RACE  0x00863470u   /* the career race being run (0 = free roam) */
-#define G_PLAYER1      0x008900acu   /* Player* of player 1, then 2: +4 its car, +0x10 its number, +0x9A4 its HUD */
+#define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player* of player 1, then 2: +4 its car, +0x10 its number, +0x9A4 its HUD */
 #define G_PSET         0x0083aa64u   /* PlayerSettings, 0x28 each: +0x10 the camera view */
 #define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_STYLES       0x00864624u   /* the style table: 0x30 each, +7 the modes' mask */
@@ -182,7 +185,10 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define ST_TOTAL       0x2cu         /* points banked (float) */
 #define PL_HUD         0x9a4u
 #define VIEW_DRIFT     4u
+#define VIEW_LAST      4u            /* the last view: cameras.c puts the drift camera in every drive */
 #define CAR_RIDE       0x10u         /* car: its ride (RideInfo) */
+#define CAR_PHYSOBJ    0x34u         /* car: its physics object (Car::SetPhysicsMode 0x5F46A0): +0x38 .. +0x44 its wheels */
+#define WH_GRIP        0x188u        /* a wheel: a factor of its tyre's force (0x59D600), 1 from its constructor (0x5A81FF) */
 #define CAR_PHYS       0x20u         /* car: its physics' values (+0x2A0 the nitrous shot's length, s) */
 #define PH_NOS_LEN     0x2a0u
 #define CAR_NOS_STATE  0x454u        /* car: its nitrous's state (+0x40 +0x414: the shot, +0x418, left, on since), 4 dwords */
@@ -218,13 +224,21 @@ static struct {
     float last;
     double total, best;
     uint32_t keys, kseq; int kinit;
+    int pad;                          /* the controller's D-pad down held a second while driving (showoff.c), not taken yet */
     int slot[8]; double val[8]; int slots;
     uint32_t tuned; int swapped;      /* the car whose physics are the switch's; the Drift setup in its ride */
     uint8_t kept[SETUP_SZ];           /* ... and the setup the ride had */
 } D;
 
-/* X presses since the last frame, from the keyboard's events (a tap between frames counts) */
+/* X presses since the last frame, from the keyboard's events (a tap between frames counts): the player's key for drift
+ * mode (X unless NFSU2_KEY_DRIFT: dinput_kbd.c dikbd_site_key), none while the player has one of the game's controls
+ * on it (dikbd_ours), and the touch controls' Drift button's (DIK_TOUCH_DRIFT, none of the game's) */
+int dikbd_ours(unsigned dik, const char *what);
+unsigned dikbd_site_key(const char *env, unsigned dflt);
+#define DIK_TOUCH_DRIFT 0xF1u        /* web/src/input/keymap.ts Nfsu2Drift: no keyboard has it */
 static int x_presses(void){
+    static unsigned dik = 0x100u;
+    if (dik == 0x100u) dik = dikbd_site_key("NFSU2_KEY_DRIFT", DIK_X);
     uint32_t head = kbd_ev_head();
     if (!D.kinit){ D.kinit = 1; D.kseq = head; return 0; }
     int n = 0;
@@ -232,7 +246,7 @@ static int x_presses(void){
         KbdEv e;
         int r = kbd_ev_get(D.kseq, &e);
         if (r == 0) break;
-        if (r > 0 && e.dik == DIK_X && e.down) n++;
+        if (r > 0 && e.down && (e.dik == DIK_TOUCH_DRIFT || (dik && e.dik == dik && dikbd_ours(dik, "drift mode")))) n++;
     }
     return n;
 }
@@ -318,15 +332,15 @@ static void camera_on(CPU *c){
         MR32(va) = VIEW_DRIFT - 1u;
         uint32_t one = 1;
         gcall(c, FN_CAMERA_KEY, pl, 1, &one);
-    } else if (D.saved > 3u) D.saved = 3u;
+    } else D.saved = VIEW_DRIFT;                   /* the player's own pick (cameras.c: every drive has the view) */
     D.cam = MR32(va) == VIEW_DRIFT;
     if (!D.cam){ MR32(va) = v; fprintf(stderr, "[drift] f=%ld no drift camera (view %u)\n", autotest_frame(), v); }
 }
 /* live: the world's camera too (the camera key's way), else only the view the next one is made for */
 static void camera_off(CPU *c, int live){
-    uint32_t va = view_addr(), pl = rd32(G_PLAYER1), back = D.saved <= 3u ? D.saved : 3u;
+    uint32_t va = view_addr(), pl = rd32(G_PLAYER1), back = D.saved <= VIEW_LAST ? D.saved : 3u;
     D.cam = 0;
-    if (!va || MR32(va) != VIEW_DRIFT || MR8(G_DRIFTRACE)) return;
+    if (!va || MR32(va) != VIEW_DRIFT || MR8(G_DRIFTRACE) || back == VIEW_DRIFT) return;
     if (live && pl){
         MR32(va) = back - 1u;                      /* the camera key's step wraps a -1 to 0 */
         uint32_t one = 1;
@@ -371,6 +385,16 @@ static void physics_in(CPU *c){
 static void physics_out(CPU *c){
     uint32_t car = D.tuned, ride = car ? rd32(car + CAR_RIDE) : 0;
     int same = car && rd32(rd32(G_PLAYER1) + 4u) == car && ok(ride, RIDE_TUNING + SETUP_SZ);
+    /* The drift assist (0x5AC260, every physics step while the switch is on) sets the rear wheels' grip factor, and
+     * nothing puts it back: only a new car's wheels (a respawn, a reset) have 1 again.  Left as it was, the car slid
+     * more after drift mode than in it (0.86 standing still; 25 degrees of slip in a test turn against 11) */
+    if (same){
+        uint32_t po = rd32(car + CAR_PHYSOBJ);
+        for (uint32_t o = 0x40u; ok(po, 0x48) && o <= 0x44u; o += 4u){
+            uint32_t w = rd32(po + o);
+            if (ok(w, WH_GRIP + 3u)) MRF32(w + WH_GRIP) = 1.f;
+        }
+    }
     if (same && D.swapped) for (uint32_t i = 0; i < SETUP_SZ; i++) MR8(ride + RIDE_TUNING + i) = D.kept[i];
     D.tuned = 0; D.swapped = 0;
     if (!car) return;
@@ -412,14 +436,102 @@ static int x_is_typing(void){
     return rd32(G_FLOW) != 6u || (mem_is_committed(G_TXT_REC + 3u) && MR8(G_TXT_ON) && MR32(G_TXT_REC));
 }
 
+/* ---- drift battles ------------------------------------------------------------------------------------- */
+/* A drift battle between two players (roam_game.c du_*) is drift mode with a clock.  From its start (drift_battle_begin,
+ * the countdown) drift mode is on, whatever the player had (X does nothing but say so: drift_battle_x), and the car has
+ * no nitrous, as in a drift event: 0x591CD0 makes a car's nitrous from its physics' shot length (+0x2A0), and with a
+ * length of 0, as a drift event's, the full shot (+0x414), its share (+0x418), what is left (+0x41C) and when it went
+ * on (+0x420) are all 0; kept so every frame, whatever a drift or a remade car would give back.  At the off
+ * (drift_battle_go) the points start: the multiplier back to X1 and a drift under way dropped, as the game's own
+ * respawn in a drift event does (0x6009A0 calls DriftCar 0x56DFA0: X1, and a drift that counts or starts ends lost,
+ * 0x56D5C0); the battle's points are those banked since then (drift_battle_score), and at the end the drift that
+ * counts then as it stands.  At its end (drift_battle_end) drift mode is as the player had chosen and the nitrous as
+ * it was when the battle started (no shot more, none less). */
+#define FN_DC_RESET    0x0056dfa0u   /* thiscall DriftCar: X1, a drift under way dropped */
+static struct {
+    int on, want;                     /* a battle runs; drift mode as the player had chosen before it */
+    int go; double base;              /* its points count, from D.total then */
+    uint32_t car, ph; float len;      /* the car whose nitrous is off, its physics, their shot's length before ... */
+    uint32_t nos[4];                  /* ... and its nitrous (CAR_NOS_STATE) */
+    uint32_t xs;                      /* X presses meanwhile */
+} B;
+int drift_wanted(void){ return D.want; }
+/* the controller's switch (showoff.c: D-pad down held a second while driving), as X */
+void drift_pad(void){ D.pad++; }
+static void nos_off(void){
+    uint32_t pl = rd32(G_PLAYER1), car = pl ? rd32(pl + 4u) : 0, ph = car ? rd32(car + CAR_PHYS) : 0;
+    if (!ok(ph, PH_NOS_LEN + 3u) || !ok(car + CAR_NOS_STATE, 15u)) return;
+    if (car != B.car){
+        if (B.car) fprintf(stderr, "[drift] f=%ld drift battle: another car (0x%08x), its nitrous off too\n", autotest_frame(), car);
+        B.car = car; B.ph = ph; B.len = MRF32(ph + PH_NOS_LEN);
+        for (uint32_t i = 0; i < 4u; i++) B.nos[i] = MR32(car + CAR_NOS_STATE + 4u * i);
+        fprintf(stderr, "[drift] f=%ld drift battle: no nitrous (a %.1f s shot, %u/4000 s of it left kept)\n", autotest_frame(),
+                (double)B.len, B.nos[2]);
+    }
+    B.ph = ph;
+    if (MRF32(ph + PH_NOS_LEN) != 0.f) MRF32(ph + PH_NOS_LEN) = 0.f;
+    for (uint32_t i = 0; i < 4u; i++) if (MR32(car + CAR_NOS_STATE + 4u * i)) MR32(car + CAR_NOS_STATE + 4u * i) = 0;
+}
+static void nos_back(void){
+    uint32_t pl = rd32(G_PLAYER1), car = pl ? rd32(pl + 4u) : 0, ph = car ? rd32(car + CAR_PHYS) : 0;
+    if (!B.car) return;
+    if (car == B.car && rd32(G_FLOW) == 6u && ok(ph, PH_NOS_LEN + 3u) && ok(car + CAR_NOS_STATE, 15u)){
+        MRF32(ph + PH_NOS_LEN) = B.len;
+        for (uint32_t i = 0; i < 4u; i++) MR32(car + CAR_NOS_STATE + 4u * i) = B.nos[i];
+        fprintf(stderr, "[drift] f=%ld drift battle over: the nitrous back as it was\n", autotest_frame());
+    } else fprintf(stderr, "[drift] f=%ld drift battle over: the car is gone, no nitrous to give back\n", autotest_frame());
+    B.car = 0;
+}
+/* the countdown: drift mode on, the nitrous off */
+void drift_battle_begin(void){
+    if (B.on) return;
+    memset(&B, 0, sizeof B);
+    B.on = 1; B.want = D.want; D.want = 1;
+    fprintf(stderr, "[drift] f=%ld drift battle: drift mode on for it (it was %s)\n", autotest_frame(), B.want ? "on" : "off");
+}
+/* the off: the points from now, from X1 */
+void drift_battle_go(CPU *c){
+    if (!B.on || B.go) return;
+    uint32_t rc = racer(), dc = rc ? rd32(rc + RC_DRIFTCAR) : 0, ds = dc && ok(dc, DC_BEST + 4u) ? rd32(dc) : 0;
+    int lvl = dc && ok(dc, DC_GAIN + 4u) ? (int)MR32(dc + DC_LEVEL) : 0;
+    if (ok(ds, 3) && ok(rd32(ds), ST_TOTAL + 4u)) gcall(c, FN_DC_RESET, dc, 0, 0);
+    B.go = 1; B.base = D.total;
+    fprintf(stderr, "[drift] f=%ld drift battle: the points count from now (the multiplier was X%d%s)\n", autotest_frame(), lvl,
+            ds ? "" : ", no drift yet");
+}
+/* the battle's points: banked since the off, and the drift that counts now (0 before the off) */
+void drift_battle_score(double *banked, double *pend){
+    *banked = *pend = 0;
+    if (!B.on || !B.go) return;
+    *banked = D.total - B.base;
+    uint32_t rc = racer(), ds = rc ? rd32(rc + RC_DRIFTSCORE) : 0, st = ok(ds, 3) ? rd32(ds) : 0;
+    if (!ok(st, ST_TOTAL + 4u)) return;
+    uint32_t s = MR32(st + ST_STATE);
+    float p = MRF32(st + ST_PEND);
+    if ((s == 0u || s == 1u) && p > 0.f && p < 1e9f) *pend = (double)(int)p;
+}
+/* X presses in the battle so far (none switch drift mode) */
+uint32_t drift_battle_x(void){ return B.xs; }
+/* over: drift mode as chosen before, the nitrous back */
+void drift_battle_end(void){
+    if (!B.on) return;
+    nos_back();
+    D.want = B.want; B.on = 0; B.go = 0;
+    fprintf(stderr, "[drift] f=%ld drift battle over: drift mode %s, as before it\n", autotest_frame(), D.want ? "on" : "off");
+}
+
 void drift_frame(CPU *c){
     int world = roam_world(), top = world && hud_on_top(), drive = top && MR32(race()) == 4u;
-    int typing = x_is_typing();
-    for (int n = x_presses(); n > 0 && !typing; n--){
+    int typing = x_is_typing(), nx = x_presses(), np = D.pad;
+    if (typing) nx = 0;
+    D.pad = 0;
+    for (int i = 0; i < nx + np; i++){
+        const char *how = i < nx ? "X" : "D-pad down held";
+        if (B.on && world){ B.xs++; fprintf(stderr, "[drift] f=%ld %s in a drift battle: drift mode stays on\n", autotest_frame(), how); continue; }
         D.keys++;
         D.note = !world;
-        if (world){ D.want = !D.want; fprintf(stderr, "[drift] f=%ld drift mode %s (X)\n", autotest_frame(), D.want ? "on" : "off"); }
-        else fprintf(stderr, "[drift] f=%ld X outside free roam: nothing\n", autotest_frame());
+        if (world){ D.want = !D.want; fprintf(stderr, "[drift] f=%ld drift mode %s (%s)\n", autotest_frame(), D.want ? "on" : "off", how); }
+        else fprintf(stderr, "[drift] f=%ld %s outside free roam: nothing\n", autotest_frame(), how);
     }
     int on = D.want && drive;
     if (on != D.on){
@@ -436,6 +548,7 @@ void drift_frame(CPU *c){
         hide_popup(c);
         if (!D.cam) camera_on(c);
     } else if (D.cam && (!D.want || !world)) camera_off(c, rd32(G_FLOW) == 6u && hud_on_top());
+    if (B.on && rd32(G_FLOW) == 6u) nos_off();
     publish();
 }
 

@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HOST_STATUS_MAGIC 0x31545453u      /* "STT1" */
-#define HOST_STATUS_MAX   32
+#define HOST_STATUS_MAX   48         /* 32 until 2026-11-04: by then 35 names, so photo mode's last ones never showed */
 #define HOST_STATUS_NAME  16
 
 typedef struct { char name[HOST_STATUS_NAME]; double value; } HostStatusItem;   /* 24 bytes */

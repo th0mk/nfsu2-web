@@ -43,10 +43,11 @@
  * throws away every bank (0x438140 with 0), and ours are loaded again.
  *
  * The controller's D-pad down is the game's Legend (Career Status) as well:
- * while the car stands in free roam with no screen over the HUD, a press
- * goes to the game only when it is let go within the second (as a short
- * press then: showoff_pad, from dinput_pad.c); held a second it is a step
- * here instead.  Driving, or anywhere else, the button is the game's as
+ * in free roam with no screen over the HUD, a press goes to the game only
+ * when it is let go within the second (as a short press then: showoff_pad,
+ * from dinput_pad.c); held a second it is a step here instead when the car
+ * stood at the press, and drift mode on or off when it was driving (drift.c
+ * drift_pad, the keyboard's X).  Anywhere else the button is the game's as
  * before.  Nothing here runs or loads before the first press.
  *
  * Tests: tests/scripts/showoff_*.txt; "[showoff]" log lines. */
@@ -72,7 +73,7 @@ long autotest_frame(void);
 #define G_RACEKIND     0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define G_CAREER_RACE  0x00863470u   /* the career race being run (0 = free roam) */
 #define G_FREEZE       0x00890084u   /* the world stands (photo mode) */
-#define G_PLAYER1      0x008900acu   /* Player*: +4 its car, +0x9A4 its HUD */
+#define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player*: +4 its car, +0x9A4 its HUD */
 #define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_TXT_ON       0x0083a9c0u   /* byte: the game's text entry takes the typing ... */
 #define G_TXT_REC      0x0083a9c4u   /* ... for this record (0: none) */
@@ -137,6 +138,7 @@ typedef struct {
     uint8_t  has;                     /* RC_OPEN_* those we opened (their nodes opening or open) */
     uint8_t  live;                    /* a node of it is not closed: it goes on the list while drawn */
 } Car;
+void drift_pad(void);              /* drift.c: drift mode's switch, as X */
 typedef struct { uint32_t type, file, name; uint8_t st; int tries; long since; } Bank;   /* st: 0 none, 1 loading, 2 in */
 static struct {
     uint32_t mem;                     /* our block: SO_CARS x 4 nodes, then SO_TYPES file names of 64 bytes */
@@ -145,8 +147,8 @@ static struct {
     int nlive;                        /* cars with a node not closed */
     int step;                         /* the player's: 0 closed, 1 the trunk, 2 and the hood, 3 and the doors */
     int ostate; uint32_t kseq; int kinit;
-    int gate;                         /* the D-pad's hold is ours now (the car stands in free roam, the HUD on top) */
-    int held, fired, fires; double t0, tap_until;
+    int gate, moving;                 /* the D-pad's hold is ours now (free roam, the HUD on top); the car drives */
+    int held, fired, fires, drifts, hmove; double t0, tap_until;   /* hmove: the hold began driving (drift mode's) */
     int note;                         /* the last press that did nothing, logged once */
     int failed;                       /* the player's car type's animations can't be had */
 } S;
@@ -187,8 +189,14 @@ static int shoot_on(void){
     return !strncasecmp(a, "UI_Showcase", 11);
 }
 
-/* O presses since the last frame (a tap between frames counts) */
+/* O presses since the last frame (a tap between frames counts): the player's key for it (O unless NFSU2_KEY_SHOWOFF:
+ * dinput_kbd.c dikbd_site_key), none while the player has one of the game's controls on it (dikbd_ours; dinput_pad.c
+ * leaves the D-pad's hold to the game the same way) */
+int dikbd_ours(unsigned dik, const char *what);
+unsigned dikbd_site_key(const char *env, unsigned dflt);
 static int o_presses(void){
+    static unsigned dik = 0x100u;
+    if (dik == 0x100u) dik = dikbd_site_key("NFSU2_KEY_SHOWOFF", DIK_O);
     uint32_t head = kbd_ev_head();
     if (!S.kinit){ S.kinit = 1; S.kseq = head; return 0; }
     int n = 0;
@@ -196,21 +204,21 @@ static int o_presses(void){
         KbdEv e;
         int r = kbd_ev_get(S.kseq, &e);
         if (r == 0) break;
-        if (r > 0 && e.dik == DIK_O){ if (e.down && !S.ostate) n++; S.ostate = e.down; }
+        if (r > 0 && dik && e.dik == dik){ if (e.down && !S.ostate && dikbd_ours(dik, "the show-off")) n++; S.ostate = e.down; }
     }
     return n;
 }
 
-/* the controller's buttons as the game reads them (dinput_pad.c fill_state): D-pad down kept back while the car stands,
- * a step when held a second, the game's own press when let go before */
-uint32_t showoff_pad(uint32_t b){
-    const uint32_t D = 1u << PAD_DDOWN;
+/* the controller's buttons as the game reads them (dinput_pad.c fill_state): D-pad down (the D-pad direction D the
+ * player has for it: NFSU2_BUTTON_HOLD) kept back in free roam, held a second a step (the car stood at the press) or
+ * drift mode (it drove), the game's own press when let go before */
+uint32_t showoff_pad(uint32_t b, uint32_t D){
     double t = now_s();
     int down = (b & D) != 0;
-    if (down && !S.held && S.gate){ S.held = 1; S.fired = 0; S.t0 = t; }
+    if (down && !S.held && S.gate){ S.held = 1; S.fired = 0; S.t0 = t; S.hmove = S.moving; }
     if (S.held){
         if (!down){ S.held = 0; if (!S.fired) S.tap_until = t + TAP_S; }
-        else if (!S.fired && t - S.t0 >= HOLD_S){ S.fired = 1; S.fires++; }
+        else if (!S.fired && t - S.t0 >= HOLD_S){ S.fired = 1; if (S.hmove) S.drifts++; else S.fires++; }
         b &= ~D;
     }
     if (t < S.tap_until) b |= D;
@@ -389,7 +397,8 @@ void showoff_frame(CPU *c){
     float v = ok(car, 0x9e0) ? fabsf(MRF32(car + CAR_SPEED)) : 0.f;
     if (!(v == v)) v = 0.f;
     int stands = top && v < OPEN_MPS;
-    S.gate = stands;
+    S.gate = top; S.moving = !stands;
+    for (; S.drifts > 0; S.drifts--) drift_pad();
     int n = o_presses() * !typing(), fires = S.fires; S.fires = 0;
     for (int i = 0; i < n + fires; i++){
         const char *how = i < n ? "O" : "D-pad down held";

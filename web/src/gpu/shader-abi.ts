@@ -53,7 +53,7 @@ export function createShaderAbi(device: GPUDevice): ShaderAbi {
       { binding: 0, visibility: V, buffer: { type: 'read-only-storage', hasDynamicOffset: false } },
       { binding: 1, visibility: V, buffer: { type: 'uniform', hasDynamicOffset: true, minBindingSize: KWIN_SIZE } },
       { binding: 2, visibility: F, buffer: { type: 'uniform', hasDynamicOffset: true, minBindingSize: PSPAR_SIZE } },
-      { binding: 3, visibility: F, buffer: { type: 'uniform', hasDynamicOffset: false, minBindingSize: HLPAR_SIZE } },
+      { binding: 3, visibility: F, buffer: { type: 'uniform', hasDynamicOffset: true, minBindingSize: HLPAR_SIZE } },
     ],
   });
   const textures = (cube: boolean): GPUBindGroupLayoutEntry[] => {

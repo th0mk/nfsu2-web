@@ -89,10 +89,15 @@ static inline void beginpass_note(CPU *c){
     uint32_t th = MR32(c->esp+4u);
     if (MR16(th+0x44u) != (MR32(c->esp+8u) & 0xffffu)) g_fx_epoch++;
 }
+/* lightkey.c: the player's car's own light on the road (HEADLIGHTCOLOR, set by 0x5BDAA0) off or brighter: the vector
+ * is the caller's (stdcall: effect, handle, vector) */
+int lightkey_road_vector(uint32_t handle, uint32_t vec);
+static inline void setvector_note(CPU *c){ lightkey_road_vector(MR32(c->esp + 8u), MR32(c->esp + 0xcu)); }
 #define DX_WRAP(idx, hex)                                                   \
     void sub_##hex##_orig(CPU *c);                                          \
     void sub_##hex(CPU *c){                                                 \
         if (idx == DX_BEGINPASS) beginpass_note(c);                         \
+        if (idx == DX_SETVECTOR) setvector_note(c);                         \
         if (!dx_on()){ sub_##hex##_orig(c); return; }                       \
         if (idx == DX_BEGINPASS) dx_window();                               \
         int inp = (idx == DX_BEGINPASS || idx == DX_COMMIT);                \

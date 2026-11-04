@@ -822,7 +822,7 @@ void discord_shutdown(void){
 #define G_TRACKS_N     0x00883da4u
 #define G_CARTYPES     0x008a1cccu  /* CarTypeInfo[], 0x890 bytes; +0 name ("CAR_NAME_<name>"), +0xc0 make, +0xd0 name hash */
 #define G_CARTYPES_N   0x2eu        /*   46 entries (0x610130's loop bound) */
-#define G_PLAYER1      0x008900acu  /* Player*; +4 its car */
+#define G_PLAYER1      SPLIT_PLAYERS_INDEX  /* Player*; +4 its car */
 #define G_RSTATUS      0x00890118u  /* race status: +0 state (3 countdown, 4 racing), +0x14 clock (1/4000 s), */
 #define   RS_COUNT       0x24u      /*   racer entries in use: the game fills entry [+0x24] and then */
                                     /*   counts it (0x6018ac); the entries past it are never written and */

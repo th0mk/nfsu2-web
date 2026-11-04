@@ -1,0 +1,84 @@
+# The headlight key (runtime/lightkey.c) in a Quick Race (Circuit, Resort Loop), behind the line once the AI racers
+# have gone: G
+# tapped (off), held (high beam, then off again), tapped (on), held (high beam, then on again), each with "lights
+# report"; then, the world standing (photo mode), high beam's looks for the variant sheet from behind the car and
+# from in front of it (turned round 180 degrees): the game's own lights, off, and high beam with "lights hi FLARE
+# ROAD PITCH", two dumps of each (a slow renderer loses some).
+#   node web/tools/run-page.mjs "<base>/test/play.html?...&env=NFSU2_FPS=30&env=NFSU2_LIGHTS_LOG=1&script=/tests/web/scripts/lightkey_sheet.txt&artifacts=/artifacts/lk_"
+# NFSU2_FPS=30 (frame counts below are at 30 fps).  The key's hold is wall time (0.2 s): "tap G 1" is one frame.
+0       waitfng UG_LS_Splash.fng 12000                  # title
++1000ms tapuntil RETURN MC_Background.fng 120 3000      # title -> profile prompt
++600ms  tapuntil RETURN GarageMain.fng 120 3000         # "No" -> main menu
++1500ms tapuntil RETURN UI_QRModeSelect.fng 240 3000    # Quick Race
++800ms  tapuntil RETURN UI_QRTrackSelect.fng 240 3000   # Circuit
++800ms  tapuntil RETURN UI_QRModeOptions.fng 240 3000   # Resort Loop
++800ms  tapuntil RETURN UI_QRCarSelect.fng 240 3000     # options
++800ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000 # car -> transmission
++800ms  tapuntil RETURN PC_Loading.fng 240 3000         # transmission -> loading
++0      waitmem 0x8654a4 6 6000
++0      log race_loaded
++450    lights report
++0      tap G 1
++12     lights report                                    # off
++12     dump k1_off
++0      down G
++20     lights report                                    # high beam (from off)
++3      dump k2_held
++0      up G
++12     lights report                                    # off again
++0      tap G 1
++12     lights report                                    # on
++0      down G
++20     lights report                                    # high beam (from on)
++0      up G
++12     lights report                                    # on again
++0      photo on
++10     photo freeze 0
++40     lights report
++20     lights state on
++20     dump b0_on
++20     lights state off
++20     dump b1_off
++20     lights state high
++20     lights hi 1.6 2.0 2
++20     dump b2_f16_r20_p2
++20     lights hi 2.0 3.0 3
++20     dump b3_f20_r30_p3
++20     lights hi 2.5 4.0 4
++20     dump b4_f25_r40_p4
++20     lights hi 3.0 5.0 5
++20     dump b5_f30_r50_p5
++20     lights hi 2.0 4.0 0
++20     dump b6_f20_r40_p0
++20     lights hi 2.5 4.0 0
++0      lights noself 1
++20     dump b7_f25_r40_game
++0      lights noself 0
++20     lights state on
++20     photo drag 1.309 0
++20     photo drag 0 0.06
++20     photo dolly 4
++40     lights report
++20     lights state on
++20     dump f0_on
++20     lights state off
++20     dump f1_off
++20     lights state high
++20     lights hi 1.6 2.0 2
++20     dump f2_f16_r20_p2
++20     lights hi 2.0 3.0 3
++20     dump f3_f20_r30_p3
++20     lights hi 2.5 4.0 4
++20     dump f4_f25_r40_p4
++20     lights hi 3.0 5.0 5
++20     dump f5_f30_r50_p5
++20     lights hi 2.0 4.0 0
++20     dump f6_f20_r40_p0
++20     lights hi 2.5 4.0 0
++0      lights noself 1
++20     dump f7_f25_r40_game
++0      lights noself 0
++20     lights state on
++20     lights report
++20     photo off
++30     quit

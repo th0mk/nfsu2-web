@@ -32,6 +32,7 @@ extern int g_gh_com, g_gh_gbuf;
 /* heap.c's links into the rest of the runtime */
 void guest_backtrace(CPU *c, int n){ (void)c; (void)n; }
 long autotest_frame(void){ return 0; }
+uint64_t host_us(void){ return 0; }
 void win32_set_last_error(CPU *c, uint32_t e){ (void)c; (void)e; }
 void com_mem_stats(uint64_t *a, uint64_t *b, uint64_t *o){ *a = *b = *o = 0; }
 void metal_mem_stats(uint64_t *a, unsigned *l, unsigned *t, uint64_t *b){ *a = 0; *l = *t = 0; *b = 0; }

@@ -67,6 +67,8 @@
  *                              photo_script: on, off, orbit, free, turn X Y ...)
  *     headlights MODE          the other cars' headlights (headlights.c): its
  *                              NFSU2_HEADLIGHTS modes, for an A/B in one run
+ *     fovscale MODE            the 3D picture's proportions (widescreen.c):
+ *                              original or correct, for an A/B in one run
  *     displayhz HZ             act as if the window moved to a screen with
  *                              this refresh rate (framerate.c, NFSU2_FPS=auto
  *                              tests); 0 = the detected rate again
@@ -228,10 +230,11 @@ static void key_event(unsigned dik, int down){
     } else win32_post_message(0x0101u, k->vk, lp | 0xC0000000u);  /* WM_KEYUP */
 }
 
+uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 /* ---- script ----------------------------------------------------------- */
 enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_POKE, C_WAITFNG, C_TAPUNTIL,
-       C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS,
-       C_PAD, C_TAPPAD, C_AXIS, C_TAPPADUNTIL,
+       C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS, C_FOVSCALE, C_LIGHTS,
+       C_PAD, C_TAPPAD, C_AXIS, C_TAPPADUNTIL, C_LOCALPAD,
        C_NSDOWN, C_NSUP, C_NSTAP, C_NSREPEAT, C_NSTYPE, C_NSFOCUS, C_NSMOUSE, C_NSTAPUNTIL,
        C_LOOP, C_ENDLOOP, C_STATUS, C_STALL, C_CAREER,
        C_COVRESET, C_COVDUMP, C_TRACE, C_UNTRACE, C_EXPECT, C_WAITEXPR, C_MARK, C_EDGE, C_ROAM,
@@ -294,7 +297,7 @@ static char  g_type_q[256]; static int g_type_h, g_type_t; static long g_type_ne
 
 static long   g_frame = 0;               /* guest Present count */
 static int    g_fng_log = 0;
-static double g_t0 = 0;                  /* ms at first Present */
+static double g_t0 = 0;                  /* script clock (ms) at first Present */
 static long   g_quit_frames = 0, g_status_every = 0;
 static int    g_inited = 0;
 
@@ -380,6 +383,8 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "srvcycle")) { e.cmd = C_SRVCYCLE; e.n = a1[0] ? atol(a1) : 1; e.val = a2[0] ? (uint32_t)atol(a2) : 0u; }
         else if (!strcasecmp(cmd, "texrep")) { e.cmd = C_TEXREP; e.n = !strcasecmp(a1, "off") ? 0 : !strcasecmp(a1, "on") ? 1 : -1; }
         else if (!strcasecmp(cmd, "headlights")) { e.cmd = C_HEADLIGHTS; snprintf(e.text, sizeof e.text, "%s", a1); }
+        else if (!strcasecmp(cmd, "fovscale")) { e.cmd = C_FOVSCALE; snprintf(e.text, sizeof e.text, "%s", a1); }
+        else if (!strcasecmp(cmd, "lights")) { e.cmd = C_LIGHTS; snprintf(e.text, sizeof e.text, "%s", rest); }
         else if (!strcasecmp(cmd, "photo")) { e.cmd = C_PHOTO; snprintf(e.text, sizeof e.text, "%s", rest); }
         else if (!strcasecmp(cmd, "waitfng")){ e.cmd = C_WAITFNG;
             snprintf(e.text, sizeof e.text, "%s", a1); e.n = a2[0] ? atol(a2) : 0; }
@@ -390,9 +395,9 @@ static void load_script(const char *path){
             e.val = a3[0] ? (uint32_t)atol(a3) : 90u; e.n = a4[0] ? atol(a4) : 0; }
         else if (!strcasecmp(cmd, "peek")){ e.cmd = C_PEEK;
             if (!strncasecmp(a1, "@in", 3)){ e.val = 1; e.addr = (uint32_t)strtoul(a1 + 3, 0, 0); }
-            else e.addr = (uint32_t)strtoul(a1, 0, 0);
+            else e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0));
             e.n = a2[0] ? atol(a2) : 1; if (e.n < 1 || e.n > 64) e.n = 1; }
-        else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; e.addr = (uint32_t)strtoul(a1, 0, 0);
+        else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0));
             if (strchr(a1, '[')) e.xtext = strdup(a1);
             e.val = (uint32_t)strtoul(a2, 0, 0); e.n = !strcasecmp(a3, "byte"); }
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
@@ -400,8 +405,15 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "status")){ e.cmd = C_STATUS; snprintf(e.text, sizeof e.text, "%s", a1); }
         else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "waitmem")){ e.cmd = C_WAITMEM;
-            e.addr = (uint32_t)strtoul(a1, 0, 0); e.val = (uint32_t)strtoul(a2, 0, 0);
+            e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0)); e.val = (uint32_t)strtoul(a2, 0, 0);
             e.n = a3[0] ? atol(a3) : 0; }
+        else if (!strcasecmp(cmd, "localpad")){
+            int seat = atoi(a1), key = gamepad_button_by_name(a2);
+            if (!strcasecmp(a2, "connect")) key = -1;
+            else if (key < 0){ int axis = gamepad_axis_by_name(a2); if (axis >= 0) key = PAD_NBUTTONS + axis; else key = -2; }
+            if (seat < 1 || seat > 6 || key == -2){ fprintf(stderr, "[autotest] invalid localpad seat/control on line %d\n", ln); continue; }
+            e.cmd = C_LOCALPAD; e.addr = seat - 1; e.key = (uint32_t)key; e.fv = (float)atof(a3);
+        }
         else if (!strcasecmp(cmd, "pad")){ e.cmd = C_PAD;
             if (!strcasecmp(a1, "connect") || !strcasecmp(a1, "disconnect")){
                 e.key = PAD_PLUG; e.n = !strcasecmp(a1, "connect") ? (!strcasecmp(a2, "wheel") ? 2 : 1) : 0; }
@@ -552,7 +564,7 @@ static uint32_t tr_eval(const char **pp, int *ok){
         p++; uint32_t a = tr_eval(&p, ok);
         if (*p == ']') p++;
         if (*ok && mem_is_committed(a) && mem_is_committed(a + 3)) v = MR32(a); else *ok = 0;
-    } else v = (uint32_t)strtoul(p, (char **)&p, 0);
+    } else v = split_guest_addr((uint32_t)strtoul(p, (char **)&p, 0));
     while (*p == '+' || *p == '-'){
         int neg = *p == '-'; p++;
         uint32_t k = (uint32_t)strtoul(p, (char **)&p, 0);
@@ -725,10 +737,19 @@ static int fire(CPU *c, Ev *e, double tms){
         int photo_script(const char *s);
         fprintf(stderr, "[autotest] f=%ld t=%.0fms photo %s%s\n", g_frame, tms, e->text, photo_script(e->text) ? "" : " (not known)");
         break; }
+    case C_LIGHTS: {       /* "lights ...": the light key's state and high beam's look (lightkey.c lightkey_script) */
+        int lightkey_script(const char *s);
+        fprintf(stderr, "[autotest] f=%ld t=%.0fms lights %s%s\n", g_frame, tms, e->text, lightkey_script(e->text) ? "" : " (not known)");
+        break; }
     case C_HEADLIGHTS: {   /* "headlights MODE": the other cars' headlights (headlights.c), A/B in one run */
         int headlights_set(const char *mode);
         fprintf(stderr, "[autotest] f=%ld t=%.0fms headlights %s%s\n", g_frame, tms, e->text,
                 headlights_set(e->text) ? "" : " (not known here)");
+        break; }
+    case C_FOVSCALE: {     /* "fovscale MODE": the 3D picture's proportions (widescreen.c), A/B in one run */
+        int ws_set_fov_scale(const char *mode);
+        fprintf(stderr, "[autotest] f=%ld t=%.0fms fovscale %s%s\n", g_frame, tms, e->text,
+                ws_set_fov_scale(e->text) ? "" : " (not known)");
         break; }
     case C_TEXREP: {       /* "texrep on|off|toggle": show / hide a texture pack (A/B) */
         void texrep_set_shown(int on);
@@ -812,6 +833,11 @@ static int fire(CPU *c, Ev *e, double tms){
         if (g_nprel < 32){ g_prel[g_nprel].dik = e->key; g_prel[g_nprel].at = g_frame + (e->n > 0 ? e->n : 1); g_nprel++; }
         break;
     case C_AXIS: gamepad_synth_axis((int)e->key, e->fv); break;
+    case C_LOCALPAD:
+#ifdef __wasm__
+        gamepad_synth_local(e->addr, (int)e->key, e->fv);
+#endif
+        break;
     case C_NSDOWN: ns_sched(g_frame, KSYN_DOWN, e->text, 0, 0, 0); break;
     case C_NSUP:   ns_sched(g_frame, KSYN_UP, e->text, 0, 0, 0); break;
     case C_NSTAP:
@@ -1000,12 +1026,24 @@ static void status_line(double t, double tms, const char *label){
  * [0x865558], WorldTimer/RealTimer (1/4000 s), then per car of
  * the World's list ([0x890080]: +0x10 count, +0x1C car pointers) whether it
  * is the local player's (player 1's vehicle), position +0x60 and speed
- * +0x430.  tools/lan_trace.py compares how each instance shows the others'
- * cars with where their owners had them at the same instant (LAN tests). */
+ * +0x430; then the frame's world step [0x865154] (s) and per car its
+ * velocity +0x70 and the forward vector's x, y (+0x90: the heading).  The
+ * position is the drawn one (racenet.c's fade offset is on at the Present).
+ * tools/lan_trace.py compares how each instance shows the others' cars with
+ * where their owners had them at the same instant (LAN tests), and
+ * tools/race_acc.py measures it close up.  Instances' wall clocks can differ
+ * (in the browser each page's clock is its I/O worker's time origin + now(),
+ * the origin the wall clock as that worker started: a WSL clock step between
+ * two pages' starts is that far between their traces), so every
+ * CTRACE_CLOCK_FRAMES racing frames a "[ctclock]" line on stderr gives this
+ * clock as read; web/tools/lan-pair.mjs stamps each line's arrival with its
+ * own monotonic clock (clock.csv), and the least difference lines the
+ * instances up. */
 static FILE *g_ctrace;
+#define CTRACE_CLOCK_FRAMES 30
 uint32_t autopilot_vehicle(void);        /* career.c: player 1's vehicle, 0 = none */
 static void car_trace(void){
-    static uint32_t last_w = 0;
+    static uint32_t last_w = 0, nclock = 0;
     if (!mem_is_committed(0x8654a7u) || MR32(0x8654a4u) != 6u) return;
     uint32_t w = MR32(0x00890080u);
     if (!w || !mem_is_committed(w + 0x3f)) return;
@@ -1018,15 +1056,27 @@ static void car_trace(void){
         fputc('\n', stderr);
     }
     struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    if (nclock++ % CTRACE_CLOCK_FRAMES == 0)
+        fprintf(stderr, "[ctclock] %lld.%06ld\n", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000));
     const char *top = autotest_top_fng();
     fprintf(g_ctrace, "%lld.%06ld,%ld,%d,%.7f,%u,%u,%u", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000), g_frame,
             top && !strncasecmp(top, "HUD_", 4), (double)MRF32(0x00865558u), MR32(0x0086518cu),
             MR32(0x008651acu), n);
-    for (uint32_t i = 0; i < n; i++){
-        uint32_t car = MR32(w + 0x1c + 4 * i);
-        if (car && mem_is_committed(car + 0x433))
+    uint32_t cars[8] = {0};
+    for (uint32_t i = 0; i < 8; i++){
+        uint32_t car = i < n ? MR32(w + 0x1c + 4 * i) : 0;
+        if (car && mem_is_committed(car + 0x433)){
+            cars[i] = car;
             fprintf(g_ctrace, ",%d,%.3f,%.3f,%.3f,%.3f", car == me, (double)MRF32(car + 0x60), (double)MRF32(car + 0x64),
                     (double)MRF32(car + 0x68), (double)MRF32(car + 0x430));
+        } else fprintf(g_ctrace, ",,,,,");
+    }
+    fprintf(g_ctrace, ",%.6f", (double)MRF32(0x00865154u));
+    for (uint32_t i = 0; i < 8; i++){
+        uint32_t car = cars[i];
+        if (car)
+            fprintf(g_ctrace, ",%.3f,%.3f,%.3f,%.4f,%.4f", (double)MRF32(car + 0x70), (double)MRF32(car + 0x74),
+                    (double)MRF32(car + 0x78), (double)MRF32(car + 0x90), (double)MRF32(car + 0x94));
         else fprintf(g_ctrace, ",,,,,");
     }
     fputc('\n', g_ctrace);
@@ -1042,8 +1092,13 @@ void autotest_on_present(CPU *c){
     g_frame++;
     if (g_ctrace) car_trace();
     double t = now_ms();
-    if (g_frame == 1){ g_t0 = t; g_st_t = t; g_st_cpu = proc_cpu_s(); g_st_gcpu = thread_cpu_ms(); }
-    double tms = t - g_t0;
+    /* the scripts' "ms" lines: the wall clock, or the game's clock when
+     * fast-forwarding (framerate.c NFSU2_FAST), where it runs ahead of it */
+    double ts = t;
+    { static int ff = -1; if (ff < 0){ int hfr_fast(void); ff = hfr_fast(); }
+      if (ff){ uint64_t host_us(void); ts = (double)host_us() / 1e3; } }
+    if (g_frame == 1){ g_t0 = ts; g_st_t = t; g_st_cpu = proc_cpu_s(); g_st_gcpu = thread_cpu_ms(); }
+    double tms = ts - g_t0;
 
     if (g_fng_log == 2 && (g_frame == 400 || g_frame == 1500)){
         uint32_t fe = mem_is_committed(0x8384c4u) ? MR32(0x8384c4u) : 0;
@@ -1143,6 +1198,8 @@ void autotest_init(void){
           setvbuf(g_ctrace, 0, _IOLBF, 0);
           fprintf(g_ctrace, "t,frame,hud,cap,worldtimer,realtimer,n");
           for (int i = 0; i < 8; i++) fprintf(g_ctrace, ",c%dlocal,c%dx,c%dy,c%dz,c%dv", i, i, i, i, i);
+          fprintf(g_ctrace, ",wdt");
+          for (int i = 0; i < 8; i++) fprintf(g_ctrace, ",c%dvx,c%dvy,c%dvz,c%dfx,c%dfy", i, i, i, i, i);
           fputc('\n', g_ctrace); } }
     { const char *fl = getenv("NFSU2_FNG_LOG"); g_fng_log = fl ? (atoi(fl) ? atoi(fl) : 1) : 0; }
     g_inited = 1;

@@ -7,7 +7,7 @@ export const RADIO_WORDS: readonly string[] = WORDS;
 /** What the runtime writes into the first two words at its start (RADIO_MAGIC, RADIO_VERSION in radio_proto.h). */
 export const RADIO_MAGIC = 0x31444152, RADIO_VERSION = 2;
 const W = Object.fromEntries(WORDS.map((n, i) => [n, i])) as Record<Word, number>;
-const CTL = 16 + 32 * 24,   // the status table before them (status.ts: HEAD + MAX * ITEM)
+const CTL = 16 + 48 * 24,   // the status table before them (status.ts: HEAD + MAX * ITEM)
   PLACES = 2, TAG = 44, TEXT = WORDS.length * 4;
 
 export interface Lines { artist: string; title: string; album: string }

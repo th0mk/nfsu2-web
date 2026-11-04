@@ -9,7 +9,8 @@
 //! folder's `days.json` (every `SWEEP_EVERY` when it changed, and at the stop), so a restart counts on; each day that
 //! ended is a line of `days.csv` there, and of the console (`[days]`).  A browser on two devices is two, a private
 //! window one a load, and a script can make up ids: the counts are for the operator, not for anything that matters.
-//! A day's sets hold `MAX_A_DAY` at most.
+//! A day's sets hold `MAX_A_DAY` at most.  The day also keeps what the ones who played changed in their settings
+//! (settings_days.rs): the day so far in days.json, the days that ended in `settings.csv`.
 
 use std::collections::HashSet;
 use std::io::Write;
@@ -20,6 +21,8 @@ use parking_lot::Mutex;
 use serde_json::Value;
 
 use nfsu2_util::{js, log};
+
+use super::settings_days::{self, Report, Tally};
 
 /// what a browser did (each counts in the ones before it too)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,13 +54,15 @@ struct Today {
     day: String,
     key: Vec<u8>,
     sets: [HashSet<u64>; 4],
+    /// the settings told at the day's first Plays (settings_days.rs)
+    settings: Tally,
     /// since days.json was written
     changed: bool,
 }
 
 impl Today {
     fn new(day: String) -> Today {
-        Today { day, key: nfsu2_util::rand::bytes(32), sets: Default::default(), changed: true }
+        Today { day, key: nfsu2_util::rand::bytes(32), sets: Default::default(), settings: Tally::default(), changed: true }
     }
 
     fn counts(&self) -> [usize; 4] {
@@ -78,6 +83,7 @@ impl Today {
             let b: Vec<u8> = self.sets[i].iter().flat_map(|h| h.to_le_bytes()).collect();
             m.insert((*k).into(), js::base64url(&b).into());
         }
+        m.insert("settings".into(), self.settings.to_json());
         Value::Object(m).to_string()
     }
 
@@ -88,7 +94,7 @@ impl Today {
         if key.len() != 32 {
             return None;
         }
-        let mut t = Today { day, key, sets: Default::default(), changed: false };
+        let mut t = Today { day, key, sets: Default::default(), settings: Tally::from_json(v.get("settings")), changed: false };
         for (i, k) in KINDS.iter().enumerate() {
             let b = js::from_base64url(v.get(*k).and_then(Value::as_str).unwrap_or(""));
             t.sets[i] = b.chunks_exact(8).take(MAX_A_DAY).map(|c| u64::from_le_bytes(c.try_into().expect("8 bytes"))).collect();
@@ -103,9 +109,10 @@ pub fn counts_text(c: [usize; 4]) -> String {
 }
 
 pub struct Days {
-    /// days.json and days.csv
+    /// days.json, days.csv and settings.csv
     file: PathBuf,
     csv: PathBuf,
+    settings_csv: PathBuf,
     t: Mutex<Today>,
 }
 
@@ -116,7 +123,8 @@ impl Days {
         let dir = PathBuf::from(state);
         let (file, csv) = (dir.join("days.json"), dir.join("days.csv"));
         let had = std::fs::read_to_string(&file).ok().and_then(|s| Today::from_json(&s));
-        let d = Days { file, csv, t: Mutex::new(had.unwrap_or_else(|| Today::new(day_of(now)))) };
+        let settings_csv = dir.join("settings.csv");
+        let d = Days { file, csv, settings_csv, t: Mutex::new(had.unwrap_or_else(|| Today::new(day_of(now)))) };
         d.roll(&mut d.t.lock(), now);
         d
     }
@@ -134,6 +142,30 @@ impl Days {
                 t.changed = true;
             }
         }
+    }
+
+    /// A browser's day's first Play told its settings (settings_days.rs); `id` as for `seen`, which counts the Play.
+    pub fn told(&self, id: &str, r: &Report, now: i64) {
+        if !id_ok(id) {
+            return;
+        }
+        let mut t = self.t.lock();
+        self.roll(&mut t, now);
+        t.settings.add(r);
+        t.changed = true;
+    }
+
+    /// The settings told in the last `n` days that ended and today so far, summed: (the first and last day, their
+    /// totals)
+    pub fn settings(&self, n: usize, now: i64) -> (String, String, Tally) {
+        let (today, mut sum) = {
+            let mut t = self.t.lock();
+            self.roll(&mut t, now);
+            (t.day.clone(), t.settings.clone())
+        };
+        let (days, ended) = Tally::from_csv(&std::fs::read_to_string(&self.settings_csv).unwrap_or_default(), n);
+        sum.merge(&ended);
+        (days.first().cloned().unwrap_or_else(|| today.clone()), today, sum)
     }
 
     /// the day so far: (its date, `Seen`'s counts)
@@ -181,7 +213,29 @@ impl Days {
                 log::error(&format!("{}: {e}", self.csv.display()));
             }
         }
+        self.settings_ended(t);
         *t = Today::new(day);
+    }
+
+    /// a day's settings that ended: its lines in settings.csv, once (a day that told none has none)
+    fn settings_ended(&self, t: &Today) {
+        if t.settings.is_empty() {
+            return;
+        }
+        let had = std::fs::read_to_string(&self.settings_csv).unwrap_or_default();
+        if had.lines().any(|l| l.starts_with(&format!("{},", t.day))) {
+            return;
+        }
+        let head = if had.is_empty() { format!("{}\n", settings_days::CSV_HEAD) } else { String::new() };
+        let body: String = t.settings.csv_lines(&t.day).iter().map(|l| format!("{l}\n")).collect();
+        let w = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.settings_csv)
+            .and_then(|mut f| f.write_all(format!("{head}{body}").as_bytes()));
+        if let Err(e) = w {
+            log::error(&format!("{}: {e}", self.settings_csv.display()));
+        }
     }
 
     /// for the tests: the day's state as days.json has it
@@ -250,6 +304,45 @@ mod tests {
         d.seen("AAAAAAAAAAAAAAAAAAAAAA", Seen::Online, T0 + DAY);
         assert_eq!(d.today(T0 + 2 * DAY).1, [0, 0, 0, 0]);
         assert_eq!(d.history(30), vec!["2026-10-30,2,1,0,0".to_string(), "2026-10-31,1,1,1,1".to_string()]);
+        let _ = std::fs::remove_dir_all(&s);
+    }
+
+    #[test]
+    fn the_settings_told_count_on_after_a_restart_and_end_in_the_csv() {
+        let s = dir("settings");
+        let told = |k: &str, v: &str| Report::parse(Some(k), Some(v)).unwrap();
+        let d = Days::open(&s, T0);
+        d.told("AAAAAAAAAAAAAAAAAAAAAA", &told("phone", "fps=30"), T0);
+        d.told("bad id!", &told("pc", "fps=30"), T0);
+        d.save().unwrap();
+        drop(d);
+
+        let d = Days::open(&s, T0 + 1000);
+        d.told("BBBBBBBBBBBBBBBBBBBBBB", &told("pc", "fps=30,hud=43"), T0 + 1000);
+        let (from, to, t) = d.settings(7, T0 + 1000);
+        assert_eq!((from.as_str(), to.as_str()), ("2026-10-30", "2026-10-30"));
+        assert_eq!(t.reports, [1, 1, 0]);
+        assert_eq!(t.counts["fps"]["30"], [1, 1, 0]);
+
+        // the next day: the day before is in settings.csv, today starts empty, and the sum takes both
+        d.told("CCCCCCCCCCCCCCCCCCCCCC", &told("tablet", "fps=120"), T0 + DAY);
+        let csv = std::fs::read_to_string(PathBuf::from(&s).join("settings.csv")).unwrap();
+        assert_eq!(
+            csv,
+            format!("{}\n2026-10-30,(browsers),,1,1,0\n2026-10-30,fps,30,1,1,0\n2026-10-30,hud,43,1,0,0\n", settings_days::CSV_HEAD)
+        );
+        let (from, to, t) = d.settings(7, T0 + DAY);
+        assert_eq!((from.as_str(), to.as_str()), ("2026-10-30", "2026-10-31"));
+        assert_eq!(t.reports, [1, 1, 1]);
+        assert_eq!(t.counts["fps"]["120"], [0, 0, 1]);
+        let (_, _, t) = d.settings(0, T0 + DAY);
+        assert_eq!(t.reports, [0, 0, 1], "0 days: today alone");
+
+        // a day nobody told any settings writes nothing
+        d.today(T0 + 3 * DAY);
+        let after = std::fs::read_to_string(PathBuf::from(&s).join("settings.csv")).unwrap();
+        assert_eq!(after.lines().filter(|l| l.starts_with("2026-11-01")).count(), 0);
+        assert_eq!(after.lines().filter(|l| l.starts_with("2026-10-31")).count(), 2);
         let _ = std::fs::remove_dir_all(&s);
     }
 

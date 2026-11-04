@@ -330,7 +330,8 @@ static void swap_out(void){
     for (int p = 0; p < 2; p++) if (g_sw_at[p]){ MR32(g_sw_at[p]) = g_sw_was[p]; g_sw_at[p] = 0; }
 }
 void sub_00525ed0_orig(CPU *c);
-void sub_00525ed0(CPU *c){ swap_in(); sub_00525ed0_orig(c); swap_out(); }
+void split_create_humans(CPU *c);
+void sub_00525ed0(CPU *c){ swap_in(); split_create_humans(c); swap_out(); }
 void sub_00526970_orig(CPU *c);
 void sub_00526970(CPU *c){ swap_in(); sub_00526970_orig(c); swap_out(); }
 void sub_0053feb0_orig(CPU *c);

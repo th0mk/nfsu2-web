@@ -43,7 +43,8 @@
  * fade), from the side the car is on, duller the farther it is, its pitch
  * shifted by how fast the car and the player come or go (Doppler).  All of
  * them as loud as the Horn Volume slider of the game's Audio options says
- * (hornmenu.c): 10 % to 100 % of that.
+ * (hornmenu.c): 10 % to 100 % of that, times the game's Master Volume, as
+ * the game's own sounds are their sliders times Master (none at 0).
  *
  * Threads: horn_begin/horn_sound/horn_end on the game thread, every frame
  * while horns may sound; the mixer (audio.m: the AudioUnit callback,
@@ -71,10 +72,21 @@
 #define TBL       2048
 #define TONES     5
 
+/* The player's horn key (N unless NFSU2_KEY_HORN: dinput_kbd.c dikbd_site_key) and stick click (the left one unless
+ * NFSU2_BUTTON_HORN: dinput_pad.c pad_horn_ours), and the touch controls' Horn button (DIK_TOUCH_HORN, none of the
+ * game's).  The key and the click leave the horn when the player put one of the game's controls on them (dikbd_ours,
+ * pad_horn_ours); a click the game has nothing on honks with hydraulics too. */
+#define DIK_TOUCH_HORN 0xF2u              /* web/src/input/keymap.ts Nfsu2Horn: no keyboard has it */
+__attribute__((weak)) int dikbd_ours(unsigned dik, const char *what){ (void)dik; (void)what; return 1; }
+__attribute__((weak)) unsigned dikbd_site_key(const char *env, unsigned dflt){ (void)env; return dflt; }
+__attribute__((weak)) int pad_horn_ours(int *button){ *button = PAD_LS; return 1; }
 int horn_held(int stick){
-    if (kbd_key_down(DIK_N)) return 1;
+    static unsigned dik = 0x100u;
+    if (dik == 0x100u) dik = dikbd_site_key("NFSU2_KEY_HORN", DIK_N);
+    if (kbd_key_down(DIK_TOUCH_HORN) || (dik && kbd_key_down(dik) && dikbd_ours(dik, "the horn"))) return 1;
     PadState s;
-    return stick && gamepad_read(&s) && (s.buttons & 1u << PAD_LS);
+    int btn = -1, st = pad_horn_ours(&btn);
+    return btn >= 0 && (st == 2 || (st == 1 && stick)) && gamepad_read(&s) && (s.buttons & 1u << btn);
 }
 
 /* ---- the kinds ------------------------------------------------------------------ */
@@ -180,12 +192,20 @@ static void voice_set(int v, uint32_t tune, int kind, float gain, float pan, flo
     PUT(g_in[v].tune, tune); PUT(g_in[v].kind, (uint32_t)kind); PUT(g_in[v].gain, fbits(gain)); PUT(g_in[v].pan, fbits(pan));
     PUT(g_in[v].pitch, fbits(pitch)); PUT(g_in[v].stamp, now_ms());
 }
-/* the volume, as the mixer reads it: 1.0's bits until the slider sets it */
-static uint32_t g_vol = 0x3f800000u;
+/* the volume and the game's Master Volume, as the mixer reads them: 1.0's
+ * bits until the slider sets the one and the game thread reads the other */
+static uint32_t g_vol = 0x3f800000u, g_master = 0x3f800000u;
 void horn_set_volume(float v){
     if (!(v >= HORN_VOL_MIN)) v = HORN_VOL_MIN;
     if (v > 1.f) v = 1.f;
     PUT(g_vol, fbits(v));
+}
+static void master_read(void){
+    float m = horn_game_master();
+    if (!(m >= 0.f)) m = 0.f;
+    if (m > 1.f) m = 1.f;
+    if (fbits(m) != GET(g_master)) fprintf(stderr, "[horn] the game's Master Volume at %.0f %%\n", 100.0 * m);
+    PUT(g_master, fbits(m));
 }
 
 /* ---- the game thread: which horn has which voice ---------------------------------- */
@@ -194,6 +214,7 @@ static struct { int ok; float p[3], l[2], v[3]; } g_lis;
 #define PREVIEW_WHO 0xfffffffeu
 static char g_self[64];                                  /* the name the player's own horn last sounded with (its pitch) */
 void horn_begin(const float *pos, const float *fwd, const float *vel){
+    master_read();
     g_lis.ok = pos && fwd;
     if (!g_lis.ok) return;
     for (int a = 0; a < 3; a++){ g_lis.p[a] = pos[a]; g_lis.v[a] = vel ? vel[a] : 0.f; }
@@ -245,7 +266,7 @@ void horn_end(void){
 }
 /* the player's own horn, sounded once: the mixer lets it go STALE_MS later
  * (or the next horn_end, when free roam or a race has the voices) */
-void horn_preview(void){ horn_sound(PREVIEW_WHO, g_self, horn_mine(), 0, 0); }
+void horn_preview(void){ master_read(); horn_sound(PREVIEW_WHO, g_self, horn_mine(), 0, 0); }
 
 /* ---- the mixer ----------------------------------------------------------------- */
 static float g_tbl[HORN_KINDS][TBL + 1];
@@ -296,7 +317,7 @@ void horn_mix(float *acc, unsigned frames, unsigned rate){
     float k_smooth = 1.f - expf(-1.f / (0.020f * fs));
     float k_hp = 1.f / (1.f + 2.f * (float)M_PI * 180.f / fs), rise = 1.f / (0.030f * fs);
     uint32_t gap = (uint32_t)(GAP_S * fs), vib_in = (uint32_t)(0.25f * fs);
-    float vol = bitsf(GET(g_vol));                       /* in the voices' gains, smoothed with them */
+    float vol = bitsf(GET(g_vol)) * bitsf(GET(g_master));   /* in the voices' gains, smoothed with them */
     for (int v = 0; v < HORN_VOICES; v++){
         float gain = bitsf(GET(g_in[v].gain));
         if (now - GET(g_in[v].stamp) > STALE_MS) gain = 0.f;

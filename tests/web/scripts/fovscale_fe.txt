@@ -1,0 +1,133 @@
+# 3D proportions A/B in the front end (widescreen.c, NFSU2_FOV_SCALE): each
+# moment held ~150 frames with "fovscale original", dumped, then the same
+# with "fovscale correct" (a dump is read back some frames after it is
+# asked for, so each look stays on well past its dump).  Main menu, then
+# Customize: the car, Car Shop, and the Body Shop's part lists one by one
+# (each has its own camera: front, rear, side, wheel).  Run on
+# /test/play.html at a wide size (w=1600&h=900).
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    waitfng GarageMain.fng 3000
++400  log main_menu
++0    fovscale original
++150  dump mm_o
++40   dump mm_o
++150  fovscale correct
++150  dump mm_c
++40   dump mm_c
++150  fovscale original
++0    tap RIGHT
++40   tap RIGHT
++40   tap RIGHT                                    # Quick Race -> Split Screen -> Online -> Customize
++90   tap RETURN
++0    waitfng UI_QRCarSelect.fng 600
++300  tap RETURN                                   # the car
++0    waitfng UI_ChooseCustomizeCategory.fng 600
++400  log car_shop
++0    fovscale original
++150  dump shop_o
++40   dump shop_o
++150  fovscale correct
++150  dump shop_c
++40   dump shop_c
++150  fovscale original
++0    tap RETURN                                   # Change Body Parts -> Body Shop
++300  log body_shop
++0    tap RETURN                                   # part list 0
++400  log part_0
++0    fovscale original
++150  dump part0_o
++40   dump part0_o
++150  fovscale correct
++150  dump part0_c
++40   dump part0_c
++150  fovscale original
++0    tap ESCAPE
++200  tap RIGHT
++200  log next
++0    tap RETURN                                   # part list 1
++400  log part_1
++0    fovscale original
++150  dump part1_o
++40   dump part1_o
++150  fovscale correct
++150  dump part1_c
++40   dump part1_c
++150  fovscale original
++0    tap ESCAPE
++200  tap RIGHT
++200  log next
++0    tap RETURN                                   # part list 2
++400  log part_2
++0    fovscale original
++150  dump part2_o
++40   dump part2_o
++150  fovscale correct
++150  dump part2_c
++40   dump part2_c
++150  fovscale original
++0    tap ESCAPE
++200  tap RIGHT
++200  log next
++0    tap RETURN                                   # part list 3
++400  log part_3
++0    fovscale original
++150  dump part3_o
++40   dump part3_o
++150  fovscale correct
++150  dump part3_c
++40   dump part3_c
++150  fovscale original
++0    tap ESCAPE
++200  tap RIGHT
++200  log next
++0    tap RETURN                                   # part list 4
++400  log part_4
++0    fovscale original
++150  dump part4_o
++40   dump part4_o
++150  fovscale correct
++150  dump part4_c
++40   dump part4_c
++150  fovscale original
++0    tap ESCAPE
++200  tap RIGHT
++200  log next
++0    tap RETURN                                   # part list 5
++400  log part_5
++0    fovscale original
++150  dump part5_o
++40   dump part5_o
++150  fovscale correct
++150  dump part5_c
++40   dump part5_c
++150  fovscale original
++0    tap ESCAPE
++200  tap RIGHT
++200  log next
++0    tap RETURN                                   # part list 6
++400  log part_6
++0    fovscale original
++150  dump part6_o
++40   dump part6_o
++150  fovscale correct
++150  dump part6_c
++40   dump part6_c
++150  fovscale original
++0    tap ESCAPE
++200  tap RIGHT
++200  log next
++0    tap RETURN                                   # part list 7
++400  log part_7
++0    fovscale original
++150  dump part7_o
++40   dump part7_o
++150  fovscale correct
++150  dump part7_c
++40   dump part7_c
++150  fovscale original
++0    tap ESCAPE
++200  tap RIGHT
++200  log next
++60   status fovscale_fe done
++30   quit

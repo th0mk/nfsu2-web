@@ -31,11 +31,19 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  career's start, 2026-10-25), the file's 32 on computers.  40 and 48 only when the player picks them: each car past
  *  32 costs the game's thread about 0.28 ms a frame on a Ryzen 5900X (14 -> 18.5 ms with 48 in view), a laptop's
  *  several times that, and the game's own drop back to 32 (roam_game.c cars_cut) waits for frames under ~40 fps: it
- *  never helps a player who went from 144 to 100 fps (fast computers started at 48, then 40, until 2026-11-02). */
+ *  never helps a player who went from 144 to 100 fps (fast computers started at 48, then 40, until 2026-11-02).  The
+ *  world map's other players: 2048 on phones, the file's 4096 elsewhere (each marker costs the open map's frames,
+ *  about 7 us a frame on a busy Ryzen 5900X, a phone's several times that). */
 export function deviceDefaults(): Record<string, string> {
-  if (isPhone()) return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16' };
-  if (touchFirst()) return { roam_max_cars: '24' };
+  const kind = deviceKind();
+  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048' };
+  if (kind === 'tablet') return { roam_max_cars: '24' };
   return {};
+}
+
+/** the device as its defaults see it: a phone, a touch-first one that is not a phone (a tablet), or a computer */
+export function deviceKind(): 'phone' | 'tablet' | 'pc' {
+  return isPhone() ? 'phone' : touchFirst() ? 'tablet' : 'pc';
 }
 
 /** the render check's verdict on this phone: in this browser only, like the other device defaults (settings.ini,

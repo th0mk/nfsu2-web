@@ -127,7 +127,8 @@ function onlineScript(role, name, inst) {
   w('0     tapuntil RETURN MC_Background.fng 120 4000');
   w('+200  tap RETURN');
   w('+0    waitfng GarageMain.fng 3000');
-  w('+300  tap RIGHT');                      // Quick Race -> Online
+  w('+300  tap RIGHT');                      // Quick Race -> Split Screen
+  w('+60   tap RIGHT');                      // -> Online
   w('+120  tap RETURN');
   if (!EA_LOGIN) w('+0    waitfng UI_OLMAIN.fng 1800');
   else eaLogin(w);

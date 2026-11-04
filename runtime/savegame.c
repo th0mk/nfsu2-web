@@ -77,7 +77,7 @@ int roam_game_in_lobby(void);         /* roam_game.c: in a free-roam race lobby 
 #define HOOK_RET       0x00581475u   /* the main-loop hook's return address, as guest calls see it */
 #define G_GAMEMODE     0x00850078u   /* 1 the career */
 #define G_RACEKIND     0x0089e7b0u   /* 0 free roam, 7 an outrun */
-#define G_PLAYER1      0x008900acu   /* Player*: +4 its car */
+#define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player*: +4 its car */
 #define G_PROFILE      0x0083a9e0u   /* the profile's name, 32 bytes; +0x20 1: a profile is loaded */
 #define G_MC_JOB       0x00836514u   /* the save screen's job: 0 none */
 #define G_MC_MANAGER   0x00836498u   /* the save screen's manager: +6 the overwrite question answered Yes this game, */

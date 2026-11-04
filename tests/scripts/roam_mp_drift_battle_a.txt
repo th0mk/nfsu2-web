@@ -1,0 +1,81 @@
+# Free-roam drift battle between two players, instance A (drift mode on, challenges, drifts): new career -> prologue
+# free roam with B (roam_mp_drift_battle_b.txt).  With drift mode on (X) the challenge offered is a drift battle; B
+# takes it.  Through the countdown and the 90 s both cars are passable and A has no nitrous; A drifts at the bend
+# south of the start (roam_drift.txt's teleport), B stands.  At the end A has won, the same points on both screens
+# ("drift battle with Bo: over, WON, N to 0"), the bank has $100 (the prologue's was 0), drift mode is still on (it
+# was before) and the nitrous is back.
+#   node web/tools/roam-pair.mjs --a Al:roam_mp_drift_battle_a.txt --b Bo:roam_mp_drift_battle_b.txt --drive 12000 --watch 12000
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++900  nstap X                         # drift mode on (the prologue holds the controls ~900 frames after its message)
++60   expect i:0x890104 == 1
++0    expect i:0x861e74 == 0           # the bank
++0    expect i:[[0x8900ac]+4]+0x454 > 0   # a nitrous shot
++0    mark nos i:[[0x8900ac]+4]+0x45c
++0    roam mp waitoutrun prompt 2400
++0    roam mp outrun
++30   tap RETURN
++0    roam mp waitoutrun race 900
++0    roam mp outrun
++0    roam mp doors                    # "in a drift battle ... passable"
++30   expect i:[[0x8900ac]+4]+0x454 == 0  # no nitrous in the battle
++0    expect i:[[0x8900ac]+4]+0x45c == 0
++0    nstap X                          # X does nothing in a battle ("Drift mode stays on")
++30   expect i:0x890104 == 1
++0    teleport 1695.0 -845.0 24.6 0xb82e
++300  down UP
++0    waitexpr [[0x8900ac]+4]+0x42c > 3 1200
++150  log flick
++0    down LEFT
++100wms tap SPACE 8
++300wms up LEFT
++0    down RIGHT
++300wms up RIGHT
++0    down LEFT
++150wms up LEFT
++600wms up UP
++0    down DOWN
++180  up DOWN
++120  roam mp outrun
++0    teleport 1695.0 -845.0 24.6 0xb82e
++300  down UP
++0    waitexpr [[0x8900ac]+4]+0x42c > 3 1200
++150  down LEFT
++100wms tap SPACE 8
++300wms up LEFT
++0    down RIGHT
++300wms up RIGHT
++0    down LEFT
++150wms up LEFT
++600wms up UP
++0    down DOWN
++180  up DOWN
++120  roam mp outrun
++0    expect i:[[0x8900ac]+4]+0x454 == 0
++0    roam mp waitoutrun idle ${ROAM_DRIVE_FRAMES}
++0    roam mp outrun
++0    expect i:0x861e74 == 100         # the winner's $100
++0    expect i:0x890104 == 1           # drift mode as it was: on
++0    expect i:[[0x8900ac]+4]+0x454 > 0   # the nitrous back
++0    expect i:[[0x8900ac]+4]+0x45c == @nos
++0    roam mp doors                    # passable no more (or for other reasons only)
++300  roam mp outrun
++10   quit

@@ -1,0 +1,122 @@
+# Our controls leave a key or button the player put one of the game's controls on (runtime/dinput_kbd.c dikbd_ours and
+# page_keys, dinput_pad.c ours_from).  A profile, then Options > Controls: Keyboard Configuration puts Shift Up on X,
+# Shift Down on O, Handbrake on N, the row after it on I and the next row on G; Joypad Configuration puts Shift Up on
+# the left stick's click, Shift Down on the right stick's and Handbrake on D-pad down (the pad's channel 1, 0x874fb0:
+# its in-game table +0x18, buttons 8 and 9 and POV 0 down at +0x40); then a new career -> prologue free roam, free
+# roam on.  The log says once for each: "[keys] X is bound to Shift Up in the game: drift mode stays off it", the same
+# for O (the show-off), N (the horn), G (the headlight key, when pressed) and I (Message a friend: the page's, the
+# status "keys"), "[pad] D-pad down is bound to Handbrake ...", the left stick's click (the horn) and the right
+# stick's (quick chat: the status "rstick" 2).  Then the game has them: standing, O and D-pad down held open nothing
+# ("[showoff] ... step" never), D-pad down is the pad's handbrake at once (the channel's action mask 0x874fb8, active
+# low: bit 5), N the keyboard's (0x874c48), N and the left stick's click sound no horn ("[horn] my horn" never);
+# driving, X leaves drift mode off and G the headlights on (the car's +0x93D).  keys_ours.txt: the defaults.
+#   node web/tools/run-suite.mjs --base <server> --script keys_bound.txt --net keysbound --env NFSU2_ROAM=1
+#     --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=keysbound --env ROAM_PROFILE=Keys2 --env NFSU2_PAD_LOG=1
+0     pad connect
++0    tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++600  tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT                       # (Split Screen, after Quick Race)
++120  tap RETURN                      # Options
++0    waitfng UI_OptionsMain.fng 600
++300  tap RIGHT
++120  tap RIGHT
++120  tap RIGHT
++120  tap RIGHT
++120  tap RETURN                      # Controls
++0    waitfng UI_Options_PC_Controller.fng 600
++300  tap UP                          # header: Keyboard Configuration
++120  tap DOWN                        # Steering (Left)
++90   tap DOWN                        # Steering (Right)
++90   tap DOWN                        # Throttle
++90   tap DOWN                        # Back / Reverse
++90   tap DOWN                        # Shift Up
++90   tap RETURN                      # "Press a button..."
++120  tap X
++150  tap DOWN                        # Shift Down
++90   tap RETURN
++120  tap O
++150  tap DOWN                        # Handbrake
++90   tap RETURN
++120  tap N
++150  tap DOWN                        # the next row
++90   tap RETURN
++120  tap I
++150  tap DOWN                        # the row after it
++90   tap RETURN
++120  tap G
++150  tap ESCAPE                      # leave Controls
++300  tap RETURN                      # Controls again
++0    waitfng UI_Options_PC_Controller.fng 600
++300  tappad DUP                      # header
++120  tappad DRIGHT                   # Joypad Configuration
++150  tappad DDOWN                    # Steering (Left)
++60   tappad DDOWN                    # Steering (Right)
++60   tappad DDOWN                    # Throttle
++60   tappad DDOWN                    # Back / Reverse
++60   tappad DDOWN                    # Shift Up
++90   tappad A                        # "press a button"
++120  tappad LS
++200  tappad DDOWN                    # Shift Down
++90   tappad A
++120  tappad RS
++200  tappad DDOWN                    # Handbrake
++90   tappad A
++120  tappad DDOWN
++200  peek 0x874fc8 80                # the pad's in-game table: buttons 0-15, then POV 0 down, up, left, right
++0    expect x:0x874fe8 == 7           # the left stick's click: Shift Up
++0    expect x:0x874fec == 8           # the right stick's: Shift Down
++0    expect x:0x875008 == 5           # D-pad down: Handbrake
++0    tappad B                        # leave Controls
++300  tappad B                        # leave Options: "save the profile?"
++300  tappad A                        # No
++0    waitfng GarageMain.fng 1500
++300  tappad DLEFT                    # back past Quick Race to Career
++60   tappad DLEFT
++60   tappad DLEFT
++60   tappad DLEFT
++60   tappad DLEFT
++60   tappad DLEFT
++60   tappad DLEFT
++120  tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log --- standing: O, then D-pad down held: nothing opens, the pad's handbrake ---
++0    tap O
++2000ms pad DDOWN down
++300ms peek 0x874fb8 4                # the pad's action mask: bit 5 (handbrake) clear
++1200ms pad DDOWN up
++1000ms log --- N: the keyboard's handbrake, no horn; the left stick's click: no horn ---
++0    down N
++300ms peek 0x874c48 4                # the keyboard's action mask: bit 5 clear
++200ms up N
++1000ms pad LS down
++500ms pad LS up
++1000ms log --- driving: X leaves drift mode off ---
++0    teleport 1695.0 -845.0 24.6 0xb82e
++300  down UP
++0    waitexpr [[0x8900ac]+4]+0x42c > 3 1200
++0    expect i:0x890104 == 0
++0    tap X
++30   expect i:0x890104 == 0          # drift mode stays off
++0    tap G 1
++10   expect b:[[0x8900ac]+4]+0x93d == 1   # the headlights stay on
++0    up UP
++60   log end
++10   quit

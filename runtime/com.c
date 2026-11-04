@@ -142,6 +142,25 @@ static void gbuf_free(uint32_t p){
     uint32_t n = gheap_usize(p);
     gheap_free_c(g_com_cpu, g_gh_gbuf, p); g_gbuf_bytes -= n;
 }
+/* A Lock whose buffer the guest heap cannot give (the window full): the game
+ * checks no Lock's result (0x5CE170's LockRect, the vertex buffer lockers'
+ * Lock at 0x5CC280: they write at the pointer at once), and with a pointer
+ * of 0 it wrote megabytes of texels and vertices at guest address 0 and up.
+ * It gets the scratch area instead (heap.c gheap_scratch), D3D_OK as before;
+ * nothing keeps the buffer, so the next Lock tries the heap again.  A
+ * texture level locked there is uploaded from it at UnlockRect if no other
+ * Lock took the area meanwhile (g_scr_slot). */
+uint32_t gheap_scratch(int lock, uint32_t n);
+static uint32_t g_scr_slot;                    /* the texture level (its slot) whose texels are in the scratch area */
+static uint64_t g_scr_locks;
+static uint32_t lock_scratch(uint32_t need, const char *what){
+    uint32_t p = gheap_scratch(1, need);
+    g_scr_locks++; g_scr_slot = 0;
+    if (g_scr_locks <= 8 || !(g_scr_locks & 255))
+        fprintf(stderr, "[com] no memory for a %s's Lock buffer of %u bytes: %s (%llu times)\n", what, need,
+                p ? "the scratch area instead" : "too big for the scratch area, pointer 0", (unsigned long long)g_scr_locks);
+    return p;
+}
 
 typedef struct { const char *name; const Method *m; unsigned n; } Iface;
 static const Iface g_if[] = {
@@ -773,6 +792,7 @@ static void rs_apply(void){
 static uint64_t g_rt_set=0, g_rt_screen=0;
 static uint64_t g_rt_tex=0;
 static uint32_t g_bb_w = 1280, g_bb_h = 720;   /* back buffer size */
+void com_backbuffer_size(unsigned *w, unsigned *h){ *w = g_bb_w; *h = g_bb_h; }
 /* Cube textures share the IDirect3DTexture9 vtable.  v12na: the cube
  * flag lives in the object header (CF_CUBE).  The old address bitmap was
  * only valid while COM memory was never reused, and that table had to be
@@ -3350,6 +3370,12 @@ int com_call(CPU *c, uint32_t magic){
             uint32_t ss=A(c,1), ds=A(c,3);
             uint32_t stex = (ss && mem_is_committed(ss+31)) ? MR32(ss+28) : 0u;
             uint32_t dtex = (ds && mem_is_committed(ds+31)) ? MR32(ds+28) : 0u;
+#ifdef __wasm__
+            /* Cube surfaces share a texture id; preserve the selected face
+             * in the ordered copy record, as SetRenderTarget already does. */
+            if (stex && ss && mem_is_committed(ss+47)) stex |= (MR32(ss+44) & 7u) << 16;
+            if (dtex && ds && mem_is_committed(ds+47)) dtex |= (MR32(ds+44) & 7u) << 16;
+#endif
             if (ENVC("BLITLOG")){
                 static int nb2=0;
                 if (nb2 < 8){ nb2++;
@@ -3378,6 +3404,10 @@ int com_call(CPU *c, uint32_t magic){
                 }
                 srq = sr;
             }
+#ifdef __wasm__
+            int split_blur_region(uint32_t, uint32_t, uint32_t, uint32_t, int *);
+            if (!srp && !A(c,4) && split_blur_region(A(c,0), ss, ds, A(c,5), sr)) srq = sr;
+#endif
             if (metal_available() && (stex || dtex) && stex != dtex){
                 void metal_blit_rect(unsigned,unsigned,const int*);
                 metal_blit_rect(stex, dtex, srq);
@@ -3409,6 +3439,11 @@ int com_call(CPU *c, uint32_t magic){
                 uint32_t face = (surf && mem_is_committed(surf+47)) ? MR32(surf+44) : 0u;
                 g_cur_rt = tid;
                 metal_set_render_target(tid | ((face & 7u) << 16));
+#ifdef __wasm__
+                { uint32_t region[4]; int split_backbuffer_region(uint32_t, uint32_t[4]);
+                  void web_set_viewport(unsigned, unsigned, unsigned, unsigned, float, float);
+                  if (split_backbuffer_region(surf, region)) web_set_viewport(region[0], region[1], region[2], region[3], 0.f, 1.f); }
+#endif
                 if (tid) g_rt_set++; else g_rt_screen++;
             }
             r=0; }
@@ -3436,6 +3471,21 @@ int com_call(CPU *c, uint32_t magic){
         else if (MID(SetViewport)){
             static int nv2=0;
             uint32_t vp2=A(c,1);
+#ifdef __wasm__
+            if (vp2 && mem_is_committed(vp2 + 23)){
+                void web_set_viewport(unsigned, unsigned, unsigned, unsigned, float, float);
+                int split_backbuffer_region(uint32_t, uint32_t[4]);
+                uint32_t region[4];
+                if (!MR32(vp2) && !MR32(vp2+4) && split_backbuffer_region(g_bind_rt[0], region))
+                    web_set_viewport(region[0], region[1], region[2], region[3], MRF32(vp2+16), MRF32(vp2+20));
+                /* The existing widescreen port uses a virtual 4:3 guest
+                 * viewport (e.g. 1280x960 on a 1280x720 target). Its shaders
+                 * already apply that correction. Only split cells describe
+                 * physical target pixels; ordinary views fill their target
+                 * (all zero, as SetRenderTarget leaves it, so draws still merge). */
+                else web_set_viewport(0, 0, 0, 0, 0.f, 0.f);
+            }
+#endif
             if (ENVC("XFORM") && nv2<6 && vp2 && mem_is_committed(vp2+23)){ nv2++;
                 fprintf(stderr,"  [SetViewport] x=%u y=%u g=%u y=%u minZ=%.3f maxZ=%.3f\n",
                         MR32(vp2), MR32(vp2+4), MR32(vp2+8), MR32(vp2+12),
@@ -3897,6 +3947,7 @@ int com_call(CPU *c, uint32_t magic){
                 MR32(self+48) = MR32(self+48) + 1u; MR32(self+52) = (uint32_t)g_present; }
             uint32_t base = self?MR32(self+8):0;
             if(!base){ base=gbuf_alloc(sz?sz:65536); if(self) MR32(self+8)=base; }
+            if(!base) base = lock_scratch(off + (sz?sz:65536u), iface==IF_IB ? "index buffer" : "vertex buffer");
             if(pp) MR32(pp)=base+off; r=0; }
         else if (MID(LockRect)){
             /* 2D texture  : (Level, pLockedRect, pRect, Flags)
@@ -3922,6 +3973,7 @@ int com_call(CPU *c, uint32_t magic){
                                             : (self + 32u + 4u*level)) : 0;
             uint32_t buf = slot ? MR32(slot) : 0;
             if(!buf){ buf = gbuf_alloc(pitch*rows + 64u); if(slot) MR32(slot)=buf; }
+            if(!buf){ buf = lock_scratch(pitch*rows + 64u, iface==IF_SURF ? "surface" : "texture"); if(buf) g_scr_slot = slot; }
             /* a render target the game made lockable (CreateRenderTarget):
              * what the GPU drew there, the cover shoot's picture (gpu_web.c) */
             if (iface==IF_SURF && self && MR32(self+40)==3u && MR32(self+28) && metal_available()){
@@ -3938,8 +3990,9 @@ int com_call(CPU *c, uint32_t magic){
             if(level>7) level=7;
             uint32_t w = self?MR32(self+4):0, h = self?MR32(self+8):0;
             uint32_t fmt = self?MR32(self+20):21u, mid = self?MR32(self+28):0;
-            uint32_t buf = self ? (is_cube2 ? MR32(self + 104u + 4u*(face2 & 7u))
-                                            : MR32(self + 32u + 4u*level)) : 0;
+            uint32_t uslot = self ? (is_cube2 ? self + 104u + 4u*(face2 & 7u) : self + 32u + 4u*level) : 0;
+            uint32_t buf = uslot ? MR32(uslot) : 0;
+            if (!buf && uslot && uslot == g_scr_slot){ buf = gheap_scratch(1, 0); g_scr_slot = 0; }   /* its texels in the scratch area */
             gheap_check_block(c, buf, "LOCK BUFFER OVERRUN (UnlockRect)");   /* NFSU2_HEAPCHECK only */
             if (metal_available() && mid && buf && w && h)
                 metal_upload_texture(mid, level, g_mem+buf,
@@ -3982,6 +4035,7 @@ int com_call(CPU *c, uint32_t magic){
             if (!sf){ if(pp) MR32(pp)=0; r=0x8007000Eu; goto surf_done; }
             com_addref(self0);
             MR32(sf+40)=2;
+            MR32(sf+44)=cube3 ? face3 + 1u : 0u;
             uint32_t self=A(c,0);
             if (self && mem_is_committed(self+31)){
                 MR32(sf+4)=MR32(self+4); MR32(sf+8)=MR32(self+8);
@@ -4151,6 +4205,7 @@ int com_call(CPU *c, uint32_t magic){
             uint32_t off=A(c,1), want=A(c,2), pp1=A(c,3), pn1=A(c,4),
                      pp2=A(c,5), pn2=A(c,6), fl=A(c,7);
             if(!buf){ buf=gbuf_alloc(sz?sz:65536u); if(self) MR32(self+8)=buf; }
+            if(!buf) buf = lock_scratch(sz?sz:65536u, "sound buffer");
             if(!sz) sz = 65536u;
             if (fl & 0x2u){ off = 0; want = sz; }        /* ENTIREBUFFER */
             off %= sz;

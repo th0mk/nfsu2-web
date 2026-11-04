@@ -2,7 +2,7 @@
 // names, same numbers; web/tools/check-proto.mjs compares the two files).
 
 export const INPUT_MAGIC = 0x4E494E50;
-export const INPUT_VERSION = 1;
+export const INPUT_VERSION = 2;
 export const INPUT_EV_N = 1024;
 export const INPUT_SYN_N = 256;
 export const INPUT_NAME_LEN = 16;
@@ -107,7 +107,18 @@ export const IM_OFF_PAD_NAME = 256;
 export const IM_OFF_NAMES = 320;
 export const IM_OFF_EV = 4416;
 export const IM_OFF_SYN = 20800;
-export const IM_BYTES = 24896;
+export const INPUT_LOCAL_PADS = 6;
+export const IM_LOCAL_WORDS = 32;
+export const IM_LOCAL_SEQ = 0;
+export const IM_LOCAL_CONNECTED = 1;
+export const IM_LOCAL_BUTTONS = 2;
+export const IM_LOCAL_FAMILY = 3;
+export const IM_LOCAL_AXIS = 4;
+export const IM_LOCAL_NAME = 10;
+export const IM_LOCAL_INDEX = 26;
+export const IM_LOCAL_JOIN = 27;
+export const IM_OFF_LOCAL_PADS = 24896;
+export const IM_BYTES = 25664;
 
 // runtime/gamepad.h
 export const PAD_A = 0, PAD_B = 1, PAD_X = 2, PAD_Y = 3, PAD_LB = 4, PAD_RB = 5, PAD_BACK = 6, PAD_START = 7,

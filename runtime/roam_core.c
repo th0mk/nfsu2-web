@@ -279,7 +279,7 @@ static int8_t q_slip(float f){ int32_t v = f_round(f_clamp(f, -1000.f, 1000.f) /
 #define ENG_MAX 20000u
 static void put_statex(rc_w *w, const rc_state *s){
     if (!s->ext){ rc_put8(w, 0); return; }
-    int slides = 0, eng = s->eng != 0, open = (s->open & RC_OPEN_ALL) != 0;
+    int slides = 0, eng = s->eng != 0, open = (s->open & RC_OPEN_ALL) != 0 || s->hibeam;
     for (int i = 0; i < 8; i++) slides |= q_slip(s->slip[i]) != 0;
     if (open) slides = eng = 1;
     rc_put8(w, (slides ? RC_STATEX_SLIP : RC_STATEX_HYD) + (eng ? RC_STATEX_ENG : 0) + (open ? RC_STATEX_OPEN : 0) - 1);
@@ -290,7 +290,7 @@ static void put_statex(rc_w *w, const rc_state *s){
         rc_put8(w, (uint8_t)q_slip(s->slip[2 * i])); rc_put8(w, (uint8_t)q_slip(s->slip[2 * i + 1])); rc_put8(w, s->surf[i]);
     }
     if (eng){ rc_put16(w, s->eng < ENG_MAX ? s->eng : ENG_MAX); rc_put8(w, s->eng_acc); rc_put8(w, s->eng_dcl); rc_put8(w, s->eng_base); }
-    if (open) rc_put8(w, s->open & RC_OPEN_ALL);
+    if (open) rc_put8(w, (s->open & RC_OPEN_ALL) | (s->hibeam ? RC_OPEN_HIBEAM : 0u));
 }
 static int get_statex(rc_r *r, rc_state *s){
     uint32_t n = rc_get8(r);
@@ -316,7 +316,8 @@ static int get_statex(rc_r *r, rc_state *s){
         k += RC_STATEX_ENG;
     }
     if (k == RC_STATEX_FULL - 1 && n >= k + RC_STATEX_OPEN){        /* the open parts, after the longest form */
-        s->open = (uint8_t)(rc_get8(r) & RC_OPEN_ALL);
+        uint32_t b = rc_get8(r);
+        s->open = (uint8_t)(b & RC_OPEN_ALL); s->hibeam = (b & RC_OPEN_HIBEAM) != 0;
         k += RC_STATEX_OPEN;
     }
     r->n += n - k;                                                  /* a newer core's fields */
@@ -325,7 +326,7 @@ static int get_statex(rc_r *r, rc_state *s){
 }
 static int get_state(rc_r *r, rc_state *s){
     s->ext = 0; s->nos = 0; s->hyd = 0; s->thumps = 0; s->slipx = 0; s->eng = 0; s->eng_acc = 0; s->eng_dcl = 0; s->eng_base = 0;
-    s->open = 0;
+    s->open = 0; s->hibeam = 0;
     for (int i = 0; i < 4; i++){ s->wz[i] = 0; s->surf[i] = 0; }
     for (int i = 0; i < 8; i++) s->slip[i] = 0;
     s->t_us = rc_get32(r);
@@ -351,6 +352,9 @@ static int get_state(rc_r *r, rc_state *s){
 }
 
 /* ---- messages ------------------------------------------------------------------- */
+/* a flag's code: lower case letters and '-' (roam_game.c looks it up; one it does not have shows none) */
+static int flag_ok(const char *s, uint32_t n){ for (uint32_t i = 0; i < n; i++) if (!((s[i] >= 'a' && s[i] <= 'z') || s[i] == '-')) return 0; return 1; }
+static uint32_t flag_len(const char *s){ uint32_t n = 0; while (n <= RC_FLAG_MAX && s[n]) n++; return n; }   /* RC_FLAG_MAX + 1: too long */
 static int printable(const char *s, uint32_t n){ for (uint32_t i = 0; i < n; i++) if ((uint8_t)s[i] < 0x20 || (uint8_t)s[i] >= 0x7F) return 0; return 1; }
 
 /* a LOBBY message's fields: a known op, state and reason, an id for the
@@ -380,6 +384,7 @@ static int racerep_ok(const rc_racerep *r){
 /* a RACERES's fields: a lobby and a race, 1 to RC_LOBBY_MAX rows, known flags (one row ours at most), numbers in range */
 static int raceres_ok(const rc_raceres *r){
     if (!r->lobby || !r->race || r->n < 1 || r->n > RC_LOBBY_MAX) return 0;
+    if (r->heats ? r->heats < 2 || r->heats > RC_RACERES_HEATS || r->heat < 1 || r->heat > r->heats : r->heat != 0) return 0;
     int ours = 0;
     for (int k = 0; k < r->n; k++){
         if (r->row[k].flags & ~(RC_RS_FINISHED | RC_RS_OURS) || !in(r->row[k].time, 0.f, 100000.f) || !in(r->row[k].done, 0.f, 1000.f)
@@ -402,12 +407,15 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put8(&w, nl); rc_putb(&w, m->u.hello.name, nl);
         rc_put8(&w, m->u.hello.n_seen);
         for (int i = 0; i < m->u.hello.n_seen; i++) rc_put32(&w, m->u.hello.seen[i]);
-        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel){
+        uint32_t fl = flag_len(m->u.hello.flag);
+        if (fl > RC_FLAG_MAX || !flag_ok(m->u.hello.flag, fl)) return -1;
+        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel || fl){
             if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX || m->u.hello.links > RC_MAX_PEERS) return -1;
             rc_put8(&w, m->u.hello.n_crews);
             for (int i = 0; i < m->u.hello.n_crews; i++){ if (!m->u.hello.crews[i]) return -1; rc_put32(&w, m->u.hello.crews[i]); }
-            if (m->u.hello.links || m->u.hello.duel) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
-            if (m->u.hello.duel) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
+            if (m->u.hello.links || m->u.hello.duel || fl) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
+            if (m->u.hello.duel || fl) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
+            if (fl){ rc_put8(&w, fl); rc_putb(&w, m->u.hello.flag, fl); }                  /* (...before version 13 this) */
         }
         break; }
     case RC_MSG_PEERS:
@@ -447,6 +455,7 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
     case RC_MSG_DUEL:
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return -1;
         rc_put8(&w, m->u.duel.op); rc_put8(&w, m->u.duel.arg); rc_put32(&w, m->u.duel.to); rc_put32(&w, m->u.duel.duel);
+        if (m->u.duel.op == RC_DUEL_SCORE) rc_put32(&w, m->u.duel.score);
         break;
     case RC_MSG_MAPREQ:
         rc_put16(&w, m->u.mapreq.req); rc_put16(&w, m->u.mapreq.max); rc_put16(&w, m->u.mapreq.base);
@@ -489,9 +498,10 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
     case RC_MSG_RACERES: {
         const rc_raceres *r = &m->u.raceres;
         if (!raceres_ok(r)) return -1;
-        rc_put32(&w, r->lobby); rc_put32(&w, r->race); rc_put8(&w, r->mode); rc_put8(&w, r->laps); rc_put8(&w, r->n); rc_put8(&w, 0);
+        rc_put32(&w, r->lobby); rc_put32(&w, r->race); rc_put8(&w, r->mode); rc_put8(&w, r->laps); rc_put8(&w, r->n);
+        rc_put8(&w, (uint8_t)(r->heats << 4 | r->heat));
         for (int k = 0; k < r->n; k++){
-            rc_put32(&w, r->row[k].id); rc_put8(&w, r->row[k].flags); rc_put8(&w, 0); rc_put8(&w, 0); rc_put8(&w, 0);
+            rc_put32(&w, r->row[k].id); rc_put8(&w, r->row[k].flags); rc_put16(&w, r->row[k].jump); rc_put8(&w, 0);
             rc_putf(&w, r->row[k].time); rc_putf(&w, r->row[k].done); rc_putf(&w, r->row[k].dist);
         }
         break; }
@@ -543,6 +553,13 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
             for (int i = 0; i < m->u.hello.n_crews; i++) if (!m->u.hello.crews[i]) return RC_E_FIELD;
             if (r.n < r.len) m->u.hello.links = (uint8_t)rc_get8(&r);
             if (r.n + 4 <= r.len) m->u.hello.duel = rc_get32(&r);
+            if (r.n < r.len){                                         /* the flag (core 13): one that is not a code, none */
+                uint32_t fl = rc_get8(&r);
+                if (fl <= RC_FLAG_MAX && r.n + fl <= r.len){
+                    rc_getb(&r, m->u.hello.flag, fl); m->u.hello.flag[fl] = 0;
+                    if (!flag_ok(m->u.hello.flag, fl)) m->u.hello.flag[0] = 0;
+                }
+            }
             r.n = r.len;                                              /* (a newer core's additions) */
         }
         break; }
@@ -599,6 +616,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
     case RC_MSG_DUEL:
         m->u.duel.op = (uint8_t)rc_get8(&r); m->u.duel.arg = (uint8_t)rc_get8(&r);
         m->u.duel.to = rc_get32(&r); m->u.duel.duel = rc_get32(&r);
+        m->u.duel.score = m->u.duel.op == RC_DUEL_SCORE ? rc_get32(&r) : 0;
         if (r.err) return RC_E_SHORT;
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return RC_E_FIELD;
         break;
@@ -666,11 +684,12 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
     case RC_MSG_RACERES: {
         rc_raceres *q = &m->u.raceres;
         q->lobby = rc_get32(&r); q->race = rc_get32(&r); q->mode = (uint8_t)rc_get8(&r); q->laps = (uint8_t)rc_get8(&r);
-        q->n = (uint8_t)rc_get8(&r); (void)rc_get8(&r);
+        q->n = (uint8_t)rc_get8(&r);
+        { uint8_t h = (uint8_t)rc_get8(&r); q->heat = h & 15u; q->heats = h >> 4; }
         if (r.err) return RC_E_SHORT;
         if (q->n < 1 || q->n > RC_LOBBY_MAX) return RC_E_FIELD;
         for (int k = 0; k < q->n; k++){
-            q->row[k].id = rc_get32(&r); q->row[k].flags = (uint8_t)rc_get8(&r); (void)rc_get8(&r); (void)rc_get8(&r); (void)rc_get8(&r);
+            q->row[k].id = rc_get32(&r); q->row[k].flags = (uint8_t)rc_get8(&r); q->row[k].jump = (uint16_t)rc_get16(&r); (void)rc_get8(&r);
             q->row[k].time = rc_getf(&r); q->row[k].done = rc_getf(&r); q->row[k].dist = rc_getf(&r);
         }
         if (r.err) return RC_E_SHORT;
@@ -809,7 +828,7 @@ static void lerp_rest(const rc_state *a, const rc_state *b, float u, rc_pose *o)
     o->speed = a->speed + u * (b->speed - a->speed);
     const rc_state *n = u < 0.5f ? a : b;
     o->gear = n->gear; o->bits = n->bits;
-    o->ext = n->ext; o->nos = n->nos; o->hyd = n->hyd; o->thumps = n->thumps; o->open = n->open;
+    o->ext = n->ext; o->nos = n->nos; o->hyd = n->hyd; o->thumps = n->thumps; o->open = n->open; o->hibeam = n->hibeam;
     for (int i = 0; i < 4; i++) o->wz[i] = a->ext && b->ext ? a->wz[i] + u * (b->wz[i] - a->wz[i]) : n->wz[i];
     o->slipx = n->slipx;
     for (int i = 0; i < 4; i++) o->surf[i] = n->surf[i];
@@ -826,7 +845,7 @@ static void from_state(const rc_state *s, rc_pose *o){
     for (int i = 0; i < 4; i++){ o->q[i] = s->q[i]; o->wz[i] = s->wz[i]; }
     o->steer = s->steer; o->throttle = s->throttle; o->brake = s->brake; o->rpm = s->rpm; o->speed = s->speed;
     o->gear = s->gear; o->bits = s->bits; o->ext = s->ext; o->nos = s->nos; o->hyd = s->hyd; o->thumps = s->thumps;
-    o->open = s->open;
+    o->open = s->open; o->hibeam = s->hibeam;
     o->slipx = s->slipx;
     for (int i = 0; i < 4; i++) o->surf[i] = s->surf[i];
     for (int i = 0; i < 8; i++) o->slip[i] = s->slip[i];
@@ -1021,21 +1040,23 @@ static int hub_mode(const rc_session *s, int64_t now){
     if (!s->hub_since) return 1;
     return now - (s->hub_heard_us ? s->hub_heard_us : s->hub_since) < T_HUB_SILENT;
 }
-int rc_send_duel(rc_session *s, uint32_t to, uint8_t op, uint8_t arg, uint32_t duel){
+int rc_send_duel(rc_session *s, uint32_t to, uint8_t op, uint8_t arg, uint32_t duel, uint32_t score){
+    int drift = op == RC_DUEL_SCORE || ((op == RC_DUEL_OFFER || op == RC_DUEL_ACCEPT || op == RC_DUEL_START) && (arg & RC_DA_DRIFT));
     for (int i = 0; i < RC_TABLE; i++){
         rc_peer *p = &s->peer[i];
-        if (p->state != RC_PS_EST || p->id != to || !p->duels) continue;
+        if (p->state != RC_PS_EST || p->id != to || !p->duels || (drift && !p->drifts)) continue;
         rc_msg m; hdr(s, &m, RC_MSG_DUEL);
-        m.u.duel.op = op; m.u.duel.arg = arg; m.u.duel.to = to; m.u.duel.duel = duel;
+        m.u.duel.op = op; m.u.duel.arg = arg; m.u.duel.to = to; m.u.duel.duel = duel; m.u.duel.score = op == RC_DUEL_SCORE ? score : 0;
         uint32_t before = s->tx;
         tx(s, p, &m);
         return s->tx != before;
     }
     return 0;
 }
-int rc_take_duel(rc_session *s, uint32_t *from, uint8_t *op, uint8_t *arg, uint32_t *duel){
+int rc_take_duel(rc_session *s, uint32_t *from, uint8_t *op, uint8_t *arg, uint32_t *duel, uint32_t *score){
     if (!s->n_duel_in) return 0;
     *from = s->duel_in[0].from; *op = s->duel_in[0].op; *arg = s->duel_in[0].arg; *duel = s->duel_in[0].duel;
+    if (score) *score = s->duel_in[0].score;
     for (int k = 1; k < s->n_duel_in; k++) s->duel_in[k - 1] = s->duel_in[k];
     s->n_duel_in--;
     return 1;
@@ -1140,8 +1161,8 @@ static void map_part(rc_session *s, const rc_msg *m, int64_t now){
     s->map_asm_z = (m->h.flags & RC_HF_MAPZ) != 0;
     memcpy(s->map_asm + (size_t)m->u.mapd.part * RC_MAPD_BYTES, m->u.mapd.data, m->u.mapd.len);
     s->map_part_n[m->u.mapd.part] = m->u.mapd.n; s->map_part_len[m->u.mapd.part] = m->u.mapd.len;
-    s->map_mask |= (uint16_t)(1u << m->u.mapd.part);
-    if (s->map_mask != (1u << s->map_nparts) - 1u) return;
+    s->map_mask |= (uint64_t)1 << m->u.mapd.part;
+    if (s->map_mask != ((uint64_t)1 << s->map_nparts) - 1u) return;
     s->map_mask = 0; s->map_asked_us = 0;                    /* answered: a repeat of a part changes nothing */
     if (s->map_asm_base && s->map_asm_base != s->map_held) return;
     int n = 0, i = 0, held = s->map_asm_base ? s->map_n : 0;
@@ -1340,12 +1361,18 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
         m->u.hello.duel = s->duel_with;
     }
     if (s->conf.duels) m->h.flags |= RC_HF_DUELS;
+    if (s->conf.duels && s->conf.drifts) m->h.flags |= RC_HF_DRIFT;
     if (s->conf.lobbies) m->h.flags |= RC_HF_LOBBY;
     if (s->conf.say) m->h.flags |= RC_HF_SAY;
     if (!to) m->h.flags |= RC_HF_ALL;
     m->u.hello.core_ver = RC_CORE_VER; m->u.hello.platform = s->conf.platform; m->u.hello.status = s->status;
     m->u.hello.listen_port = s->conf.port; m->u.hello.cfg_rev = s->cfg_rev; m->u.hello.room = s->conf.room;
     memcpy(m->u.hello.name, s->conf.name, sizeof m->u.hello.name);
+    /* our flag to each peer (with no hub, the beacon's too); the hub reads none */
+    if (to || !s->conf.hub_ip){
+        uint32_t fl = flag_len(s->conf.flag);
+        if (fl <= RC_FLAG_MAX && flag_ok(s->conf.flag, fl)){ memcpy(m->u.hello.flag, s->conf.flag, fl); m->u.hello.flag[fl] = 0; }
+    }
     int n = 0;
     /* a peer that sees its id here takes us as established, so it is named
      * once established, or heard while the group has room (with the group full
@@ -1523,8 +1550,10 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (m.u.hello.room != s->conf.room){ s->rx_room++; if (p->state == RC_PS_EST) drop_peer(s, i, "other room", RC_DGONE_SAID); return; }
         int first = !p->name[0];
         memcpy(p->name, m.u.hello.name, sizeof p->name);
+        memcpy(p->flag, m.u.hello.flag, sizeof p->flag);
         p->platform = m.u.hello.platform; p->status = m.u.hello.status; p->cfg_rev_seen = m.u.hello.cfg_rev;
         p->core_ver = m.u.hello.core_ver; p->duels = (m.h.flags & RC_HF_DUELS) != 0;
+        p->drifts = p->duels && (m.h.flags & RC_HF_DRIFT) != 0;
         p->lobbies = (m.h.flags & RC_HF_LOBBY) != 0;
         p->statex = (m.h.flags & RC_HF_STATEX) != 0;
         p->say = (m.h.flags & RC_HF_SAY) != 0;
@@ -1632,6 +1661,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (s->n_duel_in == RC_DUEL_INBOX){ s->duel_dropped++; return; }
         s->duel_in[s->n_duel_in].from = m.h.sender; s->duel_in[s->n_duel_in].op = m.u.duel.op;
         s->duel_in[s->n_duel_in].arg = m.u.duel.arg; s->duel_in[s->n_duel_in].duel = m.u.duel.duel;
+        s->duel_in[s->n_duel_in].score = m.u.duel.score;
         s->n_duel_in++;
         break;
     case RC_MSG_LOBBY:

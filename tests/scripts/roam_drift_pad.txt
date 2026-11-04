@@ -1,0 +1,48 @@
+# Drift mode on a controller (runtime/showoff.c showoff_pad -> drift.c drift_pad), one page: new career -> prologue
+# free roam.  Driving, D-pad down held 1.5 s: drift mode on ("[drift] ... drift mode on (D-pad down held)"), held
+# again: off; a short press while driving is still the game's Career Status (UI_Status_Career.fng); standing, the
+# same hold is the trunk ("[showoff] ... step 1"), not drift mode.
+#   node web/tools/roam-pair.mjs --solo --a Ann:roam_drift_pad.txt
+0     pad connect
++0    tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  teleport 1695.0 -845.0 24.6 0xb82e
++300  log drive
++0    down UP
++0    waitexpr [[0x8900ac]+4]+0x42c > 3 1200
++0    expect i:0x890104 == 0
++0    pad DDOWN down
++1500ms pad DDOWN up
++30   expect i:0x890104 == 1          # driving: drift mode on
++0    pad DDOWN down
++1500ms pad DDOWN up
++30   expect i:0x890104 == 0          # and off
++0    log tap
++0    tappad DDOWN 6
++0    waitfng UI_Status_Career.fng 300
++60   tap ESCAPE                      # back to the game
++0    up UP
++0    down DOWN
++120  up DOWN
++300  log stand
++0    pad DDOWN down
++1500ms pad DDOWN up
++60   expect i:0x890104 == 0          # standing: the trunk, not drift mode
++60   log end
++10   quit

@@ -89,6 +89,7 @@
 #include "cpu.h"
 #include "mprace.h"
 #include "mpcredit.h"
+#include "racenet.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,7 +112,7 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 #define G_QR_CAR        0x0083aab8u   /* player 1's quick-race / network car handle */
 #define G_QR_CARCAT     0x0083aac0u   /* its car select's category: 4 Career */
 #define G_RACECO        0x008900d8u   /* the race coordinator: +0 its state (4 racing, 6 paused) */
-#define G_PLAYER1       0x008900acu
+#define G_PLAYER1       SPLIT_PLAYERS_INDEX
 #define G_RACETYPE      0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define FN_PAUSE        0x005f4230u   /* thiscall coordinator (the player's +8): pause, UI_Pause */
 #define FN_FE_SEND      0x0055dda0u   /* cdecl (msg, package name): a message to that screen, as the help bar's buttons */
@@ -321,7 +322,7 @@ static void state_log(const char *where){
          * does not come back to its head (a free roam built as the LAN race whose start broke off hung in that walk) */
         fprintf(stderr, "[mprace] f=%ld subscriptions %s:", autotest_frame(), where);
         for (uint32_t p = 0; p < 2u; p++){
-            uint32_t h = 0x008655a0u + 0x1c8u * p, n = rd(h); int k = 0;
+            uint32_t h = SPLIT_PORT_TABLES + 0x1c8u * p, n = rd(h); int k = 0;
             fprintf(stderr, " port %u:", p);
             for (; n != h && k < 400; k++){
                 if (!okm(n, 12)){ fprintf(stderr, " BAD %08x", n); break; }
@@ -736,10 +737,43 @@ static void note_net_car(void){
     uint32_t pl = rd(G_PLAYER1), pi = pl ? perf_info(rd(pl + 4u)) : 0;
     if (pi) g_net_type = (int)rd(pi + PI_TYPE);
 }
-int mprace_rank_code(char code[4]){
+/* An Online race's rank (its report) has a code of 4 bytes the game leaves 0, which olfilter.c fills: "ed" and our
+ * car's type in two hex digits when its game data is edited; else, when another racer's car jumped RANK_JUMP_M or
+ * more at once as our game had it (racenet_farthest: the race's world is gone by the time the rank goes), "j", that
+ * racer's n of the rank's own NAMEn fields (its car's index is another: a test's host was NAME0, its car 4) and the
+ * jump in two hex digits, 4 m a step (1020 m at most): the farthest one.  A server before it ignores the code */
+#define RANK_JUMP_M 100.f
+/* the n (0 .. 7) of the field NAMEn whose value is `name` among a message's fields (KEY=VALUE apart by white space or
+ * control bytes, a value maybe in quotes, as the server's aries.rs parse_fields reads them); -1 none (a name with a
+ * byte the game sends %-escaped too) */
+static int rank_name_slot(const uint8_t *b, int n, const char *name){
+    size_t ln = strlen(name);
+    for (int i = 0; ln && i + 6 <= n; i++){
+        if ((i && b[i - 1] > 0x20) || strncasecmp((const char *)b + i, "NAME", 4) || b[i + 4] < '0' || b[i + 4] > '7' || b[i + 5] != '=')
+            continue;
+        int v = i + 6, q = v < n && b[v] == '"';
+        v += q;
+        if (v + (int)ln > n || strncasecmp((const char *)b + v, name, ln)) continue;
+        int e = v + (int)ln;
+        if (e >= n || (q ? b[e] == '"' : b[e] <= 0x20)) return b[i + 4] - '0';
+    }
+    return -1;
+}
+static int rank_jump_code(char code[4], const uint8_t *body, int n){
+    char who[16]; float far = racenet_farthest(who);
+    if (!who[0] || far < RANK_JUMP_M) return 0;
+    int slot = body && n > 0 ? rank_name_slot(body, n, who) : -1;
+    if (slot < 0){ fprintf(stderr, "[mprace] the Online race's report: %s's car jumped %.0f m at once, not among its names\n", who, (double)far); return 0; }
+    unsigned steps = (unsigned)(far / 4.f + 0.5f); if (steps > 255u) steps = 255u;
+    char s[6]; snprintf(s, sizeof s, "j%d%02x", slot, steps);
+    memcpy(code, s, 4);
+    fprintf(stderr, "[mprace] the Online race's report says %s's car (NAME%d) jumped %.0f m at once (%.4s)\n", who, slot, (double)far, s);
+    return 1;
+}
+int mprace_rank_code(char code[4], const uint8_t *body, int n){
     uint32_t pl = rd(G_PLAYER1), pi = pl ? perf_info(rd(pl + 4u)) : 0, mask = edited_types();
     int type = pi ? (int)rd(pi + PI_TYPE) : g_net_type;
-    if (!mask || (type >= 0 && !mprace_type_edited(type))) return 0;
+    if (!mask || (type >= 0 && !mprace_type_edited(type))) return rank_jump_code(code, body, n);
     char s[5]; snprintf(s, sizeof s, "ed%02x", type >= 0 && type < N_PLAYER_TYPES ? (unsigned)type : 0xffu);
     memcpy(code, s, 4);
     fprintf(stderr, "[cars] the Online race's report says our car's data is edited (%.4s)\n", s);
@@ -1049,12 +1083,13 @@ static void results_read(int log){
         r->clock = t < 4000u * 3600u ? (float)t / 4000.f : 0.f;
         r->dist = avg >= 0.f && avg < 1000.f && t < 4000u * 3600u ? avg * (float)t / 4000.f : 0.f;
         r->finished = MR32(e[k] + 8u) == 1u && far >= 1.f && laps < 1000.f && floorf(laps) >= floorf(far);
+        r->jump = r->ours ? 0.f : racenet_jump(r->name);
         if (r->finished && drift) r->points = pts > 0.f && pts < 1e7f ? (int)(pts + 0.5f) : 0;
         else if (r->finished) r->time = t < 4000u * 3600u ? (float)t / 4000.f : 0.f;
         if (log) fprintf(stderr, "[mprace]   row %d: car %04x%s, %s, %s, %.2f s, %.0f points, %.3f laps, "
-                         "average %.2f m/s (%.0f m), top %.2f m/s\n", k + 1, id, r->ours ? " (ours)" : "", r->name,
-                         r->finished ? "finished" : "not finished", (double)t / 4000.0, (double)pts, (double)laps, (double)avg,
-                         (double)r->dist, (double)top);
+                         "average %.2f m/s (%.0f m), top %.2f m/s, its largest jump %.1f m\n", k + 1, id, r->ours ? " (ours)" : "",
+                         r->name, r->finished ? "finished" : "not finished", (double)t / 4000.0, (double)pts, (double)laps,
+                         (double)avg, (double)r->dist, (double)top, (double)r->jump);
     }
 }
 int mprace_results(MpResult *r, int max){
@@ -1096,6 +1131,8 @@ static struct {
     char     joined[SER_HEATS][40];                 /* the joiner: the games it was in, by name */
     MpResult hres[MPRACE_RESULTS_MAX]; int nhres, hplace;   /* the last heat's own rows and our place there (the race's
                                                              * report to the server: a heat's times, not the points) */
+    MpResult hall[SER_HEATS][MPRACE_RESULTS_MAX]; int nhall[SER_HEATS];   /* every heat's rows (the reports of the
+                                                             * heats before the last: mprace_heat_rows) */
     int      between;                               /* from the last heat's game room to the lobby, for the next game */
     int      alone;                                 /* the others quit mid-heat: the series is ours (quit_win) */
     char     step[48];
@@ -1182,6 +1219,7 @@ static void series_results(int first){
     if (first){
         fprintf(stderr, "[mprace] f=%ld heat %d of %d: its results\n", autotest_frame(), S.heat + 1, S.heats);
         results_read(1);
+        if (S.heat >= 0 && S.heat < SER_HEATS){ memcpy(S.hall[S.heat], M.res, sizeof S.hall[0]); S.nhall[S.heat] = M.nres; }
     }
     if (!series_last()) return;
     int was = M.place;
@@ -1250,6 +1288,19 @@ int mprace_heat_results(MpResult *r, int max){
     int n = S.nhres < max ? S.nhres : max;
     memcpy(r, S.hres, sizeof *r * (size_t)(n > 0 ? n : 0));
     return n;
+}
+int mprace_heat_rows(int k, MpResult *r, int max, int *laps){
+    if (!series_on() || k < 0 || k >= S.heats || k >= SER_HEATS || S.nhall[k] < 1) return 0;
+    int n = S.nhall[k] < max ? S.nhall[k] : max;
+    memcpy(r, S.hall[k], sizeof *r * (size_t)n);
+    if (laps) *laps = S.laps[k];
+    return n;
+}
+int mprace_heats(int *raced){
+    int n = 0;
+    while (series_on() && n < S.heats && n < SER_HEATS && S.nhall[n] > 0) n++;
+    if (raced) *raced = n;
+    return series_on() ? S.heats : 0;
 }
 int mprace_series(MpSeries *s){
     memset(s, 0, sizeof *s);

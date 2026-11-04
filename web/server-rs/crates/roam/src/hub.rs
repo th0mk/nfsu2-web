@@ -60,10 +60,11 @@ const MAP_LOBBIES_GAP_MS: f64 = 1000.0;
 /// spot of players passing or just come (a new career's start) is none
 const STAY_M: f64 = 25.0;
 const PARKED_MS: f64 = 60_000.0;
-/// MAPD's most players placed in one answer (MAPD_PARTS full datagrams)
-const MAPD_MAX: usize = wire::MAPD_PARTS * (wire::MAPD_BYTES / wire::MAPD_PLACE);
-/// ...with their heights (an answer to wire::MAPREQ_PARKED)
-const MAPD_MAX_Z: usize = wire::MAPD_PARTS * (wire::MAPD_BYTES / wire::MAPD_PLACE_Z);
+/// MAPD's most players placed in one answer of `parts` full datagrams (wire::MAPD_PARTS, or MAPD_PARTS_WIDE to a page
+/// that takes them: MAPREQ_WIDE), with their heights (`z`: an answer to wire::MAPREQ_PARKED) or not
+const fn mapd_max(parts: usize, z: bool) -> usize {
+    parts * (wire::MAPD_BYTES / if z { wire::MAPD_PLACE_Z } else { wire::MAPD_PLACE })
+}
 /// NEARD (the minimap's answer, roam_game.c near_*): one datagram, so 128 players placed at most, within NEAR_M at
 /// most of the asker (roam_core.h RC_NEAR_MAX, RC_NEAR_M).  The minimap shows a few hundred metres across a dozen
 /// pixels' arrows: a marker is placed again once it would be 2 m off (a pixel or two there) or its heading 11° off
@@ -559,9 +560,9 @@ struct Player {
     /// linked first while each names the other (`duel_pairs`)
     duel: u32,
     /// the lobby of the race it last reported, and when (one report a race is logged); the same of its last results
-    /// (RACERES, sent with the report)
+    /// (RACERES, sent with the report), and the heats of it that came (bit 0: a race of one heat; 1 << heat)
     reported: Option<(u32, f64)>,
-    resulted: Option<(u32, f64)>,
+    resulted: Option<(u32, f64, u8)>,
     /// its links after the last tick (a HELLO of another start of the game empties them)
     links: Vec<Link>,
     /// how its car moves (watch.rs)
@@ -701,8 +702,8 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         level_slack_m: f(o.level_slack_m, d.level_slack_m),
         level_grade: f(o.level_grade, d.level_grade),
         level_k: f(o.level_k, d.level_k),
-        // (one answer is MAPD_PARTS datagrams at most)
-        map_max: n(o.map_max, d.map_max).min(MAPD_MAX),
+        // (one answer is MAPD_PARTS_WIDE datagrams at most)
+        map_max: n(o.map_max, d.map_max).min(mapd_max(wire::MAPD_PARTS_WIDE, false)),
         map_gap_ms: f(o.map_gap_ms, d.map_gap_ms),
         map_fresh_ms: f(o.map_fresh_ms, d.map_fresh_ms),
         near_gap_ms: f(o.near_gap_ms, d.near_gap_ms),
@@ -1339,8 +1340,13 @@ impl Hub {
                 report = Some(race_line(&p.name, &r) + &note);
                 edited = line;
             }
-            Msg::RaceRes(r) if sender == p.id && !p.resulted.is_some_and(|(l, t)| l == r.lobby || now - t < REPORT_GAP_MS) => {
-                p.resulted = Some((r.lobby, now));
+            // (a URL race of heats: one a heat of the lobby, at once)
+            Msg::RaceRes(r)
+                if sender == p.id
+                    && p.resulted.is_none_or(|(l, t, heats)| if l == r.lobby { heats & 1 << r.heat == 0 } else { now - t >= REPORT_GAP_MS }) =>
+            {
+                let heats = p.resulted.filter(|x| x.0 == r.lobby).map_or(0, |x| x.2);
+                p.resulted = Some((r.lobby, now, heats | 1 << r.heat));
                 res = Some((p.id, r));
             }
             _ => {}
@@ -1384,7 +1390,7 @@ impl Hub {
             self.results = results;
         }
         if let Some((req, max, base, flags)) = ask {
-            self.mapd(slot, req, max, base, flags & wire::MAPREQ_PARKED != 0, now);
+            self.mapd(slot, req, max, base, flags, now);
         }
         if let Some((req, max, base, radius)) = ask_near {
             self.neard(slot, req, max, base, radius, now);
@@ -1473,9 +1479,13 @@ impl Hub {
     /// them at most (and the most it asks for; by slot, the nearest when there are more), as what changed since its
     /// answer `base` the hub sent (from nothing when the hub has no such answer): a player come or moved off where the page has it now (`MAP_TOL_M`, `MAP_TOL_H`;
     /// the page moves each marker on at the velocity it was given) is placed, a player gone goes.  One answer to a
-    /// browser every map_gap_ms at most, and its race lobbies with it every MAP_LOBBIES_GAP_MS.
-    fn mapd(&mut self, slot: u32, req: u16, most: u16, base: u16, parked: bool, now: f64) {
-        let max = self.o.map_max.min(if parked { MAPD_MAX_Z } else { MAPD_MAX }).min(most as usize);
+    /// browser every map_gap_ms at most, and its race lobbies with it every MAP_LOBBIES_GAP_MS.  `flags` the MAPREQ's:
+    /// wire::MAPREQ_PARKED (who is parked, and heights), wire::MAPREQ_WIDE (an answer of MAPD_PARTS_WIDE datagrams
+    /// taken, else MAPD_PARTS).
+    fn mapd(&mut self, slot: u32, req: u16, most: u16, base: u16, flags: u16, now: f64) {
+        let parked = flags & wire::MAPREQ_PARKED != 0;
+        let parts_max = if flags & wire::MAPREQ_WIDE != 0 { wire::MAPD_PARTS_WIDE } else { wire::MAPD_PARTS };
+        let max = self.o.map_max.min(mapd_max(parts_max, parked)).min(most as usize);
         let Some(p) = self.player(slot) else { return };
         if p.impostor || self.map_at.get(&p.vip).is_some_and(|&t| now < t) {
             return;
@@ -1485,22 +1495,26 @@ impl Hub {
         let Some(p) = self.player(slot) else { return };
         let mut links: Vec<u32> = p.links.iter().map(|l| l.slot).collect();
         links.sort_unstable();
-        let mut list: Vec<MapCand> = cands
-            .iter()
-            .filter(|c| {
+        // (by their places in the room's list, which is by slot; past max, the nearest: each one's distance once, its
+        // square, which orders them alike)
+        let mut pick: Vec<u32> = (0..cands.len() as u32)
+            .filter(|&i| {
+                let c = &cands[i as usize];
                 c.slot != slot
                     && links.binary_search(&c.slot).is_err()
                     && !self.player(c.slot).is_some_and(|o| self.apart_from(slot, c.slot, p, o))
             })
-            .copied()
             .collect();
-        self.map_cands.insert(room, (at_t, cands));
-        let total = list.len().min(u16::MAX as usize) as u16;
-        if list.len() > max {
-            list.select_nth_unstable_by_key(max, |c| order_key(distance(&at, &c.p)));
-            list.truncate(max);
-            list.sort_unstable_by_key(|c| c.slot);
+        let total = pick.len().min(u16::MAX as usize) as u16;
+        if pick.len() > max {
+            let d2 = |q: &[f64; 3]| (q[0] - at[0]).powi(2) + (q[1] - at[1]).powi(2) + (q[2] - at[2]).powi(2);
+            let mut near: Vec<(u64, u32)> = pick.iter().map(|&i| (order_key(d2(&cands[i as usize].p)), i)).collect();
+            near.select_nth_unstable(max);
+            pick = near[..max].iter().map(|&(_, i)| i).collect();
+            pick.sort_unstable();
         }
+        let list: Vec<MapCand> = pick.iter().map(|&i| cands[i as usize]).collect();
+        self.map_cands.insert(room, (at_t, cands));
         let mut m = self.maps.remove(&vip).unwrap_or_default();
         if base != 0 && m.sent.as_ref().is_some_and(|s| s.0 == base) {
             m.held = m.sent.take();
@@ -1512,7 +1526,7 @@ impl Hub {
         let (mut b, (mut e, mut ends, mut next)) =
             (if from.is_empty() { 0 } else { base }, map_diff(from, &list, at_t, MAP_TOL_M, MAP_TOL_H, parked));
         let mut parts = map_parts(&ends);
-        if parts.len() > wire::MAPD_PARTS {
+        if parts.len() > parts_max {
             (b, (e, ends, next)) = (0, map_diff(&[], &list, at_t, MAP_TOL_M, MAP_TOL_H, parked));
             parts = map_parts(&ends);
         }
@@ -2077,9 +2091,10 @@ impl Hub {
         for (o, v) in self.results.judged(now) {
             let who = |id: u32| o.names.get(&id).cloned().or_else(|| self.who(id)).unwrap_or_else(|| format!("player {id:08x}"));
             let result = results::result_line(&o, &who);
-            let cheat = v.map(|v| results::line(&v, &who));
+            let cheats: Vec<String> =
+                v.map(|v| results::line(&v, &who)).into_iter().chain(o.jumps.iter().map(|j| results::jump_line(&o, j, &who))).collect();
             (self.log)(&result);
-            if let Some(line) = cheat {
+            for line in cheats {
                 self.st.cheat_lines += 1;
                 (self.log)(&line);
             }

@@ -1,0 +1,97 @@
+# Split Screen to the end of a race: two players through the menu (Split Screen: one right from Quick Race),
+# both cars on the game's autopilot (Player::AutoPilotOn, 0x5FAE20) for the whole race, Event Results, back out
+# to the main menu, and a single-player Quick Race after it: one player again (nothing of the split race left).
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 tappad DRIGHT
++200 tappad A
++200 dump finish_count
++100 tappad A
++0 waitfng UI_QRModeSelect.fng 2000
++100 tappaduntil A UI_QRTrackSelect.fng 150 1500
++100 tappaduntil A UI_QRModeOptions.fng 150 1500
+# one lap (the options: Track Direction, Laps 3, ...)
++200 tappad DDOWN
++100 tappad DLEFT
++100 tappad DLEFT
++100 tappaduntil A 2P_PressStart.fng 150 1500
++150 localpad 1 connect 1
++30 localpad 1 START 1
++20 localpad 1 START 0
++150 localpad 1 A 1
++8 localpad 1 A 0
++150 localpad 1 A 1
++8 localpad 1 A 0
++150 localpad 2 connect 1
++30 localpad 2 START 1
++20 localpad 2 START 0
++150 localpad 2 A 1
++8 localpad 2 A 0
++150 localpad 2 A 1
++8 localpad 2 A 0
++0 waitmem 0x8654a4 6 6000
++700 expect i:0xd00030 == 2
++0 call 0x5fae20 ecx=*0xd00000
++0 call 0x5fae20 ecx=*0xd00004
++600 dump finish_racing
++0 waitfng UI_PostRaceResults.fng 60000
++120 dump finish_results
++0 status split_finish_results
+# still in the world (flow 6): the results and the Post Race menu take the players' own pads, not the front
+# end's, and player 1's (the front end's player is player 1 again in the race). A: the results' Continue; the
+# Post Race menu (Restart, Race Stats, Quit to Main Menu): its third, A; its question opens on Cancel as in single
+# player: left to OK, A
++100 localpad 1 A 1
++8 localpad 1 A 0
++300 localpad 1 DRIGHT 1
++8 localpad 1 DRIGHT 0
++150 localpad 1 DRIGHT 1
++8 localpad 1 DRIGHT 0
++150 dump finish_post_race
++0 localpad 1 A 1
++8 localpad 1 A 0
++300 dump finish_quit_question
++0 localpad 1 DLEFT 1
++8 localpad 1 DLEFT 0
++150 dump finish_quit_ok
++0 localpad 1 A 1
++8 localpad 1 A 0
++0 waitmem 0x8654a4 3 3000
+# the quit goes back to Split-Screen Mode Select, as a Quick Race goes back to its own: A works there (the track
+# select), then Back out to the main menu (track -> mode select -> the player count -> the main menu)
++300 dump finish_mode_select
++0 expect i:0x850078 == 4
++0 tappad A
++0 waitfng UI_QRTrackSelect.fng 1500
++200 dump finish_track_select
++0 tappad B
++300 tappad B
++300 tappad B
++300 tappad B
++300 dump finish_main_menu
+# Quick Race wherever the carousel opened: all the way left (Career), one right
++100 tappad DLEFT
++60 tappad DLEFT
++60 tappad DLEFT
++60 tappad DLEFT
++60 tappad DLEFT
++60 tappad DLEFT
++60 tappad DLEFT
++60 tappad DRIGHT
++200 dump finish_quick_race
++0 tappad A
++0 waitfng UI_QRModeSelect.fng 1500
++100 expect i:0x850078 == 2
++0 tappaduntil A UI_QRTrackSelect.fng 150 1500
++200 tappaduntil A UI_QRModeOptions.fng 150 1500
++200 tappaduntil A UI_QRCarSelect.fng 150 1500
++200 expect i:0x85ad28 == 0
++0 tappad A
++200 tappad A
++0 waitmem 0x8654a4 6 5000
++700 dump finish_single_race
++0 expect i:0xd00030 == 1
++0 status split_finish_single
++60 quit

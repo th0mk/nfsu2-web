@@ -31,7 +31,7 @@ export OPT ROOT
 # v12na: incremental build keyed on a content digest.  genall.py rewrites
 # every shard, so mtime is useless; a shard whose .c + cpu.h + OPT digest is
 # unchanged is skipped (FULL=1 compiles all of them).
-export FULL HDRSUM="$(cat "$ROOT/runtime/cpu.h" | shasum | cut -c1-16)"
+export FULL HDRSUM="$(cat "$ROOT/runtime/cpu.h" "$ROOT/runtime/splitscreen_mem.h" | shasum | cut -c1-16)"
 # gen/all (SPEED2.EXE) -> out/obj, gen/server (server.dll, see gen.sh) ->
 # out/obj/srv: the same incremental rule for both, one xargs pool.
 { (cd "$ROOT/gen/all" && ls shard_*.c fntab.c stubs.c 2>/dev/null | sed "s|^|all |")

@@ -36,7 +36,7 @@
 // Test:  the autotest's ns* requests become DOM events (synth.ts).
 import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
-import { CODES, cp1252, isMeta, keyChars, keyVk } from './keymap';
+import { CODES, cp1252, isMeta, keyChars, keyVk, PAGE_CODES } from './keymap';
 import { PadPoller, type PadPage, type TouchPad } from './gamepad';
 import { SynthDriver } from './synth';
 import {
@@ -460,7 +460,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     },
     lastInput() { return refused ? null : lastUse; },
     key(code, down) {
-      const k = CODES[code];
+      const k = CODES[code] ?? PAGE_CODES[code];
       if (k && !detached) push(down ? IEV_KEY_DOWN : IEV_KEY_UP, k.dik, k.vk, 0, down ? PAGE_KEY_CHARS[code] ?? [] : []);
     },
     touchPad(t) { pads?.setTouch(t); },

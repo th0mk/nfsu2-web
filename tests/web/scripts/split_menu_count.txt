@@ -1,0 +1,14 @@
+# Stop at the main menu for visible Split Screen navigation.
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 dump split_main_menu
++100 tappad DRIGHT
++200 dump split_menu_selected
++100 tappad A
++200 dump split_player_count
++100 tappad DRIGHT
++100 dump split_count_right
++0 status split_count_navigation
++60 quit

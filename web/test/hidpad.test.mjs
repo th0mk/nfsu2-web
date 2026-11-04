@@ -93,7 +93,7 @@ test('an 8BitDo pad through the poller: its own layout, the Nintendo family, and
   Object.assign(globalThis, { addEventListener: et.addEventListener.bind(et), removeEventListener: et.removeEventListener.bind(et),
     dispatchEvent: et.dispatchEvent.bind(et) });
   try {
-    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
+    const buf = new SharedArrayBuffer(P.IM_BYTES), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
     const pad = (id, index, mapping, axes, n) => ({ id, index, mapping, connected: true, axes: [...axes],
       buttons: Array.from({ length: n }, () => ({ pressed: false, value: 0 })) });
     const xbox = pad('Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)', 0, 'standard', [0, 0, 0, 0], 17);
@@ -137,7 +137,7 @@ async function ultimate2On(ua, touch) {
   const G2 = await load('web/src/input/gamepad.ts');
   const out = { logs: [] };
   await onBrowser(ua, touch, async (pads) => {
-    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf);
+    const buf = new SharedArrayBuffer(P.IM_BYTES), h = new Int32Array(buf), f = new Float32Array(buf);
     const g = { id: ULTIMATE2_ANDROID, index: 0, mapping: '', connected: true, axes: [0, 0, 0, 0],
       buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) };
     pads.push(g);

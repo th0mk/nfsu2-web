@@ -978,6 +978,8 @@ void kbdmac_synth_simple(int type, double a, double b){
 /* ---- game pad (gamepad.m) ------------------------------------------------------- */
 static pthread_mutex_t g_pad_mx = PTHREAD_MUTEX_INITIALIZER;
 static PadState g_syn;               /* the input script's controller */
+static PadState g_local_syn[INPUT_LOCAL_PADS];
+static int g_local_syn_used[INPUT_LOCAL_PADS];
 static PadState g_real_last;         /* the last consistent read of the page's pad */
 
 static float envf(const char *nm, float dflt, float lo, float hi){
@@ -1041,6 +1043,68 @@ static float trig_dz(float v, float dz){
     if (v <= dz) return 0.f;
     return v >= 1.f ? 1.f : (v - dz) / (1.f - dz);
 }
+uint32_t gamepad_local_join_stamp(unsigned seat){
+    return seat < INPUT_LOCAL_PADS ? atomic_load_explicit(g_mb.local_pad[seat] + IM_LOCAL_JOIN, memory_order_acquire) : 0;
+}
+int gamepad_read_local(unsigned seat, PadState *s){
+    memset(s, 0, sizeof *s);
+    if (seat >= INPUT_LOCAL_PADS) return 0;
+    pthread_mutex_lock(&g_pad_mx);
+    int synthetic = g_local_syn_used[seat];
+    if (synthetic) *s = g_local_syn[seat];
+    pthread_mutex_unlock(&g_pad_mx);
+    if (synthetic) return s->connected;
+    _Atomic uint32_t *p = g_mb.local_pad[seat];
+    for (int tries = 0; tries < 64; ++tries){
+        uint32_t seq = atomic_load_explicit(p + IM_LOCAL_SEQ, memory_order_acquire);
+        if (seq & 1u) continue;
+        PadState t = {0};
+        t.connected = atomic_load_explicit(p + IM_LOCAL_CONNECTED, memory_order_relaxed) == 1;
+        t.buttons = atomic_load_explicit(p + IM_LOCAL_BUTTONS, memory_order_relaxed);
+        t.family = atomic_load_explicit(p + IM_LOCAL_FAMILY, memory_order_relaxed);
+        for (unsigned i = 0; i < PAD_NAXES; ++i){
+            uint32_t bits = atomic_load_explicit(p + IM_LOCAL_AXIS + i, memory_order_relaxed);
+            memcpy(t.axis + i, &bits, 4);
+            if (!isfinite(t.axis[i])) t.axis[i] = 0;
+        }
+        for (unsigned i = 0; i < 16; ++i){
+            uint32_t word = atomic_load_explicit(p + IM_LOCAL_NAME + i, memory_order_relaxed);
+            memcpy(t.name + 4 * i, &word, 4);
+        }
+        t.name[63] = 0;
+        atomic_thread_fence(memory_order_acquire);
+        if (seq != atomic_load_explicit(p + IM_LOCAL_SEQ, memory_order_relaxed)) continue;
+        if (!t.connected) return 0;
+        float dz = envf("NFSU2_PAD_DEADZONE", 0.08f, 0.f, 0.9f);
+        float tdz = envf("NFSU2_PAD_TRIGGER_DEADZONE", 0.02f, 0.f, 0.9f);
+        stick_dz(&t.axis[PAD_AXIS_LX], &t.axis[PAD_AXIS_LY], dz);
+        stick_dz(&t.axis[PAD_AXIS_RX], &t.axis[PAD_AXIS_RY], dz);
+        t.axis[PAD_AXIS_LT] = trig_dz(t.axis[PAD_AXIS_LT], tdz);
+        t.axis[PAD_AXIS_RT] = trig_dz(t.axis[PAD_AXIS_RT], tdz);
+        *s = t;
+        return 1;
+    }
+    return 0;
+}
+void gamepad_synth_local(unsigned seat, int key, float value){
+    if (seat >= INPUT_LOCAL_PADS || !isfinite(value) || key >= PAD_NBUTTONS + PAD_NAXES) return;
+    pthread_mutex_lock(&g_pad_mx);
+    PadState *s = &g_local_syn[seat];
+    g_local_syn_used[seat] = 1;
+    if (key == -1 && value == 0){ memset(s, 0, sizeof *s); }
+    else {
+        s->connected = s->synthetic = 1; s->family = PADF_XBOX;
+        snprintf(s->name, sizeof s->name, "Local test controller %u", seat + 1);
+        if (key >= 0 && key < PAD_NBUTTONS){
+            if (value) s->buttons |= 1u << key; else s->buttons &= ~(1u << key);
+        } else if (key >= PAD_NBUTTONS){
+            int axis = key - PAD_NBUTTONS;
+            float lo = axis >= PAD_AXIS_LT ? 0.f : -1.f;
+            s->axis[axis] = value < lo ? lo : value > 1.f ? 1.f : value;
+        }
+    }
+    pthread_mutex_unlock(&g_pad_mx);
+}
 int gamepad_read(PadState *s){
     static float dz = -1.f, tdz = -1.f;
     if (dz < 0.f){ dz = envf("NFSU2_PAD_DEADZONE", 0.08f, 0.f, 0.9f);
@@ -1050,6 +1114,10 @@ int gamepad_read(PadState *s){
     if (syn) *s = g_syn;                         /* the script's pad wins while connected */
     pthread_mutex_unlock(&g_pad_mx);
     if (!syn) read_real(s);
+    /* Keep the local input converter available if controllers disconnect
+     * while a keyboard player still owns a split-screen seat. */
+    void split_keyboard_device(PadState *);
+    split_keyboard_device(s);
     if (!syn && mprace_owns_input()){ int con = s->connected, wh = s->wheel; memset(s, 0, sizeof *s); s->connected = con; s->wheel = wh; }   /* (handle above) */
     /* a wheel's position is the steering, with no dead zone around the middle (its pedals keep the triggers') */
     if (!s->wheel) stick_dz(&s->axis[PAD_AXIS_LX], &s->axis[PAD_AXIS_LY], dz);

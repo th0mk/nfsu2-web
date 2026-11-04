@@ -207,6 +207,15 @@ kbd {
 .keys kbd { flex: none; }
 .tab-panel > .keys + .hint { margin-top: 16px; }
 .tab-panel > .hint + .set { margin-top: 8px; box-shadow: inset 0 1px var(--line); }
+/* this site's own controls (sitekeys.ts), the Controls tab's Site: the keys' list, each cap a button (its frame lime
+ * while it waits for a press); a state line under a row (why a press was not taken, a key the game has) */
+.site-box > .hint { margin-bottom: 8px; }
+.site-keys .keycap { display: inline-flex; padding: 0; border: 0; border-radius: 4px; background: none; }
+.site-keys .keycap:hover:not(:disabled) kbd, .site-keys .keycap.selected kbd { border-color: var(--lime); }
+.site-keys .keycap.selected kbd { color: var(--lime); }
+.site-keys kbd.off { color: var(--muted); }
+.keys > div > .set-state { order: 2; flex-basis: 100%; margin-top: 0; }
+.site-box + .site-fixed > div:first-child { box-shadow: inset 0 1px var(--line); }
 /* the controller (controls.ts): the pad in line art, the buttons the game uses in lime, a dotted line from each
  * label to its control, the button's name in a small key cap; the names as Xbox or PlayStation write them (the
  * sheet's data-fam).  --pad-bg: what is behind it (the hollow of the bumpers) */
@@ -781,6 +790,8 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   font-size: 14px; line-height: 20px; pointer-events: none;
 }
 /* the game's pause menu: what opens the page's menu, under the game's panel (pausehint.ts places it), as a toast */
+/* the site's address under the title screen's copyright (titlemark.ts): drawn there, placed and faded by the game's status */
+.title-mark { position: absolute; z-index: 1; pointer-events: none; user-select: none; }
 .pause-hint {
   position: absolute; z-index: 3; transform: translateX(-50%); width: max-content;
   padding: 8px 16px; border: 1px solid var(--line); border-radius: 8px; background: rgba(0, 0, 0, 0.8);
@@ -888,6 +899,13 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .drift-gain { display: flex; flex-direction: column; align-items: flex-end; gap: calc(5 * var(--u)); }
 .drift-gain b { color: #d8a020; }
 .drift-total, .drift-total b { color: #30cd30; }
+/* a drift battle's scoreboard (drift.ts) under it, the panel's rows: Time and its m:ss, then each player's place in
+ * italics, name and points, the player's own name green */
+.drift-board .drift-time b { color: #e8e8e8; }
+.drift-board .drift-who { gap: calc(8 * var(--u)); }
+.drift-board .drift-who i { font-weight: 700; color: #e8e8e8; width: calc(14 * var(--u)); }
+.drift-board .drift-who span { flex: 1; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.04em; color: #e8e8e8; }
+.drift-board .drift-who.me span { color: #30cd30; }
 /* the DRIFT counter (drift.ts): the drift event's, centred under free roam's arrow, the label over the points in big
  * italics: lime while a drift counts and when it banks, red (the drift event's) when a wall loses it; a banked or lost
  * one fades out */

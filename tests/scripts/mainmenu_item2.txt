@@ -4,6 +4,7 @@
 +500  dump mm0
 +60   tap RIGHT
 +60   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +120  dump mm_sel
 +0    tap RETURN
 +300  dump c1

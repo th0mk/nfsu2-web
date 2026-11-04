@@ -49,11 +49,25 @@ export function keepPageId(): Promise<PageIds> {
   })();
 }
 
+/** what a day's first Play tells the server besides: the kind of device, and the settings changed from its defaults
+ *  (settings.ts changedSettings: "key=value", the player's own words only as "set") */
+export interface SettingsReport { device: 'pc' | 'phone' | 'tablet'; changed: string[] }
+/** the UTC day this browser last told the server its settings */
+const TOLD_KEY = 'nfsu2.seen.settings';
+
 /** This browser came today, for the server's daily counts (web/server-rs src/app/days.rs): at a load ('page') and at
- *  Play ('play').  Nothing comes back, and a server that does not answer changes nothing. */
-export function seen(at: 'page' | 'play'): void {
+ *  Play ('play').  At the first Play of a UTC day the settings go along (web/server-rs src/app/settings_days.rs keeps
+ *  only the day's totals): once a day, so the server needs nothing per browser to count each one once.  A day whose
+ *  request failed is not marked, and a browser without storage tells them at each Play.  Nothing comes back, and a
+ *  server that does not answer changes nothing. */
+export function seen(at: 'page' | 'play', settings?: SettingsReport): void {
+  const day = new Date().toISOString().slice(0, 10);
+  let told: string | null = null;
+  try { told = localStorage.getItem(TOLD_KEY); } catch { /* no localStorage */ }
+  const report = settings && told !== day ? `&k=${settings.device}&s=${encodeURIComponent(settings.changed.join(','))}` : '';
   void keepPageId()
-    .then(({ id }) => fetch(`/seen?at=${at}&id=${encodeURIComponent(id)}`, { cache: 'no-store', keepalive: true }))
+    .then(({ id }) => fetch(`/seen?at=${at}&id=${encodeURIComponent(id)}${report}`, { cache: 'no-store', keepalive: true }))
+    .then(r => { if (report && r.ok) try { localStorage.setItem(TOLD_KEY, day); } catch { /* no localStorage */ } })
     .catch(() => {});
 }
 

@@ -481,6 +481,8 @@ void sub_0061e380(CPU *c){
 }
 void hfr_rain_update(CPU *c);          /* framerate.c: sub_0061f120_orig at any frame rate */
 void sub_0061f120(CPU *c){
+    void split_rain_begin(CPU *); void split_rain_end(void);
+    split_rain_begin(c);
     uint32_t rain = c->ecx;
     int fr = force_rain();
     if (fr && rain && mem_is_committed(rain + 0x50a3u))
@@ -488,6 +490,7 @@ void sub_0061f120(CPU *c){
     hfr_rain_update(c);
     if (fr >= 3 && rain && mem_is_committed(rain + 0x50a3u)){
         MRF32(rain + 0x5098u) = 0.0f; MRF32(rain + 0x509cu) = 0.0f; }
+    split_rain_end();
 }
 
 /* --- Force the sky transition (FORCETOD) ----------------------------------
@@ -1040,7 +1043,7 @@ void sub_004ff3b0(CPU *c){
  * (roam_host.h RH_FE_NODES; the list below); the packages are drawn one
  * after another, and sub_0050b430 lets go of the nodes after each. */
 #define FE_LIST      1024u                /* the renderer's own list: +0x110 the count, +0x114 entries (object, depth key) */
-#define FE_LIST_BIG  4096u                /* ...and ours past it */
+#define FE_LIST_BIG  8192u                /* ...and ours past it */
 #define FE_NODES     FE_LIST_BIG
 void sub_0050b410_orig(CPU *c);
 void sub_0050b410(CPU *c){
@@ -1966,4 +1969,40 @@ void sub_00489ba0(CPU *restrict c){
 #endif
     g_shrot_lifted++;
     sub_00489ba0_orig(c);
+}
+
+/* The game releases a D3D texture it no longer wants through a list (0x8763B0:
+ * a pack's unload, 0x5CAAA0 and 0x5CE6C0, and 0x5CE170 when it makes a
+ * texture again for a TextureInfo that had one), and its main loop releases
+ * the three oldest a frame (0x5CE4C0, from 0x5CEC80).  Until then a texture
+ * keeps its Lock buffers in the guest heap (com.c), 1 MB for a 512x512 one.  A
+ * world's unload queues a thousand at once, and on the way back into a
+ * crowded free roam every car of our own made (roam_game.c begin_create, two
+ * every four frames) makes its ride's car type's textures again: the old ones
+ * waited behind the unloaded world's, 100 MB and more of them at once, and
+ * the guest heap's 512 MB ran out (2026-11-04 reports: HeapAlloc of 1398016,
+ * 0x5CE170's buffer for a 512x512 palettized texture with mips, failing).  So
+ * the list goes for up to TEXREL_MS of release work a frame (at least the
+ * game's three, at most TEXREL_A_FRAME): the game's own release, run again
+ * as often as that takes; as the game does with three or fewer, at the same
+ * point of its frame (the renderer keeps a texture a frame still draws).  A
+ * count alone made the unload hitch: 256 512x512 textures are ~24 ms of
+ * giving their Lock buffers back.  NFSU2_TEST_TEXREL_GAME=1 (test runs): the
+ * game's three. */
+#define TEXREL_LIST     0x008763b0u
+#define TEXREL_A_FRAME  256
+#define TEXREL_MS       2.0
+void sub_005ce4c0_orig(CPU *c);
+void sub_005ce4c0(CPU *c){
+    static int game = -1;
+    if (game < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_TEXREL_GAME");
+                   game = s && *s && e && *e == '1'; }
+    if (game){ sub_005ce4c0_orig(c); return; }
+    uint32_t ret = MR32(c->esp);
+    double t0 = ms_now();
+    for (int n = 3; ; n += 3){
+        sub_005ce4c0_orig(c);                              /* up to three, and its ret */
+        if (n >= TEXREL_A_FRAME || MR32(TEXREL_LIST) == TEXREL_LIST || MR8(0x0087079cu) || ms_now() - t0 >= TEXREL_MS) break;
+        c->esp -= 4u; MR32(c->esp) = ret;                  /* as if called again */
+    }
 }

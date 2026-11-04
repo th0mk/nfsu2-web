@@ -43,6 +43,7 @@
 +0    log SHOT drifting
 +12   log SHOT counting
 +600wms log SHOT drift
++0    expect [[[[0x8900ac]+4]+0x34]+0x40]+0x188 != 1  # the drift assist sets the rear grip (drift.c physics_out)
 +0    expect i:0x861e74 == 0             # the career's bank: drift points are not money
 +0    expect i:0x7ed344 == 0             # the music's attenuation: free roam's song plays on (a drift race: 0x7FFF)
 +60   up UP
@@ -57,6 +58,8 @@
 +0    log KEY KeyX
 +30   expect i:0x890104 == 0
 +0    expect i:0x83aa74 == 3
++0    expect [[[[0x8900ac]+4]+0x34]+0x40]+0x188 == 1  # the rear wheels' grip as before drift mode
++0    expect [[[[0x8900ac]+4]+0x34]+0x44]+0x188 == 1
 +0    log SHOT off
 +0    untrace
 +60   quit

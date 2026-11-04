@@ -247,6 +247,14 @@ try {
   await open(a);
   await until('B\'s rename in A', async () => (await profiles(a)).includes('FROMB'));
   check(!(await profiles(a)).includes('FROMA'), 'A took B\'s choice');
+  // A's sync after the take has ended and its link holds still (a slow machine was still "Checking…" here, and its link
+  // moved after the copy below: the check after it failed on main too)
+  await until('A synced, its link still', async () => {
+    if (!await synced(a)) return false;
+    const was = JSON.stringify(await link(a));
+    await sleep(1500);
+    return await synced(a) && JSON.stringify(await link(a)) === was;
+  }, 30000);
 
   // A as the page before 2026-10-28 linked it: version 3, its hash over gamefile.bin too
   const v3 = async () => V.contentHash(V.kept(await filesOf(a, V.keptBy(3)), 3));

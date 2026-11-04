@@ -126,19 +126,27 @@ fn another_start_of_the_game_starts_its_watch_afresh() {
     assert_eq!(cheats(&k), Vec::<String>::new());
 }
 
-/// a RACERES datagram as roam_core.c lays it out: lobby, race, mode, laps, n, 0; rows (id, flags, 3 bytes 0, time,
-/// done, dist)
+/// a RACERES datagram as roam_core.c lays it out: lobby, race, mode, laps, n, the heat; rows (id, flags, the jump, a
+/// byte 0, time, done, dist)
 fn raceres(sender: u32, lobby: u32, rows: &[(u32, u8, f32, f32, f32)]) -> Vec<u8> {
+    raceres_heat(sender, lobby, 0, 0, rows, &[])
+}
+
+/// ...of heat `heat` of `heats` (the head's last byte heats << 4 | heat; 0 and 0 a race of one heat), each row's car's
+/// jump (m, u16 after its flags)
+fn raceres_heat(sender: u32, lobby: u32, heat: u8, heats: u8, rows: &[(u32, u8, f32, f32, f32)], jumps: &[u16]) -> Vec<u8> {
     let mut p = vec![0u8; 12 + 20 * rows.len()];
     p[0..4].copy_from_slice(&lobby.to_le_bytes());
     p[4..8].copy_from_slice(&0x7C80_E775u32.to_le_bytes());
     p[8] = 1;
     p[9] = 1;
     p[10] = rows.len() as u8;
+    p[11] = heats << 4 | heat;
     for (k, &(id, flags, time, done, dist)) in rows.iter().enumerate() {
         let o = 12 + 20 * k;
         p[o..o + 4].copy_from_slice(&id.to_le_bytes());
         p[o + 4] = flags;
+        p[o + 5..o + 7].copy_from_slice(&jumps.get(k).copied().unwrap_or(0).to_le_bytes());
         p[o + 8..o + 12].copy_from_slice(&time.to_le_bytes());
         p[o + 12..o + 16].copy_from_slice(&done.to_le_bytes());
         p[o + 16..o + 20].copy_from_slice(&dist.to_le_bytes());
@@ -245,6 +253,35 @@ fn results_name_only_the_lobbys_players() {
     later(&mut k);
     let l = cheats(&k);
     assert!(l.len() == 1 && l[0].starts_with("[cheat] 10.77.0.10 \"Ann\": won the race of lobby 000000b6"), "{l:?}");
+}
+
+// a URL race of 3 heats: each racer's game sends a report a heat, the last heat's first, all at once, and each heat is
+// judged as a race of its own; in heat 2 Ann's game had Bob's car jump 280 m once: a line naming him and the heat (the
+// only other game of the race); a heat's second report of the same player counts for nothing
+#[test]
+fn every_heat_is_judged_and_a_jump_is_a_line() {
+    let mut k = two();
+    lobby_of_two(&mut k, 0xC1);
+    let own = |me: u32, id: u32| 1 | if me == id { 2 } else { 0 };
+    let rows = |me: u32, a: f32, b: f32| [(101, own(me, 101), a, 1.0, 5000.0), (100, own(me, 100), b, 1.0, 5000.0)];
+    for (heat, a, b, jump) in [(3u8, 157.3, 167.9, 0u16), (1, 93.9, 94.8, 0), (2, 187.9, 206.4, 280)] {
+        k.from(V(0), &raceres_heat(100, 0xC1, heat, 3, &rows(100, a, b), &[jump, 0]));
+        k.from(V(1), &raceres_heat(101, 0xC1, heat, 3, &rows(101, a, b), &[0, 0]));
+    }
+    // (Bob again, heat 2, his car with a jump of its own: refused, the heat's report came)
+    k.from(V(1), &raceres_heat(101, 0xC1, 2, 3, &rows(101, 187.9, 206.4), &[0, 900]));
+    k.lines.lock().clear();
+    k.hub.tick();
+    assert_eq!(
+        cheats(&k),
+        ["[cheat] 10.77.0.11 \"Bob\": its car jumped 280 m at once in the race of lobby 000000c1 (race 7c80e775: sprint, 1 lap, \
+          heat 2 of 3), as 1 of 1 other players' games had it (the largest each: 280 m; honest races' largest are under 50 \
+          m); it won"]
+    );
+    let mut races: Vec<String> = k.lines.lock().iter().filter(|l| l.starts_with("[race] lobby 000000c1")).cloned().collect();
+    races.sort();
+    assert_eq!(races.len(), 3, "a result line a heat: {races:?}");
+    assert!(races[0].contains("(sprint, 1 lap, heat 1 of 3): the result by 2 of 2 racers' games: 1 Bob 1:33.9"), "{races:?}");
 }
 
 // Bob's game says his car was in the air for 2 minutes (runtime/roam_game.c fly_frame), and his page leaves the switch:

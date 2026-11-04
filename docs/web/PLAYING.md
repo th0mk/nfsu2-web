@@ -114,11 +114,12 @@ While you drive:
 | Alt | Nitrous |
 | Space | Handbrake |
 | Left Shift, left Ctrl | Gear up, gear down (manual gearbox) |
-| C, B | Camera, look back |
+| C, B | Camera (the game's four views, then the drift races' camera, in every drive), look back |
+| G | Headlights: a tap turns them off, or back on; held, high beam (brighter, reaching farther) until you let go. Friends in free roam see it, so you can flash your lights at them. On a controller the right stick straight up (see Controller below). Another key, or none, in Controls, Site |
 | R | Respawn |
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
-| X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button |
+| X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button, on a controller D-pad down held a second while driving |
 | O | Parked in free roam: open the trunk, then the hood too, then the doors too, then close them all (see section 6); on a controller hold D-pad down a second |
 | 1 to 4, then 1 to 4 | Quick chat in free roam and in races with other players: a group, then a phrase (see section 6) |
 | I | Message a friend in free roam: the answer to the newest message, or a friend to pick (see section 6, Friends) |
@@ -134,8 +135,17 @@ While you drive:
 
 The start page shows these keys under **Controls**, and F9, Controls shows them while you play.
 
-- **Change the keys:** in the game, Options, Controls, and a controller's buttons there too. The horn stays on N (the
-  game has no horn of its own).
+- **Change the keys:** in the game, Options, Controls. It opens on Keyboard Configuration; Up to that title, then
+  Right, is Joypad Configuration, the controller's buttons. The game lists a controller once it has seen it: press a
+  button on it before opening Controls. A controller's buttons are kept with the profile (leaving Options saves them),
+  the keys for every profile. The site's own keys and buttons (drift mode, the trunk, the horn, the headlights, quick
+  chat's controller button, messages, friends, photo mode, the page menu, the next song, the counter) are set on the
+  start page, Controls, Site: click one, then press the new key or controller button, or pick Off (the page menu
+  always has a key, and Home). Keys the game itself uses can't be picked; one of the game's controls you put on one of
+  the site's keys in the game's Controls takes it: the site's control leaves it to the game, and Site says so. D-pad
+  down and the stick clicks with the game's own controls on them as it comes (Career Status, hydraulics) are shared as
+  before: a short press, and a car with hydraulics, stay the game's. The touch controls' Drift and Horn work whatever
+  keys those have.
 - **Drift mode (X):** in free roam, the car handles as in the game's drift races (their handling and drift assist,
   with your car's Drift tuning from Performance Tuning / Dyno in the crib; the other modes' tuning is back when drift
   mode is off), but your nitrous stays (the drift races have none; X neither empties nor fills it). The camera is the
@@ -144,6 +154,7 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   while you drift, as in the races: lime when it banks, red when a wall loses it. Free roam's
   music plays on (the drift races have none). Just for fun: the points never go into the bank or the career. X again
   turns it off and gives your camera back. It is off in races and outruns and comes back in free roam after them.
+  With it on, challenging another player is a drift battle (see section 6, Drift battles).
 - **Photo mode (F12, or Photo Mode in the pause menu):** while you drive (a race, free roam, an outrun) the world
   stands still, the HUD goes and the camera comes loose from the car. Orbit (the first) turns around a point at your
   car, which you can move up to 25 m from it, from up to 30 m away; Free flies up to 50 m from the car. Drag with the
@@ -164,14 +175,20 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   on an Xbox pad: A is the bottom one (Cross on a PlayStation pad, B on a Nintendo-style pad such as most 8BitDo
   ones). The browser shows a pad to the page only after a button is pressed on it. The triggers are throttle and
   brake, the left stick steers, LB is nitrous, RB the handbrake, A and X shift, Y and B are camera and look back, View
-  respawns, Start pauses; D-pad up starts an event or takes an outrun, left and right are the map and messages. A
+  respawns, Start pauses; D-pad up starts an event or takes an outrun, left and right are the map and messages, down
+  is Career Status (in free roam, held a second: drift mode while driving, the trunk, hood and doors parked). A
   click of the left stick is the horn, unless your car has hydraulics: then the stick clicks are the game's hydraulics
   (left: pressurize, right: bounce). While driving (free roam, races, races with other players) the right stick
   looks round the car: the view turns to where it points (right looks right, half way out half as far) and swings
   back behind the car when you let go; with the bumper and hood cameras it turns on the spot. Straight down is the
-  game's own look back, as B (whatever button you bound to it). In
-  free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
-  bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. In the
+  game's own look back, as B (whatever button you bound to it). If you steer, accelerate or brake with the right
+  stick (the game's Options, Controls, Joypad Configuration), the left stick looks round instead, as long as the game
+  uses nothing of it (no steering or pedal, no direction bound to a control); if it does, neither stick looks round.
+  The stick that looks round, pushed straight up, is the headlights (G): a flick up turns them off or back on, held up
+  is high beam until you let go.
+  In free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
+  bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. With the
+  right stick steering or on a pedal, its click stays the game's (bounce), and 1 to 4 open quick chat. In the
   garage, the shops and the main menu the right stick turns the car round and tilts the view, as the middle-button
   drag does: right turns the view right, as in photo mode (and as a drag to the right), down looks down on the car;
   full stick turns about 60° a second. Each screen starts at the game's own angle.
@@ -204,6 +221,24 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   Windows the Game Bar may take it). The D-pad or left stick moves in it, A picks, B closes it; meanwhile the game
   gets no controller input. A stick pressed in alone reaches the game a moment later (0.12 s), so the shortcut never
   honks or works the hydraulics.
+- **Split screen:** the main menu's item after Quick Race. Pick 2, 3 or 4 players and the race, then each player
+  presses START on their own controller and picks a car. Every player gets their own view, HUD, minimap and camera;
+  player 1's controller works the results and Post Race menu. Each view is a whole scene, so 3 or 4 players need a
+  fast computer.
+- **Two players on one keyboard** (split screen): one presses Enter to join, the other Space. Alone on the keyboard,
+  a player has all of it (arrows or WASD, Shift nitrous, Space handbrake, E and Q gears, C camera, B look back).
+  With two, the keyboard is shared:
+
+  | | Enter's player | Space's player |
+  |---|---|---|
+  | Steer, gas, brake | arrows | A and D, W, S |
+  | Nitrous | Right Shift | Left Shift |
+  | Handbrake | Right Ctrl or / | Space |
+  | Gear up, gear down | . and , | E and Q |
+  | Camera, look back | L and ; | C and B |
+
+  These keys stay as they are (Options, Controls does not change them). Many laptop and cheap keyboards cannot see
+  every key two players hold at once: a key can drop out for a moment. Gaming keyboards can.
 - **Rumble:** a controller that can rumble in Chrome (Xbox, DualSense and others) shakes when you crash, scrape a
   wall or land hard. Controls, Controller, Rumble turns it off. Firefox has no rumble.
 - **Sound** starts with the Play click. If the browser still keeps it off, a note says so, and a click on the game or
@@ -227,7 +262,7 @@ that room.
 | Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 40 or 48; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, subtitles, songs (uncensored or original), autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
-| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
+| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -256,12 +291,14 @@ that room.
   [Show Hidden Races Mod](https://nfsmods.xyz/mod/1583) has them, they are on the map and the radar like the others
   (the GPS takes you there), and the map offers up to 8 races of each kind at once instead of 1 to 4, so they take no
   others off it. Turned off again, a career is as it was: the races open stay open.
-- **Menus and HUD:** Original (the default) is the game's own. Upscaled shows LunicAura106's [Upscaled
-  HUD](https://nfsmods.xyz/mod/4319) where the server has its texture pack: the menus, the
-  race HUD, the fonts and the car and brand logos redrawn at four times their size, sharp on a large screen. The
-  game's layout stays as it is. Your browser fetches the pack only with Upscaled (about 5 MB to download). A language
-  with fonts of its own (Russian, Polish, Turkish, Chinese, Japanese, Thai) keeps them. Most phones decode the larger
-  textures into four times the memory.
+- **Menus, HUD and maps:** Original (the default) is the game's own. Upscaled shows LunicAura106's [Upscaled
+  HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the server has
+  their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times their size,
+  and the minimap's, world map's and race menus' maps at 2048x2048, with the missing shortcuts, and shortcuts and
+  off-road in their own colour. The game's layout stays as it is. Your browser fetches the packs only with Upscaled
+  (about 25 MB in all; the maps as the game loads them). A language with fonts of its own (Russian,
+  Polish, Turkish, Chinese, Japanese, Thai) keeps them. Most phones decode the larger textures into four times the
+  memory.
 - **Radio:** the menu (F9) has a Radio line. It plays the music files of a folder on your device in place of the
   game's EA Trax songs. The folder icon picks the folder, its subfolders included; the list icon opens the Playlist:
   each track is Menu, Race, All or Off, and **Shuffle** plays them in random order. A new song starts with the next
@@ -299,6 +336,13 @@ that room.
   (11 outrun wins in stage 5) comes only before the last URL race. Once you have beaten Caleb, the shops have all of
   them for every car in your career, as the original game's ending has them in Customize mode, whose cars free roam
   never drives. The unique performance parts stay one per stage.
+- **Special vinyls:** the Graphics Shop's vinyls have a Special category after Sponsor, with the game's promo vinyls
+  (Snoop Dogg, Capone, Chingy, The Doors, David Choe, D3, Japan Tuning, Shinestreet, Street Reaper), for the cars that
+  have them. The game hid them. They are free, open at the stages the game gives them (2 and 3), and add nothing to
+  the visual rating.
+- **Quick Race:** Laps go from 1 to 127 and Opponents up to 5 in every race but drags, which keep the game's 3. With
+  Lap KO on, both can still be changed: it starts at 5 laps and 5 opponents, with at least 1 opponent. In every
+  race, a race of one lap shows Completed and a percent in place of LAP 1/1, as sprints do.
 - **Power Units:** the game's Options, Gameplay (also in the pause menu's) has a row after Speedometer Units: the
   engine's power in bhp or kW wherever the game shows it (the dyno, the performance shop's parts), whatever the
   speedometer shows. Until you change it, it follows Speedometer Units, as in the original game (kW with km/h).
@@ -350,7 +394,7 @@ that room.
     magazine covers (a cover is a picture of 1 MB: another browser's crib lists it, but the game says it cannot load
     it), the game's graphics options, the record of the LAN games and free-roam races this browser hosted
     (`gamefile.bin`), and of the settings full screen, the resolution scale, render size and pixel limit,
-    Menus and HUD, the frame rate and its counter, the output latency, the controller's settings and how many
+    menus, HUD and maps, the frame rate and its counter, the output latency, the controller's settings and how many
     players' cars free roam shows. A phone keeps its own and a PC its own.
   - The server keeps the copy of an earlier day too: "Go back to ..." brings it back when a day went wrong.
   - Your passphrase can also claim your name (**Online, Your name**: no one else plays under it; see "Your name is
@@ -429,12 +473,12 @@ Good to know:
   tell them from players. The minimap also has an arrow, the same as a car's, for the players near you whose cars
   your game does not show (the nearest 64 within its reach, from the server four times a second), so a crowd looks
   as big as it is; theirs are left out at the minimap's edge, where the cars' arrows point the way. The world map
-  also marks the other players in free roam, the nearest 2048 past those
+  also marks the other players in free roam, the nearest 4096 past those (2048 on phones)
   32, and while it is open every marker moves smoothly with its player. Its legend (the list on the
   map's left) has three rows of ours after the game's: **Players**, **Players' races** and **Car meets**. Pick one with
   Up or Down and Enter crosses it out, as with the game's own rows: the map then leaves out the other players' markers
   (a crew-mate's stays), the players' race lobbies (yours stays) or the meets until you tick it again, and the game
-  remembers it. A spot where 16 or more players have been parked for a minute is a car meet: a green star and "Meet:"
+  remembers it. A spot where 20 or more players have been parked for a minute is a car meet: a green star and "Meet:"
   with its number of cars on the world map (the new career's start doesn't count). Picking the Car meets row picks
   the nearest meet, Left or Right the next, and C starts the GPS there; it stops when you arrive. A player in a
   race, a shop or the menus is not in your free roam: no car, no arrow, no marker until they are back. A player farther than 300 m
@@ -476,7 +520,8 @@ Good to know:
   Each player's horn is also pitched a little differently by their name, so two players with the same horn sound
   apart. It sounds while the game runs, not in the pause menu or on the map. It works in Online and LAN races too.
   How loud the horns are (yours and the others'): the game's Options, Audio, Horn Volume, also in the pause menu's
-  Options, from 10 % to 100 % (the most, and the default). Moving it sounds your horn at the new volume.
+  Options, from 10 % to 100 % (the most, and the default), times the game's Master Volume, as for the game's own
+  sounds (none with Master Volume at 0). Moving it sounds your horn at the new volume.
 - **Quick chat:** say one of your sixteen set phrases to the players near you. There is no typing, so there is nothing
   to read that someone made up, and everyone reads a phrase in their own language. Press 1 to 4 for a group, then 1 to
   4 for its phrase; on a controller, press the right stick in, flick it (up, right, down, left) for a group, then
@@ -544,6 +589,17 @@ Good to know:
   other's car: its "Feet" meter, and whoever gets 1,000 feet (300 m) ahead of the other wins, and the bank pays or
   charges as in an outrun against a tuner. Leaving it (back to the menus, quitting, losing the connection) loses it.
   The other players' cars stay, and they see the two drive. Players on the Windows plugin are not offered outruns.
+- **Drift battles:** with drift mode on (X), the challenge offered as for an outrun is a drift battle instead: "Press
+  Enter to challenge ... to a drift battle" (X off first for an outrun). The other player takes it with Enter (their
+  drift mode comes on for it, and goes back off after if it was off). After a 3-second countdown each of you has 90
+  seconds to bank as many drift points as you can, anywhere in the city: the multiplier starts at X1, there is no
+  nitrous (as in the drift races; yours is back after), X does nothing, and the two cars, and every other player's,
+  drive through each other, so nobody can wreck your drift. A scoreboard under the drift panel on the right shows the
+  time left and both players' points, the more first (the other's as their drifts bank); a drift still counting at
+  the end counts as it stands. More points win:
+  the winner gets $100 out of the loser's bank (never more than the loser has; not in Quick Race's Free Run), a draw
+  pays nothing. Leaving it (back to the menus, into a race or a shop, losing the connection) loses it, and then no
+  money moves. Players on an older version (and the Windows plugin) get an outrun's challenge instead.
 - **The game's own tuners** come out to challenge you in free roam with other players around, as they do offline, so
   their outruns and what winning them opens up (the unique parts) are there online too. The other players' cars stay
   while you race a tuner; they see your car, not the tuner, which is in your game only. Both are offered: a tuner
@@ -832,14 +888,15 @@ Good to know:
 | What you see | What to do |
 |---|---|
 | "Secure, isolated page" on another PC, `PAGE-NOT-SECURE` | Open the server's `https://` address, not `http`. Only `localhost` works without HTTPS. |
-| `PAGE-NOT-ISOLATED` ("not cross-origin isolated"), and with it `MODULE-NOT-ISOLATED` | The page is not opened from the game's server, or something in the browser changes it on the way, most often an extension. A guest or private window shows whether that is it (its saves are gone when it closes); then, in a normal window, turn the extensions off one by one. |
+| `PAGE-NOT-ISOLATED` ("Something in this browser changes the page"; before 4 November "not cross-origin isolated"), and with it `MODULE-NOT-ISOLATED` | The page is not opened from the game's server, or something in the browser changes it on the way, most often an extension. A guest or private window shows whether that is it (its saves are gone when it closes); then, in a normal window, turn the extensions off one by one. |
 | `PAGE-NO-MEMORY`: "Shared WebAssembly memory is not available" | The browser cannot give the game the memory it needs. Close other tabs, update the browser and restart it. |
 | `PAGE-NO-JIT`: "The JavaScript optimizer is off for this site" (or "exnref not supported by the Wasm interpreter") | The browser runs WebAssembly without its compiler here, and the game cannot run that way. Chrome: Settings, Privacy and security, JavaScript optimization and security: allow the site (Android's Advanced Protection turns the optimizer off for every site). Edge: add the site as an exception to Enhanced security. |
 | `PAGE-NO-WAITASYNC`: "This browser is too old for the game" | Update the browser (Firefox 145 or newer), or play in Chrome. |
+| `PAGE-NO-SIMD`: "This computer's processor is too old for the game" | The game needs WebAssembly SIMD: a PC processor without SSE4.1 (an AMD Phenom II, an Intel Core 2 before Penryn) or a browser too old for it can't compile the game. Update the browser; on such a processor the game can't run. |
 | "Graphics (WebGPU)", `GPU-OFF` and the other `GPU-OFF-…` | The browser has no WebGPU, which the game needs. Chrome: update it (on Linux also turn on `chrome://flags/#enable-unsafe-webgpu`). Firefox has it on Windows and on Macs with Apple chips; elsewhere (Linux, Macs with Intel chips) play in Chrome, or set `dom.webgpu.enabled` to true in about:config. Firefox for Android has none yet: play in Chrome. iPhone and iPad: WebGPU comes with iOS 26 and iPadOS 26. `GPU-NOT-SECURE`: see "Secure, isolated page" above. |
 | `GPU-ACCEL-OFF` | Chrome uses no graphics at all (it draws WebGL in software, or not at all): "Use graphics acceleration when available" in `chrome://settings/system` is off, or Chrome gave up on the graphics after they crashed. Turn it on and restart Chrome; if it was on, update the graphics driver. |
 | `GPU-ADAPTER-LINUX`: Chrome on Linux, while `chrome://gpu` says WebGPU is hardware accelerated | Most likely the Vulkan driver is missing: Chrome runs WebGPU on Vulkan there (the rest of Chrome on OpenGL). `ls /usr/share/vulkan/icd.d/` lists the installed ones (`intel_icd` for Intel, `radeon_icd` for AMD). Install it with `sudo apt install mesa-vulkan-drivers` on Debian and Ubuntu, `sudo dnf install mesa-vulkan-drivers` on Fedora, `vulkan-intel` or `vulkan-radeon` on Arch, then quit Chrome completely and start it again. Chrome has WebGPU on by itself on Linux for Intel graphics (Gen12 and newer) and NVIDIA (Wayland); for other graphics turn on `chrome://flags/#enable-unsafe-webgpu`. If the driver is there, the Dawn Info section further down `chrome://gpu` lists each adapter WebGPU sees and why one is blocked. |
-| `GPU-ADAPTER-WIN`: Chrome on Windows | Chrome runs WebGPU on Direct3D 12 there, and older graphics have no Direct3D 12 driver (Intel HD 4000 and older, for one): the game cannot run on that computer. The Dawn Info section further down `chrome://gpu` lists each adapter WebGPU sees and why it is blocked; when it lists only "D3D11 backend" adapters, "Blocklisted - D3D11 backend not fully implemented", the graphics have no Direct3D 12. On newer graphics, update the graphics driver from Intel, AMD or NVIDIA, then quit Chrome completely and start it again. |
+| `GPU-ADAPTER-WIN`: Chrome on Windows | Chrome runs WebGPU on Direct3D 12 there, and older graphics have no Direct3D 12 driver (Intel HD 4000, 4400, 4600 and older, for one): the game cannot run on that computer. The Dawn Info section further down `chrome://gpu` lists each adapter WebGPU sees and why it is blocked; when it lists only "D3D11 backend" adapters, "Blocklisted - D3D11 backend not fully implemented", the graphics have no Direct3D 12. On newer graphics, update the graphics driver from Intel, AMD or NVIDIA, then quit Chrome completely and start it again. |
 | `GPU-ADAPTER-WIN-ARM`: Chrome on Windows on ARM (Snapdragon) | Chrome keeps WebGPU behind a flag there: turn on `chrome://flags/#enable-unsafe-webgpu`, then restart Chrome. |
 | `GPU-ADAPTER-ANDROID` | Chrome on Android has WebGPU from Android 12 on Qualcomm (Adreno), ARM (Mali) and Intel graphics, and from Android 16 on Imagination (PowerVR). Update Android and Chrome. If that does not help, turn on `chrome://flags/#enable-unsafe-webgpu` (on the phone, type it into Chrome's address bar, or open `chrome://flags` and search for "Unsafe WebGPU"), then restart Chrome: that lifts Chrome's WebGPU blocklist. Samsung's Xclipse (some Galaxy phones) is on it, and the game runs with the flag (a player's Xclipse 540 with Android 16). If the game still does not run with it, it cannot run on that phone yet. |
 | `GPU-ADAPTER`, `GPU-ADAPTER-FIREFOX` | The browser would not use the graphics. Restart it; update the graphics driver (on a Mac: macOS) and the browser. `chrome://gpu` in Chrome, about:support (Graphics) in Firefox says why. In Firefox on Windows, graphics without Direct3D 12 cannot run it either. |
@@ -850,12 +907,15 @@ Good to know:
 | `GPU-RENDERER`: "The game was stopped" | The graphics did not start: the game cannot go on without them. Restart the browser and press **Play**; if it happens again, update the graphics driver, and download the log (its `[gpu]` lines say why). |
 | `GPU-ANDROID-DRIVER`: "Did not start" | The phone's graphics driver refused the game's picture at its first frame (Chrome on some phones with Adreno 6xx graphics; the log's `[gpu] device lost` line says `VK_ERROR_FORMAT_NOT_SUPPORTED` while "checking external image import support"). Every Play ends the same way on that phone: no setting changes it. A system update for the phone (a newer graphics driver) may; another browser on Android has no WebGPU yet. |
 | `GPU-LOST`: "The game was stopped" | The graphics stopped during the game (the graphics driver reset, or the browser's graphics process crashed): the game cannot go on without them. Press **Play**: the page reloads, which starts the graphics again (Safari gives a page no graphics after that until it reloads), then **Play** starts the game. Your saves and settings stay. Download the log first if you want to keep it: after the reload, Download log has only a shorter copy of that game's. If the page then says `GPU-ADAPTER-AFTER-LOST`, see that. If it keeps happening, restart the browser and update the graphics driver. |
-| "Game module", `MODULE-LOAD` | The game did not load, or the server is not reachable. The page tries again by itself, or press **Retry**. If the module is missing, start the server with `web/start.sh`, which builds it. |
+| "Game module", `MODULE-LOAD`: "The game didn't load" | The game did not load, or the server is not reachable (the log says why). The page tries again by itself, or press **Retry**. If the module is missing, start the server with `web/start.sh`, which builds it. |
 | "A new version of the game is on the server" | Press **Reload** or **Play**: the page loads the new version, and your saves and settings stay. Download the log first if you want to keep it: after the reload, Download log has only a shorter copy of that game's. Before any game the page reloads by itself; during a game it says so over the game, and the start page offers it when you quit. |
 | "Open elsewhere" | The game runs in another tab of this browser. Switch to it, or close it. |
-| `GAME-START`: "Did not start", "The game could not start" | Press **Play** again; if it happens again, **Download log** (on the start page) and post the log with the message. "could not allocate memory" (Chrome) or "Out of memory" (Safari): the browser would not set aside the game's 1 GB, most often on phones with 2 to 4 GB (a 32-bit Chrome, an iPhone's Home Screen app). Close other apps and reload the page; the log's `[memory]` line says what the browser refused. |
+| "Not loading": "Your antivirus or network is probably blocking the game" | The page's own script never started, 15 seconds after the page opened: an antivirus (Kaspersky flagged the site in November 2026) or a network filter blocks it. Allow `nfsu2.xyz` in it, or try mobile data, then **Reload**. |
+| "The game's files didn't load properly" (error code 1 in the first minute) | The game's program file did not load: the browser's copy is damaged, or the network blocks it (the log shows `no PE signature`, or `HTTP 403` for it). **Other**, **Delete game data**, then **Play**; your saves stay. If it happens again, try another network. |
+| `GAME-START`: "Did not start", "The game couldn't start" | Press **Play** again; if it happens again, **Download log** (on the start page) and post the log with the message. "This device doesn't have enough free memory for the game" (the log: "could not allocate memory" in Chrome, "Out of memory" in Safari): the browser would not set aside the game's 1 GB, most often on phones with 2 to 4 GB (a 32-bit Chrome, an iPhone's Home Screen app). Close other apps and reload the page; the log's `[memory]` line says what the browser refused. |
 | `STORAGE-NONE`: "This browser window cannot store files" | A guest or private window cannot keep saves: open the page in a normal window. |
 | `STORAGE-OLD`: "This browser is too old for the game" | Safari before 26 (iOS 18 with Safari's WebGPU feature flag on, for one) cannot write the game's files. Update to iOS 26, iPadOS 26 or macOS with Safari 26 (Settings, General, Software Update). |
+| `SAVES-UNREADABLE`: "Play without saving?", "This browser can't read or write your saves right now" | The browser's storage for the site answered the page with an error (the message names it; Firefox says `UnknownError: Unknown failure`, a full disk among the causes). Nothing of the saves was written or removed. **Play without saving** starts the game anyway: it reads what it can, and nothing from that game is kept (no profile, setting or screenshot). Otherwise restart the browser, make sure the disk has free space, and press **Play** again. If it still fails and the message says your cloud saves have your progress: copy or download your passphrase first (**Cloud saves**; Firefox and Safari keep it only in the site's data), then remove this site's data in the browser's settings (Firefox: Settings, Privacy & Security, Cookies and Site Data, Manage Data; screenshots, covers, this device's settings, the Put back copy and the downloaded game data go too), reload, and enter the passphrase under **Cloud saves**. Otherwise don't remove it (that deletes what the cloud doesn't have) and ask on Discord. Shown over a game: the browser refused a file the game saves to, so a save may not have been kept. |
 | `STORAGE-ASK`: the browser asks whether the site may keep its data | Allow it, so that your saves stay when the disk runs low (section 5). |
 | `BROWSER-CHROME-OLD`, `BROWSER-FIREFOX-OLD` | A warning: the game may still play. Update the browser (Chrome 140 or newer, Firefox 145 or newer). |
 | `BROWSER-OTHER` | A warning: the page does not know this browser (it knows Chrome, Edge, Brave, Opera, Firefox and Safari). It may work when every other check passes. |

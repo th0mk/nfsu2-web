@@ -1,0 +1,26 @@
+# Capture the native fade on entry and both Back paths.
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 tappad DRIGHT
++100 tappad A
++1 dump fade_open_01
++9 dump fade_open_10
++20 dump fade_open_30
++90 dump fade_open_settled
++60 tap RIGHT
++150 tap RETURN
++0 waitfng UI_QRModeSelect.fng 2000
++200 tap ESCAPE
++1 dump fade_return_01
++9 dump fade_return_10
++20 dump fade_return_30
++200 dump fade_return_settled
++1 tap ESCAPE
++1 dump fade_main_01
++9 dump fade_main_10
++20 dump fade_main_30
++200 dump fade_main_settled
++1 status fade_complete
++60 quit

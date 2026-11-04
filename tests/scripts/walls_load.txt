@@ -1,0 +1,31 @@
+# A profile that kept a spot past the career's walls (runtime/walls.c), part 1, from a stage 2 career save: in the
+# crib the career's kept spot (Career +0x8744 kept, +0x8750 the place, which the profile saves) is put on Coal
+# Harbor's bridge behind the wall (218.8 -1086.9 21.6), as an outrun's end or a trip to the garage keeps it.  The old
+# game put the car there at every load.  Now "[walls] ... my car is past the career's walls (..., free roam started
+# there): back to <a place on the career's roads>", and the car stands north of the wall.  Standing, the pause menu's
+# Save (savegame.c) keeps that place: "[save] ... Save: the career at X Y Z".  Copy the profile out and load it with
+# walls_reload.txt: the car starts there, with no "[walls]" jump.
+#   node web/tools/roam-pair.mjs --solo --a Wal:walls_load.txt --seed <a stage 2 career save tree> --env NFSU2_ROAM=0
+#        --out <dir> --fetch "NFS Underground 2/<NAME>/<NAME>"
+0     bot on
++0    waitfng UI_CareerCrib.fng 6000
++0    poke 0x863484 1                 # a spot kept
++0    poke 0x863490 0x435acccd        # 218.8
++0    poke 0x863494 0xc487dccd        # -1086.9
++0    poke 0x863498 0x41accccd        # 21.6
++1    peekx 0x863484 6
++0    waitroam 6000
++0    bot off
++120  walls
++0    expect f:[[0x8900ac]+4]+0x64 > -1059
++300  peekx *(*0x8900ac+4)+0x60 3
++0    poke 0x844ad9 1 byte             # Save: Autosave
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  tap RIGHT                        # Save
++60   tap RETURN
++0    waitfng MC_Main.fng 600
++150  tap RETURN                       # "Save complete.": Continue
++0    waitexpr i:0x836514 == 0 1200
++0    peekx 0x863484 6
++120  quit

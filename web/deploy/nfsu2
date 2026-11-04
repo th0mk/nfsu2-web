@@ -13,6 +13,9 @@
 #   ./nfsu2 bans                           the bans in force
 #   ./nfsu2 history <player | #ban>        a player's bans and renames, in force and ended in the last year
 #   ./nfsu2 names | unname <name>          the names taken away; give one back
+#   ./nfsu2 days [n]                       how many came each day (UTC), the last n days and today so far
+#   ./nfsu2 settings [n] [setting]         the settings players changed, the last n days (7) and today so far,
+#                                          most changed first; a setting's name: only it, with every value
 #   ./nfsu2 logs [days] > logs.gz          the server's log of the last days (1: today so far), gzipped ("What the log
 #                                          keeps"); from your computer: ssh root@<vps> /srv/nfsu2/nfsu2 logs 2 > logs.gz
 # <player> is an address (10.77.x.y) or a name, as `who` shows them, or a [cheat] line's handle (c17); the message

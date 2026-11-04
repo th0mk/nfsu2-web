@@ -3,7 +3,9 @@
 // copy consistent: the copy counts only if seq was even and unchanged.
 
 export const HOST_STATUS_MAGIC = 0x31545453;
-const MAX = 32, NAME = 16, ITEM = 24, HEAD = 16;
+// (MAX is the runtime's HOST_STATUS_MAX: a game of another build has its radio's words elsewhere, which radio-link.ts
+// checks, and at most MAX names, which this reads)
+const MAX = 48, NAME = 16, ITEM = 24, HEAD = 16;
 
 export class StatusReader {
   private td = new TextDecoder();

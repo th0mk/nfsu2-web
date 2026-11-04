@@ -2,6 +2,7 @@
 """x86-32 -> C lifter.  Translates a function into C that runs on the CPU state."""
 import sys, struct, collections
 import pefile
+from split_reloc import operand as split_operand
 from capstone import *
 from capstone.x86 import *
 
@@ -411,11 +412,12 @@ class Lifter:
             if m.index not in R32: raise Unsupported("index register")
             parts.append(f"c->{R32[m.index]}*{m.scale}" if m.scale!=1 else f"c->{R32[m.index]}")
         d = (m.disp + extra) & 0xffffffff
-        if d or not parts: parts.append(f"0x{d:x}u")
+        if d or not parts: parts.append(split_operand(d, getattr(self, 'cur_ip', 0)) if getattr(self, 'IB', 0) == 0x400000 else f"0x{d:x}u")
         return "(" + "+".join(parts) + ")"
 
     def rd(self, op):
-        if op.type==X86_OP_IMM:  return f"0x{op.imm & 0xffffffff:x}u"
+        if op.type==X86_OP_IMM:
+            return split_operand(op.imm, getattr(self, 'cur_ip', 0), True) if getattr(self, 'IB', 0) == 0x400000 else f"0x{op.imm & 0xffffffff:x}u"
         if op.type==X86_OP_REG:
             r=op.reg
             if r in R32: return f"c->{R32[r]}"
@@ -568,6 +570,7 @@ class Lifter:
         return "0x%02xu" % getattr(self, 'cur_fmask', F_ALL)
 
     def insn(self, i, targets):
+        self.cur_ip = i.address
         m=i.mnemonic; ops=i.operands; o=ops
         E=lambda k: self.rd(o[k]); W=lambda k,v: self.wr(o[k],v)
         bits = (o[0].size*8) if o else 32

@@ -3,6 +3,7 @@
 +200  tap RETURN                                   # "No" profile
 +0    waitfng UI_Main.fng 3000
 +500  tap RIGHT
++60  tap RIGHT        # (Split Screen, after Quick Race)
 +120  dump mm_right
 +0    tap RETURN
 +300  dump c1

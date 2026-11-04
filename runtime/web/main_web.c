@@ -80,6 +80,9 @@ int main(int argc, char **argv){
 
     mem_init();
     if (mem_load_pe(exe)) return 1;
+    /* Six-player tables must exist before the guest static constructors. */
+    mem_commit(SPLIT_PLAYERS_INDEX, 0x10000u);
+    memset(g_mem + SPLIT_PLAYERS_INDEX, 0, 0x10000u);
     mem_commit(TEB_BASE, 0x20000);
     mem_commit(STACK_LO, STACK_HI - STACK_LO);
     fileio_set_root(exe);

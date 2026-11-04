@@ -17,6 +17,9 @@
 //     --save-out DIR    each scenario's save directory afterwards, as DIR/<scenario>/ (a seed for the next run)
 //     --allow WHY,...   with --script: what the scenario expects of web/tools/judge.mjs's failures (freeze for
 //                       watchdog_loading.txt)
+//     --fast            fast-forward (NFSU2_FAST=1, runtime/framerate.c): the game does not wait for the wall clock
+//                       except while it reads a file, so a scenario takes less time; scenarios with --net / a net
+//                       column, and free roam (NFSU2_ROAM), run as usual
 //     --list            print the scenario table and exit
 //   no scenario names: every runnable scenario of the table.
 //   NFSU2_SAVE_SEED=<dir> (as run_suite.sh): a save tree copied into the
@@ -74,7 +77,7 @@ const TABLE = [
   ['movies', 'career_movies.txt', 'tapuntil UI_StartCareer.fng satisfied', 'NOMOVIES=0', 400],
   ['options', 'options_display.txt', '[D3D] Reset', '', 400],
   // the Horn Volume slider (runtime/hornmenu.c): Options > Audio, and the pause menu's, whose bar is made of copies
-  ['hornvolume', 'options_horn.txt', '[horn] volume 85 %', '', 400],
+  ['hornvolume', 'options_horn.txt', "[horn] the game's Master Volume at 0 %", '', 400],
   ['hornpause', 'pause_horn.txt', 'parts as SLIDER_BASE_8 SLIDER_KNOB_8 SLIDER_HANDLE_8 SLIDER_BEG_8 SLIDER_END_8', '', 400],
   // Exposure and White Level (runtime/tonemenu.c): Options > Display after Level Of Detail, and the pause menu's
   ['tone', 'options_tone.txt', '[tone] white level 70 %', '', 400],
@@ -117,7 +120,7 @@ const SUITE_ENV = {
 const argv = process.argv.slice(2);
 // a game in headless Chrome keeps about three cores busy
 const JOBS = Math.max(1, Math.min(4, Math.floor(os.cpus().length / 3)));
-const opt = { base: 'http://localhost:8611', run: '', jobs: JOBS, env: [], scale: 1, script: '', marker: '', name: '', net: '', saveOut: '', allow: [], list: false };
+const opt = { base: 'http://localhost:8611', run: '', jobs: JOBS, env: [], scale: 1, script: '', marker: '', name: '', net: '', saveOut: '', allow: [], list: false, fast: false };
 const names = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i], v = () => argv[++i];
@@ -126,6 +129,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--script') opt.script = v(); else if (a === '--marker') opt.marker = v(); else if (a === '--name') opt.name = v();
   else if (a === '--net') opt.net = v(); else if (a === '--save-out') opt.saveOut = v();
   else if (a === '--allow') opt.allow.push(...v().split(','));
+  else if (a === '--fast') opt.fast = true;
   else if (a === '--list') opt.list = true; else names.push(a);
 }
 if (opt.list) {
@@ -151,7 +155,8 @@ const extraEnv = Object.fromEntries(opt.env.map(e => [e.slice(0, e.indexOf('='))
 const saveName = s => `suite-${run}-${s.name}`.replace(/[^\w.-]/g, '_');
 
 function urlFor(s) {
-  const env = { ...SUITE_ENV, ...Object.fromEntries(s.extra.split(/\s+/).filter(Boolean).map(e => e.split('='))), ...extraEnv };
+  const env = { ...SUITE_ENV, ...Object.fromEntries(s.extra.split(/\s+/).filter(Boolean).map(e => e.split('='))), ...extraEnv,
+    ...(opt.fast && !s.net ? { NFSU2_FAST: '1' } : {}) };
   const q = new URLSearchParams();
   q.set('wasm', '/game.wasm'); q.set('pages', '16384'); q.append('arg', '/data/SPEED2.EXE');
   for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
@@ -259,7 +264,7 @@ queue.sort((a, b) => (lastWall[b.name] ?? b.alarm) - (lastWall[a.name] ?? a.alar
 // (nothing to run, every scenario named not runnable yet: no browser, only the summaries)
 const browser = queue.length ? await chromium.launch({ ...pickBrowser(), headless: true,
   args: ['--enable-unsafe-webgpu', ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [])] }) : null;
-console.log(`web suite ${run}: ${queue.length} scenario(s), ${opt.jobs} at a time, logs in ${path.relative(ROOT, OUT)}/`);
+console.log(`web suite ${run}: ${queue.length} scenario(s), ${opt.jobs} at a time${opt.fast ? ', fast-forward' : ''}, logs in ${path.relative(ROOT, OUT)}/`);
 async function worker() {
   for (let s; (s = queue.shift());) {
     const r = await runOne(browser, s);
@@ -282,6 +287,6 @@ const pass = results.filter(r => r.pass).length;
 const sum = `web suite ${run}: ${pass} passed, ${results.length - pass} failed, ${skipped.length} not runnable yet\n` +
   `${MODULE ? MODULE + '\n' : ''}\n${rows.join('\n')}\n`;
 fs.writeFileSync(path.join(OUT, 'summary.txt'), sum);
-fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify({ run, module: MODULE, env: { ...SUITE_ENV, ...extraEnv }, results, skipped: skipped.map(s => ({ name: s.name, why: s.blocked })) }, null, 1));
+fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify({ run, module: MODULE, env: { ...SUITE_ENV, ...extraEnv }, fast: opt.fast, results, skipped: skipped.map(s => ({ name: s.name, why: s.blocked })) }, null, 1));
 console.log('\n' + sum);
 process.exitCode = results.length === pass ? 0 : 1;

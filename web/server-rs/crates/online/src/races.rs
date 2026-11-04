@@ -130,6 +130,8 @@ impl Core {
                         results: None,
                         own: None,
                         seen: Vec::new(),
+                        jumped: Vec::new(),
+                        jump_told: false,
                     }
                 })
                 .collect();

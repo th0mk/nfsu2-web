@@ -19,7 +19,8 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Underground 2 Revived">
 <meta name="twitter:description" content="Play Need for Speed: Underground 2 (2004) in Chrome and Firefox with WebGPU graphics, Web Audio, up to 120 fps widescreen, controller support, free roam and Online races with friends. Fan project, not affiliated with Electronic Arts.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23171717'/%3E%3Crect x='5' y='5' width='22' height='22' rx='6' fill='%23404038' stroke='%23c8f088' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="stylesheet" href="/main.css">
@@ -103,7 +104,8 @@
       </div>
       <div class="pane prose" role="tabpanel" data-tab="credits" hidden>
         <p data-i18n-html>Source code on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. Based on Talha Müderrisoğlu's <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a>, the original x86 → C static recompiler for NFSU2, after <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>. This project was forked from NFSU2Recomp's <a href="https://github.com/TalhaMudo/NFSU2Recomp/tree/3d187ce7e5f1b99c0580866da4dbaa6d59dd23c7" target="_blank" rel="noopener noreferrer">MIT-licensed version of 16 October 2026</a> and uses only code from that version.</p>
-        <p data-i18n-html>Texture pack: LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>.</p>
+        <p data-i18n-html>Texture packs: LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>, JeansBig's <a href="https://nfsmods.xyz/mod/4485" target="_blank" rel="noopener noreferrer">Detailed Map</a>.</p>
+        <p data-i18n-html>Split screen: BirdSentinel (Zack)'s port of mihaits' <a href="https://github.com/mihaits/NFSU2-SplitScreen" target="_blank" rel="noopener noreferrer">NFSU2-SplitScreen</a>.</p>
       </div>
       <div class="pane prose" role="tabpanel" data-tab="translations" hidden>
         <p data-i18n-html>Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <a href="https://nfsmods.xyz/mod/5749" target="_blank" rel="noopener noreferrer">Multi 13 languages mod</a>, with Lee-Ryo's Thai support.</p>
@@ -251,11 +253,13 @@
               <div><dt><kbd>C</kbd> <kbd>B</kbd></dt><dd data-i18n>Camera, look back</dd></div>
               <div><dt><kbd>R</kbd></dt><dd data-i18n>Respawn</dd></div>
               <div><dt><kbd>H</kbd> <kbd>J</kbd></dt><dd data-i18n>Hydraulics (hold, then the arrows)</dd></div>
-              <div><dt><kbd>N</kbd></dt><dd data-i18n>Horn (with other players)</dd></div>
-              <div><dt><kbd>X</kbd></dt><dd data-i18n>Drift mode (in free roam)</dd></div>
-              <div><dt><kbd>O</kbd></dt><dd data-i18n>Open trunk, then hood, then doors (parked, in free roam)</dd></div>
+              <!-- this site's own: the keys the player gave them (sitekeys.ts siteKeyList; a row without one hides), set in Site -->
+              <div data-key-of="horn"><dt><kbd>N</kbd></dt><dd data-i18n>Horn (with other players)</dd></div>
+              <div data-key-of="lights"><dt><kbd>G</kbd></dt><dd data-i18n>Headlights off or on; hold for high beam</dd></div>
+              <div data-key-of="drift"><dt><kbd>X</kbd></dt><dd data-i18n>Drift mode (in free roam)</dd></div>
+              <div data-key-of="showoff"><dt><kbd>O</kbd></dt><dd data-i18n>Open trunk, then hood, then doors (parked, in free roam)</dd></div>
               <div><dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd data-i18n>Quick chat (with other players): group, then phrase</dd></div>
-              <div><dt><kbd>I</kbd></dt><dd data-i18n>Message a friend (in free roam)</dd></div>
+              <div data-key-of="message"><dt><kbd>I</kbd></dt><dd data-i18n>Message a friend (in free roam)</dd></div>
               <div><dt><kbd>Enter</kbd></dt><dd data-i18n>Start an event, take an outrun</dd></div>
               <div><dt><kbd>M</kbd> <kbd>Tab</kbd></dt><dd data-i18n>Map, messages</dd></div>
               <div><dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd data-i18n>Pause</dd></div>
@@ -264,14 +268,15 @@
           </div>
           <!-- the controller's drawing: controls.ts; under it the Controller settings (settings-ui.ts), on the page only -->
           <div class="tab-panel" role="tabpanel" data-tab="pad" hidden><div id="controller-body" data-keep></div></div>
+          <!-- this site's own controls, each with its key and button: sitekeys.ts SiteKeysView (on the start page they are
+               set here by a press; the menu's copy only shows them) -->
           <div class="tab-panel" role="tabpanel" data-tab="site" hidden>
-            <dl class="keys">
-              <div class="key-only"><dt><kbd>F9</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
-              <div class="touch-only"><dt><kbd>☰</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
+            <dl class="keys touch-only">
+              <div><dt><kbd>☰</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
+            </dl>
+            <div class="site-box"></div>
+            <dl class="keys site-fixed">
               <div><dt data-i18n-html><kbd>Home</kbd> or both sticks pressed in</dt><dd data-i18n>The menu, on a controller</dd></div>
-              <div class="key-only"><dt><kbd>F7</kbd></dt><dd data-i18n>Next song</dd></div>
-              <div class="key-only"><dt><kbd>F8</kbd></dt><dd data-i18n>Frame-rate counter</dd></div>
-              <div class="key-only"><dt><kbd>F12</kbd></dt><dd data-i18n>Photo mode; F12 again takes the photo</dd></div>
               <div class="key-only"><dt data-i18n-html>Hold <kbd>Esc</kbd></dt><dd data-i18n>Leave full screen</dd></div>
             </dl>
           </div>

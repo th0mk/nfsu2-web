@@ -6,12 +6,30 @@ into /changelog.json).
 Each day with a release gets one section, written when its module is built: `## <date> (<commit>)`, the commit being
 the last one the day's releases bring, so the next section covers the commits after it. A second release on the same
 day adds its lines to that day's section and moves its commit on (web/build.mjs stops on a date twice). One line per
-change, in plain text, as `- **Area:** what changed`, written for players. Left out: the server's insides, the forum
+change, in plain text, as `- **Area:** what changed`, written for players: new things and noticeable improvements
+first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-03 (32540c7)
+## 2026-11-04 (01e41df)
 
+- **Free roam:** a country flag before your name: pick yours on the start page, in Online, Your flag.
+- **Quick Race:** up to 127 laps and 5 opponents.
+- **Split screen:** two players on one keyboard, on the arrows and WASD.
+- **Camera:** the drift races' camera in every drive (C).
+- **Vinyls:** the game's hidden Special vinyls.
+- **Controls:** this site's keys and buttons are set in Controls, Site.
+- **Saves:** Play without saving where the browser's storage stops answering.
+- **iPhone:** sound in Silent mode.
+- **Free roam:** your car keeps its brakes, exhaust tips and spoiler after a shop.
+- **Free roam:** a car reset past the career's red walls goes back on its roads.
+- **Ghost mode:** the camera no longer hops over traffic on Everything.
+- **Horns:** follow the game's Master Volume.
+- **Start page:** plainer error messages.
+
+## 2026-11-03 (a5892ba)
+
+- **Split screen:** 2 to 4 players on one screen, each with their own controller: Split Screen in the main menu, after Quick Race. A port of mihaits' NFSU2-SplitScreen mod by BirdSentinel (Zack).
 - **Free roam:** lobby races count in your career, as Solo races do: win a race of your stage you haven't won yet, or finish one a friend or crew-mate wins. A star in the lobby shows whom a race counts for.
 - **Free roam:** a lobby warns you when its stage's cars are usually much faster than yours, and quitting a race costs more at stages 4 and 5.
 - **Free roam:** races start for everyone at once, about 10 seconds after the host's Enter (was 20 to 30), and no longer get stuck at the start for the host.
@@ -22,12 +40,18 @@ not guessed.
 - **Free roam:** no outrun offers in a crowd (4 or more players within 25 m), and Ghost mode on Everything covers outruns too.
 - **Free roam:** a hit that throws a car impossibly far is undone.
 - **Free roam:** an open trunk shows its speakers and amps.
-- **World map:** a car meet takes 16 parked players (was 24).
+- **Free roam:** drift battles: with drift mode on, challenge a player as for an outrun. The most drift points in 90 seconds wins $100 from the other.
+- **Drift mode:** on a controller, hold D-pad down a second while driving. The car no longer slides more after drift mode is off.
+- **Races:** other players' cars in Online, LAN and free-roam races keep to their line and point the right way, your game no longer speeds up and slows down to follow the host, and a car whose connection stalls drives on instead of stopping and jumping.
+- **Online:** Personal Stats show your new rating right after a ranked race.
+- **World map:** shows up to 4096 players (2048 on phones), and a car meet takes 20 parked players (was 24).
+- **Maps:** Upscaled (Settings, Game, Display) also shows JeansBig's Detailed Map: the minimap and world map sharp at high resolutions, with the missing shortcuts.
 - **Quick chat:** a Countdown phrase: 5, 4, 3, 2, 1, GO! on screen for everyone within 50 m.
 - **Music:** Settings, Game, Songs: Original plays the EA Trax songs as the game shipped them, in place of the uncensored ones, and F7 skips to the next song.
-- **Controllers:** the right stick looks around the car while driving (straight down looks back), and a click of it opens quick chat.
+- **Controllers:** the right stick looks around the car while driving (straight down looks back), and a click of it opens quick chat. If you steer or brake with the right stick in the game's controls, the left stick looks around instead.
 - **Steering wheels:** Fanatec bases get their own layouts, and separate USB pedals of any make work with a wheel.
 - **Graphics:** Enhanced Contrast no longer draws flickering lines along the screen's edges, and is as sharp as the original.
+- **Photo mode:** the camera reaches twice as far.
 - **Phones:** Android phones whose graphics driver can't show the game now say so, instead of asking to press Play again.
 - **Start page:** Safari before 26 is told to update, and the page says when an antivirus or network blocks the game.
 

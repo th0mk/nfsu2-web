@@ -1,6 +1,10 @@
 # Options > Audio: the Horn Volume slider (runtime/hornmenu.c), the eighth
 # row, after Engine Volume.  Three steps left (85 %), one right (90 %): the
-# log says "[horn] volume 95 %", "90 %", "85 %", "90 %".
+# log says "[horn] volume 95 %", "90 %", "85 %", "90 %".  Then the game's
+# Master Volume (the first row) to 0 % and Horn Volume a step left: "[horn]
+# volume 85 %", "[horn] the game's Master Volume at 0 %", and that honk's
+# "[horn] voice ..." line says peak -120 dBFS (silent; the ones before about
+# -14 dBFS).
 0     tapuntil RETURN MC_Background.fng 120 4000
 +200  tap RETURN                                   # "No" profile
 +0    waitfng GarageMain.fng 3000
@@ -9,6 +13,7 @@
 +40   tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +90   tap RETURN                                   # Options
 +0    waitfng UI_OptionsMain.fng 600
 +300  dump options
@@ -28,6 +33,18 @@
 +90   dump horn_85
 +0    tap RIGHT
 +90   dump horn_90
++0    loop 7                                       # up to Master Volume, down to 0 %
++0    tap UP
++40   endloop
++0    loop 20
++0    tap LEFT
++40   endloop
++90   dump master_0
++0    loop 7
++0    tap DOWN
++40   endloop
++0    tap LEFT                                     # a silent honk
++90   dump horn_master_0
 +0    tap DOWN
 +90   dump audio_mode_row
 +0    tap ESCAPE

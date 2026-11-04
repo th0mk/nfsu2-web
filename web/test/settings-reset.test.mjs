@@ -55,12 +55,19 @@ test('Reset on a line without a row: the template line, or the line gone, by its
   const ini = player();
   const lines = ini.split('\n');
   const at = k => lines.findIndex(l => l.startsWith(k + ' =')) + 1;
-  // the car pool: the template's own commented line in its place, the rest as it was
+  // an option of the template: its own commented line in its place, the rest as it was
+  const ex = S.UI.resetLine(ini, at('roam_extrap'));
+  assert.equal(ex.split('\n').length, lines.length);
+  assert.equal(ex.split('\n')[at('roam_extrap') - 1], '#roam_extrap = 250');
+  assert.equal(S.resolveEnv(ex, {}, {}).env.NFSU2_ROAM_EXTRAP, undefined);
+  assert.equal(S.resolveEnv(ex, {}, {}).env.NFSU2_ROAM_DELAY, '1000', 'other lines stay');
+  // the car pool (only the Mac app reads it since issue #68): never passed on, and its Reset removes the line
+  const r0 = S.resolveEnv(ini, {}, {});
+  assert.equal(r0.env.NFSU2_ROAM_CARPOOL_KB, undefined);
+  assert.ok(r0.notes.some(n => /roam_carpool_kb is only used by the Mac app, ignored/.test(n)));
   const pool = S.UI.resetLine(ini, at('roam_carpool_kb'));
-  assert.equal(pool.split('\n').length, lines.length);
-  assert.equal(pool.split('\n')[at('roam_carpool_kb') - 1], '#roam_carpool_kb = 48000');
-  assert.equal(S.resolveEnv(pool, {}, {}).env.NFSU2_ROAM_CARPOOL_KB, undefined);
-  assert.equal(S.resolveEnv(pool, {}, {}).env.NFSU2_ROAM_DELAY, '1000', 'other lines stay');
+  assert.equal(pool.split('\n').length, lines.length - 1);
+  assert.ok(!pool.split('\n').some(l => l.startsWith('roam_carpool_kb')));
   // a variable by its own name: removed
   const v = S.UI.resetLine(ini, at('NFSU2_STATUS_EVERY'));
   assert.equal(v.split('\n').length, lines.length - 1);

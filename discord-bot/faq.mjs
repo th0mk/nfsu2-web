@@ -112,13 +112,17 @@ export function post(faq) {
   return [box];
 }
 
-/** one question's answer, for the one who asked; #channel-name as a link to the server's channel of that name */
-export function answer(x, guild) {
-  const linked = x.a.replace(/(^|[\s(])#([\p{L}\p{N}_-]+)/gu, (all, before, name) => {
+/** #channel-name as a link to the server's channel of that name */
+export function linked(s, guild) {
+  return s.replace(/(^|[\s(])#([\p{L}\p{N}_-]+)/gu, (all, before, name) => {
     const ch = guild?.channels.cache.find(c => c.name === name);
     return ch ? `${before}<#${ch.id}>` : all;
   });
-  return [new ContainerBuilder().setAccentColor(ACCENT).addTextDisplayComponents(text(`## ${x.q}\n${linked}`))];
+}
+
+/** one question's answer, for the one who asked */
+export function answer(x, guild) {
+  return [new ContainerBuilder().setAccentColor(ACCENT).addTextDisplayComponents(text(`## ${x.q}\n${linked(x.a, guild)}`))];
 }
 
 const OUT = {
@@ -238,17 +242,52 @@ export class Faq {
     if (!x) return i.reply({ content: 'This question is gone: the list above is up to date.', flags: MessageFlags.Ephemeral });
     const lang = langOf(i.locale);
     if (lang === 'en' || !this.anthropic) return i.reply({ ...view(x), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
-    const terms = await this.terms(lang, x), hash = hashOf(JSON.stringify([x.q, x.a, terms]));
-    const kept = this.tr[lang]?.[id];
-    if (kept?.hash === hash) return i.reply({ ...view(kept), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
+    const c = await this.cached(x, lang);
+    if (c.kept) return i.reply({ ...view(c.kept), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
     await i.deferReply({ flags: MessageFlags.Ephemeral });
-    const key = `${lang}:${id}:${hash}`;
-    let out = x;                                 // the English answer when the translation fails
+    return i.editReply(view(await this.translated(x, lang, c)));
+  }
+
+  /** every question with its answer, in faq.md's order */
+  questions() { return this.faq?.topics.flatMap(t => t.questions) ?? []; }
+
+  /** the channel the FAQ is posted in on this server, or null */
+  channelIn(guild) { return this.saved.posts.map(p => guild?.channels.cache.get(p.channel)).find(Boolean) ?? null; }
+
+  /** a line made from this question's answer (help.mjs's reply) in this language, with the page's labels as the page
+   *  names them there; one short call each time (each line is new), and the English line when it fails */
+  async lineIn(x, line, lang) {
+    if (lang === 'en' || !this.anthropic) return line;
+    try {
+      const terms = await this.terms(lang, x);
+      const glossary = terms.length ? `<glossary>\n${terms.map(([k, v]) => `${k} = ${v}`).join('\n')}\n</glossary>\n` : '';
+      const res = await this.anthropic.messages.create({
+        model: MODEL, max_tokens: 1000, system: SYSTEM,
+        messages: [{ role: 'user', content: `Into: ${nameOf(lang)} (${lang})\n${glossary}${JSON.stringify({ q: x.q, a: line })}` }],
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: OUT } },
+      });
+      if (res.stop_reason !== 'end_turn') throw new Error(`the model stopped: ${res.stop_reason}`);
+      const a = JSON.parse(res.content.filter(b => b.type === 'text').map(b => b.text).join('')).a?.replace(/\s+/g, ' ').trim();
+      if (!a) throw new Error('an empty translation');
+      return a;
+    } catch (e) { console.error(`[faq] a line of ${x.id} into ${lang}: ${e.message}`); return line; }
+  }
+
+  /** the kept translation of a question into this language (null when there is none, or it is out of date), and what
+   *  making one takes */
+  async cached(x, lang) {
+    const terms = await this.terms(lang, x), hash = hashOf(JSON.stringify([x.q, x.a, terms]));
+    const kept = this.tr[lang]?.[x.id];
+    return { terms, hash, kept: kept?.hash === hash ? kept : null };
+  }
+
+  /** one call for a translation, shared by everyone who asks for it meanwhile; the English answer when it fails */
+  async translated(x, lang, { terms, hash }) {
+    const key = `${lang}:${x.id}:${hash}`;
     try {
       if (!this.inflight.has(key)) this.inflight.set(key, this.translate(x, lang, terms, hash).finally(() => this.inflight.delete(key)));
-      out = await this.inflight.get(key);
-    } catch (e) { console.error(`[faq] ${id} into ${lang}: ${e.message}`); }
-    return i.editReply(view(out));
+      return await this.inflight.get(key);
+    } catch (e) { console.error(`[faq] ${x.id} into ${lang}: ${e.message}`); return x; }
   }
 
   /** the page's labels that this answer names, with their translations into this language */

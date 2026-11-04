@@ -63,6 +63,11 @@ export interface BootConfig {
   dataBase: string;        // URL prefix of the install folder (".../data/")
   manifestUrl: string;
   saveDir: string;         // OPFS directory name for the save overlay
+  /** 'memory': playing without saving (shell.ts): /save is a folder in the I/O worker's memory, the save folder's files
+   *  that read copied in at the start, and nothing written to the browser's storage (io-worker.ts MemDir) */
+  saves?: 'memory';
+  /** saves 'memory': files put into that folder where the save folder gave none (over: in place of its own) */
+  memFiles?: { path: string; text: string; over?: boolean }[];
 }
 
 export type ToPage =

@@ -17,7 +17,7 @@ if (!wasi) { console.error('wasi-sdk not found in deps/'); process.exit(2); }
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gwproto-'));
 const fields = {
   GwDraw: ['first', 'count', 'tex', 'target', 'kind', 'blend', 'aref', 'depth', 'tex1', 'tex2', 'tex3', 'ps', 'psci', 'vsid', 'rawoff', 'koff',
-    'proj', 'smp', 'blit_src', 'bcol', 'cull', 'fogv', 'clr_argb', 'clr_flags', 'clr_z', 'ksz', 'ix_isz', 'ix_ib', 'ix_base'],
+    'proj', 'smp', 'blit_src', 'bcol', 'cull', 'fogv', 'clr_argb', 'clr_flags', 'clr_z', 'ksz', 'ix_isz', 'ix_ib', 'ix_base', 'clip', 'viewport'],
   GwFrame: ['seq', 'dn', 'vn', 'rvn', 'kn', 'pscn', 'draws', 'tv', 'raw', 'k', 'psc', 'rq_end', 'bb_w', 'bb_h', 'clear_argb', 'pool_size', 'dump', 'dump_frame', 'dump_label',
     'rb_id', 'rb_tex', 'rb_dst', 'rb_pitch', 'rb_rows'],
   GwCtl: ['magic', 'version', 'layout', 'size', 'state', 'bell', 'attached', 'rq_head', 'rq_tail', 'rq_ptr', 'rq_cap', 'frames_done', 'view_w', 'view_h',

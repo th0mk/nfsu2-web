@@ -54,6 +54,16 @@ fn unhex(s: &str) -> Vec<u8> {
     (0..s.len() / 2).map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).expect("hex")).collect()
 }
 
+// the C core's version (roam_core.h RC_CORE_VER), which its HELLO says
+fn c_core_ver() -> u16 {
+    let hdr = std::fs::read_to_string(repo().join("runtime/roam_core.h")).expect("roam_core.h");
+    hdr.lines()
+        .find_map(|l| l.strip_prefix("#define RC_CORE_VER"))
+        .and_then(|r| r.split_whitespace().next())
+        .and_then(|v| v.parse().ok())
+        .expect("RC_CORE_VER")
+}
+
 // the wire: what roam_core sends the hub reads, and its PEERS lists decode in roam_core
 #[test]
 fn the_wire_what_roam_core_sends_the_hub_reads_and_its_peers_lists_decode_in_roam_core() {
@@ -87,14 +97,7 @@ fn the_wire_what_roam_core_sends_the_hub_reads_and_its_peers_lists_decode_in_roa
         String::from_utf8_lossy(&o.stdout).trim().to_string()
     };
     let (h, s, b) = (unhex(&run(&["hello"])), unhex(&run(&["snap"])), unhex(&run(&["bye"])));
-    // the C core's version (roam_core.h RC_CORE_VER), which its HELLO says
-    let hdr = std::fs::read_to_string(repo().join("runtime/roam_core.h")).expect("roam_core.h");
-    let core: u16 = hdr
-        .lines()
-        .find_map(|l| l.strip_prefix("#define RC_CORE_VER"))
-        .and_then(|r| r.split_whitespace().next())
-        .and_then(|v| v.parse().ok())
-        .expect("RC_CORE_VER");
+    let core = c_core_ver();
     assert_eq!(
         decode_roam(&h),
         Some(RoamMsg::Hello { sender: 0x1234ABCD, core, status: 2, room: fnv1a("blue"), name: "Ann K.".into(), crews: vec![] })
@@ -213,7 +216,7 @@ fn the_wire_a_sessions_hello_to_the_hub_says_the_links_it_wants() {
         l.both_ends();
         assert_eq!(l.of(0).len(), want, "{arg:?}");
         match decode_roam(&h) {
-            Some(RoamMsg::Hello { core, crews, .. }) => assert_eq!((core, crews.len()), (11, 2), "its crews still read"),
+            Some(RoamMsg::Hello { core, crews, .. }) => assert_eq!((core, crews.len()), (c_core_ver(), 2), "its crews still read"),
             other => panic!("not its HELLO: {other:?}"),
         }
     }

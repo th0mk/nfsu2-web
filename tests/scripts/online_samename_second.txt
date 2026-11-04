@@ -8,6 +8,7 @@
 +200  tap RETURN
 +0    waitfng GarageMain.fng 3000
 +1500 tap RIGHT
++60 tap RIGHT        # (Split Screen, after Quick Race)
 +120  tap RETURN
 +0    waitfng UI_OLMAIN.fng 1800
 +900  dump olmain_err

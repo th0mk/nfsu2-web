@@ -82,7 +82,7 @@ void autotest_tap(unsigned dik, long frames);
 
 /* ---- guest globals (v1.2 NA, verified in our exe) ------------------------ */
 #define G_FLOW          0x008654a4u   /* TheGameFlowManager state (6 = in game) */
-#define G_PLAYER1       0x008900acu   /* PlayersByNumber[0] (Player*) */
+#define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* PlayersByNumber[0] (Player*) */
 #define G_HOTPOS        0x00890140u   /* hot-position vec3 used by the jump */
 #define G_HOTPOS_ANGLE  0x008900d0u   /* u16 */
 #define G_HOTPOS_JUMP   0x008900cdu   /* u8: jump to the hot position */
@@ -143,6 +143,7 @@ void autotest_tap(unsigned dik, long frames);
 #define G_NOTHERS        0x00838420u
 
 /* ---- expressions ---------------------------------------------------------- */
+uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 static const char *xp;
 static uint32_t x_expr(void);
 static void x_ws(void){ while (*xp == ' ' || *xp == '\t') xp++; }
@@ -151,7 +152,7 @@ static uint32_t x_unary(void){
     if (*xp == '*'){ xp++; uint32_t a = x_unary();
         return mem_is_committed(a) && mem_is_committed(a + 3) ? MR32(a) : 0u; }
     if (*xp == '('){ xp++; uint32_t v = x_expr(); x_ws(); if (*xp == ')') xp++; return v; }
-    char *end; uint32_t v = (uint32_t)strtoul(xp, &end, 0); xp = end; return v;
+    char *end; uint32_t v = split_guest_addr((uint32_t)strtoul(xp, &end, 0)); xp = end; return v;
 }
 static uint32_t x_term(void){        /* '*' after an operand multiplies */
     uint32_t v = x_unary();
@@ -1081,7 +1082,7 @@ static void queue(const char *line){
 int career_is_cmd(const char *cmd){
     static const char *const k[] = { "call", "memdump", "waitx", "teleport", "autopilot", "racewin",
                                      "careerlist", "careergo", "shopgo", "peekx", "fnglist", "bot", "waitfe", "tapfe", "waitroam", "showgo", "cargo", "watchw",
-                                     "outrun", "outrunwin", "visual", "uniques", "mpcredit", 0 };
+                                     "outrun", "outrunwin", "visual", "uniques", "mpcredit", "walls", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -1225,6 +1226,7 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
     if (!strcasecmp(cmd, "fnglist")){
         fprintf(stderr, "[career] f=%ld fe packages:", f); fe_each(fe_print, a1[0] ? (void *)1 : 0); fputc('\n', stderr); return 1; }
     if (!strcasecmp(cmd, "careergo")){ career_go(a1); return 1; }
+    if (!strcasecmp(cmd, "walls")){ int walls_cmd(const char *); return walls_cmd(rest); }
     if (!strcasecmp(cmd, "mpcredit")){ int mpcredit_test(const char *, float); mpcredit_test(a1, a2[0] ? (float)atof(a2) : 100.f); return 1; }
     if (!strcasecmp(cmd, "shopgo")){
         uint32_t sh = shop_by_name(a1);

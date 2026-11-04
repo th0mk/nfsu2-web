@@ -1,0 +1,15 @@
+# A vinyl of the hidden category (runtime/vinylcat.c) on a car in free roam, as a friend sees it: instance A (acts).
+# A career save; a minute after the friend's car is in, the Special vinyl EX_VINYL (its index in "mp parts 40", the
+# vinyl slot's list: 776 is D3) goes on A's car as a shop puts it (mp setpart), and its look goes out.  B
+# (vinylcat_friend_b.txt) renders A's car before and after.  The waits are in ms: the pages run at their own rates.
+#   node web/tools/roam-pair.mjs --page play --play-only Vw --size 1280x720 --seed <career save> --seed-for Vw:<another>
+#        --env NFSU2_ROAM_ROOM=<own> --a Ex:vinylcat_friend_a.txt:EX_VINYL=<n> --b Vw:vinylcat_friend_b.txt
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++90000ms roam mp setpart 40 ${EX_VINYL}
++0    log VINYL SET
++240000ms roam mp status
++10   quit

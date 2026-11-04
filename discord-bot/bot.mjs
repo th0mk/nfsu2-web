@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { Archive } from './archive.mjs';
 import { matchFeatures, matchFixes } from './fixes.mjs';
 import { General } from './general.mjs';
+import { Help } from './help.mjs';
 import { COMMAND as FAQ, Faq, PREFIX as FAQ_BUTTON } from './faq.mjs';
 import { blocks, firstPass, investigate, newClient, overlap, picture, vet } from './investigate.mjs';
 import { Repo, defaultSource } from './repo.mjs';
@@ -131,6 +132,9 @@ const general = new General({
     .sort(byActivity).slice(0, 40)
     .map(([id, t]) => ({ id, owner: t.owner, line: `${id} | ${t.title} | ${(t.summary || t.snippet || '').slice(0, 120)}` })),
 });
+// #help (help.mjs): the FAQ's answer to a question it settles, at once
+const help = new Help({ client, anthropic, faq, general, isStaff, dryRun: CFG.dryRun, state: CFG.state });
+general.help = help;                             // the digest counts the votes on its answers
 
 // ---------------------------------------------------------------------------------------------- when to look --
 const timers = new Map();                        // thread id -> { timer, first }
@@ -1070,6 +1074,7 @@ client.on(Events.ThreadDelete, guard('thread deleted', thread => {
 client.on(Events.MessageCreate, guard('message', m => {
   if (m.system) return;                          // "changed the post title", pins, joins
   try { general.onMessage(m); } catch (e) { console.error(`[general] message: ${e.stack || e}`); }
+  try { help.onMessage(m); } catch (e) { console.error(`[help] message: ${e.stack || e}`); }
   if (archive && m.guild) {
     archive.add({
       id: m.id, at: m.createdAt.toISOString(),

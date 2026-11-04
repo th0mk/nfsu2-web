@@ -1,0 +1,54 @@
+# Our controls on their own keys and buttons, the game's controls as they come (tests/scripts/keys_bound.txt: the same
+# with the game's controls put on them).  New career -> prologue free roam, free roam on (the horn needs it).  Standing:
+# O opens the trunk ("[showoff] ... O: step 1"), D-pad down held a second the hood too ("D-pad down held: step 2"), N
+# and the left stick's click sound the horn ("[horn] my horn"); driving: X switches drift mode on and off (the game's
+# switch 0x890104), G the headlights off and on ("[lights] ... G: lights off"; the car's +0x93D, which lightkey.c
+# clears after the world's step, so 0 when the frame is shown).  No "[keys] ... is bound" or "[pad] ... is bound" line.
+#   node web/tools/run-suite.mjs --base <server> --script keys_ours.txt --net keysours --env NFSU2_ROAM=1
+#     --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=keysours --env ROAM_PROFILE=Keys1 --env NFSU2_PAD_LOG=1
+0     pad connect
++0    tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log --- standing: O, then D-pad down held ---
++0    tap O
++2000ms pad DDOWN down
++1500ms pad DDOWN up
++1000ms log --- the horn: N, then the left stick's click ---
++0    down N
++500ms up N
++1000ms pad LS down
++500ms pad LS up
++1000ms log --- driving: X ---
++0    teleport 1695.0 -845.0 24.6 0xb82e
++300  down UP
++0    waitexpr [[0x8900ac]+4]+0x42c > 3 1200
++0    expect i:0x890104 == 0
++0    tap X
++30   expect i:0x890104 == 1          # drift mode on
++0    tap X
++30   expect i:0x890104 == 0          # and off
++0    log --- driving: G ---
++0    expect b:[[0x8900ac]+4]+0x93d == 1
++0    tap G 1                         # (one frame: a tap, not the hold's high beam)
++10   expect b:[[0x8900ac]+4]+0x93d == 0   # the headlights off
++0    tap G 1
++10   expect b:[[0x8900ac]+4]+0x93d == 1   # and on
++0    up UP
++60   log end
++10   quit

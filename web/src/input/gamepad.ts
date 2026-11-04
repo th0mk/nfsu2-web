@@ -45,6 +45,7 @@ import {
   shifterGear, usbIds, WHEEL_MAP_EVENT, wheelOf, withSetUp, type OtherAxes, type ShifterMode, type WheelInfo, type WheelMap,
 } from './wheel';
 import { eightBitDoFace, HidPadReader } from './hidpad';
+import { LocalPadWriter } from './local-pads';
 
 export interface PadSnapshot { connected: boolean; buttons: number; axes: number[]; family: number; name: string; index: number; wheel?: boolean }
 
@@ -210,6 +211,8 @@ export interface PadPage {
    *  the controller (quick chat's picker opens or closes); true: the page took it, the game does not get it (else
    *  the game's: a car's hydraulics) */
   click?(): boolean;
+  /** the stick whose click goes to click() (PAD_RS unless the player picked PAD_LS, or -1: none; app/sitekeys.ts) */
+  chatButton?(): number;
   /** the whole controller each time it is read while no dialog is open (photo mode: runtime/photo.c), with the
    *  buttons pressed since the last read; true: the page has it now, the game gets it at rest */
   capture?(s: PadSnapshot, pressed: number): boolean;
@@ -238,6 +241,7 @@ function stickDirs(x: number, y: number, prev: number): number {
 }
 
 export class PadPoller {
+  private localPads: LocalPadWriter | null;
   private order: number[] = [];            // controller indices in connection order
   private last: PadSnapshot | null = null;
   private f32 = new Float32Array(1);
@@ -296,6 +300,7 @@ export class PadPoller {
               private onPress: () => void, private log: (s: string) => void, private onUse?: () => void,
               private page?: PadPage) {
     this.h = h; this.u8 = u8;
+    this.localPads = new LocalPadWriter(u8.buffer, base);
     addEventListener('gamepadconnected', this.onConnect);
     addEventListener('gamepaddisconnected', this.onDisconnect);
     addEventListener(WHEEL_MAP_EVENT, this.onWheelMap);
@@ -308,6 +313,7 @@ export class PadPoller {
     removeEventListener(WHEEL_MAP_EVENT, this.onWheelMap);
     this.rumble(null);
     this.h = null; this.u8 = null;
+    this.localPads = null;
     if (driver) { driver = null; dispatchEvent(new Event(PAD_DRIVER_EVENT)); }
   }
 
@@ -348,6 +354,7 @@ export class PadPoller {
     const both = this.touch ? withTouch(s, this.touch) : s;
     if (this.touch && !g) this.buzz();
     const out = this.page ? this.forPage(both, pressed) : both;
+    this.localPads?.poll(pads, mapStandard, !!globalThis.document?.hidden || !!this.page?.dialog());
     if (this.same(out)) return;
     this.publish(out, !this.last || this.last.connected !== out.connected || this.last.index !== out.index || this.last.name !== out.name);
     this.last = out;
@@ -444,7 +451,8 @@ export class PadPoller {
     const menu = (pressed & home) !== 0 || ((pressed & sticks) !== 0 && (s.buttons & sticks) === sticks);
     if (menu) { page.menu(); this.held |= s.buttons & (sticks | home); }
     const captured = !page.dialog() && !menu && !!page.capture?.(s, pressed);
-    const clicked = (b: number) => b === 1 << PAD_RS && !captured && !page.dialog() && !!page.click?.();
+    const chat = page.chatButton?.() ?? PAD_RS;
+    const clicked = (b: number) => chat >= 0 && b === 1 << chat && !captured && !page.dialog() && !!page.click?.();
     if (pressed & sticks && (s.buttons & sticks) !== sticks) { this.alone = s.buttons & sticks; this.aloneAt = now; }
     let wait = 0;
     if (menu) this.alone = 0;

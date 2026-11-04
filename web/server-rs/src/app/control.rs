@@ -18,6 +18,9 @@
 //!   history <player | #ban>       the player's bans and renames, in force and ended in the last year (nfsu2-bans)
 //!   names                         the names taken away; unname <name> gives one back
 //!   days [n]                      how many came each day (UTC; days.rs), the last n days (30), then today so far
+//!   settings [n] [setting]        what the ones who played changed in their settings (settings_days.rs), the last n
+//!                                 days (7) and today so far summed: most changed first, each with its top values; a
+//!                                 setting's name shows only it, with every value
 //!
 //! A player is a virtual address (10.77.x.y, as `who` and the log show it) or a name (any case): its page's on the
 //! switch, or the one its game shows over its car in free roam when that is another (`Who::game`: an edited page
@@ -72,6 +75,8 @@ pub const USAGE: &str = "commands:
   unname <name>                  give a name taken away back
   unclaim <name>                 the name's claim goes: anyone may take it again
   days [n]                       how many came each day (UTC), the last n days (30) and today so far
+  settings [n] [setting]         the settings players changed, the last n days (7) and today so far, most
+                                 changed first; a setting's name: only it, with every value
 <player>: an address (10.77.x.y) or a name, as who shows them, or a [cheat] line's handle (c17), for a week";
 
 /// The socket's file as this server made it, for its stop (`remove`)
@@ -321,7 +326,8 @@ fn tagged(line: &str, m: &nfsu2_bans::Marked) -> String {
 
 /// the address and name a `[cheat]` line of a race begins with: `[cheat] 10.77.3.41 "Bob": won the online race "..."`
 /// or `finished 2 in the online race "..."` (nfsu2-online lobby.rs), `[cheat] 10.77.3.41 "Bob": won the race of lobby
-/// ...` (nfsu2-roam results.rs) or `raced in the race of lobby ...` (an edited car, hub.rs); None for any other line
+/// ...` or `its car jumped 280 m at once in the race of lobby ...` (nfsu2-roam results.rs) or `raced in the race of
+/// lobby ...` (an edited car, hub.rs); None for any other line
 fn race_cheat(line: &str) -> Option<(u32, &str)> {
     let (vip, rest) = line.strip_prefix("[cheat] ")?.split_once(" \"")?;
     let (name, what) = rest.split_once("\": ")?;
@@ -442,6 +448,25 @@ impl App {
                 t.extend(self.days.history(n));
                 t.push(format!("{day},{},{},{},{} (today so far)", c[0], c[1], c[2], c[3]));
                 Ok(t.join("\n"))
+            }
+            "settings" => {
+                // "settings fps" as well as "settings 7 fps"
+                let (n, only) = match word(1).parse::<usize>() {
+                    Ok(n) => (n, word(2)),
+                    Err(_) => (7, word(1)),
+                };
+                let (from, to, mut t) = self.days.settings(n, now);
+                if !only.is_empty() {
+                    t.counts.retain(|k, _| k == only);
+                    if t.counts.is_empty() {
+                        return Err(format!("no one changed \"{only}\" from {from} to {to}"));
+                    }
+                }
+                let head = format!(
+                    "Settings changed from the device's defaults, as each browser had them at its first Play of a day \
+                     (UTC), {from} to {to} (today so far); a browser counts once on each day it played:"
+                );
+                Ok(format!("{head}\n{}", t.table(if only.is_empty() { 8 } else { usize::MAX })))
             }
             "bans" => {
                 let list = self.bans.list(now);
@@ -762,6 +787,17 @@ mod tests {
                 "[cheat] 10.77.1.3 \"Ed\": raced in the race of lobby 0000abcd (race 00001234: drag, 1 lap) in an edited car, \
                  1st of 3: 350Z",
                 "Ed",
+            ),
+            (
+                "[cheat] 10.77.1.3 \"Inv\": its car jumped 280 m at once in the race of lobby 0000abcd (race 00001234: URL, 3 \
+                 laps, heat 2 of 3), as 2 of 2 other players' games had it (the largest each: 280, 275 m; honest races' \
+                 largest are under 50 m); it won",
+                "Inv",
+            ),
+            (
+                "[cheat] 10.77.1.3 \"Jo\": its car jumped 280 m at once in the online race \"two\" (sprint, track 4102, 1 lap), as \
+                 1 other players' games had it (the largest each: 280 m; honest races' largest are under 50 m); it won",
+                "Jo",
             ),
         ] {
             assert_eq!(race_cheat(line), Some((vip, name)), "{line}");

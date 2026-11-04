@@ -24,6 +24,7 @@ export const NET_KIND_NOTICE = 16;            // TX ring only, never sent: a lin
 export const NET_KIND_LOBBY = 17;             // TX ring only, never sent: the free-roam race lobby's panel, its state as JSON ("{}": none)
 export const NET_KIND_SAY = 18;               // TX ring only, never sent: quick chat, a phrase said (a friend's or the player's), as JSON (the LAN mailbox's: in a race)
 export const NET_KIND_FRIEND = 19;            // TX ring only, never sent: the player's car and a friend's touched front bumpers for 3 s (or parted after), as JSON
+export const NET_KIND_BATTLE = 21;            // TX ring only, never sent: a drift battle's scoreboard ({"t","me","a","vs","b"}; "{}": none)
 export const NET_KIND_FLYING = 20;            // TX ring only, never sent: the player's car flew in free roam for minutes ({"s"}): the page leaves the switch
 export const NET_KIND_BUNDLE = 32;            // page and switch only (nfsu2-lan): several frames in one message
 export const NET_BUNDLE_MAX = 32 << 10;       // bytes in one bundle the page sends at most (the switch takes 64 KB)

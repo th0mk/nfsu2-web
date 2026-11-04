@@ -36,6 +36,10 @@ const T: Record<string, [number, number]> = {
   ContextMenu: [0xDD, 0x5D],
 };
 export const CODES: Record<string, KeyDef> = Object.fromEntries(Object.entries(T).map(([k, [dik, vk]]) => [k, { dik, vk }]));
+/** the touch controls' Drift and Horn (app/touch.ts, through the input layer's key()): keys no keyboard has and the
+ *  game never maps (no name in runtime/dikeys.c), so they work whatever keys the player gave those (runtime/drift.c,
+ *  horn.c DIK_TOUCH_*); no window message (vk 0) */
+export const PAGE_CODES: Record<string, KeyDef> = { Nfsu2Drift: { dik: 0xF1, vk: 0 }, Nfsu2Horn: { dik: 0xF2, vk: 0 } };
 /** the first code of every DIK, for synthetic events */
 export const CODE_OF_DIK: string[] = [];
 for (const [code, [dik]] of Object.entries(T)) if (!CODE_OF_DIK[dik]) CODE_OF_DIK[dik] = code;

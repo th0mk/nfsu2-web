@@ -41,6 +41,9 @@
  *                           showoff_mine), 0 where there is no show-off
  *   rh_showoff_car(c, k, car, open)   slot k's car (0: none) and the parts its
  *                           player has open, to open on it (showoff_car)
+ *   rh_lights_mine()        the player's headlights: 0 as the game has them, 1 off, 2 high beam (lightkey.c's
+ *                           lightkey_mine), 0 where there is no light key
+ *   rh_lights_car(k, car, st)   slot k's car (0: none) and its player's headlights, to show (lightkey_car)
  *   ROAM_HOST_SCRIPT        defined when the input-script commands exist
  *   RH_FE_NODES             the most objects FEng draws of one package (its
  *                           level sorter's nodes)
@@ -62,12 +65,20 @@ uint32_t win32_heap_live(void);          /* win32.c: bytes in live heap blocks *
 void ws_hud_marker(float *x, float *y);  /* widescreen.c */
 int language_no_profile(const char *name);   /* language.c */
 int drift_kept_tuning(uint8_t *out);     /* drift.c */
+int drift_wanted(void);                  /* drift.c: drift mode chosen, and its drift battles */
+void drift_battle_begin(void);
+void drift_battle_go(CPU *c);
+void drift_battle_score(double *banked, double *pend);
+uint32_t drift_battle_x(void);
+void drift_battle_end(void);
 uint8_t showoff_mine(void);              /* showoff.c */
 void showoff_car(CPU *c, int k, uint32_t car, uint8_t open);
+int  lightkey_mine(void);                /* lightkey.c */
+void lightkey_car(int k, uint32_t car, int st);
 
 #define ROAM_HOST_SCRIPT 1
 #define ROAM_HOOK_RET    0x00581475u     /* the return address guest calls see */
-#define RH_FE_NODES      4096            /* objects FEng draws of one package: overrides.c's level sorter (the game: 512) */
+#define RH_FE_NODES      8192            /* objects FEng draws of one package: overrides.c's level sorter (the game: 512) */
 #define GPTR(a)         (g_mem + (uint32_t)(a))
 #define rh_committed(a)  mem_is_committed(a)
 #define rlog(...)        fprintf(stderr, __VA_ARGS__)
@@ -86,8 +97,17 @@ void showoff_car(CPU *c, int k, uint32_t car, uint8_t open);
 #define rh_carsfx_end()  carsfx_end()
 #define rh_no_profile(n) language_no_profile(n)
 #define rh_drift_tuning(out) drift_kept_tuning(out)
+#define ROAM_HOST_DRIFT  1               /* drift mode (drift.c): drift battles */
+#define rh_drift_want()  drift_wanted()
+#define rh_drift_begin() drift_battle_begin()
+#define rh_drift_go(c)   drift_battle_go(c)
+#define rh_drift_score(b, p) drift_battle_score((b), (p))
+#define rh_drift_x()     drift_battle_x()
+#define rh_drift_end()   drift_battle_end()
 #define rh_showoff_mine() showoff_mine()
 #define rh_showoff_car(c, k, car, open) showoff_car((c), (k), (car), (open))
+#define rh_lights_mine() lightkey_mine()
+#define rh_lights_car(k, car, st) lightkey_car((k), (car), (st))
 typedef FILE rh_file;
 #ifdef __wasm__
 /* The pose log (a test aid) in the browser: every stdio flush is a

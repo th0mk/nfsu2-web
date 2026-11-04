@@ -25,6 +25,9 @@ export interface ProcessOptions {
   onRemoved?: (path: string) => void;
   /** a file the game wrote as the browser deleted the save folder could not be kept (path relative to /save) */
   onLost?: (path: string) => void;
+  /** a file of the save overlay the browser would not open or make, the folder still there (the first of a game: its
+   *  error, as "Name: message"); its saves may not be kept */
+  onSaveTrouble?: (error: string) => void;
 }
 
 export interface GameProcess {
@@ -49,6 +52,8 @@ function memoryPagesOf(mod: WebAssembly.Module): number | null {
  *  ~55 MB more of WebKit's page process.  12 at first, fewer than any game ends with: its first second starts 10
  *  threads, and with 8 or 10 workers at first the 10th waited up to 15 ms for one. */
 const POOL_START = 12, POOL_SPARE = 2;
+/** how long the I/O worker may take to say it is ready (startProcess) */
+const IO_START_MS = 45_000;
 
 export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   const pool = Math.min(o.pool ?? 24, MAX_THREADS);
@@ -91,14 +96,26 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
 
   const io = new Worker(new URL('/host/io-worker.js', import.meta.url), { type: 'module', name: 'io' });
   workers.push(io);
+  // Ready in IO_START_MS at most (the game data's list from the server, the save folder from the browser's storage): one
+  // that never answers is a game that does not start, said so, never a black stage for good.
   await new Promise<void>((res, rej) => {
-    io.onmessage = (e) => { if (e.data.t === 'io-ready') res(); else if (e.data.t === 'io-error') rej(new Error(e.data.msg)); };
+    const late = setTimeout(() => {
+      io.terminate();
+      rej(new Error(`the game's files did not open in ${IO_START_MS / 1000} s (the browser's storage or the network did not answer)`));
+    }, IO_START_MS);
+    // (its lines as it starts too: playing without saving, what it copied into memory)
+    io.onmessage = (e) => {
+      if (e.data.t === 'io-ready') { clearTimeout(late); res(); }
+      else if (e.data.t === 'io-error') { clearTimeout(late); rej(new Error(e.data.msg)); }
+      else if (e.data.t === 'log') o.onNote?.(e.data.s);
+    };
     io.postMessage({ memory, ctl: ctlBuf, rpc, cfg });
   });
   io.onmessage = (e) => {
     if (e.data.t === 'saved') o.onSaved?.(e.data.path);
     else if (e.data.t === 'removed') o.onRemoved?.(e.data.path);
     else if (e.data.t === 'lost') o.onLost?.(e.data.path);
+    else if (e.data.t === 'save-trouble') o.onSaveTrouble?.(e.data.error);
     else if (e.data.t === 'log') o.onNote?.(e.data.s);
     else if (e.data.t === 'save-gone')
       void Promise.resolve().then(() => o.onSaveGone?.()).catch(err => o.onNote?.(`[app] the saves could not be put back: ${err}`))

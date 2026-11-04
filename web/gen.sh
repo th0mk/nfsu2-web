@@ -26,18 +26,23 @@
 # web/build.sh checks against the checkout.  In a worktree gen/all and
 # gen/server are links to the main clone's, which every other worktree builds
 # against: replace them with directories first (or GEN_SHARED=1 to regenerate
-# the shared ones on purpose).
+# the shared ones on purpose).  The default lift is made once per sources on a
+# machine: web/tools/gencache.sh keeps it, this script copies a kept one in
+# instead of lifting, and web/build.sh points a worktree's links at it.
 set -e -o pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 EXE="${1:-${NFSU2_DATA:+$NFSU2_DATA/SPEED2.EXE}}"
 [ -f "$EXE" ] || { echo "usage: web/gen.sh path/to/SPEED2.EXE"; exit 1; }
 for d in gen/all gen/server; do
-  if [ -L "$d" ] && [ "${GEN_SHARED:-}" != 1 ]; then
+  if [ -L "$d" ] && { [ "${GEN_SHARED:-}" != 1 ] || case "$(readlink "$d")" in "$(web/tools/gencache.sh dir)"/*) true ;; *) false ;; esac; }; then
     echo "web/gen.sh: $d is a link to $(readlink "$d"), which other worktrees build against;"
-    echo "  rm $d && mkdir $d to lift into this worktree, or GEN_SHARED=1 web/gen.sh to regenerate the shared one"
+    echo "  rm $d && mkdir $d to lift into this worktree, or GEN_SHARED=1 web/gen.sh to regenerate the shared one (not a kept lift)"
     exit 1
   fi
 done
+# the default lift of these sources made before on this machine (web/tools/gencache.sh): copied, not made again
+DEFAULTS=$( [ -z "${WEB_LIFT+x}${JTSWITCH+x}${LREGS+x}${FTOL2INL+x}${INLINE_LIST+x}" ] && echo 1 || true)
+if [ "$DEFAULTS" = 1 ] && [ ! -L gen/all ] && [ ! -L gen/server ] && web/tools/gencache.sh get "$EXE"; then exit 0; fi
 PY="$ROOT/.venv/bin/python"
 mkdir -p out gen/all
 # never label a new lift with an old run's options, never reuse an old flag table
@@ -67,3 +72,4 @@ BAD=$(cat gen/all/shard_*.c | grep -c '"lift-error"' || true)
                        echo "incomplete: web/gen.sh found $BAD functions that failed to lift" > gen/all/stamp.txt; exit 1; }
 echo "$LIFT" > gen/all/web-lift.txt
 echo "web lift options: $LIFT"
+[ "$DEFAULTS" != 1 ] || web/tools/gencache.sh put "$EXE"

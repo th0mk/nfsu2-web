@@ -40,7 +40,17 @@ and it says something only when it is worth it:
   post and Discord's count of the thread's messages and people (`votes`, `messages`, `members` in `state/threads.json`;
   the model doesn't see them).
 
-- **in the general channels** (text channels named `general…`), sparingly: someone who reports a problem of their own
+- **in #help** (a text channel named `help`): a question that one of the FAQ's answers settles gets a reply within
+  seconds that pings the asker: one line in their language, made only of what that answer says (the page's labels
+  as the page names them, as for the FAQ's buttons). The asker's lines of 8 seconds make one question; one Haiku
+  call reads them in the chat around them and names the answer and writes the line, or none when unsure. Nothing for staff, chat, answers
+  to others, or someone already answered; the same answer to a person once a day, 5 a person a day, 60 an hour.
+  Each answer gets 👍 and 👎 from the bot, for the staff: the daily note counts the votes on the answers 6 hours old
+  or more (the bot's own left out) and lists the ones with a 👎; every counted answer goes to `state/help-votes.jsonl`
+  (time, FAQ answer, language, votes, the question, the line, its link).
+  Everything else in #help is as in the general channels below (it is one of them), without their fixed answers.
+
+- **in the general channels** (text channels named `general…`, and #help), sparingly: someone who reports a problem of their own
   there, and whom nobody helps within 4 minutes, gets one short reply in their language. When the problem is
   unmistakably one the page names by a code (`PAGE-NOT-ISOLATED`, `GPU-ADAPTER-ANDROID`, ... in their words or their
   screenshot), or one the guide answers in a line (a name that got four digits, a TV's or a console's browser;
@@ -93,7 +103,7 @@ and it says something only when it is worth it:
   3); nothing in a dry run (the log says what it would set).
 
 Otherwise it says nothing. It reads every channel it can see, but posts only in forum threads, those replies in the
-general channels, the staff channel and the FAQ it was asked to post. It
+general channels and #help, the staff channel and the FAQ it was asked to post. It
 stays out of a thread once staff wrote in it (the server owner, `BOT_STAFF`, anyone who can manage threads), and replies
 at most twice in a thread on its own. Someone answering it gets a look past that, up to `BOT_MAX_TALK` replies (4):
 after it asked for something, the poster's next post, which always gets a reply (a fix, or what their log shows and
@@ -159,6 +169,7 @@ bot's first log line says what the month and the day spent so far.
   at, so a restart misses no post.
 - `general.mjs`: the general channels: the replies that point to the forums or give a page code's fix, the spike
   alerts and the daily note.
+- `help.mjs`: the FAQ's answers in #help.
 - `translate.mjs`: the Translate command. The bot registers it at start; the `bot` scope of the invite covers it.
 - `faq.mjs`: the FAQ message, its answers and their translations; `faq.md` holds the questions and answers.
 - `tags.mjs`: the forum tags. A look's verdict names the tags it picked from "Tags you may add" in the thread's text.
@@ -180,8 +191,9 @@ the tools used, the tokens and the cost.
    `https://discord.com/oauth2/authorize?client_id=<application id>&scope=bot&permissions=274877973504`.
    That gives it View Channels, Read Message History and Send Messages in Threads, and nothing else. Without Send
    Messages it cannot write in ordinary channels or open posts. If a forum hides itself from @everyone, give the bot
-   View Channel there too. For the replies in the general channels, allow it Send Messages in those channels'
-   permissions; without that it only counts them for the staff.
+   View Channel there too. For the replies in the general channels and #help, allow it Send Messages in those
+   channels' permissions; without that it only counts them for the staff. In #help, allow it Add Reactions too,
+   for the 👍 and 👎 on its answers.
 2. **Staff channel.** Make a private channel for staff. In its permissions, add the bot with View Channel, Send
    Messages, Attach Files, Read Message History, Create Public Threads and Send Messages in Threads. Turn on Developer Mode (User Settings, Advanced), right-click the
    channel, Copy Channel ID.

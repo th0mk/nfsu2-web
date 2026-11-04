@@ -16,5 +16,6 @@
 +0    tap RIGHT
 +90   dump mm6
 +0    tap RIGHT
++60    tap RIGHT        # (Split Screen, after Quick Race)
 +90   dump mm7
 +60   quit

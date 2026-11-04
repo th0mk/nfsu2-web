@@ -1,0 +1,35 @@
+# Ghost mode Everything (roam_collide = none; runtime/roam_game.c roam_game_camera_cars): the game's traffic and
+# tuners pass through the player's car, and then through the drive camera behind it, which lifts itself over any car
+# its eye is in (0x44B040): it hopped up over each van that drove through the player's car and back, as if the two
+# had met.  Now the camera goes through those cars too.  A career past the prologue (it has traffic): run-suite
+# --script roam_ghost_camera.txt with NFSU2_SAVE_SEED=<a career save tree>, --env NFSU2_ROAM=1
+# --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<its own> --env NFSU2_ROAM_COLLIDE=none.
+# The player's car goes head on through the nearest traffic car six times ("mp traffic jump 25 180 0.3": 25 m ahead
+# of it, facing it, 0.3 m to its left; "mp traffic go 22"), with a trace every frame: the car's centre (cz), the
+# camera's eye (ez), and when the car last touched another (t138, game ticks; now).  The camera's height over the car
+# is ez - cz; "Ghost mode Everything: ... passes through my car" names each pass, and mp traffic's "camera by a car
+# let through N time(s)" counts the frames the camera went through one.  Not every run meets its car (the road bends,
+# a car brakes).  Measured 2026-11-04 (a stage-2 career): before, the eye rose 1.4 to 1.7 m over its usual height for
+# about five frames, 20 to 27 frames into each van's pass (PARCELVAN, PANELVAN; a TAXI stayed under it), the car's
+# speed and acceleration and the camera's shake (its average acceleration) smooth throughout; after, 12 passes (vans,
+# a minivan, a pickup, SUVs, taxis), no jump: the eye's height moved smoothly (within 0.03 m during a pass), and the
+# camera went through one 127 and 181 times in two runs.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    autopilot on                    # off the save's spot
++1800 roam mp traffic
++0    trace 1 cz=[[0x8900ac]+4]+0x68 ez=[0x832e90]+0x48 now=i:0x86518c t138=i:[[[0x8900ac]+4]+0x3c]+0x138
++0    loop 6
++0    autopilot on                    # on to the next traffic
++300  autopilot off
++0    roam mp traffic jump 25 180 0.3
++20   roam mp traffic go 22
++0    down UP
++100  roam mp traffic
++0    up UP
++0    endloop
++0    untrace
++0    roam mp status
++10   quit

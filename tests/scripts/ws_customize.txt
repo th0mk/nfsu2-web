@@ -5,6 +5,7 @@
 +500  tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT                                    # Quick Race -> Online -> LAN -> Customize
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +120  dump mm_right
 +0    tap RETURN
 +300  dump c1

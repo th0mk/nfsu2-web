@@ -1,0 +1,69 @@
+# Our controls on keys and buttons the player picked (the start page's Controls, Site: settings.ini key_*, button_*):
+# run with NFSU2_KEY_DRIFT=KeyZ NFSU2_KEY_SHOWOFF=KeyV NFSU2_KEY_HORN=KeyE NFSU2_KEY_LIGHTS=Digit6 NFSU2_BUTTON_HOLD=dup
+# NFSU2_BUTTON_HORN=rs NFSU2_BUTTON_CHAT=ls.  New career -> prologue free roam, free roam on (the horn needs it).
+# Standing: O and X do nothing of ours; V opens the trunk ("[showoff] ... O: step 1"), D-pad up held a second the hood
+# too ("D-pad down held: step 2", the log's name for the hold); N and the left stick's click sound no horn, E and the
+# right stick's do ("[horn] my horn" after each, between the log lines); driving: X leaves drift mode off, Z turns it
+# on, the touch controls' Drift (DIK 0xF1, keymap.ts Nfsu2Drift) off again; G leaves the headlights on, 6 turns them
+# off and on (the car's +0x93D, "[lights] ... 6: lights off").  keys_ours.txt: the defaults.
+#   node web/tools/run-suite.mjs --base <server> --script keys_custom.txt --net keyscustom --env NFSU2_ROAM=1
+#     --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=keyscustom --env ROAM_PROFILE=Keys3 --env NFSU2_KEY_DRIFT=KeyZ ...
+0     pad connect
++0    tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log --- standing: O and X: nothing of ours ---
++0    tap O
++60   tap X
++1000ms log --- V, then D-pad up held ---
++0    tap V
++2000ms pad DUP down
++1500ms pad DUP up
++1000ms log --- N: no horn ---
++0    down N
++500ms up N
++1000ms log --- E: the horn ---
++0    down E
++500ms up E
++1000ms log --- the left stick's click: no horn ---
++0    pad LS down
++500ms pad LS up
++1000ms log --- the right stick's click: the horn ---
++0    pad RS down
++500ms pad RS up
++1000ms log --- driving: X, Z, the touch controls' Drift ---
++0    teleport 1695.0 -845.0 24.6 0xb82e
++300  down UP
++0    waitexpr [[0x8900ac]+4]+0x42c > 3 1200
++0    expect i:0x890104 == 0
++0    tap X
++30   expect i:0x890104 == 0          # not drift mode's now
++0    tap Z
++30   expect i:0x890104 == 1          # drift mode on
++0    tap 0xF1
++30   expect i:0x890104 == 0          # the touch controls' Drift: off again
++0    log --- driving: G, then 6 ---
++0    tap G 1                         # (one frame: a tap, not the hold's high beam)
++10   expect b:[[0x8900ac]+4]+0x93d == 1   # not the headlights' now
++0    tap 6 1
++10   expect b:[[0x8900ac]+4]+0x93d == 0   # the headlights off
++0    tap 6 1
++10   expect b:[[0x8900ac]+4]+0x93d == 1   # and on
++0    up UP
++60   log end
++10   quit

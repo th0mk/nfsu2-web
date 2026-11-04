@@ -14,6 +14,8 @@
  * browser's shortcut):
  *   K <dik> <mods> <caps> <vk> <flags> <nch> <ch0> <ch1> <ch2> <sys> */
 #include "../../runtime/web/input_web.c"
+#include "../../runtime/splitscreen_layout.h"
+#include <assert.h>
 
 /* ---- the rest of the runtime, as far as input_web.c calls it ---------------- */
 void kbd_set_key(int src, unsigned dik, int down){ (void)src; (void)dik; (void)down; }
@@ -23,6 +25,7 @@ void kbd_post_mousemove(uint32_t wp, uint32_t lp){ (void)wp; (void)lp; }
 int kbd_log(void){ return 0; }
 const char *kbd_msg_name(uint32_t msg){ (void)msg; return "?"; }
 int kbd_key_down(unsigned dik){ (void)dik; return 0; }
+void split_keyboard_device(PadState *pad){ (void)pad; }
 void lifecycle_set_active(int on, const char *why){ (void)on; (void)why; }
 void lifecycle_request_quit(const char *why){ (void)why; }
 int lifecycle_quit_requested(void){ return 0; }
@@ -35,6 +38,47 @@ long metal_frames(void){ return 0; }
 void (*g_report_fn)(void);
 
 int main(void){
+    /* Exercise the actual wasm reader, including odd seqlocks (never return
+     * a previous accelerator value when a writer is interrupted). */
+    for (unsigned seat = 0; seat < INPUT_LOCAL_PADS; ++seat){
+        _Atomic uint32_t *p = g_mb.local_pad[seat];
+        atomic_store(p + IM_LOCAL_CONNECTED, 1);
+        atomic_store(p + IM_LOCAL_BUTTONS, 1u << seat);
+        atomic_store(p + IM_LOCAL_AXIS + PAD_AXIS_RT, 0x3F800000u);
+        PadState state;
+        assert(gamepad_read_local(seat, &state));
+        assert(state.buttons == (1u << seat) && state.axis[PAD_AXIS_RT] == 1.f);
+        atomic_store(p + IM_LOCAL_SEQ, 1);
+        assert(!gamepad_read_local(seat, &state) && state.buttons == 0 && state.axis[PAD_AXIS_RT] == 0);
+        atomic_store(p + IM_LOCAL_SEQ, 2);
+        atomic_store(p + IM_LOCAL_CONNECTED, 0);
+        assert(!gamepad_read_local(seat, &state) && state.buttons == 0);
+    }
+    PadState absent;
+    assert(!gamepad_read_local(6, &absent));
+    /* Scripted seats must remain independent, including disconnect while
+     * another driver keeps holding the accelerator. */
+    gamepad_synth_local(0, PAD_NBUTTONS + PAD_AXIS_RT, 1.f);
+    gamepad_synth_local(5, PAD_NBUTTONS + PAD_AXIS_LX, -0.5f);
+    assert(gamepad_read_local(0, &absent) && absent.axis[PAD_AXIS_RT] == 1.f && absent.axis[PAD_AXIS_LX] == 0.f);
+    assert(gamepad_read_local(5, &absent) && absent.axis[PAD_AXIS_LX] == -0.5f && absent.axis[PAD_AXIS_RT] == 0.f);
+    gamepad_synth_local(0, -1, 0);
+    assert(!gamepad_read_local(0, &absent) && absent.axis[PAD_AXIS_RT] == 0.f);
+    assert(gamepad_read_local(5, &absent) && absent.axis[PAD_AXIS_LX] == -0.5f);
+    for (int n = 1; n <= 6; ++n) for (int k = 0; k < n; ++k){
+        SplitCell a = split_layout_cell(n, k, 1919, 1079, 0);
+        assert(a.x >= 0 && a.y >= 0 && a.w > 0 && a.h > 0 && a.x+a.w <= 1919 && a.y+a.h <= 1079);
+        for (int j = 0; j < k; ++j){
+            SplitCell b = split_layout_cell(n, j, 1919, 1079, 0);
+            assert(a.x+a.w <= b.x || b.x+b.w <= a.x || a.y+a.h <= b.y || b.y+b.h <= a.y);
+        }
+    }
+    assert(split_layout_cell(6, 5, 1920, 1080, 0).x == 1280);
+    assert(split_layout_cell(6, 5, 1920, 1080, 0).y == 540);
+    assert(split_layout_cell(3, 2, 1920, 1080, 0).x == 480);
+    assert(split_layout_cell(2, 1, 1920, 1080, 1).x == 960);
+    assert(split_view_id(5) == 8 && split_view_id(6) == -1);
+    puts("split input: six independent seats and layouts verified");
     static const unsigned MODS[] = { 0, ISYN_SHIFT, ISYN_CTRL, ISYN_ALT, ISYN_SHIFT | ISYN_CTRL, ISYN_SHIFT | ISYN_ALT,
                                      ISYN_CTRL | ISYN_ALT, ISYN_SHIFT | ISYN_CTRL | ISYN_ALT, ISYN_META, ISYN_META | ISYN_SHIFT };
     int n = 0;

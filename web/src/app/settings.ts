@@ -18,15 +18,17 @@ import { blockedName } from './names.mjs';
 import { onlineName } from './claim';
 import { crewsOk, rgbsOk } from './crews';
 import { groupsOk, phrasesOk } from './phrases';
+import { flagCode } from './flags';
 import { fill, LANGUAGES, N, type Vars } from './i18n';
 export { LANGUAGES };
 
-/** bundle.m's K_* kinds, and the browser's own crews (a list of names: crews.ts) and blocked players (names: a list of
- *  players' names).  ic: K_IC, "value ; comment" (the free-roam keys).  room: K_ROOM, text that does not read as a slur
- *  (names.mjs, as a player's name). */
+/** bundle.m's K_* kinds, and the browser's own crews (a list of names: crews.ts), blocked players (names: a list of
+ *  players' names) and flag (one of flags.ts's codes).  ic: K_IC, "value ; comment" (the free-roam keys).  room:
+ *  K_ROOM, text that does not read as a slur (names.mjs, as a player's name).  key: one of our controls' key, the
+ *  browser's name of it (KeyboardEvent.code: sitekeys.ts), or off. */
 export type Kind = 'raw' | 'bool' | 'boolInv' | 'enum' | 'num' | 'id' | 'token' | 'int' | 'name' | 'peers'
   | 'path' | 'text' | 'room' | 'wxh' | 'fixes' | 'ifname' | 'ipv4' | 'mac' | 'host' | 'parts' | 'dump' | 'crews' | 'rgbs'
-  | 'phrases' | 'sayGroups' | 'names';
+  | 'phrases' | 'sayGroups' | 'names' | 'key' | 'flag';
 
 export interface KeyDef {
   key: string;
@@ -81,6 +83,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'hud', env: 'NFSU2_HUD', kind: 'enum', vals: 'wide|43|4:3', scope: 'web' },
   { key: 'movie_framing', env: 'NFSU2_MOVIE', kind: 'enum', vals: 'fit|fill|stretch', scope: 'web' },
   { key: 'cutscene_borders', env: 'NFSU2_CUTSCENE_BORDERS', kind: 'enum', vals: 'full|off', scope: 'web' },
+  { key: 'fov_scale', env: 'NFSU2_FOV_SCALE', kind: 'enum', vals: 'original|correct', scope: 'web' },
   { key: 'other_headlights', env: 'NFSU2_HEADLIGHTS', kind: 'enum', vals: 'players|all|off', scope: 'web' },
   // graphics options and frame-rate counter
   { key: 'graphics', env: 'NFSU2_GRAPHICS', kind: 'enum', vals: 'original|enhanced|custom', scope: 'mac' },
@@ -109,6 +112,8 @@ export const KEYS: readonly KeyDef[] = [
   // free-roam multiplayer (the runtime checks the values too)
   { key: 'roam', env: 'NFSU2_ROAM', kind: 'bool', ic: true, scope: 'web' },
   { key: 'roam_name', env: 'NFSU2_ROAM_NAME', kind: 'name', ic: true, scope: 'web' },
+  // the flag before the name (flags.ts; runtime/roam_game.c flag_*): the page has the list, so not in bundle.m's table
+  { key: 'roam_flag', env: 'NFSU2_ROAM_FLAG', kind: 'flag', ic: true, scope: 'web' },
   { key: 'roam_port', env: 'NFSU2_ROAM_PORT', kind: 'int', vals: '1024..65535', ic: true, scope: 'mac' },
   { key: 'roam_peers', env: 'NFSU2_ROAM_PEERS', kind: 'peers', ic: true, scope: 'mac' },
   { key: 'roam_discovery', env: 'NFSU2_ROAM_DISCOVERY', kind: 'bool', ic: true, scope: 'web' },
@@ -130,7 +135,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_rate', env: 'NFSU2_ROAM_RATE', kind: 'int', vals: '10..30', ic: true, scope: 'web' },
   { key: 'roam_delay', env: 'NFSU2_ROAM_DELAY', kind: 'int', vals: '0..1000', ic: true, scope: 'web' },
   { key: 'roam_extrap', env: 'NFSU2_ROAM_EXTRAP', kind: 'int', vals: '0..1000', ic: true, scope: 'web' },
-  { key: 'roam_carpool_kb', env: 'NFSU2_ROAM_CARPOOL_KB', kind: 'int', vals: '0..128000', ic: true, scope: 'web' },
+  // only the Mac app reads it: in the browser the game sizes the pool (runtime/roam_game.c)
+  { key: 'roam_carpool_kb', env: 'NFSU2_ROAM_CARPOOL_KB', kind: 'int', vals: '0..128000', ic: true, scope: 'mac' },
   // LAN play
   { key: 'network', env: 'NFSU2_NET', kind: 'enum', vals: 'lan|on|off', scope: 'web' },
   { key: 'lan_interface', env: 'NFSU2_NET_IFACE', kind: 'ifname', scope: 'mac' },
@@ -161,8 +167,9 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'songs', env: 'NFSU2_SONGS', kind: 'enum', vals: 'uncensored|original', scope: 'web' },
   // the player's horn, which the others hear too (runtime/horn.c).  Not in bundle.m's table either: NFSU2_HORN there
   { key: 'horn', env: 'NFSU2_HORN', kind: 'enum', vals: HORNS.join('|'), scope: 'web' },
-  // the menus' and HUD's textures: a texture pack in place of the game's (runtime/web/texrep_web.c; the page fetches
-  // ahead only the one picked: datacache.ts).  Not in bundle.m's table: the Mac's packs are "textures"
+  // the menus', HUD's and maps' textures: texture packs in place of the game's (runtime/web/texrep_web.c; the page
+  // fetches ahead only those picked: datacache.ts).  uhud also turns on the maps' pack (resolveEnv: NFSU2_MAP_TEXTURES).
+  // Not in bundle.m's table: the Mac's packs are "textures"
   { key: 'ui_textures', env: 'NFSU2_UI_TEXTURES', kind: 'enum', vals: 'original|uhud', scope: 'web', device: true },
   // the players this one blocks in free roam, by name (the page's hello to the server: net/index.ts).  Not in bundle.m's
   // table: the Mac's free roam has no hub
@@ -170,6 +177,30 @@ export const KEYS: readonly KeyDef[] = [
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
+  // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
+  // pointTex).  Not in bundle.m's table
+  { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
+  // free roam's world map: the other players marked at most (runtime/roam_game.c map_update; phones 2048: device.ts).
+  // Not in bundle.m's table: the Mac's free roam has no hub
+  { key: 'roam_map_max', env: 'NFSU2_ROAM_MAP_MAX', kind: 'int', vals: '0..4096', ic: true, scope: 'web', device: true },
+  // our own controls beside the game's (sitekeys.ts): each one's key and controller button, kept by this device (its
+  // keyboard and controller).  The runtime reads those it handles (runtime/dinput_kbd.c dikbd_site_key: drift mode, the
+  // show-off, the horn, the headlights; and Message a friend's and Add friend's, whose clashes with the game's controls
+  // it tells the page; dinput_pad.c: the buttons), the page the rest.  Not in bundle.m's table: the Mac app passes them
+  // on as NFSU2_KEY_* and NFSU2_BUTTON_* all the same
+  { key: 'key_drift', env: 'NFSU2_KEY_DRIFT', kind: 'key', scope: 'web', device: true },
+  { key: 'key_showoff', env: 'NFSU2_KEY_SHOWOFF', kind: 'key', scope: 'web', device: true },
+  { key: 'key_horn', env: 'NFSU2_KEY_HORN', kind: 'key', scope: 'web', device: true },
+  { key: 'key_lights', env: 'NFSU2_KEY_LIGHTS', kind: 'key', scope: 'web', device: true },
+  { key: 'key_message', env: 'NFSU2_KEY_MESSAGE', kind: 'key', scope: 'web', device: true },
+  { key: 'key_friend', env: 'NFSU2_KEY_FRIEND', kind: 'key', scope: 'web', device: true },
+  { key: 'key_photo', env: 'NFSU2_KEY_PHOTO', kind: 'key', scope: 'web', device: true },
+  { key: 'key_menu', env: 'NFSU2_KEY_MENU', kind: 'key', scope: 'web', device: true },
+  { key: 'key_song', env: 'NFSU2_KEY_SONG', kind: 'key', scope: 'web', device: true },
+  { key: 'key_fps', env: 'NFSU2_KEY_FPS', kind: 'key', scope: 'web', device: true },
+  { key: 'button_hold', env: 'NFSU2_BUTTON_HOLD', kind: 'enum', vals: 'ddown|dup|dleft|dright|off', scope: 'web', device: true },
+  { key: 'button_horn', env: 'NFSU2_BUTTON_HORN', kind: 'enum', vals: 'ls|rs|off', scope: 'web', device: true },
+  { key: 'button_chat', env: 'NFSU2_BUTTON_CHAT', kind: 'enum', vals: 'rs|ls|off', scope: 'web', device: true },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -226,7 +257,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 
 # The EA Trax songs: uncensored = unedited, some in longer versions than
 # the game's (a soundtrack mod's); original = the versions the game shipped
-# with, where the server has them.  F7 plays the next song while you play.
+# with, where the server has them.  Its key (key_song, F7) plays the next
+# song while you play.
 # [NFSU2_SONGS]
 #songs = uncensored
 
@@ -304,19 +336,29 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # Cutscene letterbox bars: full = across the whole width; off = none.
 # [NFSU2_CUTSCENE_BORDERS]
 #cutscene_borders = full
+# 3D proportions: original = as the game drew them, about 10 % too wide
+# (round wheels look oval); correct = true proportions, with a little more
+# to the sides.  [NFSU2_FOV_SCALE]
+#fov_scale = original
 # Other cars' headlights on the road, as your own light it: players = your
 # friends' cars in free roam and the other players' in Online and LAN races;
 # all = every car, AI racers and traffic too; off = only yours, as in the
 # original game.  [NFSU2_HEADLIGHTS]
 #other_headlights = players
 
-# The menus' and the HUD's textures: original = the game's; uhud =
+# The menus', the HUD's and the maps' textures: original = the game's; uhud =
 # LunicAura106's Upscaled HUD (nfsmods.xyz/mod/4319): the menus, the race
 # HUD, the fonts and the car and brand logos redrawn at four times their
-# size, where this server has the mod's texture pack (a language pack's own
+# size, and JeansBig's Detailed Map (nfsmods.xyz/mod/4485): the minimap's
+# and the world map's maps redrawn at 2048x2048 with the missing shortcuts,
+# where this server has the mods' texture packs (a language pack's own
 # fonts stay; most phones' GPUs decode the larger textures into four times
-# the memory).  [NFSU2_UI_TEXTURES]
+# the memory; NFSU2_MAP_TEXTURES = original keeps the game's maps).
+# [NFSU2_UI_TEXTURES]
 #ui_textures = original
+# Textures without smoothing (point sampling), blocky like early PC games;
+# on overrides the game's Texture Filtering.  [NFSU2_PIXELATED_TEXTURES]
+#pixelated_textures = off
 
 # ---- Frame rate ----------------------------------------------------------
 
@@ -335,7 +377,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #nos_trail_length = 1.0
 
 # Frame-rate counter in a corner of the game: off, on, or detailed (frame
-# time and the game's own counters).  F8 cycles it while playing.
+# time and the game's own counters).  Its key (key_fps, F8) cycles it
+# while playing.
 # [NFSU2_FPS_COUNTER]
 #fps_counter = off
 
@@ -366,6 +409,39 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # A, B and View also send Enter, Escape and Q in the menus.  [NFSU2_PAD_FE_KEYS]
 #gamepad_menu_keys = on
 
+# ---- This site's controls ------------------------------------------------
+
+# The keys of this site's own controls, beside the game's (the start page's
+# Controls, Site, sets them by a press): the browser's name of a key (KeyX,
+# Digit5, F6, Numpad7, Backquote ...) or off.  Drift mode and the trunk,
+# hood and doors (free roam), the horn (with other players), the
+# headlights (a tap off or on, held high beam), Message a friend and Add
+# friend (free roam), photo mode, the page's menu (never off), the next
+# song and the frame-rate counter.  A key one of the game's controls is on
+# (its Options, Controls) stays the game's.
+# [NFSU2_KEY_DRIFT, NFSU2_KEY_SHOWOFF, NFSU2_KEY_HORN, NFSU2_KEY_LIGHTS,
+# NFSU2_KEY_MESSAGE, NFSU2_KEY_FRIEND, NFSU2_KEY_PHOTO, NFSU2_KEY_MENU,
+# NFSU2_KEY_SONG, NFSU2_KEY_FPS]
+#key_drift = KeyX
+#key_showoff = KeyO
+#key_horn = KeyN
+#key_lights = KeyG
+#key_message = KeyI
+#key_friend = KeyF
+#key_photo = F12
+#key_menu = F9
+#key_song = F7
+#key_fps = F8
+# The controller's: the D-pad direction held a second for drift mode
+# (driving) and the trunk, hood and doors (parked): ddown, dup, dleft,
+# dright or off, a short press staying the game's; the stick click for the
+# horn and the one for quick chat: ls, rs or off.  The game's Home button,
+# or both sticks pressed in, always opens the page's menu.
+# [NFSU2_BUTTON_HOLD, NFSU2_BUTTON_HORN, NFSU2_BUTTON_CHAT]
+#button_hold = ddown
+#button_horn = ls
+#button_chat = rs
+
 # ---- Multiplayer ---------------------------------------------------------
 
 # Your name: what other players see in free roam (printable ASCII, at most
@@ -376,7 +452,13 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # starts a comment.  [NFSU2_ROAM_NAME]
 #roam_name =
 
-# Your horn (N, or the controller's left stick click), in free roam and in
+# Your flag, before your name over your car in free roam: a country's code
+# (ISO 3166-1, e.g. nl, br, us; xk for Kosovo) or gb-eng, gb-sct, gb-wls,
+# gb-nir for England, Scotland, Wales and Northern Ireland.  Empty = none.
+# [NFSU2_ROAM_FLAG]
+#roam_flag =
+
+# Your horn (key_horn and button_horn: N and the left stick click), in free roam and in
 # Online and LAN races; the other players hear the one you pick: dual (two
 # tones), single (one higher tone), truck (an air horn), train (five
 # chimes), klaxon (an old car's ah-oo-gah), cucaracha (plays La Cucaracha
@@ -434,6 +516,9 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]
 #roam_max_players = 49
 #roam_max_cars = 32
+# Other players marked on the world map at once (0 to 4096, the nearest; 2048
+# on phones).  [NFSU2_ROAM_MAP_MAX]
+#roam_map_max = 4096
 # on = the other players' cars are solid: drawn where they are now, and one
 # that appears on your car lets you through until you are apart.
 # off = Ghost mode for players: you drive through their cars, and they
@@ -444,8 +529,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #roam_collide = on
 # Quick chat: say one of your sixteen set phrases to the players near you in
 # free roam, or to everyone in a multiplayer race, while driving and on its
-# results (1 to 4, then 1 to 4; a controller's right stick pressed in, then
-# flicked twice; the chat button on a touch screen), and see theirs.  off = neither, and the others
+# results (1 to 4, then 1 to 4; a controller's stick pressed in, button_chat,
+# then the right stick flicked twice; the chat button on a touch screen), and see theirs.  off = neither, and the others
 # send you none in free roam.  [NFSU2_ROAM_SAY]
 #quick_chat = on
 # Your sixteen: the phrases' numbers (web/src/app/phrases.ts), four for each
@@ -460,10 +545,6 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #roam_rate = 20
 #roam_delay = 100
 #roam_extrap = 250
-# The free-roam car memory pool in KB, raised for other players' cars (the
-# game's own is 11000; a value at or below it is ignored, as it would leave
-# no room for them).  [NFSU2_ROAM_CARPOOL_KB]
-#roam_carpool_kb = 48000
 `;
 
 /** The template's default for a key ("#key = value"), '' if the template leaves it empty or does not list it. */
@@ -562,6 +643,9 @@ function namesOk(v: string): boolean {
 }
 /** the names a roam_block value lists */
 export const blockList = (v: string) => v.split(',').map(s => s.trim()).filter(Boolean);
+/** a key's name as the browser gives it (KeyboardEvent.code) that one of our controls may take (sitekeys.ts says which
+ *  of them it offers; the runtime knows these: runtime/dinput_kbd.c's table) */
+const KEY_NAME = /^(Key[A-Z]|Digit[0-9]|F([1-9]|1[0-5])|Numpad([0-9]|Add|Subtract|Multiply|Divide|Decimal)|Minus|Equal|BracketLeft|BracketRight|Semicolon|Quote|Backquote|Backslash|IntlBackslash|Comma|Period|Slash|Insert|Delete|Home|End|PageUp|PageDown|Pause|ScrollLock)$/;
 /** bundle.m value_ok for the kinds that need more than a line */
 function valueOk(kind: Kind, v: string): boolean {
   switch (kind) {
@@ -591,6 +675,8 @@ function valueOk(kind: Kind, v: string): boolean {
     case 'rgbs': return rgbsOk(v);
     case 'phrases': return phrasesOk(v);
     case 'sayGroups': return groupsOk(v);
+    case 'key': return v === 'off' || KEY_NAME.test(v);
+    case 'flag': return flagCode(v) !== '';
     default: return true;
   }
 }
@@ -611,6 +697,8 @@ const KIND_TEXT: Partial<Record<Kind, string>> = {
   rgbs: N('a list of up to 4 colours of 6 hex digits (rrggbb), separated by commas'),
   phrases: N('16 quick chat phrase numbers, separated by commas'),
   sayGroups: N('4 of hi, reply, thanks, nice, drive, meet, race, react, help, separated by commas'),
+  key: N('a key by the browser\'s name for it (KeyX, Digit5, F6, Numpad7) or off'),
+  flag: N('a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir'),
 };
 
 /** strtod() consuming the whole string (decimal, exponent, hex, inf/nan, leading blanks as C does).
@@ -733,6 +821,7 @@ export function checkSetting(key: string, val: string): Checked | Refused | null
     default:
       if (!valueOk(kind, val)) return refuse(N('"{value}" is not {kind}'), val, { kind: KIND_TEXT[kind]! });
       if (kind === 'dump' && (truthy(val) || falsy(val))) out = truthy(val) ? 'on' : 'off';
+      if (kind === 'flag') out = flagCode(val);
       break;
   }
   return { ok: true, env, value: out };
@@ -865,7 +954,47 @@ export function resolveEnv(text: string | null, environment: Record<string, stri
   }
   for (const [k, v] of Object.entries(APP_DEFAULTS)) if (!(k in env)) { env[k] = v; source[k] = 'default'; }
   for (const [k, v] of Object.entries(host)) if (!(k in env)) { env[k] = v; source[k] = 'host'; }
+  // the maps' pack (TEXPACKS/detailed.pak) comes with the menus' and HUD's: ui_textures = uhud shows both.
+  // NFSU2_MAP_TEXTURES = original in settings.ini keeps the game's maps (a test knob)
+  const ui = (env.NFSU2_UI_TEXTURES ?? '').toLowerCase();
+  if (!('NFSU2_MAP_TEXTURES' in env) && ui && ui !== 'original') { env.NFSU2_MAP_TEXTURES = 'detailed'; source.NFSU2_MAP_TEXTURES = source.NFSU2_UI_TEXTURES; }
   return { env, source, notes, file, byEnv, other };
+}
+
+// ------------------------------------------------- the server's tally --
+
+/** kinds a report gives the value of (a switch as on/off, a choice, a number, a size) */
+const TOLD_VALUE: ReadonlySet<Kind> = new Set<Kind>(['bool', 'boolInv', 'enum', 'num', 'int', 'wxh']);
+/** kinds of the player's own words (a name, a room, crews, phrases, blocked players): a report says only "set" */
+const TOLD_SET: ReadonlySet<Kind> = new Set<Kind>(['name', 'room', 'text', 'crews', 'rgbs', 'phrases', 'sayGroups', 'names']);
+/** what the server takes as a value (web/server-rs src/app/settings_days.rs value_ok) */
+const TALLY_VALUE = /^[A-Za-z0-9:._+-]{1,24}$/;
+
+/**
+ * The settings a launch takes from settings.ini that differ from this device's defaults (`device`: deviceDefaults,
+ * else the template's), as "key=value" in the table's order: what the page tells the server at a day's first Play
+ * (page-id.ts seen), whose daily tally shows the operator what players change (web/server-rs src/app/settings_days.rs).
+ * A switch as on/off, a choice or number as it applies, the player's own words only as "set"; a setting the file
+ * gives by its variable's name (NFSU2_FPS = 30) as the setting.  Left out: the Mac's keys, the other kinds (LAN
+ * addresses and names, test lists), variables outside the table, and the page address's (a development server's).
+ */
+export function changedSettings(r: Resolved, device: Record<string, string> = {}): string[] {
+  const out: string[] = [];
+  for (const d of KEYS) {
+    if (d.scope !== 'web' || r.source[d.env] !== 'settings.ini') continue;
+    if (!TOLD_VALUE.has(d.kind) && !TOLD_SET.has(d.kind)) continue;
+    const v = r.env[d.env];
+    const def = checkSetting(d.key, device[d.key] ?? DEFAULTS.get(d.key) ?? '');
+    if (def?.ok && def.value === v) continue;
+    let told: string;
+    if (TOLD_SET.has(d.kind)) told = 'set';
+    else if (d.kind === 'bool' || d.kind === 'boolInv') told = (v === '1') === (d.kind === 'bool') ? 'on' : 'off';
+    else if (d.kind === 'wxh') told = v.replace(/\s+/g, '').toLowerCase();
+    else if (d.kind === 'num' || d.kind === 'int') told = Number.isFinite(Number(v.trim())) ? String(Number(v.trim())) : v.trim();
+    else told = lower(v);                            // an enum: "SCALE:0.75" is scale:0.75
+    if (TALLY_VALUE.test(told)) out.push(`${d.key}=${told}`);
+  }
+  return out;
 }
 
 // -------------------------------------------------------------- editing --

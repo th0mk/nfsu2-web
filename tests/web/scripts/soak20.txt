@@ -290,6 +290,7 @@
 +40   tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +90   log main menu item 6
 +0    tap RETURN                                   # Options
 +300  tap LEFT
@@ -537,6 +538,7 @@
 +40   tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +90   log main menu item 6
 +0    tap RETURN                                   # Options
 +300  tap LEFT

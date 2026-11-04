@@ -1,0 +1,86 @@
+# The look round the car takes a stick the game's controls leave free (runtime/dinput_pad.c pad_look_stick, look.c):
+# players who steer with the right stick had it steer and turn the view at once (2026-11-03).  On Options > Controls
+# > Joypad Configuration, Steering (Left) bound to the right stick pushed left: the steering's axis is then Rx
+# (+0x344 = 0x0C), "[pad] looking round: the left stick (the game's controls read the right one)".  In a Quick Race:
+# the right stick steers (the channel's steering byte +0x12 off its middle) and no look starts; the left stick looks
+# round ("[pad] the left stick looks round the car"), straight back holds Look Back ("the left stick holds Look
+# Back"); with the throttle on the left stick's Y too, none looks ("none (the game's controls read both sticks)");
+# the throttle back on the right trigger, the left stick again; a direction of the left stick (POV 1) bound to an
+# action (nitrous): none again.  Channel 1 (0x874fb0) is the pad's: +0x12 the steering (0..254), +0x18 the in-game
+# table (+0x68 POV 1 down), +0x344 the steering's axis, +0x348 the throttle's.  With NFSU2_PAD_LOG=1.
+0     pad connect
++0    tappaduntil START MC_Background.fng 120 4000
++200  tappad A                                       # no profile
++0    waitfng GarageMain.fng 3000
++700  tappad DRIGHT
++60   tappad DRIGHT
++60   tappad DRIGHT
++60   tappad DRIGHT
++60   tappad DRIGHT
++60   tappad DRIGHT        # (Split Screen, after Quick Race)
++120  tappad A                                       # Options
++0    waitfng UI_OptionsMain.fng 600
++300  tappad DRIGHT
++120  tappad DRIGHT
++120  tappad DRIGHT
++120  tappad DRIGHT
++120  tappad A                                       # Controls
++0    waitfng UI_Options_PC_Controller.fng 600
++300  tappad DUP                                     # header
++120  tappad DRIGHT                                  # Joypad Configuration
++200  expect x:0x8752f4 == 0                         # steering: X, the left stick
++0    tappad DDOWN                                   # Steering (Left)
++90   tappad A                                       # "press a button"
++120  axis RX -1                                     # the right stick pushed left
++60   axis RX 0
++200  dump steer_bound
++0    peek 0x8752f4 1
++0    expect x:0x8752f4 == 12                        # steering: Rx
++0    expect b:0x875314 == 1                         #   on
++0    tappad B                                       # leave Controls
++300  tappad B                                       # leave Options: "save the profile?"
++300  tappad A                                       # No
++0    waitfng UI_Main.fng 1500
++300  tappad DLEFT                                   # back to Quick Race
++60   tappad DLEFT
++60   tappad DLEFT
++60   tappad DLEFT
++60   tappad DLEFT
++60   tappad DLEFT        # (Split Screen, after Quick Race)
++120  tappaduntil A UI_QRModeSelect.fng 150 3000
++200  tappaduntil A UI_QRTrackSelect.fng 150 1500
++200  tappaduntil A UI_QRModeOptions.fng 150 1500
++200  tappaduntil A UI_QRCarSelect.fng 150 1500
++200  tappaduntil A PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++600  log --- the right stick steers, no look ---
++0    peek 0x874fc2 1
++0    axis RX 1
++300  peek 0x874fc2 1
++0    expect b:0x874fc2 != 127
++0    dump rx_steers                                 # straight behind the car, its wheels turned
++0    axis RX 0
++500  log --- the left stick looks round ---
++0    axis LX 1
++700ms dump lx_looks                                # the car from its side
++0    axis LX 0
++700ms axis LY 1                                    # straight back: Look Back
++700ms dump lx_back
++0    axis LY 0
++500  log --- the throttle on the left stick's Y too: no look ---
++0    poke 0x8752f8 4
++100  axis LX 1
++700ms dump none_both
++0    axis LX 0
++0    poke 0x8752f8 0x14                             # the throttle back on Rz, the right trigger
++300  log --- the left stick again ---
++0    axis LX -1
++700ms dump lx_left
++0    axis LX 0
++500  log --- the left stick's down bound to nitrous: no look ---
++0    poke 0x875018 6
++100  axis LX 1
++700ms dump none_pov
++0    axis LX 0
++0    poke 0x875018 0
++300  quit

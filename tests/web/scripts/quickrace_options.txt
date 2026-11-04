@@ -1,0 +1,67 @@
+# Quick Race's choices (runtime/quickrace.c): Circuit, its first track.  Lap KO on picks 5 laps and 5 opponents and
+# leaves both free; Laps go 1 .. 127, wrapping round; Opponents go up to 5 (at least 1 with Lap KO).  Then a race of
+# one lap: its HUD shows COMPLETED and a percent where it showed LAP 1/1 ("[qr] track ...: one lap" in the log).
+# The circuit's settings: laps w:0x83aace, opponents b:0x83aac5, Lap KO b:0x83aad4 (runtime/quickrace.c).
+# The options' rows: Track Direction, Lap KO, Laps, Traffic Level, Opponents, Difficulty, Catch Up.
+#   node web/tools/run-page.mjs "<base>/test/play.html?wasm=/game.wasm&arg=/data/SPEED2.EXE&w=1280&h=720&fresh&reg=/tests/web/seed/registry_perf4_native.txt&script=/tests/web/scripts/quickrace_options.txt&env=NOMOVIES=1&artifacts=/artifacts/qro_&dumpscale=0.5" 600000
+# Waits are sized for WSL's software Vulkan (~18 fps).
+1        waitfng UG_LS_Splash.fng 12000
++1000ms  tapuntil RETURN MC_Background.fng 120 3000     # title -> profile prompt
++600ms   tapuntil RETURN GarageMain.fng 120 3000        # "No" -> main menu
++1500ms  tapuntil RETURN UI_QRModeSelect.fng 240 3000   # Quick Race
++2500ms  tapuntil RETURN UI_QRTrackSelect.fng 240 3000  # Circuit
++2500ms  tapuntil RETURN UI_QRModeOptions.fng 240 3000  # its first track
++2500ms  tap DOWN                                       # Lap KO
++1200ms   tap RIGHT                                      # on
++1500ms  expect b:0x83aad4 == 1
++0       expect w:0x83aace == 5
++0       expect b:0x83aac5 == 5
++0       dump ko_on
++0       tap DOWN                                       # Laps: not frozen
++1200ms   tap RIGHT
++1500ms  expect w:0x83aace == 6
++0       tap DOWN                                       # Traffic Level
++1200ms   tap DOWN                                       # Opponents: 5 -> the bottom, 1 with Lap KO
++1200ms   tap RIGHT
++1500ms  expect b:0x83aac5 == 1
++0       dump ko_opponents
++0       tap UP
++1200ms   tap UP
++1200ms   tap UP                                         # Lap KO
++1200ms   tap LEFT                                       # off
++1500ms  expect b:0x83aad4 == 0
++0       tap DOWN                                       # Laps 6 -> 1 -> 127
++1200ms   tap LEFT
++1200ms   tap LEFT
++1200ms   tap LEFT
++1200ms   tap LEFT
++1200ms   tap LEFT
++1500ms  expect w:0x83aace == 1
++0       tap LEFT
++1500ms  expect w:0x83aace == 127
++0       dump laps_127
++0       tap RIGHT                                      # -> 1
++1500ms  expect w:0x83aace == 1
++0       tap DOWN
++1200ms   tap DOWN                                       # Opponents 1 -> 5
++1200ms   tap RIGHT
++1200ms   tap RIGHT
++1200ms   tap RIGHT
++1200ms   tap RIGHT
++1500ms  expect b:0x83aac5 == 5
++0       dump options
++0       tapuntil RETURN UI_QRCarSelect.fng 240 3000
++1500ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000  # car -> transmission
++800ms   tapuntil RETURN PC_Loading.fng 240 3000           # transmission -> loading
++0       waitmem 0x8654a4 6 30000
++0       expect i:0x89e7bc == 1                         # the race: one lap
++0       expect i:[0x890118]+0x24 == 6                  # six cars
++4000ms  dump grid
++0       waitexpr i:[0x890118] == 4 30000               # racing
++0       autopilot on
++5000ms  dump hud_a
++200     dump hud_b
++10000ms dump hud_c
++200     dump hud_d
++1000ms  status quickrace_options_end
++0       quit

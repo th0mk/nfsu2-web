@@ -40,6 +40,11 @@ void horn_preview(void);
  * a value out of that range is taken as its nearer end.  Any thread. */
 #define HORN_VOL_MIN 0.1f
 void horn_set_volume(float v);
+/* The game's Master Volume, 0 .. 1 (hornmenu.c reads it from the game's
+ * Audio options): every horn is that much of the volume above, as the
+ * game's own sounds are of their sliders.  horn.c asks on the game thread,
+ * at horn_begin and horn_preview. */
+float horn_game_master(void);
 /* Adds the sounding voices to an interleaved stereo float mix.  Mixer
  * thread. */
 void horn_mix(float *acc, unsigned frames, unsigned rate);

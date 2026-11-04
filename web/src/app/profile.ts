@@ -114,7 +114,7 @@ function nameInside(file: Uint8Array): string {
  * path (UTF-8, U+FFFD for bytes that are not).  For a name the game's field
  * makes, the name inside itself.  A cover shoot whose save failed could name
  * a profile with stale heap bytes (runtime/overrides.c sub_004e8b70); Rename
- * gives such a profile a name of letters and digits again.
+ * gives such a profile a name the game's field makes again.
  */
 function folderName(file: Uint8Array): string {
   let n = 0;
@@ -140,7 +140,7 @@ export function profileName(file: Uint8Array): { name: string; edited: boolean }
   const r = profileInside(file);
   if ('bad' in r) return r;
   const name = r.inside;
-  if (!isProfileName(name)) return { bad: t('the name inside, "{name}", is not one the game makes (1 to {n} letters and digits)', { name, n: NAME_MAX }) };
+  if (!isProfileName(name)) return { bad: t('the name inside, "{name}", is not one the game makes (1 to {n} letters, digits, spaces, - and _)', { name, n: NAME_MAX }) };
   return { name, edited: r.edited };
 }
 
@@ -159,23 +159,44 @@ export const profileWhole = (file: Uint8Array) => !checkShape(file) && sealedRig
 
 /**
  * The name a profile from elsewhere comes in under when the name inside is not one the game's field makes, or not
- * its file's: its file's own name when the field makes that, else the letters and digits of its file's name ("ë" as
- * "e"), or the ASCII letters and digits of the name inside (its other bytes are the game's font's, no letters of
- * ours), or Profile when none of them has any; one that taken (lower case) does not have, with digits at its end if
- * need be.  The game's new-profile box starts with its language's text for NAME, which in Chinese, Japanese, Korean,
- * Thai, Polish and Hungarian has bytes the field itself never takes (overrides.c sub_004ff3b0), and a failed cover
- * shoot's save could name a profile with heap bytes (sub_004e8b70).
+ * its file's: its file's own name when the field makes that, else what the field keeps of its file's name ("ë" as
+ * "e"), or of the name inside (its other bytes are the game's font's, no letters of ours), or Profile when none of
+ * them has any; one that taken (lower case) does not have, with digits at its end if need be.  The game's
+ * new-profile box started with its language's text for NAME, which in Chinese, Japanese, Korean, Thai, Polish and
+ * Hungarian has bytes the field itself never takes (overrides.c sub_004ff3b0), a failed cover shoot's save could name
+ * a profile with heap bytes (sub_004e8b70), and the PC game with NFSU2 Extra Options' longer names takes any
+ * character.  The name it gives is one the game's own box makes (isGivenName).
  */
 export function fixedName(own: string, inside: string, taken: Set<string>): string {
-  const keep = (s: string) => s.replace(/[^A-Za-z0-9]/g, '').slice(0, NAME_MAX);
-  const names = [own, keep(own.normalize('NFKD')), keep(inside)].filter(n => isProfileName(n) && !readsAsSlur(n));
+  const keep = (s: string) => s.replace(/[^A-Za-z0-9]/g, '').slice(0, GIVE_MAX);
+  const names = [own, keep(own.normalize('NFKD')), keep(inside)].filter(n => isGivenName(n) && !readsAsSlur(n));
   if (!names.length) names.push('Profile');
   const free = names.find(n => !taken.has(n.toLowerCase()));
   if (free) return free;
   for (let i = 2; ; i++) {
-    const n = names[0].slice(0, NAME_MAX - String(i).length) + i;
+    const n = names[0].slice(0, GIVE_MAX - String(i).length) + i;
     if (!taken.has(n.toLowerCase())) return n;
   }
+}
+
+/** Two profile files of one career, whatever their names: the same bytes but the name inside and the checksums. */
+export function sameCareer(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== PROFILE_SIZE || b.length !== PROFILE_SIZE) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && (i < 16 || i >= 28) && (i < NAME || i >= NAME + 32)) return false;
+  return true;
+}
+
+/**
+ * Whether `to` is what a page of before 2026-11 (its fixedName: the letters and digits, 7 of them, with digits at
+ * the end when that is taken) made of the name `from` it did not take: a name of up to 15 with spaces, - or _, which
+ * such a page, cached in another browser, renames when a backup or a keyphrase's version brings it.
+ */
+export function mendedBefore(from: string, to: string): boolean {
+  const base = from.normalize('NFKD').replace(/[^A-Za-z0-9]/g, '').slice(0, 7), t = to.toLowerCase();
+  if (!base || base === from) return false;
+  if (t === base.toLowerCase()) return true;
+  const m = /^(.*?)([0-9]+)$/.exec(to);
+  return !!m && !!m[1] && m[1].toLowerCase() === base.slice(0, 7 - m[2].length).toLowerCase();
 }
 
 // ------------------------------------------------------- mod cars --
@@ -292,19 +313,31 @@ export async function turnOnAutosave(fs: SaveFiles, profilesDir: string): Promis
 // ------------------------------------------------------------- rename --
 
 /**
- * A name the game's own name field takes: letters and digits, up to 7 of them
- * (tests/scripts/kb_profile.txt: the field at 0x4ff310 keeps nothing else).
+ * A name the page keeps as it is wherever saves come in (a backup, a keyphrase's version, a refill, the PC game's
+ * profiles): 1 to NAME_MAX of letters, digits, - and _, with one space between words (none first or last), and never
+ * DVD or Magazine (any case) with a digit right after them, as a cover shoot's folder ends (coverOf).  The names the
+ * game's box will make (NFSU2 Extra Options' longer names, the next module), so a browser on this page never renames
+ * one another browser made; every name the game's own box makes (isGivenName) is one of these.
  */
-export const NAME_MAX = 7;
-export const isProfileName = (s: string) => /^[A-Za-z0-9]+$/.test(s) && s.length <= NAME_MAX;
+export const NAME_MAX = 15;
+export const isProfileName = (s: string) => s.length <= NAME_MAX && /^[A-Za-z0-9_-]+( [A-Za-z0-9_-]+)*$/.test(s) &&
+  !/(^| )(dvd|magazine) [0-9]/i.test(s);
+
+/**
+ * A name the page gives a profile itself (Rename, a broken name mended, a first profile's Your name): one the game's
+ * own name field makes, letters and digits, up to GIVE_MAX of them (tests/scripts/kb_profile.txt: the field at
+ * 0x4ff310 keeps nothing else), until this game's box takes the longer ones.
+ */
+export const GIVE_MAX = 7;
+export const isGivenName = (s: string) => /^[A-Za-z0-9]+$/.test(s) && s.length <= GIVE_MAX;
 
 /**
  * What a first profile's name field starts with instead of the game's NAME (shell.ts NFSU2_NEW_PROFILE_NAME,
- * runtime/overrides.c sub_004ff3b0): the letters and digits of Your name, the first NAME_MAX.  '' for none, and for
+ * runtime/overrides.c sub_004ff3b0): the letters and digits of Your name, the first GIVE_MAX.  '' for none, and for
  * the game's names for nobody (NAME, Player) or a name that reads as a slur.
  */
 export function newProfileName(yours: string): string {
-  const n = yours.replace(/[^A-Za-z0-9]/g, '').slice(0, NAME_MAX);
+  const n = yours.replace(/[^A-Za-z0-9]/g, '').slice(0, GIVE_MAX);
   return !n || UNCLAIMABLE.includes(n.toLowerCase()) || readsAsSlur(yours) || readsAsSlur(n) ? '' : n;
 }
 
@@ -313,7 +346,8 @@ export function newProfileName(yours: string): string {
  * "<NAME> Magazine 2" (the game puts "DVD %d" or "Magazine %d", 0x79acc0 and
  * 0x79acb4, after the profile's name).  Its file (1,048,612 bytes) does not
  * hold the name, so the folder's name is all that ties it to the profile.
- * A profile's name has no spaces, so no profile looks like one.
+ * A profile's name never has DVD or Magazine with a digit after them
+ * (isProfileName), so no profile looks like one.
  */
 export function coverOf(folder: string): { profile: string; cover: string } | null {
   const m = /^(.+) ((?:DVD|Magazine) [0-9]+)$/.exec(folder);
@@ -329,7 +363,7 @@ export interface RenameFiles extends SaveFiles {
  * Rename a profile as if the game had made it under the new name: its folder and
  * file, the name inside (checksums made again), its cover shoots' folders, and
  * its line in AUTOSAVE_SEEN (so a Save choice made in the game stays).  Refused,
- * with nothing written, when the new name is not one the game's field takes,
+ * with nothing written, when the new name is not one the page gives (isGivenName),
  * when another save has it (the I/O worker finds names in any case), or when the
  * file fails readSaveMode's checks but the name inside (a name the game's field
  * does not make is what a rename mends).  A change of case only is a rename too.  The
@@ -338,7 +372,7 @@ export interface RenameFiles extends SaveFiles {
  */
 export async function renameProfile(fs: RenameFiles, profilesDir: string, from: string, to: string):
     Promise<{ files: number } | { refused: string }> {
-  if (!isProfileName(to)) return { refused: t('A profile\'s name is 1 to {n} letters and digits, as in the game.', { n: NAME_MAX }) };
+  if (!isGivenName(to)) return { refused: t('A profile\'s name is 1 to {n} letters and digits, as in the game.', { n: GIVE_MAX }) };
   if (to === from) return { files: 0 };
   const folders = new Map<string, string[]>();      // each folder in profilesDir: its files
   for (const { path } of await fs.listFiles()) {
@@ -360,6 +394,8 @@ export async function renameProfile(fs: RenameFiles, profilesDir: string, from: 
     if (same(f, to)) return { refused: t('There is a profile {name} already.', { name: f }) };
     if (same(coverOf(f)?.profile ?? '', to)) return { refused: t('There is a cover shoot {name} of that name already.', { name: f }) };
   }
+  // (read before anything is written: one that does not read refuses the rename whole, never half of it)
+  const seen = await fs.readText(AUTOSAVE_SEEN);
   let files = 0;
   try {
     for (const [old, now] of moves) for (const path of folders.get(old)!) {
@@ -371,9 +407,9 @@ export async function renameProfile(fs: RenameFiles, profilesDir: string, from: 
     for (const [, now] of moves) await fs.remove(`${profilesDir}/${now}`).catch(() => {});
     throw e;
   }
-  const seen = await fs.readText(AUTOSAVE_SEEN);
   const renamed = seen?.split('\n').map(l => l.trim() === from ? to : l).join('\n');
-  if (seen !== null && renamed !== seen) await fs.writeFile(AUTOSAVE_SEEN, renamed!);
+  // (not written: the page's Autosave comes to the new name once more, at most; the rename itself goes on)
+  if (seen !== null && renamed !== seen) await fs.writeFile(AUTOSAVE_SEEN, renamed!).catch(() => {});
   for (const [old] of moves) await fs.remove(`${profilesDir}/${old}`);
   return { files };
 }

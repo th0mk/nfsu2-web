@@ -19,6 +19,7 @@
 +60   tappad DRIGHT
 +60   tappad DRIGHT
 +60   tappad DRIGHT
++60   tappad DRIGHT        # (Split Screen, after Quick Race)
 +120  tappad A                                       # Options
 +0    waitfng UI_OptionsMain.fng 600
 +300  tappad DRIGHT
@@ -66,6 +67,7 @@
 +60   tappad DLEFT
 +60   tappad DLEFT
 +60   tappad DLEFT
++60   tappad DLEFT        # (Split Screen, after Quick Race)
 +120  tappaduntil A UI_QRModeSelect.fng 150 3000
 +200  tappaduntil A UI_QRTrackSelect.fng 150 1500
 +200  tappaduntil A UI_QRModeOptions.fng 150 1500

@@ -1,0 +1,30 @@
+# Count carousel: native bar tracks all choices; keyboard Escape and pad B return.
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 tappad DRIGHT
++100 tappad A
++200 dump count_bar_two
++0 tap RIGHT
++150 dump count_bar_three
++0 tap RIGHT
++150 dump count_bar_four
++0 tap ESCAPE
++150 dump count_escape_main
++0 tap LEFT
++150 dump count_main_bar_left
++0 tap RIGHT
++150 dump count_main_bar_split
++0 tap RETURN
++200 dump count_reopen_two
++0 tappad B
++150 dump count_pad_back_main
++0 tap RETURN
++200 tap RIGHT
++100 tap RIGHT
++150 tap RETURN
++0 waitfng UI_QRModeSelect.fng 2000
++150 dump count_four_mode_select
++0 status count_back_complete
++60 quit

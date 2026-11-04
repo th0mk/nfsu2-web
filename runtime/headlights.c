@@ -37,6 +37,10 @@
  * from 2 m below that plane, more the farther ahead (a road dipping or the
  * car pitching), gone 1.5 m lower (vsemu_wgsl.inc W_HL).  Under an
  * overpass the street is 6 m or more below the car on it.
+ * The light key (lightkey.c) has its say per car: a car whose lights are off
+ * gets none, one on high beam a brighter light aimed higher (its projector
+ * turned up about its own x axis: view * R * projection); our own high beam
+ * is such a light from our own car (Rel = 1), with the game's own then 0.
  * Only the web renderer draws the extra light (the Mac's translator has no
  * such term): elsewhere the override is the game's function.
  *   NFSU2_HEADLIGHTS=players (default) | all (every other car: AI racers and
@@ -60,7 +64,7 @@ int photo_hides(uint32_t ri);                    /* photo.c: a car photo mode do
 #define LIT_CB       0x00488b90u   /* 0x5D6D20's callback that marks a solid lit */
 #define HL_ENABLE    0x00870cc4u   /* g_CarHeadlightEnable */
 #define HL_BIAS      0x0080052cu   /* B: x, y offsets after the projection */
-#define G_PLAYERS    0x008900b4u   /* Player*[]: +4 car (0x5BDAA0 takes the colour from [0]) */
+#define G_PLAYERS    SPLIT_PLAYERS_ORDER   /* Player*[]: +4 car (0x5BDAA0 takes the colour from [0]) */
 #define G_WORLD      0x00890080u   /* World*: its car list (car +0 next) has the World as head and end */
 #define G_GAMEMODE   0x00850078u   /* 8 online, 0x200 LAN */
 #define GM_NETWORK   0x208u
@@ -79,6 +83,7 @@ void gw_headlights(const GwHL *blk);            /* runtime/web/gpu_web.c */
 enum { HL_OFF, HL_PLAYERS, HL_ALL, HL_SELF };
 static int  g_mode = -1;                        /* HL_SELF: the player's own light once more (a test of the term) */
 static M4   g_vp9; static int g_have_vp9;       /* view 9's view * projection, as last built */
+static M4   g_v9, g_p9;                         /* ...its view and projection */
 static unsigned long g_vp9_sets;
 static float g_ramp[2] = { 0.005f, 0.5f };      /* the lit vertex shaders' falloff: oT2.x = s q.w + o */
 static int  g_n;                                /* lights this frame */
@@ -113,9 +118,18 @@ static int hl_on(void){
 /* players: the friends' cars in free roam; in an online or LAN game every
  * car but traffic (those races have no AI racers) */
 int roam_game_friend_car(uint32_t car);
+/* lightkey.c: a car's lights (0 as the game has them, 1 off, 2 high beam), high beam's look, and whether our own
+ * high beam is drawn here this view render (the game's own light on the road then 0) */
+int   lightkey_state(uint32_t car);
+float lightkey_hi_gain(void);
+float lightkey_hi_pitch(void);
+void  lightkey_self_lit(int on);
+int   lightkey_self_ok(void);
+enum { LS_OFF = 1, LS_HIGH = 2 };
 static int wanted(uint32_t car, uint32_t me){
     if (g_mode == HL_SELF) return car == me;
-    if (car == me) return 0;
+    if (car == me) return lightkey_state(me) == LS_HIGH && lightkey_self_ok();   /* our high beam: a light of this kind */
+    if (lightkey_state(car) == LS_OFF) return 0;
     if (g_mode == HL_ALL) return 1;
     if (MR32(G_GAMEMODE) & GM_NETWORK) return MR32(car + CAR_DRIVER) != DRIVER_TRAFFIC;
     return roam_game_friend_car(car);
@@ -186,7 +200,9 @@ static void frustum(double pl[6][4], const M4 *vp){
  * +0, projection +0x40, their product +0x80 */
 void headlights_view(uint32_t id, const float *plat){
     if (id != 9u || !plat) return;
-    for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) g_vp9.m[r][c] = plat[32 + 4 * r + c];
+    for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++){
+        g_v9.m[r][c] = plat[4 * r + c]; g_p9.m[r][c] = plat[16 + 4 * r + c]; g_vp9.m[r][c] = plat[32 + 4 * r + c];
+    }
     g_have_vp9 = 1; g_vp9_sets++;
 }
 /* com.c: a vertex shader with the headlight projection (vs_light_creg) */
@@ -197,7 +213,10 @@ void headlights_vs_ramp(float s, float o){ g_ramp[0] = s; g_ramp[1] = o; }
 static void make_lights(void){
     g_n = 0;
     memset(&g_blk, 0, sizeof g_blk);
-    uint32_t pl = MR32(G_PLAYERS), me = pl && mem_is_committed(pl + 7u) ? MR32(pl + 4u) : 0, w = MR32(G_WORLD);
+    uint32_t split_render_player(void);
+    uint32_t pl = split_render_player();
+    if (!pl) pl = MR32(G_PLAYERS);
+    uint32_t me = pl && mem_is_committed(pl + 7u) ? MR32(pl + 4u) : 0, w = MR32(G_WORLD);
     if (!g_have_vp9 || !car_ok(me) || !w || !mem_is_committed(w + 3u)) goto out;
     M4 Cp, B = {{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}}, M, Mi;
     car_m4(me, &Cp);
@@ -220,16 +239,30 @@ static void make_lights(void){
         while (at > 0 && near[at - 1].d2 > d2){ near[at] = near[at - 1]; at--; }
         near[at].car = car; near[at].d2 = d2;
     }
+    /* high beam (lightkey.c): brighter, and the projector turned up about its own x axis (view space: x right, y up,
+     * z ahead; a row vector v * R, R = the turn about x by a > 0 aims it higher) */
+    M4 VPhi = g_vp9, Mhi = M;
+    float hp = lightkey_hi_pitch() * 3.14159265f / 180.f;
+    if (hp != 0.f){
+        double cs = __builtin_cos(hp), sn = __builtin_sin(hp);
+        M4 R = {{{1, 0, 0, 0}, {0, cs, sn, 0}, {0, -sn, cs, 0}, {0, 0, 0, 1}}};
+        m4_mul(&VPhi, &g_v9, &R); m4_mul(&VPhi, &VPhi, &g_p9);
+        m4_mul(&Mhi, &VPhi, &B);
+    }
+    int self_lit = 0;
     for (int i = 0; i < nn; i++){
         uint32_t car = near[i].car, col = MR32(MR32(car + CAR_RENDER) + 0x380u);
+        int high = g_mode != HL_SELF && lightkey_state(car) == LS_HIGH;
+        float gain = (car == me && g_mode != HL_SELF ? 1.f : g_gain) * (high ? lightkey_hi_gain() : 1.f);
+        if (car == me && g_mode != HL_SELF) self_lit = 1;
         M4 Ck, Cki, Rel, VPk, T;
         car_m4(car, &Ck);
         if (g_mode == HL_SELF) Ck.m[3][2] += g_lift;
         rigid_inv(&Cki, &Ck);
         m4_mul(&Rel, &Cki, &Cp);                         /* world -> world: car k's frame onto the player's */
-        m4_mul(&VPk, &Rel, &g_vp9);
+        m4_mul(&VPk, &Rel, high ? &VPhi : &g_vp9);
         frustum(g_pl[g_n], &VPk);
-        m4_mul(&T, &Mi, &Rel); m4_mul(&T, &T, &M);
+        m4_mul(&T, &Mi, &Rel); m4_mul(&T, &T, high ? &Mhi : &M);
         /* z column: the height above car k's road plane, (X - P_k) . U_k
          * for the world point X = q * Mi, so the column Mi * (U_k, -P_k . U_k) */
         double g[4] = { Ck.m[2][0], Ck.m[2][1], Ck.m[2][2], 0 };
@@ -240,10 +273,11 @@ static void make_lights(void){
         }
         GwHLight *L = &g_blk.l[g_n];
         for (int j = 0; j < 4; j++) for (int r = 0; r < 4; r++) L->t[4 * j + r] = (float)T.m[r][j];   /* columns */
-        L->col[0] = g_gain * (float)(col & 0xffu) / 255.f; L->col[1] = g_gain * (float)((col >> 8) & 0xffu) / 255.f;
-        L->col[2] = g_gain * (float)((col >> 16) & 0xffu) / 255.f; L->col[3] = 0;
+        L->col[0] = gain * (float)(col & 0xffu) / 255.f; L->col[1] = gain * (float)((col >> 8) & 0xffu) / 255.f;
+        L->col[2] = gain * (float)((col >> 16) & 0xffu) / 255.f; L->col[3] = 0;
         g_n++;
     }
+    lightkey_self_lit(self_lit);
 out:
     g_blk.n = (uint32_t)g_n; g_blk.s = g_ramp[0]; g_blk.o = g_ramp[1];
     gw_headlights(&g_blk);
