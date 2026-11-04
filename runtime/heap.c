@@ -24,8 +24,9 @@
  *                space's map when an allocation finds no room);
  *                NFSU2_HEAPSTAT=1 adds per-call-site live bytes;
  *                NFSU2_HEAPMAP=1 (test runs: with NFSU2_INPUT_SCRIPT) the map
- *                with every [status] line and each block of 8 MB or more as
- *                it comes and goes.
+ *                with every [status] line, the most VA and the least longest
+ *                free run since the line before, and each block of 8 MB or
+ *                more as it comes and goes.
  *   checking     NFSU2_HEAPCHECK=1 (test-only): tail canaries, poisoned and
  *                quarantined frees, double/invalid free and use-after-free
  *                write detection, freed VA regions made inaccessible.
@@ -230,11 +231,20 @@ static int64_t va_find(uint32_t ng, int top, int allow_dead){
     }
     return -1;
 }
+static void va_free_runs(uint32_t *free_g, uint32_t *longest_g, uint32_t *runs);
+static int g_heapmap = 0;                 /* NFSU2_HEAPMAP=1 (test aid): the map with every [status] line */
+static uint64_t g_win_va;                 /* NFSU2_HEAPMAP: since the last [status] line, VA's most */
+static uint32_t g_win_run = ~0u;          /* ... and the longest free run's least (granules) */
 static uint32_t va_take(uint32_t g0, uint32_t ng, int kind, int heap, uint32_t prot){
     for (uint32_t g = g0; g < g0 + ng; g++){ vset(g_va_bits, g, 1); vset(g_va_dead, g, 0); g_va_start[g] = g0; }
     g_va[g0] = (VaReg){ ng, (uint8_t)kind, (uint8_t)heap, 0, prot, prot, 0 };
     g_va_reserved += (uint64_t)ng * VA_GRAN;
     if (g_va_reserved > g_va_peak) g_va_peak = g_va_reserved;
+    if (g_heapmap){
+        uint32_t run; va_free_runs(0, &run, 0);
+        if (g_va_reserved > g_win_va) g_win_va = g_va_reserved;
+        if (run < g_win_run) g_win_run = run;
+    }
     return GH_BASE + g0 * VA_GRAN;
 }
 static uint32_t va_alloc(uint32_t bytes, int top, int kind, int heap, uint32_t prot){
@@ -466,7 +476,6 @@ static uint32_t trail_site(uint32_t b){
  * regions, and the free space with its longest run; then every large block of
  * 8 MB or more with the call site that made it (and its frame, with
  * NFSU2_HEAPSTAT's trailers), and the smaller ones by call site. */
-static int g_heapmap = 0;                 /* NFSU2_HEAPMAP=1 (test aid): the map with every [status] line */
 static void va_map(const char *why){
     uint32_t fr, big, nr; va_free_runs(&fr, &big, &nr);
     uint64_t seg[MAXHEAP] = {0}, lrg[MAXHEAP] = {0}, lrglive[MAXHEAP] = {0}, vb = 0, vc = 0;
@@ -1126,7 +1135,13 @@ int  memstat_line(char *buf, size_t n){
     uint32_t run = 0;
     LOCK(); heap_totals(&live, &peak, &va, &held);
     if (!g_bump) va_free_runs(0, &run, 0);
-    if (g_heapmap) va_map("status");
+    if (g_heapmap){
+        va_map("status");
+        if (g_win_va)                               /* between two [status] lines (a burst the lines miss) */
+            fprintf(stderr, "[heap] since the last status: VA at most %.1f MB, the longest free run at least %.1f MB\n",
+                    g_win_va / 1048576.0, g_win_run * (VA_GRAN / 1048576.0));
+        g_win_va = g_va_reserved; g_win_run = run;
+    }
     UNLOCK();
     com_mem_stats(&cb, &bb, &objs);
     metal_mem_stats(&ma, &lt, &ts, &mt);
