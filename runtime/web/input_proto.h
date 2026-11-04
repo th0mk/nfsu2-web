@@ -88,8 +88,10 @@ enum {
     IEV_PHOTO = 14,       /* photo mode (photo.c): dik = what (PH_*), a, b its values */
     IEV_NAME = 15,        /* a new name for free roam and Online mode (the operator took the old one away): a piece of
                              it, dik = where it starts, vk = the whole length (1..32), ch[3], a and b (little-endian)
-                             its next 11 bytes (roam_web.c roam_plat_name_piece) */
+                             its next 11 bytes (roam_web.c roam_plat_name_piece); flags INAME_SEAT2: co-op player 2's
+                             name in free roam instead (roam_plat_name2) */
 };
+#define INAME_SEAT2 1u            /* IEV_NAME's flags: player 2's (co-op) */
 enum {                    /* event flags */
     IKF_REPEAT = 1,       /* autorepeat */
     IKF_ALT = 2,          /* Alt / Option held */

@@ -67,6 +67,8 @@ export interface NetOptions extends CommonOptions {
   bump?: (json: string) => void;
   /** free roam: a drift battle's scoreboard, as JSON from the game ("{}": none; drift.ts) */
   battle?: (json: string) => void;
+  /** co-op free roam: player 2 online, as JSON from the game ({"name"}; "{}": its endpoint ended) */
+  coop?: (json: string) => void;
   /** free roam: a friend message from the server */
   friend?: (m: Record<string, unknown>) => void;
   /** the server's LAN took this page back after the link was lost (a server restart, as for a deploy) */
@@ -137,9 +139,9 @@ export interface InputSubsystem extends Subsystem {
   sms?(id: number): boolean;
   /** photo mode (runtime/photo.c, photo.ts): what (its PH_* number) and its values; false: it cannot reach the game */
   photo?(what: number, a?: number, b?: number): boolean;
-  /** a new name for free roam and Online mode, now (the operator took the old one away); false: it cannot reach the
-   *  game */
-  name?(name: string): boolean;
+  /** a new name for free roam and Online mode, now (the operator took the old one away), or (seat2) for co-op's player 2
+   *  in free roam; false: it cannot reach the game */
+  name?(name: string, seat2?: boolean): boolean;
   /** every key and button the game holds goes up (photo mode takes the keys) */
   releaseAll?(): void;
   /** performance.now() of the player's last key, mouse or controller input; null: the page cannot tell

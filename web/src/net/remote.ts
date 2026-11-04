@@ -22,7 +22,7 @@ import { HostKind } from '../host/abi';
 import { attachNet, type NetLink, type NetOptions, type NetPeer, type NetState, type NetStats } from './index';
 
 /** NetOptions' callbacks: the worker sends the page each call of those the page gave */
-export const CALLBACKS = ['log', 'onPeers', 'onNotice', 'onLobby', 'onSay', 'onBump', 'onBattle', 'onFriend', 'onBack', 'onQueue',
+export const CALLBACKS = ['log', 'onPeers', 'onNotice', 'onLobby', 'onSay', 'onBump', 'onBattle', 'onCoop', 'onFriend', 'onBack', 'onQueue',
   'onRemoved', 'onRaces', 'onRename', 'onAttached'] as const;
 export type NetCallback = typeof CALLBACKS[number];
 /** NetLink's calls, made in the worker */

@@ -1,0 +1,17 @@
+# Co-op free roam online, instance B (alone), from a career save: A (coop_online_a.txt, COOP_PEER its name) plays with
+# a player 2 beside B.  B sees two cars from A's browser, player 1's and player 2's (named "<A> 2"), and player 2's
+# goes once it leaves.  How to run: coop_online_a.txt.
+0     roam fe2roam 14000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp waitname 6000 ${COOP_PEER} 2
++60   roam mp status
++0    roam mp expectcars 2
++0    roam mp expectname ${COOP_PEER}
++0    status coop_online_seen
++0    roam mp waitnoname 6000 ${COOP_PEER} 2
++0    roam mp expectcars 1
++0    status coop_online_gone
++300  roam mp status
++10   quit

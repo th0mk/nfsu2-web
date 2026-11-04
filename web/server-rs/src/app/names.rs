@@ -293,6 +293,11 @@ mod tests {
         assert_eq!(j(&kit.get("/names?name=Alex", &[B]).await.body)["state"], "taken");
         assert_eq!(j(&kit.get("/names?name=Alex", &[]).await.body)["state"], "taken");
         assert_eq!(claim(&kit, B, "ALEX").await, (409, json!({ "error": "taken" })));
+        // its second form (co-op's second player, "Alex 2") is its own too, and another's claim of it is refused
+        let g = j(&kit.get("/names?name=Alex%202", &[A]).await.body);
+        assert_eq!((&g["name"], &g["state"]), (&json!("Alex_2"), &json!("yours")));
+        assert_eq!(j(&kit.get("/names?name=Alex%202", &[B]).await.body)["state"], "taken");
+        assert_eq!(claim(&kit, B, "Alex 2").await, (409, json!({ "error": "taken" })));
         // a change: the first is free, the next waits a week; the old name stays its own
         let (code, v) = claim(&kit, A, "Speedy").await;
         assert_eq!((code, &v["mine"]["name"]), (200, &json!("Speedy")));

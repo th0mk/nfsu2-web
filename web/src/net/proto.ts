@@ -26,6 +26,7 @@ export const NET_KIND_SAY = 18;               // TX ring only, never sent: quick
 export const NET_KIND_FRIEND = 19;            // TX ring only, never sent: the player's car and a friend's touched front bumpers for 3 s (or parted after), as JSON
 export const NET_KIND_BATTLE = 21;            // TX ring only, never sent: a drift battle's scoreboard ({"t","me","a","vs","b"}; "{}": none)
 export const NET_KIND_FLYING = 20;            // TX ring only, never sent: the player's car flew in free roam for minutes ({"s"}): the page leaves the switch
+export const NET_KIND_COOP = 22;              // TX ring only, never sent: co-op's player 2 online ({"name"}; "{}": its endpoint ended)
 export const NET_KIND_BUNDLE = 32;            // page and switch only (nfsu2-lan): several frames in one message
 export const NET_BUNDLE_MAX = 32 << 10;       // bytes in one bundle the page sends at most (the switch takes 64 KB)
 export const NET_KIND_COMPACT = 33;           // switch to page only (nfsu2-lan compact.rs): a bundle without what the page puts back

@@ -42,6 +42,9 @@ pub(crate) const HF_LOBBY: u16 = 0x0080;
 pub(crate) const HF_CREW: u16 = 0x0200;
 /// HELLO's flag: this player reads the hub's crew marks (roam_core.h RC_HF_HUBCREW; `write_peers`)
 pub(crate) const HF_HUBCREW: u16 = 0x0400;
+/// HELLO's flag: this endpoint is the second local player of the browser at its address (roam_core.h RC_HF_SEAT2: co-op
+/// free roam, player 2 beside player 1 on one screen, on a port of its own): hub.rs `Player::seat2`
+pub(crate) const HF_SEAT2: u16 = 0x2000;
 /// in a list's crew marks, past the crews' bits: that player is a friend (roam_core.h RC_MARK_FRIEND; `write_peers`)
 pub(crate) const MARK_FRIEND: u8 = 0x80;
 /// the most crews a player is in (roam_core.h RC_CREW_MAX: the start page's four words)
@@ -105,6 +108,8 @@ pub(crate) enum Msg<'a> {
         /// the other player of its outrun (core version 11: the id after the links byte, roam_core.c rc_set_duel), 0
         /// none: the two are linked first once each names the other (`duel_pairs`)
         duel: u32,
+        /// its flags say it is the second local player of its browser (HF_SEAT2)
+        seat2: bool,
     },
     /// v: the newest state's velocity, 0 where roam_core's decoder would not take it (not finite, 200 m/s or more);
     /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c); slope: how steeply
@@ -421,8 +426,8 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
                     }
                 }
             }
-            let (lobbies, marks) = (flags & HF_LOBBY != 0, flags & HF_HUBCREW != 0);
-            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links, duel }
+            let (lobbies, marks, seat2) = (flags & HF_LOBBY != 0, flags & HF_HUBCREW != 0, flags & HF_SEAT2 != 0);
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links, duel, seat2 }
         }
         MSG_SNAP => {
             if end < 22 + 52 {

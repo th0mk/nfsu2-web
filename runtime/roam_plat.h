@@ -30,6 +30,17 @@ int      roam_plat_test_mode(void);
  * session and starts the network thread; 0 on success */
 int      roam_plat_start(const roam_plat_cfg *cfg, rc_session *s);
 void     roam_plat_stop(uint8_t bye_reason);       /* BYE, close, join */
+/* co-op free roam (web): player 2's session, a second endpoint of this browser on port (player 1's + 1), fed and ticked
+ * by the network thread with player 1's, until roam_plat_stop2 (its BYE).  With the lock free; 0: started */
+int      roam_plat_start2(rc_session *s, uint16_t port);
+void     roam_plat_stop2(uint8_t bye_reason);
+/* ip:port is one of this browser's own endpoints (player 1's or player 2's): never a peer.  With the lock held */
+int      roam_plat_own(uint32_t ip, uint16_t port);
+/* co-op: player 2's endpoint for the page, as a JSON object {"name"} when it starts or renames, "{}" when it ends (1
+ * sent, 0 no page, -1 the ring is full); and player 2's name the page sent (roam_plat_name's way: 0 none).  The first
+ * with the lock held */
+int      roam_plat_coop(const char *json);
+uint32_t roam_plat_name2(char out[33]);
 void     roam_plat_lock(void);
 void     roam_plat_unlock(void);
 int64_t  roam_plat_now_us(void);                   /* host monotonic clock */

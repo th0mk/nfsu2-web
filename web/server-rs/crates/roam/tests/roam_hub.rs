@@ -468,17 +468,18 @@ fn links_stay_put_at_the_edge_players_come_and_go() {
     }
 }
 
-// limits: two endpoints a browser, a player starts with its HELLO, bad datagrams counted
+// limits: three endpoints a browser (co-op's two players and a restart's), a player starts with its HELLO, bad
+// datagrams counted
 #[test]
-fn limits_two_endpoints_a_browser_a_player_starts_with_its_hello_bad_datagrams_counted() {
+fn limits_three_endpoints_a_browser_a_player_starts_with_its_hello_bad_datagrams_counted() {
     let mut k = Kit::new(RoamOptions::default());
-    for port in [47210u16, 47211, 47212] {
+    for port in [47210u16, 47211, 47212, 47213] {
         k.hub.frame(V(0), &frame_ports(V(0), &hello(300 + port as u32), port, 47210));
     }
-    assert_eq!(k.info("players"), 2.0);
+    assert_eq!(k.info("players"), 3.0);
     assert_eq!(k.info("refused"), 1.0);
     k.from(V(1), &snap(301, [0.0, 0.0, 0.0]));
-    assert_eq!(k.info("players"), 2.0, "a SNAP before any HELLO: nobody new");
+    assert_eq!(k.info("players"), 3.0, "a SNAP before any HELLO: nobody new");
     k.hub.frame(V(1), b"nonsense, not a frame at all");
     let mut f = frame(V(1), &hello(301));
     f[30] ^= 0xff;
