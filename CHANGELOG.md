@@ -16,9 +16,7 @@ not guessed.
 - **Languages:** Czech and Slovak, the game and the start page.
 - **Races:** other players' cars no longer bounce, stand on their tails or flip over.
 - **Ghost mode:** near misses with traffic on Everything give nitrous again.
-- **Menus:** cars in the menus reflect the studio again, not black.
-- **Phone:** the page's menu fits a phone on its side.
-- **Free roam:** an older crew link no longer takes you to an empty room.
+- **Menus:** the cars' paint and chrome reflect the studio's walls and lights, as on the PC, instead of black.
 
 ## 2026-11-04 (af448e5)
 
