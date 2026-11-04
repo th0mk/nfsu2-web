@@ -18,6 +18,7 @@ import { checkRoom, inviteLink } from './invite';
 import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
+import { SITE_KEYS } from './sitekeys';
 
 type Control =
   | { t: 'switch' }
@@ -56,7 +57,7 @@ const GROUPS: Group[] = [
   { title: N('Online'), more: N('More online settings'), own: true, items: [
     { key: 'roam', label: N('Free roam with others'), help: N('See other players\' cars in career free roam, and they see yours.'), c: { t: 'switch' } },
     { key: 'roam_name', label: N('Your name'), help: N('Shown over your car and in the Online menu: 3 to 15 letters, digits, - or _.'), c: { t: 'text', placeholder: N('profile name') } },
-    { key: 'horn', label: N('Your horn'), help: N('N or the left stick click, with other players.'), c: { t: 'select', opts: [
+    { key: 'horn', label: N('Your horn'), help: N('With other players. Its key and button: Controls, Site.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
     { key: 'roam_room', label: N('Room'), help: N('With a name, free roam shows only players in the same room.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
@@ -64,7 +65,7 @@ const GROUPS: Group[] = [
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not a tuner you race in an outrun.'),
       c: { t: 'seg', opts: [['on', N('Off')], ['off', N('Players')], ['none', N('Everything')]] } },
     { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['40', '40'], ['48', '48']] } },
-    { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press the right stick in, then flick it twice; touch: the chat button).'), c: { t: 'switch' } },
+    { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Four groups of four. Others read them in their own language.'), c: { t: 'phrases' } },
     { key: 'online', label: N('Online mode'), help: N('The game\'s Online menu skips the EA login: lobby, chat and races with everyone on this server.'), c: { t: 'switch' }, more: true },
   ] },
@@ -75,7 +76,7 @@ const GROUPS: Group[] = [
     { key: 'language', label: N('Language'), help: N('Menus, subtitles, dubbed voices and this page.'), c: { t: 'select', opts: LANGUAGE_OPTS } },
     { key: 'movies', label: N('Movies'), help: N('Intro and story movies.'), c: { t: 'switch' } },
     { key: 'subtitles', label: N('Subtitles'), help: N('For the movies. English uses VileStuff\'s English Subtitles Fixed.'), link: { text: N('English Subtitles Fixed'), href: 'https://nfsmods.xyz/mod/5286' }, c: { t: 'switch' } },
-    { key: 'songs', label: N('Songs'), help: N('Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them. F7 plays the next song.'), c: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] } },
+    { key: 'songs', label: N('Songs'), help: N('Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.'), c: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] } },
     { key: 'autosave', label: N('Autosave'), help: N('Sets each profile\'s Save option to Autosave once. A later change in the game\'s Options stays.'), c: { t: 'switch' } },
     { key: 'show_hidden_races', label: N('Show hidden races'), help: N('MaxHwoy\'s Show Hidden Races Mod: the 33 hidden races show on the map and radar, with up to 8 of each kind at once (the original shows 1 to 4).'), link: { text: N('Show Hidden Races Mod'), href: 'https://nfsmods.xyz/mod/1583' }, c: { t: 'switch' }, more: true },
     { key: 'intro', label: N('Startup movies'), help: N('Logos, PSA and intro. Skippable: Enter, Esc, Space, a click, A, B or Start skips each. Original: only the intro can be skipped.'), c: { t: 'seg', opts: [['skippable', N('Skippable')], ['original', N('Original')], ['off', N('Off')]] }, more: true },
@@ -85,7 +86,7 @@ const GROUPS: Group[] = [
     { key: 'seed_registry', label: N('Highest graphics for a new save'), help: N('The game\'s graphics options at their highest, at this screen\'s resolution. Off: the game\'s own hardware check decides.'), c: { t: 'switch' }, more: true },
   ] },
   { title: N('Display'), more: N('More display settings'), items: [
-    { key: 'fullscreen', label: N('Full screen on Play'), help: N('Off: play in the window; the menu (F9) has full screen. Hold Esc to leave it.'), c: { t: 'switch' } },
+    { key: 'fullscreen', label: N('Full screen on Play'), help: N('Off: play in the window; the menu has full screen. Hold Esc to leave it.'), c: { t: 'switch' } },
     { key: 'render', label: N('Resolution scale'), help: N('Lower is faster but softer: 50% renders a quarter of the pixels. Phones start at 75%.'), c: { t: 'seg', opts: [['scale:0.5', '50%'], ['scale:0.75', '75%'], ['backing', '100%'], ['scale:1.5', '150%'], ['scale:2', '200%']] } },
     { key: 'fps', label: N('Frame rate'), help: N('Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.'), c: { t: 'seg', opts: [['auto', N('Auto')], ['30', '30'], ['60', '60'], ['120', '120'], ['240', '240']] } },
     { key: 'ui_textures', label: N('Menus, HUD and maps'), help: N('Upscaled: LunicAura106\'s Upscaled HUD and JeansBig\'s Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.'), link: [{ text: N('Upscaled HUD'), href: 'https://nfsmods.xyz/mod/4319' }, { text: N('Detailed Map'), href: 'https://nfsmods.xyz/mod/4485' }], c: { t: 'seg', opts: [['original', N('Original')], ['uhud', N('Upscaled')]] }, more: true },
@@ -95,7 +96,7 @@ const GROUPS: Group[] = [
     { key: 'cutscene_borders', label: N('Cutscene bars'), help: N('Letterbox bars across the whole width, or none.'), c: { t: 'seg', opts: [['full', N('Full')], ['off', N('Off')]] }, more: true },
     { key: 'fov_scale', label: N('3D proportions'), help: N('Corrected: true proportions and round wheels, a little more at the sides.'), c: { t: 'seg', opts: [['original', N('Original')], ['correct', N('Corrected')]] }, more: true },
     { key: 'other_headlights', label: N('Other cars\' headlights'), help: N('Other cars light up the road like yours. Players: other players\' cars. All: AI racers and traffic too. Off: as in the original.'), c: { t: 'seg', opts: [['players', N('Players')], ['all', N('All cars')], ['off', N('Off')]] }, more: true },
-    { key: 'fps_counter', label: N('Frame-rate counter'), help: N('F8 switches it while you play.'), c: { t: 'seg', opts: [['off', N('Off')], ['on', N('On')], ['detailed', N('Detailed')]] }, more: true },
+    { key: 'fps_counter', label: N('Frame-rate counter'), help: N('Its key (Controls, Site) switches it while you play.'), c: { t: 'seg', opts: [['off', N('Off')], ['on', N('On')], ['detailed', N('Detailed')]] }, more: true },
     { key: 'resolution', label: N('Fixed render size'), help: N('Always render at this size, such as 2560x1440. Empty: the game\'s own setting.'), c: { t: 'text', placeholder: N('WxH') }, more: true },
     { key: 'max_pixels', label: N('Pixel limit'), help: N('Most pixels rendered at 100% and below (0 = no limit). 150% and 200% scale up from it.'), c: { t: 'num', min: 0, step: 100000 }, more: true },
   ] },
@@ -112,7 +113,8 @@ const GROUPS: Group[] = [
 /** a row's second key, which its control writes with its own and its Reset resets too (not listed under "Other
  *  settings in this file"): the Crews row's colours */
 const COMPANION: Record<string, string> = { roam_crew: 'roam_crew_colours', quick_chat_phrases: 'quick_chat_groups' };
-const COMPANIONS = new Set(Object.values(COMPANION));
+/** (and our controls' keys and buttons: the Controls tab's Site has their rows, sitekeys.ts SiteKeysView) */
+const COMPANIONS = new Set([...Object.values(COMPANION), ...SITE_KEYS]);
 /** the rows that do nothing while free roam with others is off (each says so then) */
 const ROAM_ROWS = ['roam_room', 'roam_crew'];
 /** Every key the panel shows (the check in app-test.mjs compares this with the template). */
@@ -429,7 +431,7 @@ export class SettingsPanel {
    *  value is read as the runtime reads it (an integer for NFSU2_ROAM, "starts with 0" for NOMOVIES). */
   current(key: string): string {
     const d = keyDef(key)!, r = this.fileOnly;
-    if (r.source[d.env] === 'settings.ini') {
+    if (r?.source[d.env] === 'settings.ini') {        // (not read yet: the defaults; the Site tab's rows ask early)
       const v = r.env[d.env];
       if (d.kind === 'bool') return parseInt(v, 10) === 1 ? 'on' : 'off';
       if (d.kind === 'boolInv') return v === '' || v.startsWith('0') ? 'on' : 'off';
@@ -452,12 +454,14 @@ export class SettingsPanel {
     this.text = next;
     this.resolve(next);
     this.deps.onSaved?.(next);
-    if (removed) this.render(); else { this.rerow(key); this.syncRaw(); }
+    // (our controls' rows are the Site tab's, which draws them again itself: sitekeys.ts)
+    const site = SITE_KEYS.includes(key);
+    if (removed) this.render(); else { if (!site) this.rerow(key); this.syncRaw(); }
     // (the Room and Crews rows say whether free roam is on)
     if (key === 'roam' && !removed) for (const k of ROAM_ROWS) this.rerow(k);
     this.root.dataset.saved = String(++this.saves);
     const it = ITEMS.get(key), cur = this.current(key);
-    this.deps.say?.(() => {
+    if (!site) this.deps.say?.(() => {
       const v = { what: it ? t(it.label) : key, value: it ? shown(it, cur) : value ?? '' };
       return value === null ? t('Saved: {what}, {value} (the default). Applies the next time you press Play.', v) : t('Saved: {what}, {value}. Applies the next time you press Play.', v);
     });

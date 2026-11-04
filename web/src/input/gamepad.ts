@@ -211,6 +211,8 @@ export interface PadPage {
    *  the controller (quick chat's picker opens or closes); true: the page took it, the game does not get it (else
    *  the game's: a car's hydraulics) */
   click?(): boolean;
+  /** the stick whose click goes to click() (PAD_RS unless the player picked PAD_LS, or -1: none; app/sitekeys.ts) */
+  chatButton?(): number;
   /** the whole controller each time it is read while no dialog is open (photo mode: runtime/photo.c), with the
    *  buttons pressed since the last read; true: the page has it now, the game gets it at rest */
   capture?(s: PadSnapshot, pressed: number): boolean;
@@ -449,7 +451,8 @@ export class PadPoller {
     const menu = (pressed & home) !== 0 || ((pressed & sticks) !== 0 && (s.buttons & sticks) === sticks);
     if (menu) { page.menu(); this.held |= s.buttons & (sticks | home); }
     const captured = !page.dialog() && !menu && !!page.capture?.(s, pressed);
-    const clicked = (b: number) => b === 1 << PAD_RS && !captured && !page.dialog() && !!page.click?.();
+    const chat = page.chatButton?.() ?? PAD_RS;
+    const clicked = (b: number) => chat >= 0 && b === 1 << chat && !captured && !page.dialog() && !!page.click?.();
     if (pressed & sticks && (s.buttons & sticks) !== sticks) { this.alone = s.buttons & sticks; this.aloneAt = now; }
     let wait = 0;
     if (menu) this.alone = 0;

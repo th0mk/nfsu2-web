@@ -17,6 +17,7 @@ import type { GameSession } from './game';
 import { touchFirst } from './device';
 import { gameHas, KEY_FRIEND } from './gamekeys';
 import { t } from './i18n';
+import { keyName, siteKey } from './sitekeys';
 import { pageDialog } from './padnav';
 import { onlineName } from './claim';
 import { roomHash } from './players';
@@ -364,7 +365,7 @@ export class FriendPrompt {
   }
 
   private key(e: KeyboardEvent) {
-    if (e.code !== 'KeyF' || e.metaKey || e.ctrlKey || e.altKey || !this.actionable()) return;
+    if (e.code !== siteKey('friend') || e.metaKey || e.ctrlKey || e.altKey || !this.actionable()) return;
     const el = e.target as HTMLElement | null;
     // (a control of the game's the player put on F: the game's alone, gamekeys.ts; a click on the line still adds)
     if (el?.closest?.('input, textarea, select') || pageDialog() || gameHas(this.session, KEY_FRIEND)) return;
@@ -390,7 +391,8 @@ export class FriendPrompt {
     const w = this.who, b = this.root;
     if (!w || w.st === 'wait') { b.hidden = true; return; }
     const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };
-    const offer = this.actionable(), key = offer && !touchFirst() && !gameHas(this.session, KEY_FRIEND) ? [kbd('F')] : [];
+    const fk = siteKey('friend');                   // (the player's key for it: sitekeys.ts, F by default)
+    const offer = this.actionable(), key = offer && fk && !touchFirst() && !gameHas(this.session, KEY_FRIEND) ? [kbd(keyName(fk))] : [];
     const text = (s: string) => Object.assign(document.createElement('span'), { textContent: s });
     const line = (s: string) => b.replaceChildren(personIcon(offer ? PERSON_PLUS : PERSON), ...key, text(s));
     switch (w.st) {

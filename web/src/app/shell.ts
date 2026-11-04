@@ -60,7 +60,9 @@ import { LobbyPanel } from './lobby';
 import { ICON as CHAT_ICON, QuickChat } from './quickchat';
 import { groupsOf, phrasesOf } from './phrases';
 import { FriendPrompt, FriendsApi, FriendsPanel } from './friends';
-import { ChatDialog, FriendMessages, MSG_ICON, MSG_KEY_LABEL, MessageStore } from './messages';
+import { ChatDialog, FriendMessages, MSG_ICON, MessageStore } from './messages';
+import { applySiteKeys, keyName, menuKeyOf, siteButton, siteKey, siteKeyList, SiteKeysView } from './sitekeys';
+import { PAD_LS, PAD_RS } from '../input/proto';
 import { GameSession } from './game';
 import { AwayCheck, AWAY_LIMITS, type AwayLimits } from './away';
 import { changelog } from './changelog';
@@ -749,6 +751,7 @@ async function startGame() {
   playTime = new PlayTime(session, playTimeLimit(), logLine);
   // a phone's render scale (device.ts): whether it has room for all its pixels, for its next game
   if (r.source.NFSU2_RENDER === 'device') renderCheck = new RenderCheck(session, r.env.NFSU2_RENDER, renderCheckTimes(), logLine);
+  applySiteKeys(r.env);                   // our controls' keys and buttons for this game (sitekeys.ts)
   touch.start(session, r.env.NFSU2_FF !== '0');   // Rumble off: no tick under a finger either
   textField.start(session);
   pauseHint.start(session);
@@ -871,14 +874,16 @@ function toggleFullscreen() {
   else void enterFullscreen($('#stage')).then(r => { if (!r.ok) toast(t('Full screen was not allowed.'), 4000); });
 }
 
+/** the player's key for the page's menu (F9 unless they gave it another: sitekeys.ts) */
+const menuKeyName = () => keyName(siteKey('menu') ?? 'F9');
 /** how the page's menu opens here, for the hints: F9, the ☰ button on a touch screen, Home on a controller */
 function menuKey(): string {
   if (touchFirst()) return padSeen() ? t('the ☰ button or Home on the controller') : t('the ☰ button');
-  return padSeen() ? t('F9 or Home on the controller') : 'F9';
+  return padSeen() ? t('{key} or Home on the controller', { key: menuKeyName() }) : menuKeyName();
 }
 /** "the menu (F9)", with what opens it here */
 function menuName(): string {
-  const key = touchFirst() ? '☰' : 'F9';
+  const key = touchFirst() ? '☰' : menuKeyName();
   return padSeen() ? t('the menu ({key}, or Home on the controller)', { key }) : t('the menu ({key})', { key });
 }
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -929,6 +934,8 @@ const PAD_PAGE: PadPage = {
   press: padPress,
   stick: (x, y) => quickChat.stick(x, y),
   click: () => quickChat.click(),
+  // quick chat's stick click (sitekeys.ts: the right one unless the player picked the left or none)
+  chatButton: () => { const b = siteButton('button_chat'); return b === 'ls' ? PAD_LS : b === 'rs' ? PAD_RS : -1; },
   capture: (s, pressed) => photo.pad(s, pressed),
 };
 
@@ -1103,13 +1110,30 @@ function pageToast(msg: string | Msg) {
 /** the controls sheet of the start page, in a dialog (F9, Controls, while the game runs), at the page's tab (or the
  *  one asked for: the touch controls' steering button held opens the touch settings) and button names */
 let keySheet: ControlsSheet, helpSheet: ControlsSheet | null = null;
+/** this site's controls in the Site tab: the start page's, set there (sitekeys.ts), and the menu's copy, only shown */
+let siteView: SiteKeysView, helpSiteView: SiteKeysView | null = null;
+function siteDeps() {
+  return { set: (k: string, v: string | null) => settings.set(k, v), current: (k: string) => settings.current(k), readOnly: () => !instance.owner,
+    registry: () => readText(SAVE, 'registry.txt'), ps: () => keySheet?.fam === 'ps' };
+}
+/** our controls' keys as settings.ini has them now (not while a game runs: it keeps the ones it started with), on the
+ *  keys' list and in the Site tab */
+function siteKeysNow() {
+  if (!session) applySiteKeys(resolveEnv(settingsText ?? settings.text, ENVIRONMENT, {}, DEVICE).env);
+  siteKeyList($('#keys'));
+  siteView?.render();
+  keySheet?.relabel();                    // (the controller's drawing names the sticks' clicks of ours)
+}
 function openHelp(tab?: Tab) {
   const body = $('#help-body');
   if (!helpSheet) {
     body.append(...[...$('#keys').childNodes].map(n => n.cloneNode(true)));
     for (const k of body.querySelectorAll('[data-keep]')) k.remove();   // (the start page's Controller settings: Play reads them)
     helpSheet = controlsSheet(body, 'help');
+    helpSiteView = new SiteKeysView(siteDeps());
+    helpSiteView.render(body.querySelector<HTMLElement>('.site-box')!, false);
   }
+  siteKeyList(body);
   helpSheet.show(tab ?? keySheet.tab);
   helpSheet.family(keySheet.fam);
   $<HTMLDialogElement>('#help').showModal();
@@ -1200,11 +1224,12 @@ function msgHint(ms: number | null) {
   box.querySelector('.msg-hint')?.remove();
   clearTimeout(msgHintTimer);
   if (ms === null) return;
-  const h = document.createElement('div'), k = document.createElement('kbd');
+  const h = document.createElement('div'), k = document.createElement('kbd'), key = siteKey('message');
   h.className = 'msg-hint';
   h.style.animationDuration = `${ms}ms`;
-  k.textContent = MSG_KEY_LABEL;
-  h.append(k, t('Write back'));
+  k.textContent = key ? keyName(key) : '';
+  if (key) h.append(k);                   // (no key for it: the line alone, a tap on it answers)
+  h.append(t('Write back'));
   box.append(h);
   msgHintTimer = window.setTimeout(() => h.remove(), ms);
 }
@@ -2020,8 +2045,9 @@ export async function boot() {
       if (packsKey() !== was) void saves.refresh();
       vault?.changed(); players?.now();
       applyLanguage();
+      siteKeysNow();
     },
-    onLoaded: applyLanguage,
+    onLoaded: () => { applyLanguage(); siteKeysNow(); },
     // the tab that owns the saves is the one whose Play reads the file: another tab only looks
     readOnly: () => !instance.owner, say: pageToast, confirm: confirmBox,
     nameRow: (row, input, ctl) => nameRow.attach(row, input, ctl),
@@ -2105,13 +2131,17 @@ export async function boot() {
   // is on, else the page's screenshot (not the game's, whose copy of the frame
   // comes out black in this port, nor the browser's developer tools).
   window.addEventListener('keydown', e => {
-    if (session && (e.code === 'F7' || e.code === 'F8' || e.code === 'F9' || e.code === 'F12')) {
+    // (the keys the player gave them: sitekeys.ts; F12 not photo mode's stays away from the game all the same, whose own
+    // screenshot comes out black, and goes to the browser)
+    const ours = session ? menuKeyOf(e.code) : null;
+    if (ours) {
       e.preventDefault(); e.stopImmediatePropagation();
       if (e.repeat) return;
-      if (e.code === 'F7') radioPort()?.skip();
-      else if (e.code === 'F8') toast(fpsLabel(fps.cycle()), 1500); else if (e.code === 'F9') openMenu(); else photo.f12();
+      if (ours === 'song') radioPort()?.skip();
+      else if (ours === 'fps') toast(fpsLabel(fps.cycle()), 1500); else if (ours === 'menu') openMenu(); else photo.f12();
       return;
     }
+    if (session && e.code === 'F12') { e.stopImmediatePropagation(); return; }
     // Enter plays only when nothing else has the focus (or Play itself does): a
     // focused link, button or field keeps its own Enter
     const t = e.target as Element | null;
@@ -2135,11 +2165,13 @@ export async function boot() {
   // the menu's button on the game: on a touch screen from the start, elsewhere from the first touch
   markTouch();
   keySheet = controlsSheet($('#keys'), 'keys', { follow: true });
+  siteView = new SiteKeysView(siteDeps());
+  siteView.render($('#keys .site-box'), true);
   // what the page drew itself, again in the language picked (the markup and the live texts redraw themselves)
   onLanguage(() => {
     renderProblems(); evaluate(); settings.render(); void saves.refresh(); vault.refresh(); keySheet.relabel(); lobbyPanel.redraw(); touch.relabel();
-    friendsPanel.render();
-    helpSheet = null; $('#help-body').replaceChildren();
+    friendsPanel.render(); siteView.render();
+    helpSheet = null; helpSiteView = null; $('#help-body').replaceChildren();
     syncPicker();
   });
   const stageMenu = $<HTMLButtonElement>('#stage-menu');

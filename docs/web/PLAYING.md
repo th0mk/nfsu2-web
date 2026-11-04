@@ -137,10 +137,14 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Change the keys:** in the game, Options, Controls. It opens on Keyboard Configuration; Up to that title, then
   Right, is Joypad Configuration, the controller's buttons. The game lists a controller once it has seen it: press a
   button on it before opening Controls. A controller's buttons are kept with the profile (leaving Options saves them),
-  the keys for every profile. The site's own keys and buttons are not set there (N, X, O, I, F, 1 to 4; a
-  controller's D-pad down held, the stick clicks), but one of the game's controls you put on one of them takes it:
-  the site's control leaves it to the game. D-pad down and the stick clicks with the game's own controls on them as it
-  comes (Career Status, hydraulics) are shared as before: a short press, and a car with hydraulics, stay the game's.
+  the keys for every profile. The site's own keys and buttons (drift mode, the trunk, the horn, quick chat's
+  controller button, messages, friends, photo mode, the page menu, the next song, the counter) are set on the start
+  page, Controls, Site: click one, then press the new key or controller button, or pick Off (the page menu always has
+  a key, and Home). Keys the game itself uses can't be picked; one of the game's controls you put on one of the
+  site's keys in the game's Controls takes it: the site's control leaves it to the game, and Site says so. D-pad down
+  and the stick clicks with the game's own controls on them as it comes (Career Status, hydraulics) are shared as
+  before: a short press, and a car with hydraulics, stay the game's. The touch controls' Drift and Horn work whatever
+  keys those have.
 - **Drift mode (X):** in free roam, the car handles as in the game's drift races (their handling and drift assist,
   with your car's Drift tuning from Performance Tuning / Dyno in the crib; the other modes' tuning is back when drift
   mode is off), but your nitrous stays (the drift races have none; X neither empties nor fills it). The camera is the

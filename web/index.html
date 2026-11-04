@@ -252,11 +252,12 @@
               <div><dt><kbd>C</kbd> <kbd>B</kbd></dt><dd data-i18n>Camera, look back</dd></div>
               <div><dt><kbd>R</kbd></dt><dd data-i18n>Respawn</dd></div>
               <div><dt><kbd>H</kbd> <kbd>J</kbd></dt><dd data-i18n>Hydraulics (hold, then the arrows)</dd></div>
-              <div><dt><kbd>N</kbd></dt><dd data-i18n>Horn (with other players)</dd></div>
-              <div><dt><kbd>X</kbd></dt><dd data-i18n>Drift mode (in free roam)</dd></div>
-              <div><dt><kbd>O</kbd></dt><dd data-i18n>Open trunk, then hood, then doors (parked, in free roam)</dd></div>
+              <!-- this site's own: the keys the player gave them (sitekeys.ts siteKeyList; a row without one hides), set in Site -->
+              <div data-key-of="horn"><dt><kbd>N</kbd></dt><dd data-i18n>Horn (with other players)</dd></div>
+              <div data-key-of="drift"><dt><kbd>X</kbd></dt><dd data-i18n>Drift mode (in free roam)</dd></div>
+              <div data-key-of="showoff"><dt><kbd>O</kbd></dt><dd data-i18n>Open trunk, then hood, then doors (parked, in free roam)</dd></div>
               <div><dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd data-i18n>Quick chat (with other players): group, then phrase</dd></div>
-              <div><dt><kbd>I</kbd></dt><dd data-i18n>Message a friend (in free roam)</dd></div>
+              <div data-key-of="message"><dt><kbd>I</kbd></dt><dd data-i18n>Message a friend (in free roam)</dd></div>
               <div><dt><kbd>Enter</kbd></dt><dd data-i18n>Start an event, take an outrun</dd></div>
               <div><dt><kbd>M</kbd> <kbd>Tab</kbd></dt><dd data-i18n>Map, messages</dd></div>
               <div><dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd data-i18n>Pause</dd></div>
@@ -265,14 +266,15 @@
           </div>
           <!-- the controller's drawing: controls.ts; under it the Controller settings (settings-ui.ts), on the page only -->
           <div class="tab-panel" role="tabpanel" data-tab="pad" hidden><div id="controller-body" data-keep></div></div>
+          <!-- this site's own controls, each with its key and button: sitekeys.ts SiteKeysView (on the start page they are
+               set here by a press; the menu's copy only shows them) -->
           <div class="tab-panel" role="tabpanel" data-tab="site" hidden>
-            <dl class="keys">
-              <div class="key-only"><dt><kbd>F9</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
-              <div class="touch-only"><dt><kbd>☰</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
+            <dl class="keys touch-only">
+              <div><dt><kbd>☰</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
+            </dl>
+            <div class="site-box"></div>
+            <dl class="keys site-fixed">
               <div><dt data-i18n-html><kbd>Home</kbd> or both sticks pressed in</dt><dd data-i18n>The menu, on a controller</dd></div>
-              <div class="key-only"><dt><kbd>F7</kbd></dt><dd data-i18n>Next song</dd></div>
-              <div class="key-only"><dt><kbd>F8</kbd></dt><dd data-i18n>Frame-rate counter</dd></div>
-              <div class="key-only"><dt><kbd>F12</kbd></dt><dd data-i18n>Photo mode; F12 again takes the photo</dd></div>
               <div class="key-only"><dt data-i18n-html>Hold <kbd>Esc</kbd></dt><dd data-i18n>Leave full screen</dd></div>
             </dl>
           </div>

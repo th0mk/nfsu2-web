@@ -301,13 +301,46 @@ static uint32_t build_map(KDev *d, uint32_t af, uint32_t flags){
  * the keyboard reads has it so: the key's action there is not its default (the action the map's semantics give it).
  * Each says so once in the log ("[keys] X is bound to Shift Up in the game: drift mode stays off it").  The page's
  * controls hear it through the status "keys" (status_web.c's block): a bit for each of PAGE_KEYS, in its order, set
- * while the game has that key. */
+ * while the game has that key.
+ * The player may give ours other keys (the start page's Controls, Site: settings.ini key_drift ..., NFSU2_KEY_DRIFT
+ * ...: dikbd_site_key).  The page offers none the game has a control on by default; one set by hand in the file is
+ * left to the game the same way when its default is one of the game's live controls (not the debug camera's). */
 #define NO_ACT 0xFFFFFFFFu
+#define ACT_DEBUG(a) ((a) >= 0x31u && (a) <= 0x3eu)   /* the debug camera's (0x7fcac0: Numpad 1-9, L, [, ], G ...) */
 __attribute__((weak)) int host_status_slot(const char *name){ (void)name; return -1; }
 __attribute__((weak)) void host_status_set_n(const int *slot, const double *value, int n){ (void)slot; (void)value; (void)n; }
 static const KDev *g_mapped;     /* the device last given an action map: what the keyboard reads now */
 static uint32_t rebound(const KDev *d, unsigned dik){
-    return dik < 256u && d->act_of[dik] >= 0 && d->app_of[dik] != d->def_of[dik] ? d->app_of[dik] : NO_ACT;
+    if (dik >= 256u || d->act_of[dik] < 0) return NO_ACT;
+    uint32_t app = d->app_of[dik];
+    return app != d->def_of[dik] || !ACT_DEBUG(app) ? app : NO_ACT;
+}
+
+/* KeyboardEvent.code (the page's names: web/src/input/keymap.ts) -> DIK, for the keys our controls may have */
+static const struct { const char *code; uint8_t dik; } k_codes[] = {
+    {"Digit1",0x02},{"Digit2",0x03},{"Digit3",0x04},{"Digit4",0x05},{"Digit5",0x06},{"Digit6",0x07},{"Digit7",0x08},
+    {"Digit8",0x09},{"Digit9",0x0A},{"Digit0",0x0B},{"Minus",0x0C},{"Equal",0x0D},
+    {"KeyQ",0x10},{"KeyW",0x11},{"KeyE",0x12},{"KeyR",0x13},{"KeyT",0x14},{"KeyY",0x15},{"KeyU",0x16},{"KeyI",0x17},
+    {"KeyO",0x18},{"KeyP",0x19},{"BracketLeft",0x1A},{"BracketRight",0x1B},{"KeyA",0x1E},{"KeyS",0x1F},{"KeyD",0x20},
+    {"KeyF",0x21},{"KeyG",0x22},{"KeyH",0x23},{"KeyJ",0x24},{"KeyK",0x25},{"KeyL",0x26},{"Semicolon",0x27},{"Quote",0x28},
+    {"Backquote",0x29},{"Backslash",0x2B},{"KeyZ",0x2C},{"KeyX",0x2D},{"KeyC",0x2E},{"KeyV",0x2F},{"KeyB",0x30},
+    {"KeyN",0x31},{"KeyM",0x32},{"Comma",0x33},{"Period",0x34},{"Slash",0x35},{"NumpadMultiply",0x37},
+    {"F1",0x3B},{"F2",0x3C},{"F3",0x3D},{"F4",0x3E},{"F5",0x3F},{"F6",0x40},{"F7",0x41},{"F8",0x42},{"F9",0x43},{"F10",0x44},
+    {"ScrollLock",0x46},{"Numpad7",0x47},{"Numpad8",0x48},{"Numpad9",0x49},{"NumpadSubtract",0x4A},{"Numpad4",0x4B},
+    {"Numpad5",0x4C},{"Numpad6",0x4D},{"NumpadAdd",0x4E},{"Numpad1",0x4F},{"Numpad2",0x50},{"Numpad3",0x51},
+    {"Numpad0",0x52},{"NumpadDecimal",0x53},{"IntlBackslash",0x56},{"F11",0x57},{"F12",0x58},{"F13",0x64},{"F14",0x65},
+    {"F15",0x66},{"NumpadDivide",0xB5},{"Pause",0xC5},{"Home",0xC7},{"PageUp",0xC9},{"End",0xCF},{"PageDown",0xD1},
+    {"Insert",0xD2},{"Delete",0xD3},
+};
+/* drift.c, showoff.c, horn.c, page_keys: the key the variable env (NFSU2_KEY_DRIFT ...) gives one of ours: its DIK, 0
+ * for off; unset, or a name it does not know (said once), dflt */
+unsigned dikbd_site_key(const char *env, unsigned dflt){
+    const char *v = getenv(env);
+    if (!v || !*v) return dflt;
+    if (!strcasecmp(v, "off")) return 0;
+    for (unsigned i = 0; i < sizeof k_codes / sizeof k_codes[0]; i++) if (!strcmp(v, k_codes[i].code)) return k_codes[i].dik;
+    fprintf(stderr, "[keys] %s=%s: no such key, %s\n", env, v, dik_name(dflt) ? dik_name(dflt) : "the default");
+    return dflt;
 }
 /* an action's name in the device's action format ("Shift Up") */
 static const char *act_name(const KDev *d, uint32_t app){
@@ -341,18 +374,23 @@ int dikbd_ours(unsigned dik, const char *what){
     said_once(dik, app, act_name(d, app), what);
     return 0;
 }
-/* the page's controls with their keys: the status "keys" has a bit for each, in this order (web/src/app/gamekeys.ts) */
-static const struct { uint8_t dik; const char *what; } PAGE_KEYS[] = {
-    { 0x17, "Message a friend" }, { 0x21, "Add friend" },
-    { 0x02, "quick chat" }, { 0x03, "quick chat" }, { 0x04, "quick chat" }, { 0x05, "quick chat" },     /* 1 to 4 */
-    { 0x4F, "quick chat" }, { 0x50, "quick chat" }, { 0x51, "quick chat" }, { 0x4B, "quick chat" },     /* Numpad 1 to 4 */
+/* the page's controls with their keys: the status "keys" has a bit for each, in this order (web/src/app/gamekeys.ts);
+ * the first two the player may move (env, 0: off) */
+static struct { uint8_t dik; const char *what, *env; } PAGE_KEYS[] = {
+    { 0x17, "Message a friend", "NFSU2_KEY_MESSAGE" }, { 0x21, "Add friend", "NFSU2_KEY_FRIEND" },
+    { 0x02, "quick chat", 0 }, { 0x03, "quick chat", 0 }, { 0x04, "quick chat", 0 }, { 0x05, "quick chat", 0 },     /* 1-4 */
+    { 0x4F, "quick chat", 0 }, { 0x50, "quick chat", 0 }, { 0x51, "quick chat", 0 }, { 0x4B, "quick chat", 0 },     /* Numpad */
 };
 static void page_keys(const KDev *d){
-    static int slot = -2;
+    static int slot = -2, set;
     static double last = -1;
     uint32_t bits = 0;
     g_mapped = d;
+    if (!set){ set = 1;
+        for (unsigned i = 0; i < sizeof PAGE_KEYS / sizeof PAGE_KEYS[0]; i++)
+            if (PAGE_KEYS[i].env) PAGE_KEYS[i].dik = (uint8_t)dikbd_site_key(PAGE_KEYS[i].env, PAGE_KEYS[i].dik); }
     for (unsigned i = 0; i < sizeof PAGE_KEYS / sizeof PAGE_KEYS[0]; i++){
+        if (!PAGE_KEYS[i].dik) continue;
         uint32_t app = rebound(d, PAGE_KEYS[i].dik);
         if (app == NO_ACT) continue;
         bits |= 1u << i;

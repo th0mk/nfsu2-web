@@ -107,3 +107,25 @@ test('the right stick reaches the game (its look round the car) unless the page\
     assert.equal(read().rx, 0, 'quick chat\'s picker has it: at rest for the game');
   });
 });
+
+test('quick chat on the left stick\'s click, or on none (the player\'s: app/sitekeys.ts): the right one is the game\'s', async () => {
+  await rig(async ({ page, set, read }) => {
+    const LS = 1 << P.PAD_LS;
+    page.chatButton = () => P.PAD_LS;
+    set(11, true); read(); read(150);
+    assert.equal(read().buttons & RS, RS, 'the right stick\'s click held: the game\'s');
+    set(11, false); read(200);
+    assert.equal(page.clicks, 0);
+    set(10, true);                                           // the left stick in (10)
+    assert.equal(read().buttons & LS, 0, 'kept while the right one may follow');
+    set(10, false);
+    assert.equal(read().buttons & LS, 0, 'taken by the page');
+    assert.equal(page.clicks, 1);
+    page.chatButton = () => -1;
+    read(200);
+    set(10, true); read(); read(150);
+    assert.equal(read().buttons & LS, LS, 'none: the game\'s');
+    set(10, false); set(11, true); read(); read(150); set(11, false); read();
+    assert.equal(page.clicks, 1, 'and neither goes to the page');
+  });
+});

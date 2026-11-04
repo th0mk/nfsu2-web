@@ -451,16 +451,38 @@ int pad_look_stick(void){ return g_look_stick; }
  * on it (Options > Controls > Joypad Configuration: the channel's in-game tables, +0x18 and the two 0x5c1840 reads
  * as well) gets it from the game alone, and ours leave it: the log says so once ("[pad] D-pad down is bound to
  * Handbrake in the game: drift mode and the show-off stay off it"), and the page hears the right stick's click
- * through "rstick" (its 2). */
+ * through "rstick" (its 2).
+ * The player may give them other buttons (the start page's Controls, Site: settings.ini button_hold, button_horn,
+ * button_chat, NFSU2_BUTTON_*): another D-pad direction held (Engage, World Map, SMS by default, shared the same way),
+ * the other stick's click, or none. */
 static const uint32_t g_prof_game[32], g_prof_wheel[32];
-enum { OUR_DDOWN, OUR_LS, OUR_RS, NOURS };
+enum { OUR_HOLD, OUR_HORN, OUR_CHAT, NOURS };
 enum { PAD_THEIRS, PAD_SHARED, PAD_OURS };
-static const struct { uint8_t idx; const char *name, *what; } k_ours[NOURS] = {
-    { 16, "D-pad down", "drift mode and the show-off stay" },              /* POV 0 down */
-    { 8, "the left stick's click", "the horn stays" },
-    { 9, "the right stick's click", "quick chat stays" },
+/* each one's place in the channel's tables (-1: none), its PAD_* button and name */
+static struct { int idx, bit; const char *name, *what; } k_ours[NOURS] = {
+    { 16, PAD_DDOWN, "D-pad down", "drift mode and the show-off stay" },  /* POV 0 down */
+    { 8, PAD_LS, "the left stick's click", "the horn stays" },
+    { 9, PAD_RS, "the right stick's click", "quick chat stays" },
 };
 static uint8_t g_ours[NOURS] = { PAD_SHARED, PAD_SHARED, PAD_SHARED };
+static void ours_config(void){
+    static int done;
+    if (done) return;
+    done = 1;
+    static const struct { const char *v; int idx, bit; const char *name; } C[] = {
+        {"ddown", 16, PAD_DDOWN, "D-pad down"}, {"dup", 17, PAD_DUP, "D-pad up"}, {"dleft", 18, PAD_DLEFT, "D-pad left"},
+        {"dright", 19, PAD_DRIGHT, "D-pad right"}, {"ls", 8, PAD_LS, "the left stick's click"}, {"rs", 9, PAD_RS, "the right stick's click"} };
+    static const char *const env[NOURS] = { "NFSU2_BUTTON_HOLD", "NFSU2_BUTTON_HORN", "NFSU2_BUTTON_CHAT" };
+    for (int i = 0; i < NOURS; i++){
+        const char *v = getenv(env[i]);
+        if (!v || !*v) continue;
+        if (!strcasecmp(v, "off")){ k_ours[i].idx = -1; continue; }
+        unsigned c = 0;
+        while (c < sizeof C / sizeof C[0] && (strcasecmp(v, C[c].v) || (i == OUR_HOLD) != (C[c].idx >= 16))) c++;
+        if (c == sizeof C / sizeof C[0]){ fprintf(stderr, "[pad] %s=%s: not one of its buttons, %s\n", env[i], v, k_ours[i].name); continue; }
+        k_ours[i].idx = C[c].idx; k_ours[i].bit = C[c].bit; k_ours[i].name = C[c].name;
+    }
+}
 /* the name of one of the game's in-game actions (its keyboard map 0x7fcac0 names them: "Handbrake") */
 static const char *action_name(uint32_t act){
     static char nm[40];
@@ -479,8 +501,10 @@ static const char *action_name(uint32_t act){
 static void ours_from(uint32_t ch, int wheel){
     static const uint32_t tab[3] = {0x018u, 0x118u, 0x198u};
     static uint32_t said[NOURS];
+    ours_config();
     for (int i = 0; i < NOURS; i++){
-        uint32_t idx = k_ours[i].idx, def = (wheel ? g_prof_wheel : g_prof_game)[idx], act = 0;
+        if (k_ours[i].idx < 0){ g_ours[i] = PAD_THEIRS; continue; }          /* none (off) */
+        uint32_t idx = (uint32_t)k_ours[i].idx, def = (wheel ? g_prof_wheel : g_prof_game)[idx], act = 0;
         int st = PAD_OURS;
         for (int t = 0; t < 3 && st != PAD_THEIRS; t++){
             uint32_t a = MR32(ch + tab[t] + 4u * idx);
@@ -497,13 +521,17 @@ static void ours_from(uint32_t ch, int wheel){
 }
 static void rstick_status(void){
     static int slot = -2, last = -1;
-    int v = g_rstick_reads | (g_ours[OUR_RS] == PAD_THEIRS) << 1;
+    int v = g_rstick_reads | (k_ours[OUR_CHAT].idx >= 0 && g_ours[OUR_CHAT] == PAD_THEIRS) << 1;
     if (slot == -2) slot = host_status_slot("rstick");
     if (v != last && slot >= 0){ double x = v; host_status_set_n(&slot, &x, 1); last = v; }
 }
-/* horn.c: the left stick's click: 0 another of the game's controls (no horn), 1 Hydraulic Pressurize as by default (the
- * horn for a car without hydraulics), 2 none of the game's (the horn) */
-int pad_ls_ours(void){ return g_ours[OUR_LS]; }
+/* horn.c: the horn's stick click (*button: its PAD_* button, -1 none): 0 another of the game's controls on it (no
+ * horn), 1 its hydraulics as by default (the horn for a car without hydraulics), 2 none of the game's (the horn) */
+int pad_horn_ours(int *button){
+    ours_config();
+    *button = k_ours[OUR_HORN].idx >= 0 ? k_ours[OUR_HORN].bit : -1;
+    return g_ours[OUR_HORN];
+}
 
 static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
     uint8_t st[0x110];
@@ -515,10 +543,12 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
         int32_t v = scale_axis(t, d, a);
         memcpy(st + k_axis_ofs[a], &v, 4);
     }
-    uint32_t showoff_pad(uint32_t b);                  /* showoff.c: D-pad down held while the car stands */
+    uint32_t showoff_pad(uint32_t b, uint32_t hold);   /* showoff.c: D-pad down (hold) held while the car stands */
     uint32_t ch = dev_channel(d);
     if (ch) ours_from(ch, s->wheel);
-    uint32_t b = MR32(0x850078u) == 4 || g_ours[OUR_DDOWN] == PAD_THEIRS ? s->buttons : showoff_pad(s->buttons);
+    else ours_config();
+    uint32_t hold = k_ours[OUR_HOLD].idx >= 0 ? 1u << k_ours[OUR_HOLD].bit : 0u;
+    uint32_t b = MR32(0x850078u) == 4 || !hold || g_ours[OUR_HOLD] == PAD_THEIRS ? s->buttons : showoff_pad(s->buttons, hold);
     uint32_t pov[4] = { pov_of(!!(b & 1u << PAD_DUP), !!(b & 1u << PAD_DDOWN),
                                !!(b & 1u << PAD_DLEFT), !!(b & 1u << PAD_DRIGHT)),
                         stick_pov(d, s->axis[PAD_AXIS_LX], s->axis[PAD_AXIS_LY]),

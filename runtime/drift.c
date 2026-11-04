@@ -229,10 +229,15 @@ static struct {
     uint8_t kept[SETUP_SZ];           /* ... and the setup the ride had */
 } D;
 
-/* X presses since the last frame, from the keyboard's events (a tap between frames counts); none while the player has
- * one of the game's controls on X (dinput_kbd.c dikbd_ours) */
+/* X presses since the last frame, from the keyboard's events (a tap between frames counts): the player's key for drift
+ * mode (X unless NFSU2_KEY_DRIFT: dinput_kbd.c dikbd_site_key), none while the player has one of the game's controls
+ * on it (dikbd_ours), and the touch controls' Drift button's (DIK_TOUCH_DRIFT, none of the game's) */
 int dikbd_ours(unsigned dik, const char *what);
+unsigned dikbd_site_key(const char *env, unsigned dflt);
+#define DIK_TOUCH_DRIFT 0xF1u        /* web/src/input/keymap.ts Nfsu2Drift: no keyboard has it */
 static int x_presses(void){
+    static unsigned dik = 0x100u;
+    if (dik == 0x100u) dik = dikbd_site_key("NFSU2_KEY_DRIFT", DIK_X);
     uint32_t head = kbd_ev_head();
     if (!D.kinit){ D.kinit = 1; D.kseq = head; return 0; }
     int n = 0;
@@ -240,7 +245,7 @@ static int x_presses(void){
         KbdEv e;
         int r = kbd_ev_get(D.kseq, &e);
         if (r == 0) break;
-        if (r > 0 && e.dik == DIK_X && e.down && dikbd_ours(DIK_X, "drift mode")) n++;
+        if (r > 0 && e.down && (e.dik == DIK_TOUCH_DRIFT || (dik && e.dik == dik && dikbd_ours(dik, "drift mode")))) n++;
     }
     return n;
 }

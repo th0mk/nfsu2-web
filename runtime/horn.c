@@ -72,15 +72,21 @@
 #define TBL       2048
 #define TONES     5
 
-/* N and the stick's click leave the horn when the player put one of the game's controls on them (dinput_kbd.c
- * dikbd_ours, dinput_pad.c pad_ls_ours); a click the game has nothing on honks with hydraulics too */
+/* The player's horn key (N unless NFSU2_KEY_HORN: dinput_kbd.c dikbd_site_key) and stick click (the left one unless
+ * NFSU2_BUTTON_HORN: dinput_pad.c pad_horn_ours), and the touch controls' Horn button (DIK_TOUCH_HORN, none of the
+ * game's).  The key and the click leave the horn when the player put one of the game's controls on them (dikbd_ours,
+ * pad_horn_ours); a click the game has nothing on honks with hydraulics too. */
+#define DIK_TOUCH_HORN 0xF2u              /* web/src/input/keymap.ts Nfsu2Horn: no keyboard has it */
 __attribute__((weak)) int dikbd_ours(unsigned dik, const char *what){ (void)dik; (void)what; return 1; }
-__attribute__((weak)) int pad_ls_ours(void){ return 1; }
+__attribute__((weak)) unsigned dikbd_site_key(const char *env, unsigned dflt){ (void)env; return dflt; }
+__attribute__((weak)) int pad_horn_ours(int *button){ *button = PAD_LS; return 1; }
 int horn_held(int stick){
-    if (kbd_key_down(DIK_N) && dikbd_ours(DIK_N, "the horn")) return 1;
+    static unsigned dik = 0x100u;
+    if (dik == 0x100u) dik = dikbd_site_key("NFSU2_KEY_HORN", DIK_N);
+    if (kbd_key_down(DIK_TOUCH_HORN) || (dik && kbd_key_down(dik) && dikbd_ours(dik, "the horn"))) return 1;
     PadState s;
-    int ls = pad_ls_ours();
-    return (ls == 2 || (ls == 1 && stick)) && gamepad_read(&s) && (s.buttons & 1u << PAD_LS);
+    int btn = -1, st = pad_horn_ours(&btn);
+    return btn >= 0 && (st == 2 || (st == 1 && stick)) && gamepad_read(&s) && (s.buttons & 1u << btn);
 }
 
 /* ---- the kinds ------------------------------------------------------------------ */
