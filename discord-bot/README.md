@@ -44,7 +44,7 @@ and it says something only when it is worth it:
   within seconds, as a reply that pings the asker, in their language (`faq.md`'s text, translated once and kept, as
   for the FAQ's buttons; never words of the model's own). The asker's lines of 8 seconds make one question; one Haiku
   call reads them in the chat around them and names the answer, or none when unsure. Nothing for staff, chat, answers
-  to others, or someone already answered; the same answer to a person once a day, 2 a person a day, 20 an hour.
+  to others, or someone already answered; the same answer to a person once a day, 5 a person a day, 60 an hour.
   Everything else in #help is as in the general channels below (it is one of them), without their fixed answers.
 
 - **in the general channels** (text channels named `general…`, and #help), sparingly: someone who reports a problem of their own

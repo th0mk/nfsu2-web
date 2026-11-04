@@ -5,7 +5,7 @@
 //   - The author's lines of a few seconds make one question; one Haiku call reads them in the chat around them (what
 //     they reply to, who answered, their pictures) and names the FAQ answer that settles it, or none.  When unsure, none.
 //   - Not for staff, bots or lines too short to ask anything; nothing when someone answered them already.
-//   - A reply that pings them.  The same answer to a person once a day, 2 answers a person a day, 20 an hour in a
+//   - A reply that pings them.  The same answer to a person once a day, 5 answers a person a day, 60 an hour in a
 //     channel.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +17,7 @@ const GATHER_MS = 8_000;                         // the author's next line withi
 const GATHER_MAX_MS = 30_000;                    // ... up to this long after their first
 const CONTEXT_MS = 3 * 60_000;                   // the chat the call reads: from this long before their first line
 const MIN_CHARS = 10;                            // "up", "ty", "hello": no question
-const DAY_MS = 86400_000, PER_DAY = 2, CHANNEL_MAX_PER_HOUR = 20;
+const DAY_MS = 86400_000, PER_DAY = 5, CHANNEL_MAX_PER_HOUR = 60;   // spam limits: a call costs ~0.05 cents
 const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 const name = m => m.member?.displayName ?? m.author.displayName ?? m.author.username;
