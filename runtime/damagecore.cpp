@@ -34,7 +34,8 @@
 #include "damage/Tessellate.h"
 
 extern "C" {
-#include "roam_core.h"   // RC_DMG_*: a dent on the wire (free roam)
+#include "roam_core.h"         // RC_DMG_*: a dent on the wire (free roam)
+#include "splitscreen_mem.h"   // SPLIT_PLAYERS_INDEX: where the players' table is (moved for split screen on wasm)
 }
 
 extern "C" {
@@ -573,7 +574,23 @@ std::vector<Clone*> g_retired;
 uint32_t g_lastFrame = 0xFFFFFFFF;
 uint32_t g_lastWorldTime = 0;
 
+// The plates are drawn on their markers, but mounted on a part: the rear one on the trunk lid where the car type has
+// it there, else on the rear bumper; the front one on the front bumper. They swing, drop and come off with it. Which
+// car types carry the rear plate on the lid is the game's own table: Render (0x6253C0) draws the plate with the trunk
+// lid's matrix (its opening animation: the cover shoot, the show-off) where table[type] is 0, for types 0..25
+// (0x630DBC, a byte each; CarRenderInfo +4 the RideInfo, +0 its car type).
+constexpr uint32_t kPlateOnTrunk = 0x630DBC;
+constexpr uint32_t kPlateOnTrunkTypes = 26;
+constexpr int kSpecFrontBumper = 0, kSpecRearBumper = 1;
+int PlateSpec(const Clone* c) {
+    if (c->place.t.x > 0) return kSpecFrontBumper;
+    const uint32_t ride = dmg_committed(A(c->renderInfo) + 4, 4) ? At<uint32_t>(c->renderInfo, 4) : 0;
+    const uint32_t type = ride && dmg_committed(ride, 4) ? R32(ride) : 0xFFFFFFFFu;
+    return type < kPlateOnTrunkTypes && G(kPlateOnTrunk)[type] == 0 ? kSpecTrunk : kSpecRearBumper;
+}
+
 int SpecOf(const Clone* c) {
+    if (c->slot == kSlotPlate && c->place.on) return PlateSpec(c);
     for (int i = 0; i < kHangCount; i++)
         if (SpecHas(kHangSpecs[i], c->slot, c->row)) return i;
     return -1;
@@ -2129,9 +2146,10 @@ constexpr int kNetSlots = 64;
 NetSlot g_netSlots[kNetSlots];
 uint32_t g_netBusy = 0xFFFFFFFF;  // frame a car's dents were made last (one car's a frame)
 
-constexpr uint32_t kPlayers = 0x8900B4;   // Player*[]: +4 its car
+// Player 1's car: Player* +4. The players' table is the game's 0x8900AC, which the browser build moves for split screen
+// (splitscreen_mem.h): read where the game's code reads it.
 uint8_t* PlayerCar() {
-    const uint32_t p = R32(kPlayers);
+    const uint32_t p = R32(SPLIT_PLAYERS_INDEX);
     return p && dmg_committed(p + 4, 4) ? G(R32(p + 4)) : nullptr;
 }
 
@@ -2201,7 +2219,7 @@ void NetFrame() {
     g_mine.pubFirst = g_mine.first;
     g_mine.pub.assign(g_mine.dents.begin(), g_mine.dents.end());
     g_mine.rev++;
-    if (g_settings.logHits) Log("free roam: damage published (epoch %u, dents %u..%u)", g_mine.pubEpoch, g_mine.pubFirst,
+    Log("free roam: damage published (epoch %u, dents %u..%u)", g_mine.pubEpoch, g_mine.pubFirst,
                                 (unsigned)(g_mine.pubFirst + g_mine.pub.size()));
 }
 
@@ -2581,7 +2599,7 @@ extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, u
         DecodeDent(dents + (i - first) * RC_DMG_BYTES, d, magnitude);
         ApplyNetDent(renderInfo, G(car), d, magnitude);
     }
-    if (g_settings.logHits) Log("free roam: friend's car %08X: dents %u..%u made (epoch %u) in %.1f ms", car,
+    Log("free roam: friend's car %08X: dents %u..%u made (epoch %u) in %.1f ms", car,
                                 s.next > first ? s.next : first, last, epoch, NowMs() - t0);
     s.next = last;
     s.any = true;
