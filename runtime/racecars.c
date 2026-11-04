@@ -37,12 +37,16 @@
  *    while, never jumps.  Each step it is put where it is at the step's
  *    start with the velocity and spin it moves at over the step (the game's
  *    physics moves it on after the blend);
- *  - a car within DRIVE_M runs on the game's own physics, its owner's
- *    controls in it, its velocity and yaw rate steered each step toward where
- *    the states say (DRIVE_TAU, DRIVE_TAU_R), its height, roll and pitch the
- *    physics' own: it meets walls and the player's car as a car does, and
- *    bumps both ways (a car put there every step was an immovable one to
- *    bumps the game does not call hits);
+ *  - (off since 2026-11-05, NFSU2_RACE_DRIVE=1 a test) a car within DRIVE_M
+ *    runs on the game's own physics, its owner's controls in it, its velocity
+ *    and yaw rate steered each step toward where the states say (DRIVE_TAU,
+ *    DRIVE_TAU_R), its height, roll and pitch the physics' own: it meets walls
+ *    and the player's car as a car does, and bumps both ways (a car put there
+ *    every step was an immovable one to bumps the game does not call hits).
+ *    Live, the cars it drove bounced, stood on their tails and flipped in
+ *    every kind of race (players' reports and screenshots, 2026-11-04, the
+ *    first night it was out): the rig measured place and heading only, never
+ *    height, roll or pitch;
  *  - after a hit here (the game stamps one, racenet.c's sub_005f8d40) the car
  *    runs on its own physics until a state its owner sent after the hit has
  *    come, then glides back to where the states say; so one within reach
@@ -68,7 +72,7 @@
  * Test knobs (read only with NFSU2_INPUT_SCRIPT set, racenet.c's test_env):
  * NFSU2_RACE_CARS=0 off (the game's and racenet.c's way), NFSU2_RACE_CARS_HZ,
  * NFSU2_RACE_NEAR_M / _FAR_M, NFSU2_RACE_GHOST_MS, NFSU2_RACE_LEAD_MS,
- * NFSU2_RACE_DRIVE=0 (no car driven: all put), NFSU2_RACE_DRIVE_M /
+ * NFSU2_RACE_DRIVE=1 (near cars driven, above; 0 the default: all put), NFSU2_RACE_DRIVE_M /
  * _DRIVE_TAU_MS / _DRIVE_TAUR_MS, NFSU2_RACECARS_TRACE=1 (lines on what
  * moved a car: "[rctrace]").
  *
@@ -129,7 +133,7 @@
 #define GLIDE_TAU_MIN 0.08f        /* ... between these (s) */
 #define GLIDE_TAU_MAX 0.35f
 #define JUMP_M       15.f          /* our car this far off its own move in a frame: put elsewhere (a reset) */
-/* driven (NFSU2_RACE_DRIVE=1, a test): a car this near runs on the game's own physics, its velocity and yaw rate
+/* driven (NFSU2_RACE_DRIVE=1, a test, off by default: live, driven cars bounced and flipped): a car this near runs on the game's own physics, its velocity and yaw rate
  * set each step toward where the states say (the error over DRIVE_TAU / DRIVE_TAU_R), its height, roll and pitch
  * the physics' own; an error over DRIVE_SNAP_M is put right at once */
 #define DRIVE_M      60.f
@@ -199,7 +203,7 @@ static void opts(void){
     if (O.far_m < O.near_m + 1.f) O.far_m = O.near_m + 1.f;
     O.ghost_us = (int64_t)(knob("NFSU2_RACE_GHOST_MS", GHOST_US / 1000, -500, 1000) * 1000.0);
     O.lead_us = (int64_t)(knob("NFSU2_RACE_LEAD_MS", 0, -500, 500) * 1000.0);
-    O.drive = (int)knob("NFSU2_RACE_DRIVE", 1, 0, 1);
+    O.drive = (int)knob("NFSU2_RACE_DRIVE", 0, 0, 1);
     O.trace = (int)knob("NFSU2_RACECARS_TRACE", 0, 0, 1);
     O.drive_m = (float)knob("NFSU2_RACE_DRIVE_M", DRIVE_M, 0, 10000);
     O.drive_tau = (float)knob("NFSU2_RACE_DRIVE_TAU_MS", DRIVE_TAU * 1000.f, 20, 2000) / 1000.f;
