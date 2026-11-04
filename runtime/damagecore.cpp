@@ -45,7 +45,8 @@ float dmg_thiscall_f(uint32_t fn, uint32_t self, int n, const uint32_t* a);   //
 uint32_t dmg_alloc(uint32_t n);
 void dmg_free(uint32_t p);
 int dmg_committed(uint32_t a, uint32_t n);
-int fileio_resolve_game(const char* win, char* out, size_t outsz);
+extern const unsigned char dmg_scratches[];   // damage.c: runtime/damage/scratches.tpk
+extern const unsigned dmg_scratches_len;
 }
 
 namespace {
@@ -68,12 +69,10 @@ struct HangSettings {
     float mirrorSwing = 1.0f;     // a dangling mirror swings out and back against the body (turns, wind); 0 = it hangs
 };
 struct WearSettings {
-    const char* pack = "GLOBAL\\DAMAGE.BIN";
     float scratchThreshold = 0.5f, scratchPerImpulse = 0.4f, scratchRadius = 0.45f, scrapeBand = 0.08f;
     const char* scratchMaterial = "MAGGUNMETAL";
     float scratchScale = 2.0f, lightBreakDepth = 0.03f, lightBreakRadius = 0.45f;
     bool nativeGlass = true;
-    bool prostreetGlass = true;   // the cracked windows use ProStreet's broken glass (DAMAGE_GLASS1..3, in the pack)
 };
 // A bent wheel (drawn only: the handling is not touched), at full damage: its top leans in, its front turns out,
 // and a bent rim wobbles as it turns.
@@ -2483,78 +2482,29 @@ extern "C" void dmg_car_textures(uint32_t used, uint32_t nameAddr) {
     if (g_settings.logHits) Log("car textures: %s added (%d in all)", name, count);
 }
 
-// The windows' damage textures. CarRenderInfo::UpdateCarReplacementTextures (0x615280) swaps each window's texture
-// (WINDOW_FRONT, _REAR, _LEFT_FRONT...) for DamagedWindowHashes[level] (0x802740: WINDOW, WINDOW_DAMAGE0/1/2) and
-// drops the cached texture, so it is looked up by hash at the next draw. Levels 1..3 are pointed at the pack's
-// DAMAGE_GLASS1..3 (ProStreet's broken glass) once the pack is in. The table is global: every car with the game's
-// window damage gets them.
-constexpr uint32_t kDamagedWindowHashes = 0x802740;
-bool g_packLoaded = false, g_glassDone = false;
-int g_glassWait = 0;
-
-void PatchGlass() {
-    if (g_glassDone || !g_packLoaded) return;
-    if (!g_settings.wear.prostreetGlass) {
-        g_glassDone = true;
-        return;
-    }
-    uint32_t* table = (uint32_t*)G(kDamagedWindowHashes);
-    static const uint32_t kExpected[4] = {0x834B8017, 0x0A155545, 0x0A155546, 0x0A155547};
-    if (memcmp(table, kExpected, sizeof(kExpected)) != 0) {
-        g_glassDone = true;
-        Log("window damage table at %08X is not the game's: the game's own cracks stay", kDamagedWindowHashes);
-        return;
-    }
-    uint32_t hashes[3];
-    for (int i = 0; i < 3; i++) {
-        char name[16];
-        snprintf(name, sizeof name, "DAMAGE_GLASS%d", i + 1);
-        hashes[i] = HashName(name);
-        const uint32_t args[3] = {hashes[i], 0, 0};
-        if (!dmg_call(kGetTextureInfo, 3, args)) {
-            if (++g_glassWait > 600) {   // ten seconds of frames after the pack: it does not have them
-                g_glassDone = true;
-                Log("pack has no %s: the game's own window cracks stay", name);
-            }
-            return;
-        }
-    }
-    memcpy(table + 1, hashes, sizeof(hashes));
-    g_glassDone = true;
-    Log("windows: ProStreet's broken glass for the window damage levels");
-}
-
-// The main loop, once a frame: the texture pack (scratches, cracked lenses), given once to the game's
-// LoadChunks; it is permanent (the game keeps pointers into it).
+// The main loop, once a frame: the scratches' texture pack (runtime/damage/scratches.tpk, built into the module by
+// damage.c: Crashing Foreign Cars' own DAMAGE_SCRATCH1..4, DXT5), given once to the game's LoadChunks from a block of
+// the guest heap, 128-aligned as the pack's textures are; it is permanent (the game keeps pointers into it).
 extern "C" void dmg_main_loop(void) {
     static bool tried = false;
-    PatchGlass();
     NetFrame();
     if (tried) return;
     tried = true;
-    const char* win = g_settings.wear.pack;
-    char path[1024];
-    FILE* fp = fileio_resolve_game(win, path, sizeof path) ? fopen(path, "rb") : nullptr;
-    if (!fp) {
-        Log("pack %s missing: no scratches or cracked lenses", win);
+    const uint32_t size = dmg_scratches_len;
+    const uint32_t block = size ? dmg_alloc(size + 128u) : 0;
+    if (!block) {
+        Log("scratches' pack: no memory for it: no scratches");
         return;
     }
-    long size = 0;
-    uint8_t* data = nullptr;
-    if (!fseek(fp, 0, SEEK_END) && (size = ftell(fp)) > 0 && !fseek(fp, 0, SEEK_SET))
-        data = (uint8_t*)GAlloc((uint32_t)size);
-    const bool ok = data && fread(data, 1, (size_t)size, fp) == (size_t)size;
-    fclose(fp);
-    if (!ok) {
-        Log("pack %s unreadable", win);
-        return;
-    }
-    const uint32_t name = dmg_alloc((uint32_t)strlen(win) + 1);
-    memcpy(G(name), win, strlen(win) + 1);
-    const uint32_t args[3] = {A(data), (uint32_t)size, name};
+    const uint32_t data = (block + 127u) & ~127u;
+    memcpy(G(data), dmg_scratches, size);
+    static const char kName[] = "Crash damage scratches";
+    const uint32_t name = dmg_alloc(sizeof kName);
+    if (!name) return;
+    memcpy(G(name), kName, sizeof kName);
+    const uint32_t args[3] = {data, size, name};
     dmg_call(kLoadChunks, 3, args);
-    g_packLoaded = true;
-    Log("pack %s loaded (%ld bytes)", win, size);
+    Log("scratches' pack loaded (%u bytes)", size);
 }
 
 // ---------------------------------------------------------------------------------------------------------

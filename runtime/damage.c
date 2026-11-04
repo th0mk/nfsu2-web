@@ -16,16 +16,18 @@
  *   Render's draws of the body, exhausts and     HOOK_SITE at each call (Body's matrix; the clone of
  *     plates (calls redirected)                    that tip or plate swapped in) and at the next
  *                                                  instruction (the original put back)
- *   UpdateCameraMovers call 0x581493 (main loop) the main-loop hook (roam.c): the texture pack
+ *   UpdateCameraMovers call 0x581493 (main loop) the main-loop hook (roam.c): the scratches' texture pack,
+ *                                                  built into the module (dmg_scratches below)
  *   (none: not in the .asi)                      HOOK_SITE in the car loader (0x63AFEF): the engine's
  *                                                  texture, <CAR>_ENGINE, loaded with the car's others, so the
  *                                                  engine a lost hood shows is not black (on Windows too)
  *
  * Only what is seen: dents, folds, loose and lost parts (lying on the road, the
  * doors hitting walls and cars), scratches, broken lights, the game's own window
- * cracks with ProStreet's broken glass, and bent wheels (drawn only).  Not ported (yet): the engine and suspension
+ * cracks, and bent wheels (drawn only).  Not ported (yet): the engine and suspension
  * damage, the health bar and "totaled", the career's saved damage and repairs, the
- * neon and the sounds.  The game's own repair (SetDamageToZero: a race's start, the
+ * neon and the sounds; nor the .asi's ProStreet textures (broken glass, cracked lenses: EA's),
+ * so the windows crack as the game cracks them and a broken lamp only goes dark.  The game's own repair (SetDamageToZero: a race's start, the
  * garage) takes the damage away.
  * In free roam friends see the player's damage (RC_EXT_DAMAGE in the car record, roam_game.c): the player's dents
  * are published (damage_net_*), and a friend's car gets the dents its player's record has.
@@ -56,6 +58,17 @@ uint32_t dmg_net_rev(void);
 int  dmg_net_mine(uint8_t *epoch, uint16_t *first, uint8_t *dents, int max);
 void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t first, int n, const uint8_t *dents);
 void dmg_car_textures(uint32_t used, uint32_t name);
+
+/* the scratches: Crashing Foreign Cars' own DAMAGE_SCRATCH1..4 (FRS Mods' tools/build_pack.py, the bare metal
+ * with the scratches in the alpha, four strengths), DXT5, as a raw texture pack (TPK) the game's LoadChunks takes;
+ * damagecore.cpp loads it once (dmg_main_loop) */
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc23-extensions"
+const unsigned char dmg_scratches[] = {
+#embed "damage/scratches.tpk"
+};
+#pragma clang diagnostic pop
+const unsigned dmg_scratches_len = sizeof dmg_scratches;
 
 #define APPLY_IMPULSE   0x005a0b00u
 #define VT_APPLY_IMPULSE 0x50u        /* its vtable slot */
