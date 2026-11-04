@@ -86,7 +86,8 @@ void sub_004ca840(CPU *c){
     mm_players = 0;
     if (!split_racing()){ sub_004ca840_orig(c); return; }
     mm_collect(c);
-    if (!mm_count || !mm_marker[0] || !mm_marker[1] || !mm_extend(c, c->ecx)){
+    /* co-op free roam: free roam's HUD has one player's arrow; each half's map is centred on its player */
+    if (!mm_count || !mm_marker[0] || (!mm_marker[1] && !split_coop_hud()) || !mm_extend(c, c->ecx)){
         sub_004ca840_orig(c); return;
     }
     CPU before = *c, after = *c;
@@ -122,9 +123,12 @@ void sub_004ecb80(CPU *c){
     if (mm_test > 0) MR32(0xd0d000u) = 0;
     sub_004ecb80_orig(c);
 }
+/* the map's centre in its HUD: the 2P race HUD's, or free roam's (co-op) */
+static float mm_cx(void){ return split_coop_hud() ? -223.f : -230.f; }
+static float mm_cy(void){ return split_coop_hud() ? 143.f : 5.f; }
 static int mm_near(uint32_t obj){
     uint32_t d = MR32(obj + 0x2c);
-    return d && fabsf(MRF32(d+28) + 230.f) < 100.f && fabsf(MRF32(d+32) - 5.f) < 100.f;
+    return d && fabsf(MRF32(d+28) - mm_cx()) < 100.f && fabsf(MRF32(d+32) - mm_cy()) < 100.f;
 }
 static void mm_render(CPU *c, const CPU *before, uint32_t obj){
     *c = *before; MR32(c->esp+4) = obj;
@@ -173,6 +177,18 @@ static int mm_transform(CPU *c){
         uint32_t copy = 0xd0c000u + (split_hud_copy++ & 15u)*0x60u;
         mem_commit(copy, 0x60); memcpy(g_mem + copy, g_mem + data, 0x54);
         if (group){ MRF32(copy+28) = MRF32(copy+32) = 0.f; }
+        else if (split_coop_hud()){
+            /* co-op: where the HUD mapping puts free roam's map in this player's half, as big as the HUD there */
+            unsigned w,h; void com_backbuffer_size(unsigned *, unsigned *); com_backbuffer_size(&w,&h);
+            float sc = split_coop_scale(), e = h ? 240.f*w/h : 320.f;
+            float bot = mm_target ? 240.f : 0.f;
+            float cx = -e + (mm_cx() + 320.f)*sc, cy = bot - (240.f - mm_cy())*sc;
+            float x = MRF32(copy+28), y = MRF32(copy+32);
+            if (!level){ x -= mm_cx(); y -= mm_cy(); }
+            MRF32(copy+28) = cx + x*sc; MRF32(copy+32) = cy + y*sc;
+            for (unsigned j=4;j<=6;++j) MRF32(copy+j*4) *= sc;
+            MRF32(copy+56) *= sc; MRF32(copy+60) *= sc;
+        }
         else {
             unsigned w,h; void com_backbuffer_size(unsigned *, unsigned *); com_backbuffer_size(&w,&h);
             SplitCell cell = split_cell(mm_target);

@@ -134,6 +134,7 @@
  *
  * Drift battles between players (roam_game.c du_*, db_*) are drift mode with a clock: drift_battle_* below. */
 #include "cpu.h"
+#include "coop.h"
 #include "kbd.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
@@ -254,7 +255,7 @@ static int roam_world(void){
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(void){
     uint32_t pl = rd32(G_PLAYER1), hud = pl ? rd32(pl + PL_HUD) : 0, fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0,
-             top = mg ? rd32(mg + 0xe4u) : 0;
+             top = mg ? coop_fe_top(mg) : 0;
     char a[40], b[40];
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b);

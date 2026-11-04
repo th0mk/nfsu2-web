@@ -92,6 +92,7 @@
  *   photo_fov   the field of view, degrees     photo_roll  the tilt, degrees
  *   photo_n     how many times it opened       photo_focus the focus distance, m */
 #include "cpu.h"
+#include "coop.h"
 #include <math.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -308,7 +309,7 @@ static int network_race(void){
 }
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(uint32_t pl){
-    uint32_t hud = rd32(pl + PL_HUD), fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? rd32(mg + 0xe4u) : 0;
+    uint32_t hud = rd32(pl + PL_HUD), fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? coop_fe_top(mg) : 0;
     char a[40], b[40];
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b);

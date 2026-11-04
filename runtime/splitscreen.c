@@ -16,9 +16,28 @@
 enum { SL_SPLIT, SL_PLAYERS, SL_PLAYER, SL_PLAYER_UP, SL_JOIN, SL_JOIN_KB, SL_JOIN_SP, SL_N };
 static void split_label_text(int which, unsigned n, char *out, size_t size);
 
+/* more than one view drawn: a split race, or co-op free roam (coop.c: the career's game mode, player 2 on view 2,
+ * which makes the view mode 3 by itself) */
+int coop_in(void);
 static int split_racing(void){
 #ifdef __wasm__
-    return MR32(0x850078u) == 4 && MR32(0x89e7c0u) == 2 && MR32(0x8707e0u) == 3;
+    if (MR32(0x8707e0u) != 3) return 0;
+    if (MR32(0x850078u) == 4) return MR32(0x89e7c0u) == 2;
+    return MR32(0x850078u) == 1 && coop_in() && MR32(SPLIT_PLAYERS_COUNT) == 2;
+#else
+    return 0;
+#endif
+}
+/* co-op: the HUDs' size in their halves (NFSU2_COOP_HUD_SCALE, a test knob while the size is picked) */
+static float split_coop_scale(void){
+    static float sc = -1.f;
+    if (sc < 0.f){ const char *e = getenv("NFSU2_COOP_HUD_SCALE"); sc = e ? (float)atof(e) : 0.6f; if (sc < 0.3f || sc > 1.f) sc = 0.6f; }
+    return sc;
+}
+/* co-op free roam's two views (coop.c): each player's free-roam HUD mapped into its half */
+static int split_coop_hud(void){
+#ifdef __wasm__
+    return split_racing() && MR32(0x850078u) == 1;
 #else
     return 0;
 #endif
@@ -1002,7 +1021,7 @@ static void split_map_hud_objects(uint32_t obj, unsigned seat, unsigned depth, i
 }
 static void split_map_huds(CPU *c){
     static unsigned frames;
-    if (!split_racing() || split_render_limit() <= 2){ split_hud_data_count = 0; return; }
+    if (!split_racing() || (split_render_limit() <= 2 && !split_coop_hud())){ split_hud_data_count = 0; return; }
     if (++frames % 30 && split_hud_data_count) return;
     split_minimap_names(c);
     split_hud_data_count = 0;
@@ -1227,9 +1246,19 @@ static int split_clone_hud(CPU *c, uint32_t src, uint32_t dst){
 }
 
 void sub_004f8bf0_orig(CPU *c);
+int coop_making_player(void);
 void sub_004f8bf0(CPU *c){
     int who = split_hud_owner >= 2 ? split_hud_owner : (int)MR32(c->esp + 8);
     uint32_t fng = MR32(c->esp + 4);
+    if (coop_making_player() && fng){
+        /* co-op: player 2's HUD is free roam's own, a copy of the package under a name of its own (the Player ctor
+         * named a 2P race HUD: it sees two local humans while it runs) */
+        uint32_t src = SPLIT_HUD_SCRATCH, dst = SPLIT_HUD_NAMES + 64;
+        snprintf((char *)g_mem + src, 64, "HUD_SingleRace.fng");
+        snprintf((char *)g_mem + dst, 64, "HUD_SingleRac2.fng");
+        if (split_clone_hud(c, src, dst)) MR32(c->esp + 4) = dst;
+        else fprintf(stderr, "[coop] player 2's HUD: no copy of HUD_SingleRace (the 2P one stays)\n");
+    }
     if (split_requested() > 2 && who >= 0 && who < 6 && fng && (who >= 2 || (who & 1))){
         uint32_t src = SPLIT_HUD_SCRATCH, dst = SPLIT_HUD_NAMES + who * 64;
         snprintf((char *)g_mem + src, 64, "%s", (char *)g_mem + fng);
@@ -1738,6 +1767,33 @@ int splitscreen_hook(CPU *c, uint32_t ip){
             if (pos > worst){ worst = pos; trailer = p; }
         }
         if (ai_racer) MR32(c->ebx + 0x748) = (int8_t)MR8(ai_racer + 0xa) > threshold ? trailer : leader;
+        return 1;
+    }
+    if (ip == 0x51b0b0u && split_coop_hud() && MR32(c->esp + 16) == 0){
+        /* co-op: a full-screen HUD (640x480, centred units) into its half: s times as big, an element left or right
+         * of the middle kept on that screen edge, one above the middle at the half's top, one below at its bottom */
+        uint32_t data = MR32(c->esp + 4);
+        for (unsigned i = 0; data && i < split_hud_data_count; ++i) if (split_hud_data[i].data == data){
+            uint32_t copy = 0x00d08000u + (split_hud_copy++ & 15) * 0x50;
+            memcpy(g_mem + copy, g_mem + data, 0x50);
+            unsigned width, height; void com_backbuffer_size(unsigned *, unsigned *);
+            com_backbuffer_size(&width, &height);
+            float x = MRF32(copy + 28), y = MRF32(copy + 32);
+            /* player 2's HUD without the top band: the bank, the SMS and Engage icons, the song, the outrun meter are
+             * player 1's career's */
+            if (split_hud_data[i].hide || (split_hud_data[i].seat && y < -60.f && fabsf(x) < 400.f)) x = y = 10000.f;
+            else if (fabsf(x) < 400.f && fabsf(y) < 300.f){             /* not one the game parks off screen */
+                float sc = split_coop_scale(), e = height ? 240.f * width / height : 320.f;
+                float top = split_hud_data[i].seat ? 0.f : -240.f, bot = top + 240.f;
+                x = x < -40.f ? -e + (x + 320.f) * sc : x > 40.f ? e - (320.f - x) * sc : x * sc;
+                y = y < 0.f ? top + (y + 240.f) * sc : bot - (240.f - y) * sc;
+                for (unsigned k = 4; k <= 6; ++k) MRF32(copy + k * 4) *= sc;
+                MRF32(copy + 56) *= sc; MRF32(copy + 60) *= sc;
+            }
+            MRF32(copy + 28) = x; MRF32(copy + 32) = y;
+            MR32(c->esp + 4) = copy;
+            break;
+        }
         return 1;
     }
     if (ip == 0x51b0b0u && split_racing() && split_render_limit() > 2 && MR32(c->esp + 16) == 0){

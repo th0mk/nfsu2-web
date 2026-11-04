@@ -67,6 +67,7 @@ long autotest_frame(void);
 static int coop_want;               /* co-op is on: player 2 is in, or comes back after a world load */
 static int coop_dev = -1;           /* COOP_DEV_KB or the local pad seat 0..5 */
 static uint32_t coop_pl, coop_car, coop_world;   /* player 2's Player and car, and the World they are in */
+static int coop_ctor;               /* player 2's Player ctor runs (splitscreen.c gives it free roam's HUD) */
 static long coop_settled;           /* frames free roam has been as roaming wants it */
 /* after a leave, in that world: player 2's car parked, and its Player's memory (ended, out of the game's lists): the
  * car keeps pointing at it (car +0x18), and Car::Activate reads it on a rejoin, so it is not freed before the world
@@ -89,6 +90,7 @@ static uint32_t p1_car(void){
     return p ? MR32(p + 4u) : 0;
 }
 
+int coop_making_player(void){ return coop_ctor; }
 int coop_in(void){ return coop_pl != 0 && MR32(G_FLOW) == 6u; }
 int coop_wanted(void){ return coop_want; }
 int coop_device(void){ return coop_want ? coop_dev : -1; }
@@ -126,9 +128,11 @@ static int coop_make(CPU *c){
     if (!pl){ uint32_t sz = 0x9c0u; pl = call(c, FN_NEW, 0, 0, 1, &sz); }
     if (!pl) return 0;
     memset(g_mem + pl, 0, 0x9c0);
-    MR32(G_HUMANS) = 2u;                       /* view 2 and a 2P HUD of its own (see above) */
+    MR32(G_HUMANS) = 2u;                       /* view 2 and a HUD of its own (see above) */
     uint32_t pa[2] = { 1, 1 };
+    coop_ctor = 1;
     call(c, FN_PLAYER, pl, 0, 2, pa);
+    coop_ctor = 0;
     MR32(G_HUMANS) = 1u;
     call(c, FN_ATTACHCAR, pl, 0, 1, &car);
     if (back){
@@ -189,6 +193,26 @@ static void coop_drop(CPU *c){
         fprintf(stderr, "[coop] f=%ld player 2 left\n", autotest_frame());
     }
     coop_pl = coop_car = coop_world = 0;
+}
+
+/* The front end's packages: a list from the top one (FEng manager +0xE4; a package's +4 the one below it, +0xC its
+ * name).  Player 2's HUD came in last, so FEng keeps it on top (it puts that order back every frame); what the game
+ * and the runtime take for the screen in front (GetTopPackage 0x50C8E0: SMS, photo mode, the races' screens) is the
+ * package below it then, player 1's HUD */
+static int fe_named(uint32_t node, uint32_t hud){
+    uint32_t a = node ? MR32(node + 0xcu) : 0, b = hud ? MR32(hud + 0x10u) : 0;
+    return a && b && !strcasecmp((const char *)g_mem + a, (const char *)g_mem + b);
+}
+uint32_t coop_fe_top(uint32_t mg){
+    uint32_t top = mg ? MR32(mg + 0xe4u) : 0;
+    if (top && coop_pl && fe_named(top, MR32(coop_pl + 0x9a4u)) && MR32(top + 4u)) return MR32(top + 4u);
+    return top;
+}
+void sub_0050c8e0_orig(CPU *c);
+void sub_0050c8e0(CPU *c){
+    sub_0050c8e0_orig(c);
+    uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0;
+    if (mg && c->eax == MR32(mg + 0xe4u)) c->eax = coop_fe_top(mg);
 }
 
 /* every frame at the main-loop hook (roam.c, 0x581475) */

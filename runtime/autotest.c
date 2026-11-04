@@ -148,6 +148,7 @@
  *        NUMPAD0..9 ...), or a number (0x1c = DIK code), or VK_xx / vk:0xNN.
  */
 #include "cpu.h"
+#include "coop.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -519,7 +520,7 @@ const char *autotest_top_fng(void){
     if (!fe || !mem_is_committed(fe + 11)) return 0;
     uint32_t mg = MR32(fe + 8);                       /* GetTopPackage (0x50C8E0) */
     if (!mg || !mem_is_committed(mg + 0xe7)) return 0;
-    uint32_t pk = MR32(mg + 0xe4);                    /* FNGInfo*; name ptr at +0x0C */
+    uint32_t pk = coop_fe_top(mg);                    /* FNGInfo*; name ptr at +0x0C (co-op: player 2's HUD skipped) */
     if (!pk || !mem_is_committed(pk + 255)) return 0;
     if (g_fng_off >= 0){ const char *s = fng_str(MR32(pk + (uint32_t)g_fng_off)); if (s) return s; }
     for (int o = 0; o < 256; o += 4){

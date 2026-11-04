@@ -52,6 +52,7 @@
  *
  * Tests: tests/scripts/showoff_*.txt; "[showoff]" log lines. */
 #include "cpu.h"
+#include "coop.h"
 #include "kbd.h"
 #include "gamepad.h"
 #include "roam_core.h"            /* RC_OPEN_* */
@@ -174,7 +175,7 @@ static int roam_world(void){
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(void){
     uint32_t pl = rd32(G_PLAYER1), hud = pl ? rd32(pl + 0x9a4u) : 0, fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0,
-             top = mg ? rd32(mg + 0xe4u) : 0;
+             top = mg ? coop_fe_top(mg) : 0;
     char a[40], b[40];
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b);
@@ -183,7 +184,7 @@ static int typing(void){ return rd32(G_FLOW) != 6u || (mem_is_committed(G_TXT_RE
 /* a cover shoot is on (its screens on top: UI_ShowCase_Preview.fng, UI_Showcase_DPAD.fng): it opens and closes the
  * player's car's parts itself, on the game's list */
 static int shoot_on(void){
-    uint32_t fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? rd32(mg + 0xe4u) : 0;
+    uint32_t fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? coop_fe_top(mg) : 0;
     char a[40];
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a);
     return !strncasecmp(a, "UI_Showcase", 11);
