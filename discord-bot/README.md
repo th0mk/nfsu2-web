@@ -45,6 +45,9 @@ and it says something only when it is worth it:
   as the page names them, as for the FAQ's buttons). The asker's lines of 8 seconds make one question; one Haiku
   call reads them in the chat around them and names the answer and writes the line, or none when unsure. Nothing for staff, chat, answers
   to others, or someone already answered; the same answer to a person once a day, 5 a person a day, 60 an hour.
+  Each answer gets 👍 and 👎 from the bot, for the staff: the daily note counts the votes on the answers 6 hours old
+  or more (the bot's own left out) and lists the ones with a 👎; every counted answer goes to `state/help-votes.jsonl`
+  (time, FAQ answer, language, votes, the question, the line, its link).
   Everything else in #help is as in the general channels below (it is one of them), without their fixed answers.
 
 - **in the general channels** (text channels named `general…`, and #help), sparingly: someone who reports a problem of their own
@@ -189,7 +192,8 @@ the tools used, the tokens and the cost.
    That gives it View Channels, Read Message History and Send Messages in Threads, and nothing else. Without Send
    Messages it cannot write in ordinary channels or open posts. If a forum hides itself from @everyone, give the bot
    View Channel there too. For the replies in the general channels and #help, allow it Send Messages in those
-   channels' permissions; without that it only counts them for the staff.
+   channels' permissions; without that it only counts them for the staff. In #help, allow it Add Reactions too,
+   for the 👍 and 👎 on its answers.
 2. **Staff channel.** Make a private channel for staff. In its permissions, add the bot with View Channel, Send
    Messages, Attach Files, Read Message History, Create Public Threads and Send Messages in Threads. Turn on Developer Mode (User Settings, Advanced), right-click the
    channel, Copy Channel ID.
