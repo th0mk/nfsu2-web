@@ -23,7 +23,8 @@ static int split_racing(void){
 #ifdef __wasm__
     if (MR32(0x8707e0u) != 3) return 0;
     if (MR32(0x850078u) == 4) return MR32(0x89e7c0u) == 2;
-    return MR32(0x850078u) == 1 && coop_in() && MR32(SPLIT_PLAYERS_COUNT) == 2;
+    /* co-op: player 2 in free roam (coop.c's), or a career race the two race together (the game's two humans) */
+    return MR32(0x850078u) == 1 && MR32(SPLIT_PLAYERS_COUNT) == 2 && (coop_in() || coop_racing_together());
 #else
     return 0;
 #endif
@@ -33,7 +34,8 @@ static float split_coop_scale(void){ return 0.7f; }
 /* co-op free roam's two views (coop.c): each player's free-roam HUD mapped into its half */
 static int split_coop_hud(void){
 #ifdef __wasm__
-    return split_racing() && MR32(0x850078u) == 1;
+    /* (a career race together has the game's own 2P HUDs, made for halves) */
+    return split_racing() && MR32(0x850078u) == 1 && !coop_racing_together();
 #else
     return 0;
 #endif
@@ -209,7 +211,7 @@ static int split_pause_port = -1, split_pause_seen, split_pause_released;
  * lend it their own pad while they own the pause menu. */
 void sub_0050d2d0_orig(CPU *c);
 void sub_0050d2d0(CPU *c){
-    if ((split_requested() || (coop_in() && MR32(0x850078u) != 4)) && MR32(c->esp) == 0x4eb46eu){
+    if ((split_requested() || ((coop_in() || coop_racing_together()) && MR32(0x850078u) != 4)) && MR32(c->esp) == 0x4eb46eu){
         unsigned port = MR32(c->esp + 4);
         if (port < 6){
             split_pause_port = (int)port;
@@ -231,7 +233,7 @@ static void split_pause_refresh(CPU *c){
         active |= !!(split_call(c, 0x52cf60u, 0, 1, &name) & 255);
     }
     if (active) split_pause_seen = 1;
-    else if (split_pause_seen || !(split_racing() || coop_in())){
+    else if (split_pause_seen || !(split_racing() || coop_in() || coop_racing_together())){
         fprintf(stderr, "[split] pause closed P%d\n", split_pause_port + 1);
         split_pause_port = -1;
     }
@@ -252,7 +254,7 @@ int split_menu_pad(PadState *pad){
         }
         return 1;
     }
-    if (split_pause_port < 0 || !(split_requested() || (coop_in() && MR32(0x850078u) != 4))) return 0;
+    if (split_pause_port < 0 || !(split_requested() || ((coop_in() || coop_racing_together()) && MR32(0x850078u) != 4))) return 0;
     /* co-op: player 1's pause is the game's own (its controller already drives this pad) */
     if (!split_requested() && split_pause_port == 0) return 0;
     split_read_local((unsigned)split_pause_port, pad);
@@ -1511,7 +1513,7 @@ void sub_005cfd60_orig(CPU *c);
 void sub_005cfd60(CPU *c){
 #ifdef __wasm__
     uint32_t port = MR32(c->esp + 4u), type = MR32(c->esp + 8u), previous = MR32(c->esp + 12u);
-    if (MR32(0x850078u) != 4 && coop_in() && port < 2){
+    if (MR32(0x850078u) != 4 && (coop_in() || coop_racing_together()) && MR32(0x8654a4u) == 6 && port < 2){
         /* co-op free roam: port 0 stays the game's own (player 1's keys and controller); port 1 is player 2's seat.
          * With the keyboard shared, player 1's arrows' half joins port 0's own (player 2's keys are hidden from it) */
         static uint32_t port_type;

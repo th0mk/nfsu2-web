@@ -1,0 +1,35 @@
+# Co-op free roam, Race together: player 2 in (the keyboard's left half), player 1 on the next career race's marker,
+# Engage, the card's start asks Together or Alone: Together; the race has two local humans (two Players, two views),
+# player 2's keys drive player 2's car; player 1 wins (racewin); back in free roam one human again and player 2 back.
+0     roam fe2roam 14000
++0    roam smsauto on
++120  roam coop join kb
++0    waitmem 0xd00030 2 1500
++60   careergo next
++120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitfe IG_GenericDialog_MED.fng 300
++60   tap LEFT                        # "Together" (the dialog opens on "Alone")
++30   tap RETURN
++0    waitfng 2PHudTop.fng 3000
++300  roam coop state
++0    expect i:0x89e7c0 == 2
++0    expect i:0xd00030 == 2
++0    expect i:[0x890118]+0x24 == 5
++0    expect i:0x8707e0 == 3
++0    status coop_together_racing
++0    down W
++120  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0    up W
++60   racewin
++120  roam coop finish                # the race ends once both players are home (the game's rule for two humans)
++0    bot on                          # the post-race screens, the save
++0    waitroam 30000                  # back in free roam
++0    bot off
++0    waitmem 0x89e7c0 1 3000
++0    waitmem 0xd00030 2 3000
++60   expect i:0x89e7c0 == 1
++0    status coop_together_complete
++10   quit

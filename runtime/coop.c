@@ -26,6 +26,7 @@
 #include "gamepad.h"
 #include "kbd.h"
 #include "coop.h"
+#include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -205,21 +206,26 @@ static void coop_ride_let_go(void){
     if (coop_ride_h){ coop_unload_h = coop_ride_h; coop_ride_h = 0; }
     coop_ride_ready = 0; coop_ride_rec = 0;
 }
+/* a ride (0x900) from a garage car with player 2's paint slot */
+static int coop_build_ride(CPU *c, uint32_t rec, uint32_t ride){
+    if (!roam_game_coop_skin(c, COOP_SKIN)){ fprintf(stderr, "[coop] no paint slot for player 2's car\n"); return 0; }
+    memset(g_mem + ride, 0, 0x900);
+    call(c, FN_PHYSINFO, ride + 0x10u, 0, 0, 0);
+    uint32_t ia[4] = { 0xffffffffu, 0, 0, 0 };
+    call(c, FN_RIDEINIT, ride, 0, 4, ia);
+    uint32_t ba[3] = { 1, ride, 0 };
+    call(c, MR32(MR32(rec) + 0xcu), rec, 0, 3, ba);
+    uint32_t sk = COOP_SKIN; call(c, FN_SKIN, ride, 0, 1, &sk);
+    return 1;
+}
 /* player 2's ride for its garage car, loaded: 1 ready, 0 not yet, -1 cannot (then a copy of player 1's) */
 static int coop_ride(CPU *c){
     if (!coop_car_rec) return -1;
     if (coop_ride_ready && coop_ride_rec == coop_car_rec) return 1;
     if (coop_ride_h && coop_ride_rec != coop_car_rec) coop_ride_let_go();
     if (!coop_ride_h){
-        if (!roam_game_coop_skin(c, COOP_SKIN)){ fprintf(stderr, "[coop] no paint slot for player 2's car\n"); return -1; }
-        uint32_t ride = COOP_RIDE, rec = coop_car_rec, m1 = 0xffffffffu;
-        memset(g_mem + ride, 0, 0x900);
-        call(c, FN_PHYSINFO, ride + 0x10u, 0, 0, 0);
-        uint32_t ia[4] = { m1, 0, 0, 0 };
-        call(c, FN_RIDEINIT, ride, 0, 4, ia);
-        uint32_t ba[3] = { 1, ride, 0 };
-        call(c, MR32(MR32(rec) + 0xcu), rec, 0, 3, ba);
-        uint32_t sk = COOP_SKIN; call(c, FN_SKIN, ride, 0, 1, &sk);
+        uint32_t ride = COOP_RIDE, rec = coop_car_rec;
+        if (!coop_build_ride(c, rec, ride)) return -1;
         uint32_t la[3] = { ride, 0, 0 };
         coop_ride_h = call(c, FN_LOAD, G_CARLOADER, 0, 3, la);
         uint32_t sa[2] = { 0, 0 }; call(c, FN_SERVICE, G_CARLOADER, 0, 2, sa);
@@ -289,13 +295,16 @@ static int coop_make(CPU *c){
             autotest_frame(), pl, MR32(pl + 0x18u), car, MR32(car + 0x24u), MR32(w + 0x10u), MR32(w + 0x14u), MR32(w + 0x18u));
     return 1;
 }
+/* player 2's racer name: player 1's profile name and " 2" */
+static void coop_racer_name(void){
+    char name[32]; snprintf(name, sizeof name, "%.13s 2", (const char *)g_mem + G_PROFILE0);
+    memset(g_mem + COOP_NAME, 0, 32); memcpy(g_mem + COOP_NAME, name, strlen(name));
+}
 /* a car for player 2 in this world: a human's racer record with player 1's ride, CreateCar at COOP_GRID */
 static int coop_new_car(CPU *c, uint32_t w, uint32_t ride, uint32_t *out){
     uint32_t n0 = MR32(G_RACEPARAMS + 0x74u);
     if (n0 >= 22u) { fprintf(stderr, "[coop] no racer record free (%u)\n", n0); return 0; }
-    /* the name: player 1's profile name and " 2" */
-    char name[32]; snprintf(name, sizeof name, "%.13s 2", (const char *)g_mem + G_PROFILE0);
-    memset(g_mem + COOP_NAME, 0, 32); memcpy(g_mem + COOP_NAME, name, strlen(name));
+    coop_racer_name();
     memset(g_mem + COOP_REC, 0, REC_SZ);
     uint32_t ri[6] = { 1, 1, ride, COOP_NAME, 0xfffffffeu, 0 };
     call(c, FN_RACERINIT, COOP_REC, 0, 6, ri);
@@ -353,8 +362,13 @@ static int fe_named(uint32_t node, uint32_t hud){
     const char *a = gstr_at(MR32(node + 0xcu)), *b = gstr_at(MR32(hud + 0x10u));
     return a && b && !strcasecmp(a, b);
 }
-/* player 2's Player while the game still has it (a world's end frees it before coop_frame sees) */
-static uint32_t coop_live(void){ return coop_pl && MR32(SPLIT_PLAYERS_INDEX + 4u) == coop_pl ? coop_pl : 0; }
+/* player 2's Player while the game still has it (a world's end frees it before coop_frame sees); in a career race
+ * together the game's own second Player */
+int coop_racing_together(void);
+static uint32_t coop_live(void){
+    if (coop_pl && MR32(SPLIT_PLAYERS_INDEX + 4u) == coop_pl) return coop_pl;
+    return coop_racing_together() && MR32(SPLIT_PLAYERS_COUNT) == 2u ? MR32(SPLIT_PLAYERS_INDEX + 4u) : 0;
+}
 uint32_t coop_fe_top(uint32_t mg){
     uint32_t top = mg ? MR32(mg + 0xe4u) : 0;
     uint32_t p2 = coop_live();
@@ -364,7 +378,7 @@ uint32_t coop_fe_top(uint32_t mg){
 /* driving: player 2 in, and player 1's HUD the screen in front (no pause menu, dialog, map or SMS over it: those
  * take the whole keyboard, and read port 0 as well) */
 int coop_driving(void){
-    if (!coop_in()) return 0;
+    if (!coop_in() && !coop_racing_together()) return 0;
     uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0, p1 = MR32(SPLIT_PLAYERS_INDEX);
     return mg && p1 && fe_named(coop_fe_top(mg), MR32(p1 + 0x9a4u));
 }
@@ -473,9 +487,9 @@ void coop_join(int dev){ coop_dev = dev; coop_want = 1; if (!coop_car_rec) coop_
 void coop_join_car(int dev, uint32_t rec){ coop_car_rec = rec; coop_join(dev); }
 void coop_leave(void){ coop_want = 0; coop_car_rec = 0; }
 
-/* script: "roam coop join kb|pad N", "roam coop leave", "roam coop state" */
+/* script: "roam coop join kb|pad N", "roam coop leave", "roam coop state", "roam coop finish" (a race's player 2) */
 int coop_cmd(CPU *c, const char *args, long *wait_start){
-    (void)c; (void)wait_start;
+    (void)wait_start;
     char sub[32] = {0}, a1[32] = {0}, a2[32] = {0};
     sscanf(args, "%31s %31s %31s", sub, a1, a2);
     long f = autotest_frame();
@@ -489,6 +503,13 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
         memcpy(g_mem + r1, g_mem + r0, 0x7f8);
         MR32(r1 + 8u) = h1 ? h1 : bhash("CAREER_SLOT_1"); MR8(r1 + 0x7f4u) = 0; MR8(r1 + 0x7f5u) = 1;
         uint32_t g[10]; fprintf(stderr, "[coop] f=%ld script: garage of %d cars\n", f, coop_garage(g));
+    } else if (!strcasecmp(sub, "finish")){
+        /* test only: player 2's racer finishes now, through the coordinator's FinishRacer (as career.c's racewin) */
+        uint32_t rc = MR32(0x00890118u), p2 = MR32(SPLIT_PLAYERS_INDEX + 4u), car = p2 ? MR32(p2 + 4u) : 0, n = rc ? MR32(rc + 0x24u) : 0, i;
+        for (i = 0; car && i < n && i < 8u && MR32(rc + 0xbd0u + 4u * i) && MR32(MR32(rc + 0xbd0u + 4u * i)) != car; i++) ;
+        if (!car || i >= n || i >= 8u) fprintf(stderr, "[coop] f=%ld script: finish: player 2 is not racing\n", f);
+        else { uint32_t a[4] = { i, 0, 0, 1u }; call(c, 0x00606cb0u, rc, 0, 4, a);
+               fprintf(stderr, "[coop] f=%ld script: player 2 (racer %u of %u) finished, position %u\n", f, i, n, MR8(MR32(rc + 0xbd0u + 4u * i) + 0xcu)); }
     } else if (!strcasecmp(sub, "leave")){
         coop_leave();
         fprintf(stderr, "[coop] f=%ld script: leave\n", f);
@@ -498,6 +519,14 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
                 f, coop_want, coop_dev, coop_pl, coop_car, MR32(SPLIT_PLAYERS_COUNT),
                 car1 ? MRF32(car1 + 0x60u) : 0.f, car1 ? MRF32(car1 + 0x64u) : 0.f,
                 coop_car ? MRF32(coop_car + 0x60u) : 0.f, coop_car ? MRF32(coop_car + 0x64u) : 0.f);
+        uint32_t rc = MR32(0x00890118u), n = rc ? MR32(rc + 0x24u) : 0;   /* the race coordinator */
+        fprintf(stderr, "[coop] f=%ld state: humans %u AI %u, players", f, MR32(G_HUMANS), MR32(0x0089e7c4u));
+        for (uint32_t i = 0; i < 4 && i < MR32(SPLIT_PLAYERS_COUNT); i++){ uint32_t pl = MR32(SPLIT_PLAYERS_INDEX + 4u * i);
+            fprintf(stderr, " 0x%08x(car 0x%08x)", pl, pl ? MR32(pl + 4u) : 0); }
+        fprintf(stderr, "; entries %u [%08x %08x %08x %08x] ports [%u %u]; racers %u:", MR32(0x0089e814u), MR32(0x0089e808u), MR32(0x0089e80cu),
+                MR32(0x0089e810u), MR32(0x0089e818u), MR32(0x0089e7e8u), MR32(0x0089e7ecu), n);
+        for (uint32_t i = 0; rc && i < n && i < 8; i++){ uint32_t r = rc + 0x30u + 0x1f0u * i; fprintf(stderr, " 0x%08x", MR32(r)); }
+        fputc('\n', stderr);
     }
     return 1;
 }
@@ -534,33 +563,45 @@ void language_game_letters(const char *utf8, char *out, size_t n);
 void language_texts_frame(CPU *c);
 void sub_004c2510(CPU *c);         /* the free-roam pause menu's Resume */
 
-static const struct { const char *lang, *add, *rem, *ask, *kb, *cancel, *next, *drive, *drives; } COOP_TEXTS[] = {
+static const struct { const char *lang, *add, *rem, *ask, *kb, *cancel, *next, *drive, *drives, *rt, *together, *alone; } COOP_TEXTS[] = {
     { "english", "Add Player 2", "Remove Player 2",
-      "Player 2: press START on your controller, or choose Keyboard to play on the left half of this keyboard.", "Keyboard", "Cancel", "Next car", "Drive", "Player 2 drives:" },
+      "Player 2: press START on your controller, or choose Keyboard to play on the left half of this keyboard.", "Keyboard", "Cancel", "Next car", "Drive", "Player 2 drives:",
+      "Race this one with player 2, or alone? (Only player 1's place counts in the career.)", "Together", "Alone" },
     { "french", "Ajouter le joueur 2", "Retirer le joueur 2",
-      "Joueur 2 : appuie sur START sur ta manette, ou choisis Clavier pour jouer sur la moitié gauche de ce clavier.", "Clavier", "Annuler", "Voiture suivante", "Conduire", "Le joueur 2 conduit :" },
+      "Joueur 2 : appuie sur START sur ta manette, ou choisis Clavier pour jouer sur la moitié gauche de ce clavier.", "Clavier", "Annuler", "Voiture suivante", "Conduire", "Le joueur 2 conduit :",
+      "Courir avec le joueur 2, ou seul ? (Seule la place du joueur 1 compte pour la carrière.)", "Ensemble", "Seul" },
     { "german", "Spieler 2 hinzufügen", "Spieler 2 entfernen",
-      "Spieler 2: Drück START auf deinem Controller oder wähle Tastatur, um auf der linken Hälfte dieser Tastatur zu spielen.", "Tastatur", "Abbrechen", "Nächstes Auto", "Fahren", "Spieler 2 fährt:" },
+      "Spieler 2: Drück START auf deinem Controller oder wähle Tastatur, um auf der linken Hälfte dieser Tastatur zu spielen.", "Tastatur", "Abbrechen", "Nächstes Auto", "Fahren", "Spieler 2 fährt:",
+      "Mit Spieler 2 fahren oder allein? (Für die Karriere zählt nur der Platz von Spieler 1.)", "Zusammen", "Allein" },
     { "italian", "Aggiungi giocatore 2", "Rimuovi giocatore 2",
-      "Giocatore 2: premi START sul tuo controller, oppure scegli Tastiera per giocare sulla metà sinistra di questa tastiera.", "Tastiera", "Annulla", "Auto successiva", "Guida", "Il giocatore 2 guida:" },
+      "Giocatore 2: premi START sul tuo controller, oppure scegli Tastiera per giocare sulla metà sinistra di questa tastiera.", "Tastiera", "Annulla", "Auto successiva", "Guida", "Il giocatore 2 guida:",
+      "Correre con il giocatore 2 o da solo? (Per la carriera conta solo il posto del giocatore 1.)", "Insieme", "Da solo" },
     { "spanish", "Añadir jugador 2", "Quitar jugador 2",
-      "Jugador 2: pulsa START en tu mando o elige Teclado para jugar en la mitad izquierda de este teclado.", "Teclado", "Cancelar", "Siguiente coche", "Conducir", "El jugador 2 conduce:" },
+      "Jugador 2: pulsa START en tu mando o elige Teclado para jugar en la mitad izquierda de este teclado.", "Teclado", "Cancelar", "Siguiente coche", "Conducir", "El jugador 2 conduce:",
+      "¿Correr con el jugador 2 o solo? (En la carrera solo cuenta el puesto del jugador 1.)", "Juntos", "Solo" },
     { "dutch", "Speler 2 toevoegen", "Speler 2 verwijderen",
-      "Speler 2: druk op START op je controller, of kies Toetsenbord om op de linkerhelft van dit toetsenbord te spelen.", "Toetsenbord", "Annuleren", "Volgende auto", "Rijden", "Speler 2 rijdt:" },
+      "Speler 2: druk op START op je controller, of kies Toetsenbord om op de linkerhelft van dit toetsenbord te spelen.", "Toetsenbord", "Annuleren", "Volgende auto", "Rijden", "Speler 2 rijdt:",
+      "Samen met speler 2 racen, of alleen? (Alleen de plaats van speler 1 telt voor de carrière.)", "Samen", "Alleen" },
     { "swedish", "Lägg till spelare 2", "Ta bort spelare 2",
-      "Spelare 2: tryck på START på din handkontroll, eller välj Tangentbord för att spela på vänstra halvan av det här tangentbordet.", "Tangentbord", "Avbryt", "Nästa bil", "Kör", "Spelare 2 kör:" },
+      "Spelare 2: tryck på START på din handkontroll, eller välj Tangentbord för att spela på vänstra halvan av det här tangentbordet.", "Tangentbord", "Avbryt", "Nästa bil", "Kör", "Spelare 2 kör:",
+      "Köra med spelare 2, eller ensam? (Bara spelare 1:s placering räknas i karriären.)", "Tillsammans", "Ensam" },
     { "danish", "Tilføj spiller 2", "Fjern spiller 2",
-      "Spiller 2: tryk på START på din controller, eller vælg Tastatur for at spille på venstre halvdel af dette tastatur.", "Tastatur", "Annuller", "Næste bil", "Kør", "Spiller 2 kører:" },
+      "Spiller 2: tryk på START på din controller, eller vælg Tastatur for at spille på venstre halvdel af dette tastatur.", "Tastatur", "Annuller", "Næste bil", "Kør", "Spiller 2 kører:",
+      "Køre med spiller 2, eller alene? (Kun spiller 1's placering tæller i karrieren.)", "Sammen", "Alene" },
     { "portuguese", "Adicionar jogador 2", "Remover jogador 2",
-      "Jogador 2: pressione START no seu controle ou escolha Teclado para jogar na metade esquerda deste teclado.", "Teclado", "Cancelar", "Próximo carro", "Dirigir", "O jogador 2 dirige:" },
+      "Jogador 2: pressione START no seu controle ou escolha Teclado para jogar na metade esquerda deste teclado.", "Teclado", "Cancelar", "Próximo carro", "Dirigir", "O jogador 2 dirige:",
+      "Correr com o jogador 2 ou sozinho? (Só a posição do jogador 1 conta na carreira.)", "Juntos", "Sozinho" },
     { "polish", "Dodaj gracza 2", "Usuń gracza 2",
-      "Gracz 2: wciśnij START na swoim kontrolerze albo wybierz Klawiatura, aby grać na lewej połowie tej klawiatury.", "Klawiatura", "Anuluj", "Następny samochód", "Jedź", "Gracz 2 jedzie:" },
+      "Gracz 2: wciśnij START na swoim kontrolerze albo wybierz Klawiatura, aby grać na lewej połowie tej klawiatury.", "Klawiatura", "Anuluj", "Następny samochód", "Jedź", "Gracz 2 jedzie:",
+      "Ścigać się z graczem 2 czy samemu? (W karierze liczy się tylko miejsce gracza 1.)", "Razem", "Sam" },
     { "turkish", "Oyuncu 2'yi ekle", "Oyuncu 2'yi çıkar",
-      "Oyuncu 2: kumandanda START'a bas ya da bu klavyenin sol yarısında oynamak için Klavye'yi seç.", "Klavye", "İptal", "Sonraki araba", "Sür", "Oyuncu 2 sürüyor:" },
+      "Oyuncu 2: kumandanda START'a bas ya da bu klavyenin sol yarısında oynamak için Klavye'yi seç.", "Klavye", "İptal", "Sonraki araba", "Sür", "Oyuncu 2 sürüyor:",
+      "Oyuncu 2 ile mi yarışılsın, tek başına mı? (Kariyerde yalnızca oyuncu 1'in sırası sayılır.)", "Birlikte", "Tek başına" },
     { "hungarian", "2. játékos hozzáadása", "2. játékos eltávolítása",
-      "2. játékos: nyomd meg a START gombot a kontrollereden, vagy válaszd a Billentyűzetet, hogy a billentyűzet bal felén játssz.", "Billentyűzet", "Mégse", "Következő autó", "Vezetés", "A 2. játékos vezet:" },
+      "2. játékos: nyomd meg a START gombot a kontrollereden, vagy válaszd a Billentyűzetet, hogy a billentyűzet bal felén játssz.", "Billentyűzet", "Mégse", "Következő autó", "Vezetés", "A 2. játékos vezet:",
+      "Versenyzel a 2. játékossal, vagy egyedül? (A karrierben csak az 1. játékos helyezése számít.)", "Együtt", "Egyedül" },
 };
-static struct { const char *lang; uint32_t add, rem, kb, cancel, next, drive; char ask[256], drives[64]; } T;
+static struct { const char *lang; uint32_t add, rem, kb, cancel, next, drive, together, alone; char ask[256], drives[64], rt[256]; } T;
 static void coop_texts(CPU *c){
     const char *l = language_name();
     if (T.add && l == T.lang) return;
@@ -576,6 +617,9 @@ static void coop_texts(CPU *c){
     language_game_letters(COOP_TEXTS[e].next, s, sizeof s);   T.next = language_add_text("COOP_NEXTCAR_N2", s);
     language_game_letters(COOP_TEXTS[e].drive, s, sizeof s);  T.drive = language_add_text("COOP_DRIVE_N2", s);
     language_game_letters(COOP_TEXTS[e].drives, T.drives, sizeof T.drives);
+    language_game_letters(COOP_TEXTS[e].together, s, sizeof s); T.together = language_add_text("COOP_TOGETHER_N2", s);
+    language_game_letters(COOP_TEXTS[e].alone, s, sizeof s);  T.alone = language_add_text("COOP_ALONE_N2", s);
+    language_game_letters(COOP_TEXTS[e].rt, T.rt, sizeof T.rt);
     language_texts_frame(c);
 }
 
@@ -741,7 +785,8 @@ static void coop_ask_frame(CPU *c){
     }
 }
 static void coop_outrun_frame(CPU *c);
-void coop_ask_frame_(CPU *c){ coop_ask_frame(c); coop_pick_frame(c); coop_outrun_frame(c); }
+static void coop_rt_frame(CPU *c);
+void coop_ask_frame_(CPU *c){ coop_ask_frame(c); coop_pick_frame(c); coop_outrun_frame(c); coop_rt_frame(c); }
 
 /* ---- outruns between player 1 and player 2 -------------------------------------------------------------------------
  * As outruns with an online friend (roam_game.c du_*): near each other (25 m) for 4 s, nothing else racing and no
@@ -909,4 +954,111 @@ void sub_00600590_orig(CPU *c);
 void sub_00600590(CPU *c){
     if (coop_pl && c->ecx == coop_pl && coop_outrun_on()){ POP32(c->eip); return; }
     sub_00600590_orig(c);
+}
+
+/* ---- Race together: player 2 in player 1's career race ---------------------------------------------------------------
+ * The race card's start (0x499B50, the career's StartRace) asks first while player 2 is in: Together or Alone (the
+ * world's dialog over the card).  Together: the race has two humans, as the console's two-player races: the career
+ * race's setup (0x53FD30, run before the card's start) forces its type's humans byte ([0x83AAC4 + type * 0x14]) to 1
+ * and copies it to [0x89E7C0]; Together runs the setup again with the byte 2 (it only resets and refills the race's
+ * globals from the card's settings); human 1's
+ * input port ([0x83A9DC], the front end's) 1; the race's cars (0x525ED0) give every human the career's car looked up in
+ * that user's table (user 1's is an empty locked slot): human 1's is player 2's garage car in player 1's table
+ * (user 0's; else player 1's car again).  The game makes both Players, view 2 and its 2P HUDs (2PHudTop/Bot); the
+ * career counts player 1's place only (its win test reads car index 0).  Back in free roam the local humans are one
+ * again (the free-roam setup 0x540780 never writes them). */
+#define G_RTYPE       0x0083aab4u   /* the race's type (an index of the types' 0x14-byte records at 0x83AAC4) */
+#define G_TYPE_HUMANS 0x0083aac4u
+#define G_FE_PORT1    0x0083a9dcu
+#define MSG_RT_TOGETHER 0xc0c0a011u
+#define MSG_RT_ALONE    0xc0c0a012u
+#define MSG_RT_BACK     0xc0c0a013u
+static int coop_rt, coop_rt_go, coop_rt_ask, coop_rt_port_kept;
+static uint32_t coop_rt_card, coop_rt_port;
+int coop_racing_together(void){ return MR32(G_GAMEMODE) == 1u && MR32(G_HUMANS) == 2u && coop_want && coop_rt; }
+/* the race's type gets two humans (the race's load copies the byte to [0x89E7C0]), human 1 port 1 */
+static void coop_rt_humans(const char *when){
+    if (!coop_rt || MR32(G_GAMEMODE) != 1u) return;
+    uint32_t t = MR32(G_RTYPE);
+    if (t < 0x20u) MR8(G_TYPE_HUMANS + t * 0x14u) = 2;
+    if (!coop_rt_port_kept){ coop_rt_port = MR32(G_FE_PORT1); coop_rt_port_kept = 1; }
+    MR32(G_FE_PORT1) = 1u;
+    fprintf(stderr, "[coop] f=%ld the career race: two humans (type %u, %s)\n", autotest_frame(), t, when);
+}
+void sub_00499b50_orig(CPU *c);
+void sub_00499b50(CPU *c){
+    if (coop_rt_go || !coop_in() || MR32(G_DLG_ID)){ coop_rt_go = 0; sub_00499b50_orig(c); return; }
+    /* the question first; the race starts on its answer (coop_rt_frame) */
+    coop_texts(c);
+    char *s = (char *)g_mem + COOP_STR;
+    memset(s, 0, 0x200);
+    snprintf(s, 0x38, "IG_GenericDialog_MED.fng"); snprintf(s + 0x38, 8, "%%s"); snprintf(s + 0x40, 0x140, "%s", T.rt);
+    for (char *p = s + 0x40; *p; p++) if (*p == '%') *p = '?';
+    snprintf(s + 0x180, 0x40, "UI_EngageRaceDialog.fng");
+    uint32_t a[10] = { COOP_STR + 0x180u, COOP_STR, T.together, T.alone, MSG_RT_TOGETHER, MSG_RT_ALONE, MSG_RT_BACK, 0, COOP_STR + 0x38u, COOP_STR + 0x40u };
+    call(c, FN_DIALOG2, 0, 0, 10, a);
+    coop_rt_card = c->ecx; coop_rt_ask = 1;
+    fprintf(stderr, "[coop] f=%ld the race card: together or alone?\n", autotest_frame());
+    POP32(c->eip);
+}
+static void coop_rt_frame(CPU *c){
+    if (!coop_rt_ask) return;
+    uint32_t d = coop_dialog(), v = d ? MR32(d + 0x50u) : 0;
+    if (v != MSG_RT_TOGETHER && v != MSG_RT_ALONE && v != MSG_RT_BACK){
+        if (!d && !MR32(G_DLG_ID)) coop_rt_ask = 0;           /* gone another way */
+        return;
+    }
+    if (MR32(G_DLG_ID)) return;                                /* the dialog still going: start once it went */
+    coop_rt_ask = 0;
+    if (v == MSG_RT_BACK){ fprintf(stderr, "[coop] f=%ld the race card: no answer\n", autotest_frame()); return; }
+    coop_rt = v == MSG_RT_TOGETHER;
+    fprintf(stderr, "[coop] f=%ld the race card: %s\n", autotest_frame(), coop_rt ? "together" : "alone");
+    if (coop_rt) call(c, 0x0053fd30u, 0, 0, 0, 0);   /* the race's setup again (it ran before the card's start), two
+                                                    * humans this time (the hook below) */
+    coop_rt_go = 1;
+    call(c, 0x00499b50u, coop_rt_card, 0, 0, 0);
+}
+/* the free-roam setup: one local human again, human 1's port as it was */
+void sub_00540780_orig(CPU *c);
+void sub_00540780(CPU *c){
+    if (MR32(G_GAMEMODE) == 1u && MR32(G_HUMANS) == 2u){ MR32(G_HUMANS) = 1u; fprintf(stderr, "[coop] f=%ld free roam: one local human again\n", autotest_frame()); }
+    if (coop_rt_port_kept){ MR32(G_FE_PORT1) = coop_rt_port; coop_rt_port_kept = 0; }
+    coop_rt = 0;
+    sub_00540780_orig(c);
+}
+/* player 2's racer in the career race, after player 1's (0x5322E0 makes player 1's from the career, then the AI):
+ * human 1, its garage car (or a copy of player 1's ride), port 1; CreatePlayers then makes its Player */
+static void coop_rt_racer(CPU *c){
+    uint32_t n0 = MR32(G_RACEPARAMS + 0x74u), ride = COOP_RIDE;
+    if (n0 != 1u){ fprintf(stderr, "[coop] the career race: player 1's racer not alone (%u)\n", n0); return; }
+    if (!coop_car_rec || !coop_build_ride(c, coop_car_rec, ride)) ride = G_RECORDS + 0x10u;   /* player 1's record's */
+    coop_racer_name();
+    memset(g_mem + COOP_REC, 0, REC_SZ);
+    uint32_t ri[6] = { 1, 1, ride, COOP_NAME, 0xfffffffeu, 0 };
+    call(c, FN_RACERINIT, COOP_REC, 0, 6, ri);
+    uint32_t a = COOP_REC;
+    call(c, FN_ADDRACER, G_RACEPARAMS, 0, 1, &a);
+    MR32(0x0089e7ecu) = 1u;                     /* human 1's port */
+    fprintf(stderr, "[coop] f=%ld the career race: player 2's racer (%s), numbers %d %d, entries %u\n", autotest_frame(),
+            ride == COOP_RIDE ? "its garage car" : "player 1's car", (int)MR32(0x0089e808u), (int)MR32(0x0089e80cu), MR32(G_RACEPARAMS + 0x74u));
+}
+int coop_hook(CPU *c, uint32_t ip){
+    switch (ip){
+    case HOOK_SITE(0x0053fd96):                 /* 0x53FD30 forced the type's humans to 1 */
+        coop_rt_humans("the setup");
+        return 1;
+    case HOOK_SITE(0x005324f1):                 /* 0x5322E0, the career race's racers: player 1's just added */
+        if (coop_racing_together()) coop_rt_racer(c);
+        return 1;
+    case HOOK_SITE(0x00525fb9):                 /* 0x525ED0: human esi's car handle in edi, its user's table in edx */
+        if (coop_racing_together() && c->esi == 1u){
+            uint32_t want = MR32(0x00863480u), tab = CARS0 + 0x9bd8u;
+            for (uint32_t i = 0; coop_car_rec && i < 0x5bu; i++) if (MR32(tab + 4u * i) == coop_car_rec){ want = MR32(coop_car_rec + 8u); break; }
+            c->edi = want; c->edx = CARS0; MR32(c->esp + 0x1cu) = CARS0;
+            fprintf(stderr, "[coop] f=%ld the career race: player 2's car 0x%08x (%s)\n", autotest_frame(), want,
+                    want == MR32(0x00863480u) ? "player 1's car" : "player 2's pick");
+        }
+        return 1;
+    }
+    return 0;
 }

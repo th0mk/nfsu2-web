@@ -5,7 +5,8 @@
 #define COOP_DEV_KB 6            /* player 2's device: the keyboard's WASD half (else a local pad seat 0..5) */
 int coop_in(void);               /* player 2 is in this world (flow 6) */
 int coop_wanted(void);
-int coop_driving(void);          /* player 2 in and player 1's HUD in front (no menu or dialog over it) */           /* co-op is on (player 2 in, or back after the next world load) */
+int coop_driving(void);
+int coop_racing_together(void);  /* a career race player 2 races in (two local humans) */          /* player 2 in and player 1's HUD in front (no menu or dialog over it) */           /* co-op is on (player 2 in, or back after the next world load) */
 int coop_device(void);           /* player 2's device while co-op is on, else -1 */
 uint32_t coop_player(void);      /* player 2's Player (0: none) */
 uint32_t coop_p2_car(void);
