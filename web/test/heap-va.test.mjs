@@ -31,7 +31,8 @@ test('heap address space: best fit, segments given back, trips never short of th
   catch (e) { out = (e.stdout ?? '') + (e.stderr ?? ''); }
   console.log(out.trim());
   for (const c of ['bestfit-small-hole', 'bestfit-big-hole', 'bighole-untouched', 'bighole-back', 'racehole-in-hole', 'racehole-rest-untouched', 'racehole-back', 'segments-back', 'segments-pinned', 'segments-reuse', 'segments-empty',
-    'trips-no-failure', 'trips-bounded', 'trips-streamer-room', 'dfree-refused', 'dfree-not-live', 'dfree-no-overlap', 'reserve-small-after-big']) assert.match(out, new RegExp(`^PASS ${c}$`, 'm'), `${c} passed`);
+    'trips-no-failure', 'trips-bounded', 'trips-streamer-room', 'dfree-refused', 'dfree-not-live', 'dfree-no-overlap', 'reserve-small-after-big',
+    'holes-kept', 'holes-kept-a-while', 'holes-expire', 'holes-compact']) assert.match(out, new RegExp(`^PASS ${c}$`, 'm'), `${c} passed`);
   assert.doesNotMatch(out, /^FAIL /m);
   assert.match(out, /^heap_va_unit: passed/m);
 });

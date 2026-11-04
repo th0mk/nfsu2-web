@@ -24,7 +24,10 @@
  *             block is handed out twice
  *   reserve   with the heaps' segments given back, 1.4 MB blocks filling the
  *             window leave room for new segments: as many 900 KB blocks fit
- *             after them as had fitted before */
+ *             after them as had fitted before
+ *   holes     a hole whose big block never comes back is kept HINT_TTL frames
+ *             only; a block taking part of one of eight holes keeps the other
+ *             seven (the oldest went although a slot was free) */
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,11 +39,13 @@ int heap_api_kind(const char *); uint32_t heap_api(CPU *, int);
 uint32_t gheap_alloc_c(CPU *, int, uint32_t, int); void gheap_free_c(CPU *, int, uint32_t);
 void heap_totals(uint64_t *, uint64_t *, uint64_t *, uint64_t *);
 int memstat_line(char *, size_t);
+int gheap_kept_holes(uint32_t *, uint32_t *, int);
 extern int g_gh_com, g_gh_gbuf;
 
 /* heap.c's links into the rest of the runtime */
 void guest_backtrace(CPU *c, int n){ (void)c; (void)n; }
-long autotest_frame(void){ return 0; }
+static long g_frame;                                   /* the game's frame count */
+long autotest_frame(void){ return g_frame; }
 void win32_set_last_error(CPU *c, uint32_t e){ (void)c; (void)e; }
 void com_mem_stats(uint64_t *a, uint64_t *b, uint64_t *o){ *a = *b = *o = 0; }
 void metal_mem_stats(uint64_t *a, unsigned *l, unsigned *t, uint64_t *b){ *a = 0; *l = *t = 0; *b = 0; }
@@ -255,12 +260,58 @@ static void reserve(void){
     for (int i = 0; i < nbig; i++) crt_free(g_fill[i]);
 }
 
+/* The kept holes (VirtualAlloc regions reserved at fixed addresses and
+ * released make them where a test wants them). */
+#define HOLE_TTL 36000
+static int hole_kept(uint32_t a){
+    uint32_t ad[16], ln[16]; int n = gheap_kept_holes(ad, ln, 16);
+    for (int i = 0; i < n; i++) if (ad[i] == a) return 1;
+    return 0;
+}
+static int holes_n(void){ uint32_t ad[16], ln[16]; return gheap_kept_holes(ad, ln, 16); }
+static uint32_t hole_at(uint32_t a, uint32_t n){
+    uint32_t r = H("VirtualAlloc", a, n, 0x2000u, 4u);
+    if (r == a) H("VirtualFree", a, 0u, 0x8000u);
+    return r == a;
+}
+static void holes_expire(void){
+    g_frame += HOLE_TTL + 1;                                   /* the other tests' holes go */
+    uint32_t top = 0x28000000u - 20u * MB;                     /* the top of the window */
+    int ok = holes_n() == 0 && hole_at(top, 20u * MB);
+    uint32_t t = crt(1398016u);
+    CHK("holes-kept", ok && hole_kept(top) && t && (t < top || t >= top + 20u * MB));
+    g_frame += HOLE_TTL / 2;
+    CHK("holes-kept-a-while", hole_kept(top));
+    g_frame += HOLE_TTL / 2 + 1;
+    uint32_t t2 = crt(1398016u);
+    CHK("holes-expire", !hole_kept(top) && t2 >= top && t2 < top + 20u * MB);
+    crt_free(t); crt_free(t2);
+}
+static void holes_compact(void){
+    g_frame += HOLE_TTL + 1;
+    const uint32_t base = 0x1C000000u, step = 20u * MB + 0x10000u;
+    uint32_t sep[8]; int ok = holes_n() == 0;
+    for (int i = 0; i < 8; i++){                               /* 8 holes, each with a 64 KB region after it */
+        uint32_t len = i == 7 ? 18u * MB : 20u * MB, a = base + (uint32_t)i * step;
+        sep[i] = H("VirtualAlloc", a + len, 0x10000u, 0x2000u, 4u);
+        ok &= sep[i] == a + len;
+    }
+    for (int i = 0; i < 8; i++){ g_frame++; ok &= (int)hole_at(base + (uint32_t)i * step, i == 7 ? 18u * MB : 20u * MB); }
+    ok &= holes_n() == 8;
+    uint32_t x = crt(17u * MB);                                /* best fit: the 18 MB hole, the newest */
+    ok &= x >= base + 7u * step && x < base + 7u * step + 18u * MB;
+    CHK("holes-compact-setup", ok);
+    CHK("holes-compact", holes_n() == 8 && hole_kept(base) && hole_kept(base + 7u * step));
+    crt_free(x);
+    for (int i = 0; i < 8; i++) H("VirtualFree", sep[i], 0u, 0x8000u);
+}
+
 int main(void){
     mem_init();
     mem_commit(0x00E00000u, 0x00010000u);                /* the calls' guest stack */
     heap_init();
     g_h = H("HeapCreate", 0u, 0x1000u, 0u);
-    bestfit(); bighole(); racehole(); segments(); trips(); dfree(); reserve();
+    bestfit(); bighole(); racehole(); segments(); trips(); dfree(); reserve(); holes_expire(); holes_compact();
     printf("heap_va_unit: %s (%d failed)\n", fails ? "FAILED" : "passed", fails);
     return fails != 0;
 }

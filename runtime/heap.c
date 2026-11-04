@@ -11,7 +11,7 @@
  *                reserve/commit/decommit/release semantics, VirtualQuery,
  *                VirtualProtect.  Heap segments and large blocks are VA
  *                regions too, so freed address space is shared by everyone;
- *                big blocks keep their holes (va_find) and leave
+ *                big blocks keep their holes for a while (va_find) and leave
  *                room for the heaps' segments (va_alloc).
  *   heaps        GetProcessHeap (handle 1), HeapCreate (2, 3, ...), plus two
  *                internal heaps for the COM layer (objects, Lock buffers).
@@ -157,33 +157,50 @@ static inline void dset(uint32_t a, int v){ uint32_t p = (a - GH_BASE) / GPAGE;
  * VA_BIG or more leaves its granules here when it goes, and they are kept for
  * the next big one (va_find).  A block placed in a hole takes its part of it;
  * the rest stays kept (a race track's smaller streamer block sits in free
- * roam's hole for the race, and free roam's comes back into the whole of it). */
+ * roam's hole for the race, and free roam's comes back into the whole of it).
+ * A hole is kept HINT_TTL frames at most (its rest as long as the hole):
+ * one whose block never comes back would push the smaller blocks into the
+ * other free space for good, cutting the runs the next big blocks need. */
 #define VA_BIG ((16u << 20) / VA_GRAN)
 #define NHINT 8
-static struct { uint32_t g0, ng; } g_hint[NHINT];
+#define HINT_TTL 36000u                 /* frames: 10 minutes at 60 fps, longer than a race */
+static uint32_t now_frame(void);
+static struct { uint32_t g0, ng, made; } g_hint[NHINT];
 static uint64_t g_hintmask[VA_NG / 64];
 static void hint_mask(void){
     memset(g_hintmask, 0, sizeof g_hintmask);
     for (int i = 0; i < NHINT; i++)
         for (uint32_t g = g_hint[i].g0; g < g_hint[i].g0 + g_hint[i].ng; g++) vset(g_hintmask, g, 1);
 }
-static void hint_put(uint32_t g0, uint32_t ng){           /* newest first, the oldest goes */
-    memmove(g_hint + 1, g_hint, (NHINT - 1) * sizeof g_hint[0]);
-    g_hint[0].g0 = g0; g_hint[0].ng = ng;
+static void hint_compact(void){                           /* the kept ones first, in their order */
+    int j = 0;
+    for (int i = 0; i < NHINT; i++) if (g_hint[i].ng) g_hint[j++] = g_hint[i];
+    for (; j < NHINT; j++) g_hint[j].g0 = g_hint[j].ng = g_hint[j].made = 0;
 }
-static void hint_add(uint32_t g0, uint32_t ng){ hint_put(g0, ng); hint_mask(); }
+static void hint_put(uint32_t g0, uint32_t ng, uint32_t made){   /* newest first, the oldest goes if all are kept */
+    hint_compact();
+    memmove(g_hint + 1, g_hint, (NHINT - 1) * sizeof g_hint[0]);
+    g_hint[0].g0 = g0; g_hint[0].ng = ng; g_hint[0].made = made;
+}
+static void hint_add(uint32_t g0, uint32_t ng){ hint_put(g0, ng, now_frame()); hint_mask(); }
 static void hint_drop(uint32_t g0, uint32_t ng){         /* [g0, g0+ng) taken */
-    uint32_t rest[2 * NHINT][2]; int n = 0, cut = 0;
+    uint32_t rest[2 * NHINT][3]; int n = 0, cut = 0;
     for (int i = 0; i < NHINT; i++){
         uint32_t h0 = g_hint[i].g0, h1 = h0 + g_hint[i].ng;
         if (!g_hint[i].ng || h0 >= g0 + ng || g0 >= h1) continue;
         g_hint[i].ng = 0; cut = 1;
-        if (h0 < g0){ rest[n][0] = h0; rest[n][1] = g0 - h0; n++; }
-        if (g0 + ng < h1){ rest[n][0] = g0 + ng; rest[n][1] = h1 - (g0 + ng); n++; }
+        if (h0 < g0){ rest[n][0] = h0; rest[n][1] = g0 - h0; rest[n][2] = g_hint[i].made; n++; }
+        if (g0 + ng < h1){ rest[n][0] = g0 + ng; rest[n][1] = h1 - (g0 + ng); rest[n][2] = g_hint[i].made; n++; }
     }
     if (!cut) return;
-    for (int i = n - 1; i >= 0; i--) hint_put(rest[i][0], rest[i][1]);
+    for (int i = n - 1; i >= 0; i--) hint_put(rest[i][0], rest[i][1], rest[i][2]);
+    hint_compact();
     hint_mask();
+}
+static void hint_expire(void){
+    uint32_t now = now_frame(); int gone = 0;
+    for (int i = 0; i < NHINT; i++) if (g_hint[i].ng && now - g_hint[i].made > HINT_TTL){ g_hint[i].ng = 0; gone = 1; }
+    if (gone){ hint_compact(); hint_mask(); }
 }
 /* A run of ng free granules: bottom-up first fit for heap segments, top-down
  * for VirtualAlloc and large blocks, so the two meet in the middle and the
@@ -288,6 +305,7 @@ static int64_t va_find_keep(uint32_t ng){
 static uint32_t va_alloc(uint32_t bytes, int top, int kind, int heap, uint32_t prot){
     uint32_t ng = (uint32_t)(((uint64_t)bytes + VA_GRAN - 1) / VA_GRAN);
     if (!ng || ng > VA_NG) return 0;
+    hint_expire();
     int64_t g0 = va_find(ng, top, 0);
     if (g0 < 0 && g_check){ memset(g_va_dead, 0, sizeof g_va_dead); g0 = va_find(ng, top, 1); }
     if (g0 >= 0 && kind != VK_SEG && va_seg_room((uint32_t)g0, ng) < SEG_KEEP) g0 = va_find_keep(ng);
@@ -541,6 +559,10 @@ static void va_map(const char *why){
     if (k < (int)sizeof buf)
         k += snprintf(buf + k, sizeof buf - (size_t)k, " VirtualAlloc: %u regions %.1f MB (%.1f MB committed);", nv, vb / 1048576.0,
                       vc / 1048576.0);
+    uint32_t hn = 0, hg = 0;
+    for (int i = 0; i < NHINT; i++) if (g_hint[i].ng){ hn++; hg += g_hint[i].ng; }
+    if (k < (int)sizeof buf)
+        k += snprintf(buf + k, sizeof buf - (size_t)k, " %u holes kept %.1f MB;", hn, hg * (VA_GRAN / 1048576.0));
     uint32_t rs[6] = {0}, rl[6] = {0}, run = 0;                  /* the widest free runs: where they are */
     for (uint32_t g = 0; g <= VA_NG; g++){
         if (g < VA_NG && !vbit(g_va_bits, g)){ run++; continue; }
@@ -902,6 +924,16 @@ uint32_t gheap_usize(uint32_t p){
     uint32_t r = g_bump ? bump_usize(p) : tlsf_usize(p);
     UNLOCK();
     return r == 0xFFFFFFFFu ? 0 : r;
+}
+/* The big blocks' holes kept now, newest first (web/test/heap_va_unit.c). */
+int gheap_kept_holes(uint32_t *addr, uint32_t *len, int max){
+    LOCK();
+    hint_expire();
+    int n = 0;
+    for (int i = 0; i < NHINT && n < max; i++)
+        if (g_hint[i].ng){ addr[n] = GH_BASE + g_hint[i].g0 * VA_GRAN; len[n] = g_hint[i].ng * VA_GRAN; n++; }
+    UNLOCK();
+    return n;
 }
 /* HEAPCHECK: verify one block's tail canary now (com.c, after UnlockRect). */
 int gheap_check_block(CPU *c, uint32_t p, const char *what){
