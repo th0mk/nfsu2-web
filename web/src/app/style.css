@@ -1187,7 +1187,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .menu-radio { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); }
 .menu-radio .btn { padding: 0 80px; overflow: hidden; }
 .menu-radio .btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-inline-end: 0.2em; }
-.menu-radio .icon { position: absolute; top: 6px; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: inherit; }
+.menu-radio .icon { position: absolute; top: 50%; translate: 0 -50%; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: inherit; }
 .menu-radio .icon:hover { color: var(--lime); }
 .menu-radio [data-act="radio-folder"] { right: 40px; }
 .menu-radio [data-act="playlist"] { right: 8px; }
@@ -1269,9 +1269,28 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .tabs { gap: 16px; }
   html:not([data-touch]) .tabs { gap: 8px; }
 }
-/* a phone in landscape: the page menu's buttons in two columns, so Quit game needs no scrolling */
+/* a phone on its side (a short window): the page menu in as many columns as the dialog's width gives it, so no label is
+ * cut (the fixed two columns cut "Contador de FPS: desactivad…", and the radio's 80 px of icons left it "R…"), and a
+ * label too long for its button takes a second line as a row's button does on a narrow screen.  The radio and its two
+ * icons keep a line of their own, and dense placement fills the cells the row before it leaves empty.  The dialog takes
+ * the room the game's picture has there, and its margins tighten, so a landscape phone's menu (and Quit game) is in
+ * sight without scrolling. */
 @media (max-height: 479px) {
-  .menu-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dlg.menu { width: min(760px, calc(100vw - 32px)); padding: 16px; }
+  .dlg.menu h2 { margin-bottom: 4px; }
+  .dlg.menu .hint { margin-bottom: 6px; }
+  .dlg.menu #menu-save { margin-top: -6px; }
+  .menu-actions { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); grid-auto-flow: dense; gap: 4px; }
+  .menu-actions > .btn { height: auto; min-height: 40px; padding-block: 6px; white-space: normal; text-align: center; }
+  .menu-radio { grid-column: 1 / -1; }
+}
+/* the smallest phones: the radio's two icons take less of its button, so "Radio: desactivado" is whole too (its longest
+   word is 92 px, and 80 px each side left 72 on a 320 px screen) */
+@media (max-width: 399px) {
+  .menu-radio .btn { padding: 0 56px; }
+  .menu-radio .icon { width: 24px; height: 24px; }
+  .menu-radio [data-act="radio-folder"] { right: 32px; }
+  .menu-radio [data-act="playlist"] { right: 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
