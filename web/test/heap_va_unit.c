@@ -23,8 +23,9 @@
  *             it is refused, it is not live for HeapSize/HeapValidate, and no
  *             block is handed out twice
  *   reserve   with the heaps' segments given back, 1.4 MB blocks filling the
- *             window leave room for new segments: as many 900 KB blocks fit
- *             after them as had fitted before; a 16 MB block may have it
+ *             window leave the last segment's room (they take the rest of
+ *             the room kept, a last resort), counted outside the kept holes;
+ *             a 16 MB block may have it
  *   holes     a hole whose big block never comes back is kept ten minutes
  *             only; a block taking part of one of eight holes keeps the other
  *             seven (the oldest went although a slot was free); the pieces of
@@ -248,9 +249,12 @@ static void dfree(void){
 }
 
 /* 12 blocks of 900 KB (three segments) freed, the segments given back, the
- * window then filled with 1.4 MB blocks: the 900 KB blocks still find new
- * segments (before, the 1.4 MB blocks took all of it and only the one spare
- * segment's 4 were left). */
+ * window then filled with 1.4 MB blocks until they fail: they take the room
+ * kept for segments too (a last resort, not a wall) but leave the last
+ * segment's, where four more 900 KB blocks fit after the spare segment's
+ * four (before the room, only those four fitted).  Then twelve 1.4 MB
+ * blocks that lay together freed: a 16 MB block may take that room to its
+ * last segment. */
 enum { NFILL = 512 };
 static uint32_t g_fill[NFILL];
 static void reserve(void){
@@ -258,12 +262,21 @@ static void reserve(void){
     for (int i = 0; i < 12; i++) ok &= (s[i] = crt(900u << 10)) != 0;
     for (int i = 0; i < 12; i++) crt_free(s[i]);
     while (nbig < NFILL && (g_fill[nbig] = crt(1398016u))) nbig++;
-    uint32_t streamer = crt(16u * MB - 32u);                   /* a big block may have that room (16 MB) */
-    CHK("reserve-big-not-held", streamer != 0);
-    crt_free(streamer);
+    unsigned left = vrun();
     while (nsmall < 64 && (sm[nsmall] = crt(900u << 10))) nsmall++;
-    printf("  window filled with %d blocks of 1.4 MB, then %d blocks of 900 KB\n", nbig, nsmall);
-    CHK("reserve-small-after-big", ok && nbig > 300 && nsmall >= 12);
+    printf("  window filled with %d blocks of 1.4 MB (the longest run left %u MB), then %d blocks of 900 KB\n", nbig, left, nsmall);
+    CHK("reserve-last-segment", ok && nbig > 300 && nsmall >= 8);
+    CHK("reserve-last-resort", left < 8);
+    int k = -1;                                                 /* twelve that lie together: 16.5 MB */
+    for (int i = nbig / 2; i + 11 < nbig && k < 0; i++){
+        int adj = 1;
+        for (int j2 = i; j2 < i + 11; j2++) adj &= g_fill[j2] == g_fill[j2 + 1] + 22u * 0x10000u;
+        if (adj) k = i;
+    }
+    for (int j2 = k; k >= 0 && j2 < k + 12; j2++){ crt_free(g_fill[j2]); g_fill[j2] = 0; }
+    uint32_t streamer = k >= 0 ? crt(16u * MB - 32u) : 0;
+    CHK("reserve-big-not-held", k >= 0 && streamer != 0);
+    crt_free(streamer);
     for (int i = 0; i < nsmall; i++) crt_free(sm[i]);
     for (int i = 0; i < nbig; i++) crt_free(g_fill[i]);
 }
@@ -335,6 +348,23 @@ static void holes_age(void){
     for (int i = 0; i < 11; i++) H("VirtualFree", sep[i], 0u, 0x8000u);
 }
 
+/* A big block's 60 MB hole kept: 1.4 MB blocks fill the space outside it
+ * down to the last segment's room before one goes into the hole, and a new
+ * heap's first segment finds that room (counted with the hole, the room
+ * looked ample: the blocks filled all of the rest and the segment went into
+ * the hole). */
+static void reserve_holes(void){
+    g_us += HOLE_TTL_US + 1000u;
+    const uint32_t top = 0x28000000u - 60u * MB;
+    int ok = holes_n() == 0 && hole_at(top, 60u * MB), n = 0, in = 0;
+    while (!in && n < NFILL && (g_fill[n] = crt(1398016u))){ in = g_fill[n] >= top && g_fill[n] < top + 60u * MB; n++; }
+    uint32_t h4 = H("HeapCreate", 0u, 0x1000u, 0u), p = H("HeapAlloc", h4, 0u, 100u);
+    CHK("reserve-holes-setup", ok && in && h4 && p);
+    CHK("reserve-outside-holes", p && (p < top || p >= top + 60u * MB));
+    H("HeapFree", h4, 0u, p); H("HeapDestroy", h4);
+    for (int i = 0; i < n; i++) crt_free(g_fill[i]);
+}
+
 /* NFSU2_HEAPCHECK=1: released pages are 0xDD; a region reserved and
  * committed there again must read zero. */
 static void check_zero(void){
@@ -355,10 +385,9 @@ static void check_zero(void){
 }
 /* NFSU2_HEAPCHECK=1: a new segment goes into space released a while ago
  * rather than into a big block's hole that is cleaner.  The window: 4 MB in
- * 1 MB regions at the bottom, a 20 MB region, the rest reserved; both
- * released (the 20 MB one a hole), the released marks cleared by an
- * allocation nothing else had room for, one granule of the 4 MB released
- * again; then a new heap's first segment (4 MB). */
+ * 1 MB regions at the bottom, a 20 MB region, the rest reserved; the 20 MB
+ * released (a hole), the released marks cleared by a request nothing had
+ * room for, then the 4 MB released; then a new heap's first segment. */
 static void check_hole(void){
     const uint32_t base = 0x08000000u;                          /* the window's bottom */
     uint32_t small[4], ok = 1, rest[64]; int nr = 0;
@@ -367,10 +396,8 @@ static void check_hole(void){
     ok &= hole == base + 4u * MB;
     for (uint32_t a = base + 24u * MB; a < 0x28000000u && nr < 64; a += 8u * MB) ok &= (rest[nr++] = H("VirtualAlloc", a, 8u * MB, 0x2000u, 4u)) == a;
     H("VirtualFree", hole, 0u, 0x8000u);
+    ok &= H("VirtualAlloc", 0u, 30u * MB, 0x2000u, 4u) == 0u;   /* no room: the released marks go */
     for (int i = 0; i < 4; i++) H("VirtualFree", small[i], 0u, 0x8000u);
-    uint32_t g = H("VirtualAlloc", 0u, 0x10000u, 0x2000u, 4u);   /* all released: the marks go */
-    ok &= g >= base && g < base + 4u * MB;
-    H("VirtualFree", g, 0u, 0x8000u);
     uint32_t h3 = H("HeapCreate", 0u, 0x1000u, 0u), p = H("HeapAlloc", h3, 0u, 100u);
     CHK("check-hole-setup", ok && h3 && p);
     CHK("check-hole-kept", p >= base && p < base + 4u * MB);
@@ -384,7 +411,7 @@ int main(int argc, char **argv){
     heap_init();
     g_h = H("HeapCreate", 0u, 0x1000u, 0u);
     if (argc > 1 && !strcmp(argv[1], "check")){ check_zero(); check_hole(); }
-    else { bestfit(); bighole(); racehole(); segments(); trips(); dfree(); reserve(); holes_expire(); holes_compact(); holes_age(); }
+    else { bestfit(); bighole(); racehole(); segments(); trips(); dfree(); reserve(); holes_expire(); holes_compact(); holes_age(); reserve_holes(); }
     printf("heap_va_unit: %s (%d failed)\n", fails ? "FAILED" : "passed", fails);
     return fails != 0;
 }

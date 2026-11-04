@@ -291,35 +291,52 @@ static uint32_t va_take(uint32_t g0, uint32_t ng, int kind, int heap, uint32_t p
  * game down than a failed texture buffer.  Not the big blocks (VA_BIG and up):
  * the track streamer's and the pools' are one of a kind, come back into their
  * own holes, and the game stops at once without them (in a test run the
- * streamer's block was refused its own hole: the room was that hole). */
+ * streamer's block was refused its own hole: the room was that hole).
+ * The room is what lies outside the kept holes (the streamer's 60 MB hole
+ * counted as room for 14 segments while the space around it filled up), and
+ * it is a last resort, not a wall: a block that finds no place keeping
+ * SEG_KEEP segments' room takes all but SEG_LAST's, then a kept hole, and
+ * fails only after that. */
 #define SEG_G    (SEG_MIN / VA_GRAN)
-#define SEG_KEEP 4u
-static uint32_t va_seg_room(uint32_t x0, uint32_t xn){   /* segments the free runs hold, [x0, x0+xn) taken */
+#define SEG_KEEP 4u                     /* kept while anything else fits */
+#define SEG_LAST 1u                     /* kept */
+static uint32_t va_seg_room(uint32_t x0, uint32_t xn){   /* segments the free runs outside the holes hold, [x0, x0+xn) taken */
     uint32_t room = 0, run = 0;
     for (uint32_t g = 0; g <= VA_NG; g++){
-        if (g < VA_NG && !(g & 63) && !g_va_bits[g >> 6] && (g + 64u <= x0 || g >= x0 + xn)){ run += 64; g += 63; continue; }
-        if (g < VA_NG && !vbit(g_va_bits, g) && (g < x0 || g >= x0 + xn)){ run++; continue; }
+        if (g < VA_NG && !(g & 63) && !(g_va_bits[g >> 6] | g_hintmask[g >> 6]) && (g + 64u <= x0 || g >= x0 + xn)){ run += 64; g += 63; continue; }
+        if (g < VA_NG && !vbit(g_va_bits, g) && !vbit(g_hintmask, g) && (g < x0 || g >= x0 + xn)){ run++; continue; }
         room += run / SEG_G; run = 0;
     }
     return room;
 }
-/* Where ng granules go without taking that room: the top of the run where
- * they cost the fewest segments' room, of those the shortest, the highest;
- * a place that costs none is always fine.  -1: none. */
-static int64_t va_find_keep(uint32_t ng){
-    uint32_t room = va_seg_room(0, 0), run = 0, bcost = ~0u, blen = ~0u;
-    int64_t best = -1;
-    for (uint32_t g = 0; g <= VA_NG; g++){
-        if (g < VA_NG && !(g & 63) && !g_va_bits[g >> 6]){ run += 64; g += 63; continue; }
-        if (g < VA_NG && !vbit(g_va_bits, g)){ run++; continue; }
-        if (run >= ng){
-            uint32_t cost = run / SEG_G - (run - ng) / SEG_G;
-            if ((cost == 0 || room >= cost + SEG_KEEP) && (cost < bcost || (cost == bcost && run <= blen))){
-                best = (int64_t)g - ng; bcost = cost; blen = run; }
+/* Where ng granules go leaving keep segments' room, or costing none of it:
+ * past the kept holes and (HEAPCHECK) the released granules, then past the
+ * holes, then (holes_ok) anywhere; in a pass the top of the run that costs
+ * the fewest segments, of those the shortest, the highest.  -1: none. */
+static int64_t va_find_keep(uint32_t ng, uint32_t keep, int holes_ok){
+    uint32_t room = va_seg_room(0, 0);
+    int dead = g_check;
+    for (int pass = 0; pass < 3; pass++){
+        if ((pass == 1 && !dead) || (pass == 2 && !holes_ok)) continue;
+        uint32_t run = 0, bcost = ~0u, blen = ~0u;
+        int64_t best = -1;
+        for (uint32_t g = 0; g <= VA_NG; g++){
+            uint64_t w = g < VA_NG ? (g_va_bits[g >> 6] | (dead && pass == 0 ? g_va_dead[g >> 6] : 0ull)
+                                      | (pass < 2 ? g_hintmask[g >> 6] : 0ull)) : ~0ull;
+            if (g < VA_NG && !(g & 63) && !w){ run += 64; g += 63; continue; }
+            if (g < VA_NG && !((w >> (g & 63)) & 1u)){ run++; continue; }
+            if (run >= ng){
+                int64_t at = (int64_t)g - ng;
+                /* outside the holes the run is its own room; with holes the count is made again */
+                uint32_t left = pass < 2 ? room - (run / SEG_G - (run - ng) / SEG_G) : va_seg_room((uint32_t)at, ng);
+                uint32_t cost = room - left;
+                if ((cost == 0 || left >= keep) && (cost < bcost || (cost == bcost && run <= blen))){ best = at; bcost = cost; blen = run; }
+            }
+            run = 0;
         }
-        run = 0;
+        if (best >= 0) return best;
     }
-    return best;
+    return -1;
 }
 static uint32_t va_alloc(uint32_t bytes, int top, int kind, int heap, uint32_t prot){
     uint32_t ng = (uint32_t)(((uint64_t)bytes + VA_GRAN - 1) / VA_GRAN);
@@ -327,7 +344,12 @@ static uint32_t va_alloc(uint32_t bytes, int top, int kind, int heap, uint32_t p
     hint_expire();
     int64_t g0 = va_find(ng, top, 0);
     if (g0 < 0 && g_check){ memset(g_va_dead, 0, sizeof g_va_dead); g0 = va_find(ng, top, 1); }
-    if (g0 >= 0 && kind != VK_SEG && ng < VA_BIG && va_seg_room((uint32_t)g0, ng) < SEG_KEEP) g0 = va_find_keep(ng);
+    if (g0 >= 0 && kind != VK_SEG && ng < VA_BIG && va_seg_room((uint32_t)g0, ng) < SEG_KEEP){
+        int64_t k = va_find_keep(ng, SEG_KEEP, 0);              /* elsewhere, the room kept */
+        if (k < 0) k = va_find_keep(ng, SEG_LAST, 0);           /* all but the last segment's */
+        if (k < 0) k = va_find_keep(ng, SEG_LAST, 1);           /* then a kept hole */
+        g0 = k;
+    }
     if (g0 < 0) return 0;
     hint_drop((uint32_t)g0, ng);
     return va_take((uint32_t)g0, ng, kind, heap, prot);

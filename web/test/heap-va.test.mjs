@@ -39,7 +39,7 @@ test('heap address space: best fit, segments given back, trips never short of th
   };
   const out = run([], {});
   for (const c of ['bestfit-small-hole', 'bestfit-big-hole', 'bighole-untouched', 'bighole-back', 'racehole-in-hole', 'racehole-rest-untouched', 'racehole-back', 'segments-back', 'segments-pinned', 'segments-reuse', 'segments-empty',
-    'trips-no-failure', 'trips-bounded', 'trips-streamer-room', 'dfree-refused', 'dfree-not-live', 'dfree-no-overlap', 'reserve-small-after-big', 'reserve-big-not-held',
+    'trips-no-failure', 'trips-bounded', 'trips-streamer-room', 'dfree-refused', 'dfree-not-live', 'dfree-no-overlap', 'reserve-last-segment', 'reserve-last-resort', 'reserve-big-not-held', 'reserve-outside-holes',
     'holes-kept', 'holes-kept-a-while', 'holes-expire', 'holes-compact', 'holes-age']) assert.match(out, new RegExp(`^PASS ${c}$`, 'm'), `${c} passed`);
   const chk = run(['check'], { NFSU2_HEAPCHECK: '1' });
   for (const c of ['check-release-zero', 'check-decommit-zero', 'check-hole-kept']) assert.match(chk, new RegExp(`^PASS ${c}$`, 'm'), `${c} passed`);
