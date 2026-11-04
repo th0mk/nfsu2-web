@@ -1078,9 +1078,9 @@ static uint32_t virtual_query(uint32_t addr, uint32_t mbi, uint32_t len){
  * a fresh zeroed block whatever the flags, VirtualFree/GlobalFree no-ops). */
 uint32_t heap_api(CPU *c, int k){
     if (g_bump < 0) heap_init();
-    if (k > 0 && k < 48) g_api_n[k]++;
     uint32_t r = 0, site = site_of(c), ra = c->eip;
     LOCK();
+    if (k > 0 && k < 48) g_api_n[k]++;
     switch (k){
     case HK_GetProcessHeap: r = 1; break;
     case HK_HeapCreate:
