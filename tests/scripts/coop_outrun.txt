@@ -1,0 +1,49 @@
+# Co-op free roam: an outrun between player 1 and player 2, with no career effect: side by side (player 2 comes in
+# behind player 1) for 4 s, the outrun is offered on both HUDs; player 1's Engage (Enter) starts it; player 1 drives
+# away (the game's autopilot) and wins once 300 m ahead; the career's outrun result is skipped (the bank as it was).
+# Afterwards free roam is one racer's again and both players drive; player 2 leaves and joins again (beside player 1,
+# a third human's car in the World's index) and a second outrun runs the same way.
+0     roam fe2roam 14000
++0    roam smsauto on
++120  roam coop join kb
++0    waitmem 0xd00030 2 1500
++0    roam peek 0x85ad40+0x7134 1
++0    mark bank i:0x85ad40+0x7134
++300  tap RETURN
++60   expect i:0x89e7b0 == 7
++0    expect i:0x89e7c0 == 1
++0    expect i:[0x890118]+0x24 == 2
++0    status coop_outrun_racing
++0    autopilot on
++0    waitmem 0x89e7b0 0 4000
++60   autopilot off
++0    roam peek 0x85ad40+0x7134 1
++0    expect i:0x85ad40+0x7134 == @bank
++300  roam coop state
++0    expect i:0x89e7c0 == 1
++0    expect i:[0x890118]+0x24 == 1
++0    expect i:0xd00030 == 2
++0    down W
++100  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0    up W
++30   down UP
++100  expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0    up UP
++60   status coop_outrun_after
++0    roam coop leave
++60   roam coop join kb
++0    waitmem 0xd00030 2 1500
++300  tap RETURN
++60   expect i:0x89e7b0 == 7
++0    status coop_outrun_racing2
++0    autopilot on
++0    waitmem 0x89e7b0 0 4000
++60   autopilot off
++0    expect i:0x85ad40+0x7134 == @bank
++300  roam coop state
++0    expect i:[0x890118]+0x24 == 1
++0    expect i:0xd00030 == 2
++0    status coop_outrun_complete
++10   quit
