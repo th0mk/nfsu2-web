@@ -10,6 +10,9 @@
  *   bighole   with no small hole, 1.4 MB blocks and heap segments go to the
  *             wide free run, and the streamer's block comes back into its
  *             own hole
+ *   racehole  a race track's smaller streamer block in that hole for a
+ *             while: the rest of the hole is kept too, and the 60000 KB
+ *             block gets it whole again after the race
  *   segments  a heap that held 160 MB of small blocks gives that address space
  *             back once they are freed (one 4 MB segment kept for its next
  *             growth), and holds only what a few long-lived blocks pin
@@ -96,6 +99,26 @@ static void bighole(void){
     CHK("bighole-untouched", ok && !inside);
     uint32_t again = crt(61440172u);
     CHK("bighole-back", again == a);
+    crt_free(again); crt_free(sep);
+    for (int i = 0; i < NTEX; i++) crt_free(g_tex[i]);
+    for (int i = 0; i < NSEG_SMALL; i++) gbuf_free(g_small[i]);
+}
+
+/* A race on another track: its streamer's 36000 KB goes into free roam's
+ * 60000 KB hole for the race, the textures meanwhile go past the rest of that
+ * hole, and back in free roam its block finds the hole whole again. */
+static void racehole(void){
+    uint32_t a = crt(61440172u), sep = crt(1398016u), s = 11;
+    crt_free(a);
+    uint32_t race = crt(36864172u);
+    CHK("racehole-in-hole", race >= a && race < a + 61440172u);
+    int inside = 0;
+    for (int i = 0; i < NTEX; i++){ g_tex[i] = crt(1398016u); inside += g_tex[i] >= a && g_tex[i] < a + 61440172u; }
+    for (int i = 0; i < NSEG_SMALL; i++){ g_small[i] = gbuf(1000u + rnd(&s) % 4000u); inside += g_small[i] >= a && g_small[i] < a + 61440172u; }
+    CHK("racehole-rest-untouched", !inside);
+    crt_free(race);
+    uint32_t again = crt(61440172u);
+    CHK("racehole-back", again == a);
     crt_free(again); crt_free(sep);
     for (int i = 0; i < NTEX; i++) crt_free(g_tex[i]);
     for (int i = 0; i < NSEG_SMALL; i++) gbuf_free(g_small[i]);
@@ -189,7 +212,7 @@ int main(void){
     mem_commit(0x00E00000u, 0x00010000u);                /* the calls' guest stack */
     heap_init();
     g_h = H("HeapCreate", 0u, 0x1000u, 0u);
-    bestfit(); bighole(); segments(); trips();
+    bestfit(); bighole(); racehole(); segments(); trips();
     printf("heap_va_unit: %s (%d failed)\n", fails ? "FAILED" : "passed", fails);
     return fails != 0;
 }

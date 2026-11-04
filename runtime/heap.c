@@ -151,9 +151,11 @@ static inline int dbit(uint32_t a){ uint32_t p = (a - GH_BASE) / GPAGE; return (
 static inline void dset(uint32_t a, int v){ uint32_t p = (a - GH_BASE) / GPAGE;
     if (v) g_va_dirty[p >> 3] |= (uint8_t)(1u << (p & 7)); else g_va_dirty[p >> 3] &= (uint8_t)~(1u << (p & 7)); }
 
-/* Big blocks' holes (g_hint, the last NHINT freed): a block of VA_BIG or more
- * leaves its granules here when it goes, and they are kept for the next big
- * one (va_find) until one takes them. */
+/* Big blocks' holes (g_hint, the last NHINT, newest first): a block of
+ * VA_BIG or more leaves its granules here when it goes, and they are kept for
+ * the next big one (va_find).  A block placed in a hole takes its part of it;
+ * the rest stays kept (a race track's smaller streamer block sits in free
+ * roam's hole for the race, and free roam's comes back into the whole of it). */
 #define VA_BIG ((16u << 20) / VA_GRAN)
 #define NHINT 8
 static struct { uint32_t g0, ng; } g_hint[NHINT];
@@ -163,16 +165,23 @@ static void hint_mask(void){
     for (int i = 0; i < NHINT; i++)
         for (uint32_t g = g_hint[i].g0; g < g_hint[i].g0 + g_hint[i].ng; g++) vset(g_hintmask, g, 1);
 }
-static void hint_add(uint32_t g0, uint32_t ng){
+static void hint_put(uint32_t g0, uint32_t ng){           /* newest first, the oldest goes */
     memmove(g_hint + 1, g_hint, (NHINT - 1) * sizeof g_hint[0]);
     g_hint[0].g0 = g0; g_hint[0].ng = ng;
-    hint_mask();
 }
-static void hint_drop(uint32_t g0, uint32_t ng){         /* [g0, g0+ng) taken: the holes it cuts are gone */
-    int n = 0;
-    for (int i = 0; i < NHINT; i++)
-        if (g_hint[i].ng && g_hint[i].g0 < g0 + ng && g0 < g_hint[i].g0 + g_hint[i].ng){ g_hint[i].ng = 0; n++; }
-    if (n) hint_mask();
+static void hint_add(uint32_t g0, uint32_t ng){ hint_put(g0, ng); hint_mask(); }
+static void hint_drop(uint32_t g0, uint32_t ng){         /* [g0, g0+ng) taken */
+    uint32_t rest[2 * NHINT][2]; int n = 0, cut = 0;
+    for (int i = 0; i < NHINT; i++){
+        uint32_t h0 = g_hint[i].g0, h1 = h0 + g_hint[i].ng;
+        if (!g_hint[i].ng || h0 >= g0 + ng || g0 >= h1) continue;
+        g_hint[i].ng = 0; cut = 1;
+        if (h0 < g0){ rest[n][0] = h0; rest[n][1] = g0 - h0; n++; }
+        if (g0 + ng < h1){ rest[n][0] = g0 + ng; rest[n][1] = h1 - (g0 + ng); n++; }
+    }
+    if (!cut) return;
+    for (int i = n - 1; i >= 0; i--) hint_put(rest[i][0], rest[i][1]);
+    hint_mask();
 }
 /* A run of ng free granules: bottom-up first fit for heap segments, top-down
  * for VirtualAlloc and large blocks, so the two meet in the middle and the
