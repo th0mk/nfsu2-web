@@ -295,6 +295,12 @@ context lists every problem the developer has a report on, with its first thread
   (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); portrait works for some.
 - Black picture with sound on Intel graphics of the 9th generation (HD 510 and similar), in Chrome and Firefox: the
   log shows the game drawing with no WebGPU errors. No fix.
+- Free roam: error 134 after an hour or more among many players, with trips out of free roam and back (the crib,
+  shops, cover shoots and special events, races): the log has `[heap] HeapAlloc(...) FAILED` lines before the `TRAP`
+  (in tlsf_alloc < gbuf_alloc while friends' cars load, or in sub_00401aa0 on a race's loading screen). The game's
+  memory came back in pieces too small for its next big load. A fix is in d28b0b03, there only once the live
+  version has that commit; with it the log also says what holds the memory (`[heap] no room for ...` lines). A log
+  on a version with it that still ends that way is new: escalate it with the log.
 - Free roam: the world's loading screen, or roads missing, while driving among many players (seconds on a PC, half a
   minute on a phone; once it never ended). Cause found on 29 October: the game loads no part of the city while it
   loads a player's car, and with players coming and going their cars load one after another, so the city waited for
