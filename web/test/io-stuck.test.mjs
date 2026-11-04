@@ -46,16 +46,20 @@ class FFile {
     return W.hangOpen && /\\.BIN\\./.test(this.name) ? new Promise(() => {}) : Promise.resolve(new Sync(this));
   }
   async getFile() {
+    if (W.hang === 'read' && this.name === 'settings.ini') await new Promise(() => {});
     if (W.readFail === this.name) throw new DOMException('Unknown failure', 'UnknownError');
     const d = this.data; return { size: d.length, lastModified: 0, arrayBuffer: async () => d.slice().buffer };
   }
 }
 class FDir {
   constructor(name) { this.kind = 'directory'; this.name = name; this.kids = new Map(); }
-  async getDirectoryHandle(n, o = {}) { let k = this.kids.get(n); if (!k) { if (!o.create) throw new DOMException('', 'NotFoundError'); k = new FDir(n); this.kids.set(n, k); } return k; }
+  async getDirectoryHandle(n, o = {}) {
+    if (W.hang === 'lookup' && n === 'save' && !o.create) await new Promise(() => {});
+    let k = this.kids.get(n); if (!k) { if (!o.create) throw new DOMException('', 'NotFoundError'); k = new FDir(n); this.kids.set(n, k); } return k;
+  }
   async getFileHandle(n, o = {}) { let k = this.kids.get(n); if (!k) { if (!o.create) throw new DOMException('', 'NotFoundError'); k = new FFile(n); this.kids.set(n, k); } return k; }
   async removeEntry(n) { this.kids.delete(n); }
-  async *entries() { for (const e of [...this.kids]) yield e; }
+  async *entries() { if (W.hang === 'list' && this.name === 'save') await new Promise(() => {}); for (const e of [...this.kids]) yield e; }
   async *keys() { for (const k of [...this.kids.keys()]) yield k; }
 }
 const root = new FDir('');
@@ -65,7 +69,11 @@ for (const [path, text] of Object.entries(W.saveFiles ?? {})) {
   for (const x of parts.slice(0, -1)) { let k = d.kids.get(x); if (!k) { k = new FDir(x); d.kids.set(x, k); } d = k; }
   const f = new FFile(parts[parts.length - 1]); f.data = new TextEncoder().encode(text); d.kids.set(f.name, f);
 }
-const getDirectory = async () => { if (W.noStorage) throw new DOMException('Unknown failure', 'UnknownError'); return root; };
+const getDirectory = async () => {
+  if (W.hang === 'root') await new Promise(() => {});
+  if (W.noStorage) throw new DOMException('Unknown failure', 'UnknownError');
+  return root;
+};
 Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/156.0.0.0', storage: { getDirectory } }, configurable: true });
 /** the browser's storage as it is: path -> its bytes as text */
 function dump(d = root, rel = '', out = {}) {
@@ -236,5 +244,35 @@ test('playing without saving in a browser whose storage gives nothing at all: th
     await io.writeAll('NFS Underground 2.txt', 'x');
     assert.equal(await io.readAll('NFS Underground 2.txt'), 'x');
     assert.deepEqual(io.msgs.filter(m => PAGE_NEWS.includes(m.t)), []);
+  } finally { await io.stop(); }
+});
+
+// Review of 2f61632b, second round: Play without saving is offered where the storage does not answer, so its start must
+// not wait for it for good (it gave no "ready" in 8 s, and the page a black stage), and what it copies into memory is
+// what the game reads: no screenshots, covers or big files (40 screenshots of 4 MB were 160 MB beside the game's 1 GB).
+// On de9b20bb both fail.
+
+for (const hang of ['root', 'lookup', 'list', 'read'])
+  test(`playing without saving where the storage never answers (${hang}): ready within its time, with the page's files alone`, { timeout: 30_000 }, async () => {
+    const t0 = performance.now();
+    const io = await start({ memory: true, hang, saveFiles: { 'settings.ini': '# mine\n', 'registry.txt': 'd A=1\n', 'NFS Underground 2/AAA/AAA': 'aaa' },
+      memFiles: [{ path: 'registry.txt', text: 'd DEFAULT=1\n' }] });
+    try {
+      const s = (performance.now() - t0) / 1000;
+      assert.ok(s < 9, `ready after ${s.toFixed(1)} s`);
+      assert.deepEqual([await io.readAll('registry.txt'), await io.readAll('NFS Underground 2/AAA/AAA'), await io.readAll('settings.ini')], ['d DEFAULT=1\n', 44, 44]);
+      assert.ok(io.notes.some(n => /^\[save\] playing without saving: the save folder did not answer within 2 s a call \(6 s in all\), so \/save is in this game's memory with the page's files alone/.test(n)), io.notes.join('\n'));
+      await io.writeAll('registry.txt', 'd A=2\n');
+      assert.equal(await io.readAll('registry.txt'), 'd A=2\n');
+    } finally { await io.stop(); }
+  });
+
+test('playing without saving copies what the game reads: no screenshots, covers or big files, and says so', { timeout: 60_000 }, async () => {
+  const io = await start({ memory: true, saveFiles: { 'NFS Underground 2/AAA/AAA': 'aaa', 'registry.txt': 'd A=1\n', 'nfsu2-shot.png': 'png',
+    'NFS Underground 2/AAA DVD 1/AAA DVD 1': 'cover', 'big.bin': 'x'.repeat(3 << 20) } });
+  try {
+    assert.deepEqual([await io.readAll('NFS Underground 2/AAA/AAA'), await io.readAll('registry.txt')], ['aaa', 'd A=1\n']);
+    assert.deepEqual([await io.readAll('nfsu2-shot.png'), await io.readAll('NFS Underground 2/AAA DVD 1/AAA DVD 1'), await io.readAll('big.bin')], [44, 44, 44]);
+    assert.ok(io.notes.some(n => /2 files of the save folder copied in .*, 3 screenshots, covers or big files left out \(3\.0 MB\); nothing is written/.test(n)), io.notes.join('\n'));
   } finally { await io.stop(); }
 });

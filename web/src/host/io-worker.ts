@@ -496,6 +496,7 @@ async function salvage(rel: string, bytes: Uint8Array | null): Promise<boolean> 
   return false;
 }
 function recover(): Promise<void> {
+  if (inMemory()) return Promise.resolve();       // (playing without saving: the browser's storage is never looked at again)
   recovering ??= (async () => {
     const t0 = performance.now();
     const opfs = await navigator.storage.getDirectory();
@@ -582,26 +583,60 @@ function moveMem(e: MemDir | MemFile, to: MemDir, name: string) {
   e.name = name; e.parent = to;
   to.kids.set(name, e);
 }
-/** the save folder's files that read, copied into dir (folders as they are); what did not read is left out */
-async function memCopy(from: FileSystemDirectoryHandle, dir: MemDir, n: { files: number; bytes: number; skipped: number }) {
-  const list: [string, FileSystemHandle][] = [];
-  try { for await (const e of (from as any).entries() as AsyncIterable<[string, FileSystemHandle]>) list.push(e); }
-  catch { n.skipped++; return; }
-  for (const [name, h] of list) {
-    if (h.kind === 'directory') { const sub = new MemDir(name, dir); dir.kids.set(name, sub); await memCopy(h as FileSystemDirectoryHandle, sub, n); continue; }
+// It is offered where the storage does not answer, so its start waits for the storage a little only: each call
+// MEM_CALL_MS, all of them MEM_ALL_MS.  Past either, the game starts with the page's files alone (none of the save
+// folder's: half of them would be a profile without its GARAGE.DAT).  Copied: what the game reads, up to MEM_ALL_MAX;
+// left out: F12's screenshots, the DVD and magazine covers (1 MB each), and a file over MEM_FILE_MAX (a game that cannot
+// keep anything has no use for them, and a phone none for their memory beside the game's own).
+const MEM_CALL_MS = 2000, MEM_ALL_MS = 6000, MEM_FILE_MAX = 2 << 20, MEM_ALL_MAX = 16 << 20;
+const isMemShot = (path: string) => !path.includes('/') && /\.(tga|bmp|png|jpe?g)$/i.test(path);
+const isMemCover = (path: string) => /^NFS Underground 2\/[^/]+ (DVD|Magazine) \d+$/.test(path);
+interface MemCount { files: number; bytes: number; skipped: number; left: number; leftBytes: number; until: number }
+/** p, or a TimeoutError once ms passed (p answers whenever it does, unheard) */
+function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  p.catch(() => {});
+  return Promise.race([p, new Promise<never>((_, no) => { timer = setTimeout(() => no(domError('TimeoutError', `no answer in ${ms} ms`)), ms); })])
+    .finally(() => clearTimeout(timer));
+}
+const memCall = <T>(p: Promise<T>, n: MemCount) => within(p, Math.max(0, Math.min(MEM_CALL_MS, n.until - Date.now())));
+const timedOut = (e: unknown) => (e as Error)?.name === 'TimeoutError';
+/** the save folder's files the game reads (rel: dir's path), copied into dir; what did not read is left out, and a
+ *  TimeoutError (a call past its time) is thrown: none of it is used then */
+async function memCopy(from: FileSystemDirectoryHandle, dir: MemDir, rel: string, n: MemCount) {
+  const it = (from as any).entries() as AsyncIterator<[string, FileSystemHandle]>;
+  for (;;) {
+    let r: IteratorResult<[string, FileSystemHandle]>;
+    try { r = await memCall(it.next(), n); } catch (e) { if (timedOut(e)) throw e; n.skipped++; return; }
+    if (r.done) return;
+    const [name, h] = r.value, path = rel ? `${rel}/${name}` : name;
+    if (h.kind === 'directory') {
+      if (isMemCover(path)) { n.left++; continue; }
+      const sub = new MemDir(name, dir); dir.kids.set(name, sub);
+      await memCopy(h as FileSystemDirectoryHandle, sub, path, n);
+      continue;
+    }
+    if (isMemShot(path)) { n.left++; continue; }
     try {
-      const f = await (h as FileSystemFileHandle).getFile(), m = new MemFile(name, dir);
-      m.data = new Uint8Array(await f.arrayBuffer()); m.mtime = f.lastModified;
+      const f = await memCall((h as FileSystemFileHandle).getFile(), n);
+      if (f.size > MEM_FILE_MAX || n.bytes + f.size > MEM_ALL_MAX) { n.left++; n.leftBytes += f.size; continue; }
+      const m = new MemFile(name, dir);
+      m.data = new Uint8Array(await memCall(f.arrayBuffer(), n)); m.mtime = f.lastModified;
       dir.kids.set(name, m); n.files++; n.bytes += m.data.length;
-    } catch { n.skipped++; }
+    } catch (e) { if (timedOut(e)) throw e; n.skipped++; }
   }
 }
-/** /save in memory: the save folder's files that read, then the page's own (cfg.memFiles) */
-async function memorySaves(opfs: FileSystemDirectoryHandle | null): Promise<FileSystemDirectoryHandle> {
-  const m = new MemDir('', null), n = { files: 0, bytes: 0, skipped: 0 };
-  let real: FileSystemDirectoryHandle | null = null;
-  try { real = opfs && await opfs.getDirectoryHandle(cfg.saveDir); } catch { /* none, or it does not answer */ }
-  if (real) await memCopy(real, m, n);
+/** /save in memory: the save folder's files the game reads, then the page's own (cfg.memFiles) */
+async function memorySaves(opfs: FileSystemDirectoryHandle | null, rootLate = false): Promise<FileSystemDirectoryHandle> {
+  const n: MemCount = { files: 0, bytes: 0, skipped: 0, left: 0, leftBytes: 0, until: Date.now() + MEM_ALL_MS };
+  let m = new MemDir('', null), late = rootLate;
+  try {
+    const real = opfs && await memCall(opfs.getDirectoryHandle(cfg.saveDir), n);
+    if (real) await memCopy(real, m, '', n);
+  } catch (e) {
+    // (no save folder: nothing to copy; one that did not answer in time: none of it)
+    if (timedOut(e)) { late = true; m = new MemDir('', null); Object.assign(n, { files: 0, bytes: 0, skipped: 0, left: 0, leftBytes: 0 }); }
+  }
   for (const f of cfg.memFiles ?? []) {
     const p = f.path.split('/').filter(Boolean);
     let d = m;
@@ -609,8 +644,12 @@ async function memorySaves(opfs: FileSystemDirectoryHandle | null): Promise<File
     if (!f.over && d.kids.has(p[p.length - 1])) continue;
     (await d.getFileHandle(p[p.length - 1], { create: true })).data = te.encode(f.text);
   }
-  note(`[save] playing without saving: /save is in this game's memory, ${n.files} files of the save folder copied in ` +
-    `(${(n.bytes / 1024).toFixed(0)} KB)${n.skipped ? `, ${n.skipped} that did not read left out` : ''}; nothing is written to the browser's storage`);
+  note(late ? `[save] playing without saving: the save folder did not answer within ${MEM_CALL_MS / 1000} s a call (${MEM_ALL_MS / 1000} s in all), ` +
+      'so /save is in this game\'s memory with the page\'s files alone; nothing is written to the browser\'s storage'
+    : `[save] playing without saving: /save is in this game's memory, ${n.files} files of the save folder copied in ` +
+      `(${(n.bytes / 1024).toFixed(0)} KB)${n.skipped ? `, ${n.skipped} that did not read left out` : ''}` +
+      `${n.left ? `, ${n.left} screenshots, covers or big files left out${n.leftBytes ? ` (${(n.leftBytes / 1048576).toFixed(1)} MB)` : ''}` : ''}; ` +
+      'nothing is written to the browser\'s storage');
   return m as unknown as FileSystemDirectoryHandle;
 }
 const inMemory = () => cfg.saves === 'memory';
@@ -911,9 +950,10 @@ onmessage = async (e: MessageEvent<Init | { t: 'save-ready' }>) => {
   try {
     if (inMemory()) {
       // (a browser whose storage does not answer at all still plays: the game data from the server, the saves in memory)
-      const opfs = await navigator.storage.getDirectory().catch(() => null);
-      saveRoot = await memorySaves(opfs);
-      try { cacheDir = opfs && await opfs.getDirectoryHandle(CACHE_DIR, { create: true }); } catch { cacheDir = null; }
+      let rootLate = false;
+      const opfs = await within(navigator.storage.getDirectory(), MEM_CALL_MS).catch(e => { rootLate = timedOut(e); return null; });
+      saveRoot = await memorySaves(opfs, rootLate);
+      try { cacheDir = opfs && await within(opfs.getDirectoryHandle(CACHE_DIR, { create: true }), MEM_CALL_MS); } catch { cacheDir = null; }
     } else {
       const opfs = await navigator.storage.getDirectory();
       saveRoot = await opfs.getDirectoryHandle(cfg.saveDir, { create: true });

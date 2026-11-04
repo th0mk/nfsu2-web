@@ -368,13 +368,30 @@ export async function writeBeside(name: string, text: string): Promise<void> {
 export interface SavesCheck { ok: boolean; tries: number; step?: 'list' | 'read' | 'write'; error?: unknown }
 /** how long checkSaves asks at most, all its tries together: a call the browser never answers is a failed check */
 export const CHECK_MS = 8000;
-/** the file checkSaves writes and removes beside the save folder (in none: no listing, backup or cloud save sees it) */
-const checkFile = (saveDir: string) => `${saveDir}~check`;
+/** the files checkSaves writes and removes beside the save folder (in none: no listing, backup or cloud save sees them):
+ *  a new name each try, as one left by a failed try may stay broken in a browser whose storage was (Firefox's "Entry
+ *  not found"), and would fail every check after it */
+const checkPrefix = (saveDir: string) => `${saveDir}~check`;
+const checkFile = (saveDir: string) => `${checkPrefix(saveDir)}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+/** the names under the save folder, listed (no file read: a healthy folder of 300 files took Firefox 0.4-1.7 s to read
+ *  every file's size); a folder gone meanwhile is left out, any other error thrown (missing, found) */
+async function listNames(saveDir: string): Promise<number> {
+  async function walk(parent: FileSystemDirectoryHandle, name: string, d: FileSystemDirectoryHandle): Promise<number> {
+    let n = 0;
+    try {
+      for await (const [k, h] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>)
+        n += h.kind === 'directory' ? await walk(d, k, h as FileSystemDirectoryHandle) : 1;
+    } catch (e) { if (missing(e) && !await found(parent, name, 'directory')) return 0; throw e; }
+    return n;
+  }
+  const r = await root(), top = await dirIn(r, [saveDir]);
+  return top ? walk(r, saveDir, top) : 0;
+}
 
 /**
- * Whether the save folder answers as one that works, before a game starts on it: listed whole (each file's size),
- * settings.ini and registry.txt read, and a small file written and removed beside it (in the storage's top folder, not
- * in the save folder: nothing of the save folder is written or removed).  One that does not is asked again after each
+ * Whether the save folder answers as one that works, before a game starts on it: its names listed, settings.ini and
+ * registry.txt read, and a small file written and removed beside it (in the storage's top folder, not in the save
+ * folder: nothing of the save folder is written or removed; those an earlier check left there go first).  One that does not is asked again after each
  * of waits, every handle fresh from navigator.storage (a lock another tab or a closing game still holds, a browser busy
  * for a moment); ok after any try.  All of it within limitMs: a call the browser never answers is a failed check
  * (TimeoutError).  Not there is no failure (a new player's folder), nor a full disk on the write (QuotaExceededError:
@@ -390,12 +407,18 @@ export async function checkSaves(saveDir: string, waits: number[] = [300, 1000, 
   for (let i = 0; ; i++) {
     let step: SavesCheck['step'] = 'list';
     const once = (async () => {
-      await listFiles(saveDir);
+      await listNames(saveDir);
       step = 'read';
       for (const f of ['settings.ini', 'registry.txt']) await readText(saveDir, f);
       step = 'write';
       try {
         const r = await root(), name = checkFile(saveDir);
+        // (what earlier checks left: gone if it goes; one that does not is left, and this check writes beside it)
+        try {
+          const old: string[] = [];
+          for await (const k of (r as any).keys() as AsyncIterable<string>) if (k.startsWith(checkPrefix(saveDir))) old.push(k);
+          for (const k of old) await r.removeEntry(k).catch(() => {});
+        } catch { /* not listed: left */ }
         const w = await (await r.getFileHandle(name, { create: true })).createWritable();
         await w.write('ok'); await w.close();
         await r.removeEntry(name).catch(() => {});

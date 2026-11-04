@@ -485,7 +485,7 @@
   "Did not start": "未能啟動",
   "This browser can't read or write your saves right now ({error}).": "這個瀏覽器目前無法讀取或寫入你的存檔（{error}）。",
   "Restart the browser and check that the disk has free space, then try again.": "請重新啟動瀏覽器，並確認磁碟還有可用空間，然後再試一次。",
-  "If it still fails, copy or download your passphrase under Cloud saves first. Then remove this site's data in the browser's settings (its screenshots and the Put back copy go too), reload, and enter the passphrase under Cloud saves: your progress comes back as it was at {when}.": "如果仍然失敗，請先在「雲端存檔」中複製或下載你的通關密語。然後在瀏覽器設定中移除此網站的資料（它的截圖和「放回」用的副本也會一起刪除），重新載入頁面，再到「雲端存檔」中輸入通關密語：你的進度會回到上次同步（{when}）時的狀態。",
+  "If it still fails, copy or download your passphrase under Cloud saves first. Then remove this site's data in the browser's settings (screenshots, covers, this device's settings, the Put back copy and the downloaded game data go too), reload, and enter the passphrase under Cloud saves: your progress comes back as it was at {when}.": "如果仍然失敗，請先在「雲端存檔」中複製或下載你的通關密語。然後在瀏覽器設定中移除此網站的資料（截圖、封面、這台裝置的設定、「放回」用的副本和已下載的遊戲資料也會一起刪除），重新載入頁面，再到「雲端存檔」中輸入通關密語：你的進度會回到上次同步（{when}）時的狀態。",
   "If it still fails, don't remove this site's data: your cloud saves may not have everything from this browser. Ask for help on Discord.": "如果仍然失敗，請不要移除此網站的資料：你的雲端存檔可能沒有這個瀏覽器裡的全部內容。請到 Discord 尋求協助。",
   "If it still fails, don't remove this site's data: your saves are only in this browser. Ask for help on Discord.": "如果仍然失敗，請不要移除此網站的資料：你的存檔只存在這個瀏覽器裡。請到 Discord 尋求協助。",
   "Play without saving starts the game, but nothing you do in it is kept.": "「不存檔遊玩」會啟動遊戲，但你在遊戲中做的一切都不會保留。",

@@ -868,10 +868,10 @@ test('checkSaves: the folder unreadable at start (Firefox 159): asked 4 times ov
 test('checkSaves: no new file can be made (Firefox, the day before) is not ok at its write; a full disk passes; a new player\'s browser passes and gets no folder', async () => {
   reset();
   await put(at('TOP'), profile('TOP'));
-  fsx.hooks.fail = (op, p) => op === 'write' && p === `${SAVE}~check` ? new DOMException('Entry not found', 'NotFoundError') : undefined;
+  fsx.hooks.fail = (op, p) => op === 'write' && p.startsWith(`${SAVE}~check`) ? new DOMException('Entry not found', 'NotFoundError') : undefined;
   const c = await SF.checkSaves(SAVE, [1, 1, 1]);
   assert.deepEqual([c.ok, c.tries, c.step, c.error?.name], [false, 4, 'write', 'NotFoundError']);
-  fsx.hooks.fail = (op, p) => op === 'close' && p === `${SAVE}~check` ? new DOMException('quota', 'QuotaExceededError') : undefined;
+  fsx.hooks.fail = (op, p) => op === 'close' && p.startsWith(`${SAVE}~check`) ? new DOMException('quota', 'QuotaExceededError') : undefined;
   assert.deepEqual(await SF.checkSaves(SAVE, [1]), { ok: true, tries: 1 });
   fsx.hooks = {};
   reset();
@@ -885,7 +885,7 @@ test('checkSaves: a lock a second tab or a closing game holds for a moment, then
   // (by the check's own waits: a page an earlier test left running may list the folder meanwhile)
   let phase = 0;
   fsx.hooks.fail = (op, p) => {
-    if (op === 'write' && p === `${SAVE}~check` && phase < 2) return new DOMException('No modification allowed', 'NoModificationAllowedError');
+    if (op === 'write' && p.startsWith(`${SAVE}~check`) && phase < 2) return new DOMException('No modification allowed', 'NoModificationAllowedError');
     if (op === 'getFile' && p === `${SAVE}/settings.ini` && phase === 2) return unknown();
   };
   const c = await SF.checkSaves(SAVE, [1, 1, 1], async () => { phase++; });
@@ -923,7 +923,7 @@ test('a file found, then not reading with NotFoundError (Firefox\'s "Entry not f
   await assert.rejects(SU.exportSaves(SAVE), { name: 'NotFoundError' });
   const c = await SF.checkSaves(SAVE, [1, 1, 1]);
   fsx.hooks = {};
-  assert.deepEqual([c.ok, c.step], [false, 'list']);
+  assert.deepEqual([c.ok, c.step], [false, 'read']);
   assert.equal(dec.decode(await bytes('settings.ini')), mine);
   // one that is gone by the time its read fails is left out, as one removed meanwhile
   fsx.hooks.fail = (op, p) => { if (op === 'getFile' && p.endsWith('/BBB/BBB')) { fsx.root.kids.get(SAVE).kids.get(DIR).kids.get('BBB').kids.delete('BBB'); return notFound(); } };
@@ -1008,7 +1008,7 @@ test('checkSaves: a call the browser never answers is a failed check after its t
   const c = await SF.checkSaves(SAVE, [1, 1, 1], undefined, 300);
   const ms = performance.now() - t0;
   fsx.hooks = {};
-  assert.deepEqual([c.ok, c.step, c.error?.name], [false, 'list', 'TimeoutError']);
+  assert.deepEqual([c.ok, c.step, c.error?.name], [false, 'read', 'TimeoutError']);
   assert.ok(ms >= 250 && ms < 2000, `${ms} ms`);
 });
 
@@ -1034,4 +1034,31 @@ test('playing without saving (setWritesOff): nothing writes, moves or removes an
   assert.deepEqual([...fsx.root.kids.keys()], beside);
   await SF.writeFile(SAVE, 'settings.ini', '# changed\n');
   assert.equal(dec.decode(await bytes('settings.ini')), '# changed\n');
+});
+
+// Review of 2f61632b, second round: the check reads no file but settings.ini and registry.txt (a healthy but slow
+// browser took 0.4-1.7 s for every file's size), and writes its file under a new name each try, removing what earlier
+// checks left (one a bad spell left broken failed every check after it).  On de9b20bb both fail.
+
+test('checkSaves lists names only: no file read but settings.ini and registry.txt', async () => {
+  reset();
+  for (const n of ['AAA', 'BBB', 'CCC']) await put(at(n), profile(n));
+  await put('settings.ini', '# s\n'); await put('registry.txt', 'd A=1\n');
+  const read = [];
+  fsx.hooks.fail = (op, p) => { if (op === 'getFile' && p.startsWith(`${SAVE}/`)) read.push(p.slice(SAVE.length + 1)); };
+  assert.deepEqual(await SF.checkSaves(SAVE, [1]), { ok: true, tries: 1 });
+  fsx.hooks = {};
+  assert.deepEqual(read.sort(), ['registry.txt', 'settings.ini']);
+});
+
+test('checkSaves: a test file an earlier check left broken does not fail it; one that can go goes', async () => {
+  reset();
+  await put('settings.ini', '# s\n');
+  (await fsx.root.getFileHandle(`${SAVE}~check`, { create: true })).data = enc.encode('ok');        // broken: nothing on it answers
+  (await fsx.root.getFileHandle(`${SAVE}~check-old1`, { create: true })).data = enc.encode('ok');   // left by a cut check
+  fsx.hooks.fail = (op, p) => p === `${SAVE}~check` ? unknown() : undefined;
+  const c = await SF.checkSaves(SAVE, [1, 1, 1]);
+  fsx.hooks = {};
+  assert.deepEqual(c, { ok: true, tries: 1 });
+  assert.deepEqual([...fsx.root.kids.keys()].sort(), [SAVE, `${SAVE}~check`]);
 });

@@ -93,16 +93,18 @@ console.log(`  asked after ${((Date.now() - t0) / 1000).toFixed(1)} s: ${title} 
 check('Play asks: what the browser answered, what to do, Play without saving, the code', title === 'Play without saving?' && ADVICE.test(body ?? '') &&
   /Play without saving starts the game, but nothing you do in it is kept\./.test(body ?? '') && /SAVES-UNREADABLE/.test(body ?? '') &&
   await page.textContent('#confirm-ok') === 'Play without saving' && await page.textContent('#confirm-cancel') === 'Cancel');
+check('its two buttons plain and equal, Cancel focused (Enter keeps the page)', await page.evaluate(() =>
+  document.querySelector('#confirm-ok').className === 'btn' && document.querySelector('#confirm-cancel').className === 'btn' && document.activeElement?.id === 'confirm-cancel'));
 await page.click('#confirm-cancel');
 await page.waitForFunction(() => window.__nfsu2.phase === 'exited', null, { timeout: 60000 });
 const status = await page.textContent('#status'), sub = await page.textContent('#status-sub');
 check('Cancel: did not start, with what to do and the code', status === 'Did not start' && ADVICE.test(sub ?? '') && /SAVES-UNREADABLE/.test(sub ?? ''), sub ?? '');
 check('no game, the stage down, the page usable', await page.evaluate(() => !window.__nfsu2.session && document.querySelector('#stage').hidden && !document.querySelector('#app').inert));
 log = await logText();
-check('the log says the problem in English with its code', /\[app\] problem SAVES-UNREADABLE: the save folder does not answer \(list: UnknownError: Unknown failure; 4 tries\)/.test(log) &&
+check('the log says the problem in English with its code', /\[app\] problem SAVES-UNREADABLE: the save folder does not answer \(read: UnknownError: Unknown failure; 4 tries\)/.test(log) &&
   /\[app\] not played without saving/.test(log) && /\[app\] the game did not start \(SAVES-UNREADABLE\), nothing written/.test(log));
 check('the saves are as they were, byte for byte', JSON.stringify(await files()) === JSON.stringify(before));
-check('nothing left beside the save folder', !(await page.evaluate(async S => { for await (const n of (await navigator.storage.getDirectory()).keys()) if (n === `${S}~check`) return true; return false; }, SAVE)));
+check('nothing left beside the save folder', !(await page.evaluate(async S => { for await (const n of (await navigator.storage.getDirectory()).keys()) if (n.startsWith(`${S}~check`)) return true; return false; }, SAVE)));
 
 // 2. Play without saving: the game starts and says so, runs (its registry written at its start: into memory), F12
 // keeps no screenshot; the save folder after it as before, byte for byte

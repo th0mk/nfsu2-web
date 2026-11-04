@@ -563,14 +563,15 @@ class SavesBroken extends Error {
   constructor(readonly check: SavesCheck) { super(String(check.error)); }
 }
 const RESTART = N('Restart the browser and check that the disk has free space, then try again.');
-const CLOUD_WAY = N('If it still fails, copy or download your passphrase under Cloud saves first. Then remove this site\'s data in the browser\'s settings (its screenshots and the Put back copy go too), reload, and enter the passphrase under Cloud saves: your progress comes back as it was at {when}.');
+const CLOUD_WAY = N('If it still fails, copy or download your passphrase under Cloud saves first. Then remove this site\'s data in the browser\'s settings (screenshots, covers, this device\'s settings, the Put back copy and the downloaded game data go too), reload, and enter the passphrase under Cloud saves: your progress comes back as it was at {when}.');
 const UNSYNCED_WAY = N('If it still fails, don\'t remove this site\'s data: your cloud saves may not have everything from this browser. Ask for help on Discord.');
 const ALONE_WAY = N('If it still fails, don\'t remove this site\'s data: your saves are only in this browser. Ask for help on Discord.');
 const NO_SAVE_WHAT = N('Play without saving starts the game, but nothing you do in it is kept.');
 /**
  * What the page says of a save folder that does not answer: what the browser answered, and what to do.  A restart of
  * the browser and free room on the disk first (Firefox gives a full disk the same "Unknown failure").  Then the site's
- * data removed only where nothing is lost by it but the screenshots and Put back's copy: cloud saves whose last sync went
+ * data removed only where nothing is lost by it but what cloud saves leave out (screenshots, covers, this device's
+ * settings, Put back's copy, the game data downloaded again): cloud saves whose last sync went
  * through (VaultPanel.clearable, its time said), the passphrase copied first (in Firefox and Safari it is kept only in
  * the site's data).  Anywhere else: leave the data, ask for help (removing it deletes what the cloud does not have).
  */
@@ -591,13 +592,14 @@ async function askNoSave(c: SavesCheck): Promise<boolean> {
   const body = document.createElement('div');
   body.append(p(savesAdvice(String(c.error))), p(t(NO_SAVE_WHAT)));
   body.append(codeOf('SAVES-UNREADABLE'));
-  const on = await choiceBox(t('Play without saving?'), body, t('Play without saving'), t('Cancel')) === 'ok';
+  // (two plain buttons, Cancel focused: the choice that keeps no progress is never the one Enter takes)
+  const on = await choiceBox(t('Play without saving?'), body, t('Play without saving'), t('Cancel'), false, '', false, true) === 'ok';
   log.add(`[app] ${on ? 'playing without saving: /save in memory, nothing written to the browser\'s storage' : 'not played without saving'}`);
   return on;
 }
 /** this game plays without saving (askNoSave): nothing the page writes, and the game's /save in memory (game.ts memory) */
 let noSave = false;
-function endNoSave() { if (noSave) { noSave = false; setWritesOff(false); } }
+function endNoSave() { if (noSave) { noSave = false; setWritesOff(false); void settings.refresh(); } }    // (its panel writable again)
 
 async function startGame() {
   // settings.ini as it is now (another tab or the raw editor may have changed it,
@@ -1890,13 +1892,14 @@ function quitLabel(): string {
 function confirmBox(title: string, body: Node | string, ok: string, danger = false, about = '', cancel = t('Cancel')): Promise<boolean> {
   return choiceBox(title, body, ok, cancel, danger, about).then(v => v === 'ok');
 }
-/** the same, with which way it closed: 'ok', 'cancel' (the cancel button, none when cancel is ''), '' (Esc) */
-function choiceBox(title: string, body: Node | string, ok: string, cancel: string, danger = false, about = '', cancelDanger = false): Promise<string> {
+/** the same, with which way it closed: 'ok', 'cancel' (the cancel button, none when cancel is ''), '' (Esc); plain: two
+ *  equal buttons, neither primary, Cancel focused (a choice that loses progress) */
+function choiceBox(title: string, body: Node | string, ok: string, cancel: string, danger = false, about = '', cancelDanger = false, plain = false): Promise<string> {
   const d = $<HTMLDialogElement>('#confirm');
   d.dataset.about = about;            // 'quit': closed when the game ends (endStage)
   $('#confirm-title').textContent = title;
   const b = $('#confirm-body'); b.replaceChildren(typeof body === 'string' ? Object.assign(document.createElement('p'), { textContent: body }) : body);
-  const okb = $<HTMLButtonElement>('#confirm-ok'); okb.textContent = ok; okb.className = danger ? 'btn danger' : 'btn selected';
+  const okb = $<HTMLButtonElement>('#confirm-ok'); okb.textContent = ok; okb.className = danger ? 'btn danger' : plain ? 'btn' : 'btn selected';
   okb.hidden = !ok;                                  // '' (cancel '' too): the body's buttons answer (vault-ui.ts askAtPlay)
   okb.parentElement!.hidden = !ok && !cancel;
   const cb = $('#confirm-cancel'); cb.textContent = cancel; cb.hidden = !cancel;     // '': the one button
@@ -1907,6 +1910,7 @@ function choiceBox(title: string, body: Node | string, ok: string, cancel: strin
     d.tabIndex = -1; d.focus();
     d.addEventListener('close', () => d.removeAttribute('tabindex'), { once: true });
   } else if (cancelDanger && !danger) okb.focus();   // the safe one first
+  else if (plain && cancel) cb.focus();
   return new Promise(res => d.addEventListener('close', () => res(d.returnValue), { once: true }));
 }
 // A frozen game's log: players download it before the stall report's 15 s (2026-10-24: 13 s, no report), so the
