@@ -340,7 +340,7 @@ static void va_free_region(uint32_t g0){
     uint32_t ng = g_va[g0].ng, a = GH_BASE + g0 * VA_GRAN, len = ng * VA_GRAN;
     if (ng >= VA_BIG) hint_add(g0, ng);                 /* a big block's hole, kept for the next big one */
     for (uint32_t g = g0; g < g0 + ng; g++){ vset(g_va_bits, g, 0); if (g_check) vset(g_va_dead, g, 1); }
-    for (uint32_t p = a; p < a + len; p += GPAGE){ pcset(p, 0); dset(p, 0); }
+    for (uint32_t p = a; p < a + len; p += GPAGE){ pcset(p, 0); dset(p, g_check != 0); }   /* HEAPCHECK: 0xDD, not zero */
     g_va[g0] = (VaReg){0};
     g_va_reserved -= (uint64_t)len;
     mem_release(a, len, !g_check);
@@ -1030,7 +1030,7 @@ static uint32_t virtual_free(CPU *c, uint32_t addr, uint32_t size, uint32_t type
         if (!size && addr != rbase){ win32_set_last_error(c, 87); return 0; }
         if (hi > (uint64_t)rbase + len) hi = (uint64_t)rbase + len;
         uint32_t rlo = (lo + 0x3FFFu) & ~0x3FFFu, rhi = (uint32_t)hi & ~0x3FFFu;   /* whole host pages */
-        for (uint32_t p = lo; p < hi; p += GPAGE){ pcset(p, 0); if (p >= rlo && p < rhi) dset(p, 0); }
+        for (uint32_t p = lo; p < hi; p += GPAGE){ pcset(p, 0); if (p >= rlo && p < rhi) dset(p, g_check != 0); }
         mem_release(lo, (uint32_t)(hi - lo), !g_check);
         return 1;
     }

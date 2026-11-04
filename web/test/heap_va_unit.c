@@ -27,7 +27,9 @@
  *             after them as had fitted before
  *   holes     a hole whose big block never comes back is kept HINT_TTL frames
  *             only; a block taking part of one of eight holes keeps the other
- *             seven (the oldest went although a slot was free) */
+ *             seven (the oldest went although a slot was free)
+ *   check     (NFSU2_HEAPCHECK=1, run with "check") a VirtualAlloc region
+ *             released and reserved again reads zero, not the 0xDD poison */
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -306,12 +308,32 @@ static void holes_compact(void){
     for (int i = 0; i < 8; i++) H("VirtualFree", sep[i], 0u, 0x8000u);
 }
 
-int main(void){
+/* NFSU2_HEAPCHECK=1: released pages are 0xDD; a region reserved and
+ * committed there again must read zero. */
+static void check_zero(void){
+    uint32_t a = H("VirtualAlloc", 0u, MB, 0x3000u, 4u);
+    memset(g_mem + a, 0x5A, MB);
+    H("VirtualFree", a, 0u, 0x8000u);
+    uint32_t b = H("VirtualAlloc", a, MB, 0x3000u, 4u);
+    int nz = 0;
+    for (uint32_t i = 0; b && i < MB; i++) nz += MR8(b + i) != 0;
+    CHK("check-release-zero", a && b == a && nz == 0);
+    memset(g_mem + b, 0x5A, MB);
+    H("VirtualFree", b, MB, 0x4000u);                           /* decommit, then commit again */
+    uint32_t c = H("VirtualAlloc", b, MB, 0x1000u, 4u);
+    nz = 0;
+    for (uint32_t i = 0; c && i < MB; i++) nz += MR8(c + i) != 0;
+    CHK("check-decommit-zero", c == b && nz == 0);
+    H("VirtualFree", b, 0u, 0x8000u);
+}
+
+int main(int argc, char **argv){
     mem_init();
     mem_commit(0x00E00000u, 0x00010000u);                /* the calls' guest stack */
     heap_init();
     g_h = H("HeapCreate", 0u, 0x1000u, 0u);
-    bestfit(); bighole(); racehole(); segments(); trips(); dfree(); reserve(); holes_expire(); holes_compact();
+    if (argc > 1 && !strcmp(argv[1], "check")) check_zero();
+    else { bestfit(); bighole(); racehole(); segments(); trips(); dfree(); reserve(); holes_expire(); holes_compact(); }
     printf("heap_va_unit: %s (%d failed)\n", fails ? "FAILED" : "passed", fails);
     return fails != 0;
 }
