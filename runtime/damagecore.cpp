@@ -100,6 +100,10 @@ constexpr uint32_t kWorldTimer = 0x86518C;         // simulation clock, 1/4000 s
 constexpr uint32_t kImpulseMassScale = 0x7A1884;   // float, ApplyImpulse divides 1 by it
 // Render's open flags (1 = hood/trunk/door open), at esp + these at 0x620C2B
 constexpr size_t kOpenHood = 0x30C, kOpenTrunk = 0xD0, kOpenLeftDoor = 0x184, kOpenRightDoor = 0xFC;
+// How far the hood and the trunk lid are open (float, from their opening animation, 0x434610), which Render works
+// out before 0x620C2B only for a lid that was open from its start (0x620BD6, 0x620C08), so a lid opened by the
+// hook kept 0. The engine's light is the car's scaled by the hood's (0x6304DD): at 0 the engine was black.
+constexpr size_t kOpenHoodAmount = 0x158, kOpenTrunkAmount = 0x150;
 constexpr size_t kCarTypeInfo = 0x0C;                     // Car
 constexpr size_t kTypeFrontAxleX = 0x120, kTypeFrontWheelRadius = 0x130, kTypeRearAxleX = 0x180;
 constexpr uint32_t kGetTextureInfo = 0x4901D0;           // cdecl TextureInfo* (hash, int default, int unloaded)
@@ -1565,14 +1569,17 @@ extern "C" void dmg_open_flags(uint32_t cri, uint32_t frame) {
     if (it == g_cars.end()) return;
     static const struct {
         const char* name;
-        size_t flag;
-    } kOpen[] = {{"hood", kOpenHood}, {"trunk", kOpenTrunk}, {"left door", kOpenLeftDoor},
-                 {"right door", kOpenRightDoor}};
+        size_t flag, amount;   // amount: 0 for none
+    } kOpen[] = {{"hood", kOpenHood, kOpenHoodAmount}, {"trunk", kOpenTrunk, kOpenTrunkAmount},
+                 {"left door", kOpenLeftDoor, 0}, {"right door", kOpenRightDoor, 0}};
     for (int i = 0; i < kHangCount; i++) {
         const HangPart& h = it->second->parts[i];
         if (!h.loose && !h.fallen) continue;
         for (const auto& o : kOpen)
-            if (strcmp(o.name, kHangSpecs[i].name) == 0) At<int>(G(frame), o.flag) = 1;
+            if (strcmp(o.name, kHangSpecs[i].name) == 0) {
+                if (!At<int>(G(frame), o.flag) && o.amount) At<float>(G(frame), o.amount) = 1.0f;   // fully open
+                At<int>(G(frame), o.flag) = 1;
+            }
     }
 }
 
