@@ -715,7 +715,7 @@ export class SettingsPanel {
       row.classList.add('set-list');
       described = crewControl({ list: crewsOf(cur, this.current('roam_crew_colours')), id, labelId: label.id, placeholder: c.placeholder, counts: this.crewCounts,
         draft: this.crewDraft, onDraft: v => { this.crewDraft = v; }, change: (list, focus) => void this.setCrews(list, focus),
-        // with the room this file sets: crew-mates meet within one room
+        // with the room this file sets, if any: crew-mates meet within one room
         link: name => inviteLink(location.origin, { crew: name, room: this.current('roam_room') }), said: msg => this.deps.say?.(msg) }, ctl);
     } else if (c.t === 'phrases') {
       row.classList.add('set-list');

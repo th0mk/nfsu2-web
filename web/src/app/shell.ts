@@ -1567,7 +1567,7 @@ function drawPopCrews(focus?: (root: HTMLElement) => Element | null | undefined)
   box.replaceChildren();
   crewControl({ list: roamCrews ?? [], id: 'crews-pop-input', labelId: 'crews-pop-title', placeholder: N('Crew name'), counts: popCounts, draft: crewDraft,
     onDraft: v => { crewDraft = v; }, change: (list, f) => void menuCrews(list, f),
-    // with the room the game is in (crew-mates meet within one room); what the copy did goes in the popup's note
+    // with the room the game is in, if any (crew-mates meet within one room); what the copy did goes in the popup's note
     link: name => inviteLink(location.origin, { crew: name, room: roamRoom ?? '' }) }, box).setAttribute('aria-labelledby', 'crews-pop-title');
   if (had && focus) ((focus(box) ?? box.querySelector('input:enabled')) as HTMLElement | null)?.focus({ focusVisible: true } as FocusOptions);
 }

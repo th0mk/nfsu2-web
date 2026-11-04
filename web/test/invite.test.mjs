@@ -13,10 +13,10 @@ const js = (await esbuild.build({ stdin: { contents: entry, resolveDir: ROOT, lo
 const I = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 const O = 'https://nfsu2.xyz';
 
-test('a room\'s link, and a crew\'s with the sender\'s room', () => {
+test('a room\'s link, and a crew\'s with the sender\'s room if any', () => {
   assert.equal(I.inviteLink(O, { room: 'Blue Room' }), 'https://nfsu2.xyz/#room=Blue%20Room');
   assert.equal(I.inviteLink(O, { crew: 'Night Owls', room: 'Blue Room' }), 'https://nfsu2.xyz/#crew=Night%20Owls&room=Blue%20Room');
-  assert.equal(I.inviteLink(O, { crew: 'Night Owls', room: '' }), 'https://nfsu2.xyz/#crew=Night%20Owls&room=', 'in no room: says so');
+  assert.equal(I.inviteLink(O, { crew: 'Night Owls', room: '' }), 'https://nfsu2.xyz/#crew=Night%20Owls', 'in no room: the crew alone');
   assert.equal(I.inviteLink(O, { crew: 'Night Owls' }), 'https://nfsu2.xyz/#crew=Night%20Owls');
   // letters past ASCII as they are (a chat shows them); the URL's own signs and what a chat cuts off a link's end coded
   assert.equal(I.inviteLink(O, { room: 'Комната' }), 'https://nfsu2.xyz/#room=Комната');
@@ -27,7 +27,7 @@ test('a room\'s link, and a crew\'s with the sender\'s room', () => {
 });
 
 test('the page reads its own links back, the names as the settings keep them', () => {
-  for (const inv of [{ room: 'Blue Room' }, { crew: 'Night Owls', room: 'Blue Room' }, { crew: 'Night Owls', room: '' }, { crew: 'Night Owls' },
+  for (const inv of [{ room: 'Blue Room' }, { crew: 'Night Owls', room: 'Blue Room' }, { crew: 'Night Owls' },
     { room: 'Комната' }, { room: 'A&B=C#1?' }, { room: 'Team (2).' }, { room: '100%!' }, { crew: 'zoë', room: 'ŁÓDŹ ×2' }]) {
     const link = I.inviteLink(O, inv);
     assert.deepEqual(I.readInvite(new URL(link).hash), inv, link);
@@ -43,6 +43,8 @@ test('the page reads its own links back, the names as the settings keep them', (
   assert.equal(I.readInvite('#room=%E2%80%8B'), null, 'a room of an invisible character alone');
   assert.equal(I.readInvite('#room=%E0%A4'), null, 'not UTF-8');
   assert.deepEqual(I.readInvite('#x=1&room=Red&other'), { room: 'Red' }, 'other parts left alone');
+  assert.deepEqual(I.readInvite('#crew=RoLegends&room='), { crew: 'RoLegends' }, 'a crew\'s link of before from no room: the crew alone');
+  assert.deepEqual(I.readInvite('#crew=&room=Blue%20Room'), { room: 'Blue Room' }, 'an empty crew: the room');
 });
 
 test('which names it takes: the Room row\'s and the Crews box\'s checks', () => {
@@ -58,7 +60,7 @@ test('which names it takes: the Room row\'s and the Crews box\'s checks', () => 
   assert.equal(I.checkRoom('я'.repeat(31)).ok, true, '62 bytes');
   assert.equal(I.checkRoom('я'.repeat(32)).ok, false, '64 bytes');
   assert.deepEqual(I.checkInvite({ room: 'Blue Room', crew: 'Night Owls' }), { ok: true });
-  assert.deepEqual(I.checkInvite({ crew: 'Night Owls', room: '' }), { ok: true }, 'a crew in no room');
+  assert.deepEqual(I.checkInvite({ crew: 'Night Owls' }), { ok: true }, 'a crew in no room');
   const bad = I.checkInvite({ crew: 'a, b' });
   assert.equal(bad.ok, false);
   assert.equal(bad.v.name, 'a, b');
