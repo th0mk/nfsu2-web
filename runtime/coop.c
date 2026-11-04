@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <strings.h>
 
 void dispatch_indirect(CPU *c, uint32_t addr);
@@ -451,6 +452,7 @@ void sub_00413030(CPU *c){
     sub_00413030_orig(c);
     MR32(SPLIT_PLAYERS_COUNT) = 2u;
     MR32(coop_pl + 0x250u) = 0;
+    void coop_outrun_icon(CPU *c); coop_outrun_icon(c);     /* (it put player 1's outrun icon out: ours back on) */
 }
 
 /* the markers' and triggers' step of Player::Update (0x602AD9): player 1's only */
@@ -738,4 +740,173 @@ static void coop_ask_frame(CPU *c){
         call(c, FN_FE_MSG, 0, 0, 2, a);
     }
 }
-void coop_ask_frame_(CPU *c){ coop_ask_frame(c); coop_pick_frame(c); }
+static void coop_outrun_frame(CPU *c);
+void coop_ask_frame_(CPU *c){ coop_ask_frame(c); coop_pick_frame(c); coop_outrun_frame(c); }
+
+/* ---- outruns between player 1 and player 2 -------------------------------------------------------------------------
+ * As outruns with an online friend (roam_game.c du_*): near each other (25 m) for 4 s, nothing else racing and no
+ * tuner's outrun offered, both HUDs show the outrun icon (0x4DB890 with the other's car); either player's Engage
+ * starts the game's own outrun (0x607180, as Engage starts one) with the World's AI range narrowed to player 2's car
+ * for the call; each frame the one getting away is ranked first (the game ranks the opponent first, and only an AI's
+ * road path moves it); the game decides it once the other is 300 m behind.  No career effect: the career's outrun
+ * result (0x541320: the stake, the outrun's win, its SMS) is skipped for it. */
+#define G_RACE        0x00890118u   /* race coordinator: +0x24 racers, +0x30 racers (0x1F0 each: +0 car, +0x10 completion), +0xBD0/+0xBD4 the order */
+#define G_RACETYPE    0x0089e7b0u   /* 0 free roam, 7 an outrun */
+#define G_ENCOUNTERS  0x0085ef70u
+#define G_OUTRUN_ST   (G_ENCOUNTERS + 0x1ae8u)   /* 2: a tuner's outrun can be taken */
+#define G_ENGAGE      0x00838590u
+#define G_ACTIONS     0x0086eaf0u   /* port 0's actions this frame (a bit each, 0 held) */
+#define ACT_ENGAGE    15u
+#define PL_OPPONENT   0x250u
+#define PL_HUD        0x9a4u
+#define FN_HUD_OUTRUN 0x004db890u   /* thiscall HUD (car or 0) */
+#define FN_OUTRUN     0x00607180u   /* thiscall race */
+#define FN_ENG_DONE   0x005010e0u   /* thiscall G_ENGAGE */
+#define FN_EM_OVER    0x00500ca0u   /* thiscall G_ENCOUNTERS */
+#define SPLIT_INPUT_CURRENT_COOP 0x00d01000u   /* splitscreen.c's ports' records (16 each): port 1 player 2's */
+/* Off until player 1's HUD survives it: on the outrun's first frame its race widget (0x4C68D0) traps on an object
+ * it takes from the car type's block ([car +0xC] +0x7F0), which both cars share when player 2 drives player 1's model
+ * (the notes repo, coop-roam README) */
+#define COOP_OUTRUNS  0
+#define OR_NEAR_M     25.f
+#define OR_NEAR_US    4000000
+#define OR_KEEP_M     35.f
+#define OR_RANK_MPS   2.f
+static struct { int st; int64_t near_since, t; uint32_t icon1, icon2, eng1, eng2; float d, away, was[4]; uint32_t wins1, wins2; } OR;
+enum { OR_IDLE, OR_OFFER, OR_RACE, OR_OVER };
+static float or_dist(uint32_t a, uint32_t b){
+    float dx = MRF32(a + 0x60u) - MRF32(b + 0x60u), dy = MRF32(a + 0x64u) - MRF32(b + 0x64u);
+    return sqrtf(dx * dx + dy * dy);
+}
+static void or_icons(CPU *c, int on){
+    uint32_t p1 = MR32(SPLIT_PLAYERS_INDEX), car1 = p1_car(), car2 = coop_p2_car();
+    uint32_t h1 = p1 ? MR32(p1 + PL_HUD) : 0, h2 = coop_pl ? MR32(coop_pl + PL_HUD) : 0;
+    uint32_t want1 = on ? car2 : 0, want2 = on ? car1 : 0;
+    if (h1 && want1 != OR.icon1){ call(c, FN_HUD_OUTRUN, h1, 0, 1, &want1); OR.icon1 = want1; }
+    if (h2 && want2 != OR.icon2){ call(c, FN_HUD_OUTRUN, h2, 0, 1, &want2); OR.icon2 = want2; }
+}
+int coop_outrun_on(void){ return OR.st == OR_RACE || OR.st == OR_OVER; }
+/* the tuners' step puts player 1's HUD's outrun icon out each frame a tuner is not near: on again while offered */
+void coop_outrun_icon(CPU *c){
+    if (OR.st != OR_OFFER) return;
+    uint32_t p1 = MR32(SPLIT_PLAYERS_INDEX), h1 = p1 ? MR32(p1 + PL_HUD) : 0, car2 = coop_p2_car();
+    if (h1 && car2){ call(c, FN_HUD_OUTRUN, h1, 0, 1, &car2); OR.icon1 = car2; }
+}
+static int or_start(CPU *c){
+    uint32_t w = MR32(G_WORLD), race = MR32(G_RACE), p1 = MR32(SPLIT_PLAYERS_INDEX), car2 = coop_p2_car();
+    if (!w || !race || !p1 || !car2 || MR32(race + 0x24u) != 1u || MR32(G_RACETYPE)) return 0;
+    uint32_t first = MR32(w + 0x14u), end = MR32(w + 0x18u);
+    if (first >= 22u) return 0;
+    or_icons(c, 0);
+    uint32_t keep = MR32(w + 0x1cu + 4u * first);
+    MR32(w + 0x1cu + 4u * first) = car2; MR32(w + 0x18u) = first + 1u;      /* the AI range: player 2's car alone */
+    MR32(p1 + PL_OPPONENT) = car2; MR32(G_OUTRUN_ST) = 2u;
+    call(c, FN_OUTRUN, race, 0, 0, 0);
+    call(c, FN_ENG_DONE, G_ENGAGE, 0, 0, 0);
+    MR32(w + 0x1cu + 4u * first) = keep; MR32(w + 0x18u) = end;
+    if (MR32(G_RACETYPE) != 7u || MR32(race + 0x24u) != 2u){
+        fprintf(stderr, "[coop] f=%ld the outrun did not start (race type %u, %u racers)\n", autotest_frame(), MR32(G_RACETYPE), MR32(race + 0x24u));
+        MR32(p1 + PL_OPPONENT) = 0;
+        return 0;
+    }
+    OR.away = 0; OR.t = 0;
+    fprintf(stderr, "[coop] f=%ld outrun: player 1 against player 2, %.0f m apart\n", autotest_frame(), or_dist(p1_car(), car2));
+    return 1;
+}
+/* the order: the one getting away from the other the faster first (smoothed over a second) */
+static void or_rank(uint32_t race, int64_t now){
+    uint32_t car1 = p1_car(), car2 = coop_p2_car();
+    float p[4] = { MRF32(car1 + 0x60u), MRF32(car1 + 0x64u), MRF32(car2 + 0x60u), MRF32(car2 + 0x64u) };
+    if (OR.t){
+        float dt = (float)(now - OR.t) / 1e6f;
+        if (dt > 0.f && dt < 0.5f){
+            float ux = p[0] - p[2], uy = p[1] - p[3], n = sqrtf(ux * ux + uy * uy);
+            if (n > 0.1f){
+                ux /= n; uy /= n;
+                float a1 = ((p[0] - OR.was[0]) * ux + (p[1] - OR.was[1]) * uy) / dt;     /* player 1 away from player 2 */
+                float a2 = (-(p[2] - OR.was[2]) * ux - (p[3] - OR.was[3]) * uy) / dt;    /* player 2 away from player 1 */
+                float k = dt > 1.f ? 1.f : dt;
+                OR.away += ((a1 - a2) - OR.away) * k;
+            }
+        }
+    }
+    memcpy(OR.was, p, sizeof p); OR.t = now;
+    uint32_t a = MR32(race + 0xbd0u), b = MR32(race + 0xbd4u);
+    if (MR32(race + 0x24u) != 2u || !a || !b) return;
+    int p1_first = MR32(a) == car1;
+    int want = OR.away > OR_RANK_MPS ? 1 : OR.away < -OR_RANK_MPS ? 0 : p1_first;
+    if (want != p1_first){ MR32(race + 0xbd0u) = b; MR32(race + 0xbd4u) = a; MR8(b + 0xau) = 1; MR8(a + 0xau) = 2; }
+}
+static int or_outcome(uint32_t race){
+    uint32_t car1 = p1_car();
+    for (uint32_t i = 0; car1 && i < 6; i++){
+        uint32_t r = race + 0x30u + 0x1f0u * i;
+        if (MR32(r) != car1) continue;
+        uint32_t ct = MR16(r + 0x10u);
+        return ct == 6u ? 1 : ct == 7u ? 2 : 0;
+    }
+    return 0;
+}
+static void coop_outrun_frame(CPU *c){
+    uint32_t car1 = p1_car(), car2 = coop_p2_car(), race = MR32(G_RACE);
+    int64_t now = roam_plat_now_us();
+    if (!coop_in() || !car1 || !car2 || !race){
+        if (OR.st == OR_OFFER) or_icons(c, 0);
+        if (OR.st != OR_RACE && OR.st != OR_OVER) OR.st = OR_IDLE;
+        return;
+    }
+    float d = or_dist(car1, car2);
+    /* Engage: player 1's (port 0's actions) or player 2's (its seat's record), a new press */
+    int e1 = !(MR32(G_ACTIONS) & 1u << ACT_ENGAGE), e2 = !(MR32(SPLIT_INPUT_CURRENT_COOP + 16u) & 1u << ACT_ENGAGE);
+    int press = (e1 && !OR.eng1) || (e2 && !OR.eng2);
+    OR.eng1 = e1; OR.eng2 = e2;
+    if (!COOP_OUTRUNS && OR.st == OR_IDLE) return;
+    switch (OR.st){
+    case OR_IDLE: case OR_OFFER: {
+        int free = MR32(race + 0x24u) == 1u && !MR32(G_RACETYPE) && MR32(G_OUTRUN_ST) != 2u && coop_driving();
+        if (!free || d > (OR.st == OR_OFFER ? OR_KEEP_M : OR_NEAR_M)){ OR.near_since = 0; if (OR.st == OR_OFFER){ or_icons(c, 0); OR.st = OR_IDLE; } break; }
+        if (!OR.near_since) OR.near_since = now;
+        if (OR.st == OR_IDLE && now - OR.near_since >= OR_NEAR_US){ OR.st = OR_OFFER; fprintf(stderr, "[coop] f=%ld outrun offered\n", autotest_frame()); }
+        if (OR.st == OR_OFFER){
+            or_icons(c, 1);
+            if (press && or_start(c)) OR.st = OR_RACE;
+        }
+        break;
+    }
+    case OR_RACE: {
+        if (MR32(G_RACETYPE) != 7u){ OR.st = OR_OVER; break; }
+        or_rank(race, now);
+        int o = or_outcome(race);
+        if (o){
+            if (o == 1) OR.wins1++; else OR.wins2++;
+            fprintf(stderr, "[coop] f=%ld outrun: player %d wins, %.0f m apart (player 1 %u, player 2 %u)\n", autotest_frame(), o == 1 ? 1 : 2, d, OR.wins1, OR.wins2);
+            OR.st = OR_OVER;
+        }
+        break;
+    }
+    case OR_OVER:
+        if (MR32(G_RACETYPE) == 7u) break;                  /* its result still shown */
+        { uint32_t p1 = MR32(SPLIT_PLAYERS_INDEX); if (p1 && MR32(p1 + PL_OPPONENT) == car2) MR32(p1 + PL_OPPONENT) = 0; }
+
+        call(c, FN_EM_OVER, G_ENCOUNTERS, 0, 0, 0);
+        OR.st = OR_IDLE; OR.near_since = 0;
+        break;
+    }
+}
+/* the career's outrun result: not for one between player 1 and player 2 */
+void sub_00541320_orig(CPU *c);
+void sub_00541320(CPU *c){
+    if (coop_outrun_on()){
+        fprintf(stderr, "[coop] f=%ld the outrun between the two players: no career result\n", autotest_frame());
+        POP32(c->eip); c->esp += 4u; return;
+    }
+    sub_00541320_orig(c);
+}
+/* Player 0x600590 (the HUD step of Player::Update): player 2's HUD is free roam's own, made for a player who is no
+ * racer: in an outrun with player 1 (its car one of the race's two racers) its race parts read what a racer's HUD has
+ * and player 2's has not (a trap in 0x4C68D0).  It stands still for the outrun's few seconds. */
+void sub_00600590_orig(CPU *c);
+void sub_00600590(CPU *c){
+    if (coop_pl && c->ecx == coop_pl && coop_outrun_on()){ POP32(c->eip); return; }
+    sub_00600590_orig(c);
+}

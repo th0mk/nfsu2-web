@@ -1,0 +1,18 @@
+# (not in the set: outruns between the two players are off, COOP_OUTRUNS in coop.c; this is their test once on)
+# Co-op free roam: an outrun between player 1 and player 2, with no career effect: side by side (player 2 comes in
+# behind player 1) for 4 s, the outrun is offered on both HUDs; player 1's Engage (Enter) starts it; player 1 drives
+# away (the game's autopilot) and wins once 300 m ahead; the career's outrun result is skipped (the bank as it was).
+0     roam fe2roam 14000
++0    roam smsauto on
++120  roam coop join kb
++0    waitmem 0xd00030 2 1500
++0    roam peek 0x85ad40+0x7134 1
++300  tap RETURN
++60   expect i:0x89e7b0 == 7
++0    status coop_outrun_racing
++0    roam call 0x5fae20 ecx=*0xd00000
++0    waitmem 0x89e7b0 0 4000
++60   roam call 0x5faf10 ecx=*0xd00000
++0    roam peek 0x85ad40+0x7134 1
++0    status coop_outrun_complete
++10   quit
