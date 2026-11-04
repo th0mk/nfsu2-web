@@ -427,7 +427,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   with the game's promo vinyls (Snoop Dogg, Capone, Chingy, The Doors and others; free, no visual rating, stages 2
   and 3), since 84c85172; Quick Race: laps 1 to 127 and up to 5 opponents (drags 3), Lap KO's laps and opponents
   changeable (it starts at 5 and 5), and a race of one lap shows Completed % in place of LAP 1/1, since 81fad175;
-  the guide
+  headlights on G: a tap turns them off or back on, held is high beam (brighter, reaching farther) until let go, and
+  friends in free roam see it; on a controller the look's stick straight up; another key, or none, in Controls,
+  Site; since a64138c4; the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
