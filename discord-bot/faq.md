@@ -5,6 +5,7 @@ The FAQ the bot posts with /faq (faq.mjs). A push changes the posted message wit
 A button keeps working while its label stays the same. #channel-name becomes a link to that channel.
 Answers go to each reader in their Discord language (translated once, kept until the answer changes).
 The bot also replies with an answer in #help (help.mjs) when a question there asks exactly that: keep each one whole on its own.
+"## Only in #help" at the end: answers for those replies only, with no button (the message has no parts left for more).
 No small text (-#). Discord takes 40 parts in a message: 6 topics with 20 questions take all 40 (a new question
 needs one out, or a new row: none left).
 -->
@@ -27,6 +28,7 @@ The start page says what is wrong, with a code. The most common:
 - `GPU-ADAPTER-WIN`: your graphics have no Direct3D 12 driver. Update the graphics driver; older graphics (Intel HD 4000, 4400, 4600 and older) can't run it.
 - `GPU-ADAPTER-ANDROID`: update Android and Chrome. Then turn on `chrome://flags/#enable-unsafe-webgpu` and restart Chrome.
 - `Error code 1` right after Play: on the start page, Other, **Delete game data**, then reload and Play. Your saves stay.
+- `MODULE-LOAD` with "Wasm SIMD unsupported": the processor is too old (no SSE4.1, such as an AMD Phenom II). No browser can run the game on it.
 It worked yesterday? Reload the page (Ctrl+F5 on a PC). Something else: post a screenshot of the message in #bug-reports.
 
 ### The site or the server can't be reached
@@ -55,8 +57,9 @@ Your saves are in this browser on this device, not on the server. To take them a
 
 ### My saves are gone
 label: Saves gone
-- The browser deleted the site's data, often when it closes. In Chrome, allow nfsu2.xyz in `chrome://settings/content/siteData`.
+- Most often the browser deleted the site's data (some do when they close). In Chrome, allow nfsu2.xyz in `chrome://settings/content/siteData`.
 - Lost saves can't be brought back, unless you had cloud saves or a backup.
+- The game says "Unable to load" with your profile's name: the profile is there, but the game can't read it. Post it in #bug-reports with the log (F9, **Download log**).
 - Lost your cloud saves passphrase? Look in your browser's passwords under nfsu2.xyz (user name "Cloud saves").
 
 ### Can I use my saves from the PC game?
@@ -81,7 +84,7 @@ label: Wide body kits
 
 ### Can I unlock everything or get more money?
 label: Unlock everything
-No. The career plays as in the original game: cars and parts unlock as you win a stage's races, and money comes from races. In the game's Online mode every track is open, whatever your career has unlocked. Profiles changed by a save editor may crash the game or break the career.
+There's no unlock-all: the career plays as in the original game. Cars and parts unlock as you win a stage's races, and money comes from races. A save you have goes in with Saves, **Restore** on the start page. In the game's Online mode every track is open, whatever your career has unlocked. Profiles changed by a save editor may crash the game or break the career.
 
 ### Do races with other players count in my career?
 label: Online wins in the career
@@ -91,7 +94,7 @@ Yes. In free roam, win a race of your stage you haven't won yet in a lobby, and 
 ### How do I play with other players?
 label: Play with others
 1. Start page, Online: turn on **Free roam with others**, and set **Your name**.
-2. Drive in your career's free roam: the other players are there.
+2. Drive in your career's free roam: the other players are there. Alone there? Leave **Room** (start page, Online) empty: with a name in it, you see only the players in the same room.
 3. To find your friends: type the same crew name in Friends & crews, **Crews**. You always see each other.
 4. To race: drive to a race's start, press **Enter** and pick **Multiplayer**. The others join your lobby.
 
@@ -120,7 +123,7 @@ In the game: **Options**, **Controls**. It opens on Keyboard Configuration: go *
 ### Which key does what?
 label: Keys
 - **R** respawn, **T** career status, **M** map, **X** drift mode, **N** horn
-- **O** open the trunk, hood and doors (parked), **H** / **J** hydraulics
+- **O** open the trunk, hood and doors (parked; on a controller hold D-pad Down; the touch controls have no button for it), **H** / **J** hydraulics
 - **F7** next song, **F12** photo mode, **F9** the page menu: log, radio, controls, full screen
 - The whole list: start page, **Controls**.
 
@@ -136,3 +139,38 @@ label: Mods and music
 label: Report a bug
 1. Right after it happens: **F9**, **Download log** (on a controller: Home; on a touch screen: ☰). After a crash: **Download log** on the start page.
 2. Post in #bug-reports: what happened, your device and browser, and the .log file.
+
+## Only in #help
+### How do I load a save file I have?
+label: Load a save file
+On the start page: Saves, **Restore**, and pick the file: a backup (a zip) or one of the game's profiles. Saves from the PC game: zip its folder `%LOCALAPPDATA%\NFS Underground 2` first.
+
+### How do I keep my online name?
+label: Claim your name
+On the start page, Online, **Your name**: press **Claim**. Until a name is claimed anyone can play as it. Claiming makes an 8-word passphrase that holds the name and your cloud saves: keep it safe. Someone claimed yours first? Pick another name.
+
+### How do I rename or delete a profile?
+label: Rename or delete a profile
+- **Rename:** start page, Saves, **Rename** beside the profile.
+- **Delete:** the game's main menu, Profile Manager, Delete.
+- **Start over:** a new profile, or Career, Start New Career.
+
+### How do I turn off vibration?
+label: Vibration
+On the start page, Controls, Controller: turn **Rumble** off. It also stops the phone's vibration with the touch controls.
+
+### Where are my screenshots?
+label: Screenshots
+**F12** opens photo mode, and **F12** again takes the picture. They're on the start page, Saves, **Screenshots**.
+
+### Where are the shops? They're not on my map.
+label: Shops on the map
+As in the original game, a shop shows on the map only once you've found it: drive around the city, the newer areas too.
+
+### How do I look around my car?
+label: Look around
+A controller's right stick looks round the car while you drive. A keyboard and the touch controls have only the game's look back.
+
+### The game's data doesn't fit on my drive
+label: Game data space
+The browser keeps the game's data in its own folder, so it can't go on another drive. Preloading is optional: the game loads what it needs as you play. Start page, Other, **Delete game data** frees the space; your saves stay.

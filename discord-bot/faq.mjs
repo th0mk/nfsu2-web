@@ -34,17 +34,23 @@ export const langOf = locale => { const l = String(locale || 'en'); return /^zh/
 const NAMES = new Intl.DisplayNames(['en'], { type: 'language' });
 const nameOf = lang => { try { return lang === 'pt' ? 'Brazilian Portuguese' : NAMES.of(lang) ?? lang; } catch { return lang; } };
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const HELP_ONLY = /^only in #help$/i;            // the topic of answers without a button (parse)
 
 /** faq.md: "# Title", lines of intro, then "## Topic" groups of "### Question" with its answer below it.  A question's
  *  "label:" line names its button (else the question itself); its id is its label's slug, so an answer can change
- *  without the button changing */
+ *  without the button changing.  The topic "## Only in #help" has no buttons: its answers are only for help.mjs
+ *  (faq.extra), beside the posted ones, as Discord takes no more parts in the FAQ's message */
 export function parse(md) {
-  const faq = { title: '', intro: [], topics: [] };
+  const faq = { title: '', intro: [], topics: [], extra: [] };
   let topic = null, q = null;
   for (const line of md.replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/)) {
     let m;
     if ((m = line.match(/^# (.+)/))) faq.title = m[1].trim();
-    else if ((m = line.match(/^## (.+)/))) { faq.topics.push(topic = { name: m[1].trim(), questions: [] }); q = null; }
+    else if ((m = line.match(/^## (.+)/))) {
+      topic = { name: m[1].trim(), questions: [] };
+      if (HELP_ONLY.test(topic.name)) topic.questions = faq.extra; else faq.topics.push(topic);
+      q = null;
+    }
     else if ((m = line.match(/^### (.+)/))) {
       if (!topic) faq.topics.push(topic = { name: '', questions: [] });
       topic.questions.push(q = { q: m[1].trim(), label: '', a: [] });
@@ -53,7 +59,7 @@ export function parse(md) {
     else if (!topic) faq.intro.push(line);
   }
   faq.intro = faq.intro.join('\n').trim();
-  for (const t of faq.topics) for (const x of t.questions) {
+  for (const x of [...faq.topics.flatMap(t => t.questions), ...faq.extra]) {
     x.a = x.a.join('\n').trim();
     x.label ||= x.q;
     x.id = slug(x.label);
@@ -63,7 +69,7 @@ export function parse(md) {
 
 /** what keeps Discord from taking the message: too many parts, a question twice, a label too long, an empty answer */
 export function check(faq) {
-  const problems = [], seen = new Set(), all = faq.topics.flatMap(t => t.questions);
+  const problems = [], seen = new Set(), all = [...faq.topics.flatMap(t => t.questions), ...faq.extra];
   if (!faq.title) problems.push('no "# Title"');
   if (!all.length) problems.push('no questions');
   for (const x of all) {
@@ -248,8 +254,8 @@ export class Faq {
     return i.editReply(view(await this.translated(x, lang, c)));
   }
 
-  /** every question with its answer, in faq.md's order */
-  questions() { return this.faq?.topics.flatMap(t => t.questions) ?? []; }
+  /** every question with its answer, in faq.md's order, the ones only for #help last */
+  questions() { return this.faq ? [...this.faq.topics.flatMap(t => t.questions), ...this.faq.extra] : []; }
 
   /** the channel the FAQ is posted in on this server, or null */
   channelIn(guild) { return this.saved.posts.map(p => guild?.channels.cache.get(p.channel)).find(Boolean) ?? null; }
