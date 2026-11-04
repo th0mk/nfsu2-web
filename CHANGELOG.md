@@ -10,6 +10,20 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
+## 2026-11-04 (d0832f6)
+
+- **Quick Race:** up to 127 laps (was 10) and 5 opponents (3 in Drag), Lap KO no longer locks the laps and opponents, and a one-lap circuit shows how far you are in percent, as sprints do.
+- **Split screen:** two players on one keyboard: Enter and Space each take a seat, one drives on the arrows, the other on WASD.
+- **Camera:** C goes through a fifth view in every drive: the drift races' camera, high behind the car.
+- **Vinyls:** the vinyl shops end with the game's hidden Special category, its promo vinyls, for the cars that have them.
+- **Controls:** this site's keys and buttons (drift mode, the trunk, the horn, quick chat, photo mode, the menu and more) are set in Controls, Site, and a key or button you give one of the game's controls goes to the game alone.
+- **Free roam:** your car keeps its brake calipers, exhaust tips and spoiler after every shop, with no reload.
+- **Free roam:** a car reset (R) or loaded past the career's red walls is put back on the career's roads.
+- **Ghost mode:** on Everything, the camera no longer hops over traffic driving through you.
+- **Horns:** the game's Master Volume turns them down too.
+- **iPhone:** sound in Silent mode.
+- **Start page:** plainer error messages, with the steps that fix them.
+
 ## 2026-11-03 (a5892ba)
 
 - **Split screen:** 2 to 4 players on one screen, each with their own controller: Split Screen in the main menu, after Quick Race. A port of mihaits' NFSU2-SplitScreen mod by BirdSentinel (Zack).
