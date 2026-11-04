@@ -36,6 +36,7 @@
 extern "C" {
 uint32_t dmg_call(uint32_t fn, int n, const uint32_t* a);
 uint32_t dmg_thiscall(uint32_t fn, uint32_t self, int n, const uint32_t* a);
+float dmg_thiscall_f(uint32_t fn, uint32_t self, int n, const uint32_t* a);   // its return in st0
 uint32_t dmg_alloc(uint32_t n);
 void dmg_free(uint32_t p);
 int dmg_committed(uint32_t a, uint32_t n);
@@ -54,6 +55,12 @@ struct HangSettings {
     float mirrorPerImpulse = 0.004f, doorDamage = 0.40f, doorShockDepth = 0.20f, fallDamage = 0.70f;
     float popAngleDeg = 6.0f, windOpen = 0.0006f, flutter = 0.6f, damping = 3.0f, bounce = 0.3f;
     float hoodFlySpeed = 36.0f, hoodFlyLift = 7.0f;
+    bool doorCollide = true;      // an open door hits walls and cars: pushed shut from the front, torn off from behind
+    float doorTearSpeed = 3.0f;   // m/s an obstacle must push an open door open at to tear it off
+    bool debris = true;           // a part that comes off drops to the road and lies there (else it is just gone)
+    float debrisSeconds = 120.0f, debrisReach = 80.0f;   // how long it lies there; gone once the car is this far
+    float mirrorDropDeg = 50.0f;  // how far a dangling mirror turns down before it rests on the body
+    float mirrorSwing = 1.0f;     // a dangling mirror swings out and back against the body (turns, wind); 0 = it hangs
 };
 struct WearSettings {
     const char* pack = "GLOBAL\\DAMAGE.BIN";
@@ -61,11 +68,21 @@ struct WearSettings {
     const char* scratchMaterial = "MAGGUNMETAL";
     float scratchScale = 2.0f, lightBreakDepth = 0.03f, lightBreakRadius = 0.45f;
     bool nativeGlass = true;
+    bool prostreetGlass = true;   // the cracked windows use ProStreet's broken glass (DAMAGE_GLASS1..3, in the pack)
+};
+// A bent wheel (drawn only: the handling is not touched), at full damage: its top leans in, its front turns out,
+// and a bent rim wobbles as it turns.
+struct WheelSettings {
+    bool enabled = true;
+    float wheelReach = 1.1f;      // metres (flat) from a wheel within which a dent hurts it
+    float wheelPerDepth = 6.0f;   // wheel damage per metre of dent depth
+    float bendCamberDeg = 15.0f, bendToeDeg = 8.0f, bendWobbleDeg = 4.0f;
 };
 struct Settings {
     DentSettings dent;
     HangSettings hang;
     WearSettings wear;
+    WheelSettings wheels;
     float impulseThreshold = 4.0f, depthPerImpulse = 0.007f, maxDepthPerHit = 0.20f;
     bool crushAtWheels = true;
     float crushSide = 0.12f, crushRoof = 0.15f, maxEdge = 0.07f;
@@ -210,6 +227,147 @@ Vec3 Rotate(Vec3 v, Vec3 a, float t) {
 }
 
 // ---------------------------------------------------------------------------------------------------------
+// The world around a car, for the doors that hit things and the fallen parts (the .asi's WorldU2.h): the ground
+// and the walls of the track's topology, and the other cars.
+//  - a TopologyCoordinate (0x400 bytes, 16-aligned): ctor 0x5E0B40, SetSectionPosition 0x5E68D0 (connects +8 to
+//    the topology tree), dtor 0x5E0BF0;
+//  - GetElevation 0x5E7E70 thiscall(tc, const bVector3*, TerrainType*, bVector3* normal, bool* found) -> st0;
+//  - SegmentIntersectsPossiblyLong 0x5E7ED0 thiscall(tc, from, to, bVector3* normal, bVector3* hit, bool twoSided):
+//    the first polygon (floor, wall or ceiling) the segment crosses, with its normal and the point;
+//  - every car: a ring whose head [0x890080] is a sentinel, a car's +0 the next; car +0x3C its collision body
+//    (+0xE0/+0xF0 its box, relative to the rigid body), the body's +0x68 its RigidBody (+0x20 position, rows +0x30
+//    forward, +0x40 left, +0x50 up, +0xA0 velocity, world).
+// The coordinate and the vectors the game is handed live in the guest heap.
+namespace world {
+
+constexpr uint32_t kTopoCtor = 0x5E0B40, kTopoDtor = 0x5E0BF0, kTopoSetSection = 0x5E68D0;
+constexpr uint32_t kGetElevation = 0x5E7E70, kSegmentIntersects = 0x5E7ED0;
+constexpr uint32_t kWorldCarList = 0x890080;
+constexpr size_t kCarBody = 0x3C, kBodyRigid = 0x68, kBodyBoxMin = 0xE0, kBodyBoxMax = 0xF0;
+constexpr size_t kRigidPosition = 0x20, kRigidRows = 0x30, kRigidVelocity = 0xA0, kRigidCg = 0x1F0;
+
+// A rigid frame: the car's axes (world) and where its origin is.
+struct Frame {
+    Vec3 o{0, 0, 0}, x{1, 0, 0}, y{0, 1, 0}, z{0, 0, 1};
+    Vec3 ToWorld(Vec3 p) const { return o + x * p.x + y * p.y + z * p.z; }
+    Vec3 DirToWorld(Vec3 d) const { return x * d.x + y * d.y + z * d.z; }
+    Vec3 ToLocal(Vec3 w) const {
+        const Vec3 d = w - o;
+        return {Dot(d, x), Dot(d, y), Dot(d, z)};
+    }
+    Vec3 DirToLocal(Vec3 d) const { return {Dot(d, x), Dot(d, y), Dot(d, z)}; }
+};
+
+uint8_t* RigidOf(uint8_t* car) {
+    if (!car || !dmg_committed(A(car) + kCarBody, 4)) return nullptr;
+    uint8_t* body = At<uint8_t*>(car, kCarBody);
+    return body && dmg_committed(A(body) + kBodyRigid, 4) ? At<uint8_t*>(body, kBodyRigid) : nullptr;
+}
+
+// The car space the damage works in (the impacts): the rigid body's axes, the origin the rigid body's position
+// less its centre-of-gravity offset.
+bool CarFrame(const uint8_t* rigid, Frame& f) {
+    if (!rigid || !dmg_committed(A(rigid), kRigidCg + 12)) return false;
+    const float* m = (const float*)(rigid + kRigidRows);
+    f.x = {m[0], m[1], m[2]};
+    f.y = {m[4], m[5], m[6]};
+    f.z = {m[8], m[9], m[10]};
+    if (Length(f.x) < 0.5f || Length(f.z) < 0.5f) return false;
+    const Vec3 p = At<Vec3>(rigid, kRigidPosition), cg = At<Vec3>(rigid, kRigidCg);
+    f.o = p - f.DirToWorld(cg);
+    return true;
+}
+
+Vec3 Velocity(const uint8_t* rigid) { return rigid ? At<Vec3>(rigid, kRigidVelocity) : Vec3{0, 0, 0}; }
+
+uint32_t g_topo = 0, g_vec = 0;   // guest: the coordinate (0x400), and 4 vectors + a flag (0x70)
+bool Scratch() {
+    if (!g_topo) g_topo = dmg_alloc(0x400);
+    if (!g_vec) g_vec = dmg_alloc(0x70);
+    return g_topo && g_vec;
+}
+bool Open(const float* at) {   // the coordinate at the section of `at`; false where there is no topology
+    memset(G(g_topo), 0, 0x400);
+    dmg_thiscall(kTopoCtor, g_topo, 0, nullptr);
+    const uint32_t args[2] = {A(at), 0};   // (const bVector3*, float 0)
+    dmg_thiscall(kTopoSetSection, g_topo, 2, args);
+    if (R32(g_topo + 8)) return true;
+    dmg_thiscall(kTopoDtor, g_topo, 0, nullptr);
+    return false;
+}
+
+// The ground under p (looked for from a little above it); false where there is no topology.
+bool Ground(Vec3 p, float& height, Vec3& normal) {
+    if (!Scratch()) return false;
+    float* at = (float*)G(g_vec);
+    float* n = at + 4;
+    uint8_t* found = (uint8_t*)(at + 8);
+    at[0] = p.x, at[1] = p.y, at[2] = p.z + 1.0f, at[3] = 0;
+    n[0] = 0, n[1] = 0, n[2] = 1, n[3] = 0;
+    *found = 0;
+    if (!Open(at)) return false;
+    const uint32_t args[4] = {A(at), 0, A(n), A(found)};
+    const float e = dmg_thiscall_f(kGetElevation, g_topo, 4, args);
+    dmg_thiscall(kTopoDtor, g_topo, 0, nullptr);
+    if (!*found || !(e > -10000.0f && e < 10000.0f)) return false;
+    height = e;
+    const Vec3 nn{n[0], n[1], n[2]};
+    normal = Length(nn) > 0.5f ? Normalize(nn) : Vec3{0, 0, 1};
+    return true;
+}
+
+// The first wall (a polygon of the topology steeper than 60 degrees) the segment a -> b crosses.
+bool Wall(Vec3 a, Vec3 b, Vec3& hit, Vec3& normal) {
+    if (!Scratch()) return false;
+    float* pa = (float*)G(g_vec);
+    float *pb = pa + 4, *n = pa + 8, *h = pa + 12;
+    pa[0] = a.x, pa[1] = a.y, pa[2] = a.z, pa[3] = 0;
+    pb[0] = b.x, pb[1] = b.y, pb[2] = b.z, pb[3] = 0;
+    for (int k = 0; k < 4; k++) n[k] = h[k] = 0;
+    if (!Open(pa)) return false;
+    const uint32_t args[5] = {A(pa), A(pb), A(n), A(h), 1};
+    const bool crossed = (dmg_thiscall(kSegmentIntersects, g_topo, 5, args) & 0xFF) != 0;
+    dmg_thiscall(kTopoDtor, g_topo, 0, nullptr);
+    if (!crossed) return false;
+    const Vec3 nn{n[0], n[1], n[2]};
+    if (Length(nn) < 0.5f || fabsf(Normalize(nn).z) > 0.5f) return false;   // a floor or a ceiling
+    normal = Normalize(nn);
+    if (Dot(normal, b - a) > 0) normal = normal * -1.0f;   // facing the side the segment comes from
+    hit = {h[0], h[1], h[2]};
+    return true;
+}
+
+// Calls f(car, rigid, body box min, max) for every car of the world.
+template <typename F>
+void ForEachCar(F f) {
+    uint8_t* head = G(R32(kWorldCarList));
+    if (!head || !dmg_committed(A(head), 4)) return;
+    int guard = 0;
+    for (uint8_t* car = At<uint8_t*>(head, 0); car && car != head && guard < 256; car = At<uint8_t*>(car, 0), ++guard) {
+        if (!dmg_committed(A(car), kCarBody + 4)) break;
+        uint8_t* body = At<uint8_t*>(car, kCarBody);
+        if (!body || !dmg_committed(A(body), kBodyBoxMax + 12)) continue;
+        uint8_t* rigid = At<uint8_t*>(body, kBodyRigid);
+        if (!rigid || !dmg_committed(A(rigid), kRigidVelocity + 12)) continue;
+        const Vec3 lo = At<Vec3>(body, kBodyBoxMin), hi = At<Vec3>(body, kBodyBoxMax);
+        if (!(hi.x - lo.x > 1.0f && hi.x - lo.x < 15.0f && hi.y - lo.y > 0.8f && hi.y - lo.y < 5.0f)) continue;
+        f(car, rigid, lo, hi);
+    }
+}
+
+// Where a point (world) is in a car's box, relative to its rigid body: true when inside, grown by `margin`.
+bool InCarBox(const uint8_t* rigid, Vec3 lo, Vec3 hi, Vec3 w, float margin, Vec3& local) {
+    const float* m = (const float*)(rigid + kRigidRows);
+    const Vec3 d = w - At<Vec3>(rigid, kRigidPosition);
+    local = {d.x * m[0] + d.y * m[1] + d.z * m[2], d.x * m[4] + d.y * m[5] + d.z * m[6],
+             d.x * m[8] + d.y * m[9] + d.z * m[10]};
+    return local.x > lo.x - margin && local.x < hi.x + margin && local.y > lo.y - margin &&
+           local.y < hi.y + margin && local.z > lo.z - margin && local.z < hi.z + margin;
+}
+
+}  // namespace world
+
+// ---------------------------------------------------------------------------------------------------------
 // Loose parts
 
 enum class HangKind {
@@ -265,6 +423,20 @@ struct HangPart {
     Vec3 offset{0, 0, 0};       // car space, added after the swing
 };
 
+// A part that came off, lying in the world.
+struct Debris {
+    bool active = false, asleep = false;
+    bool leftCar = false;   // it has been clear of its own car once (it starts against it)
+    float age = 0, still = 0;
+    float rot0[9] = {};     // the part's car-space transform when it came off: y = rot0 * x + t0
+    Vec3 t0{0, 0, 0};
+    Vec3 c0{0, 0, 0};       // its centre then (car space), and its box's half size (car axes then)
+    Vec3 half{0, 0, 0};
+    Vec3 p{0, 0, 0}, v{0, 0, 0}, w{0, 0, 0};   // world: centre, velocity, angular velocity
+    float r[9] = {};        // world rotation, columns the body's axes (the car's when it came off)
+    float drag = 0;
+};
+
 struct CarState {
     uint8_t* car = nullptr;
     uint8_t* rigid = nullptr;   // the car's RigidBody, from the impulse that created this state
@@ -276,8 +448,17 @@ struct CarState {
     std::vector<BrokenLight> brokenLights;
     Vec3 lastVelocity{0, 0, 0};
     bool hasVelocity = false;
+    Vec3 lastWorldVelocity{0, 0, 0};   // for the true acceleration (the car-space one misses the turns)
     float flutterPhase = 0;
     HangPart parts[kHangCount];
+    // A dangling mirror may also swing fore and aft about the car's Y axis through its hinge, after its droop.
+    float sway[kHangCount] = {}, swayRate[kHangCount] = {}, shownSway[kHangCount] = {};
+    Debris debris[kHangCount];
+    bool shownDebris[kHangCount] = {};
+    float doorCooldown[kHangCount] = {};
+    world::Frame lastFrame{};   // the car's pose at the last SwingParts, for the doors' speed
+    bool hasFrame = false;
+    float wheel[4] = {0, 0, 0, 0};   // per physics wheel (front ones 0 and 1), 0..1: how bent it is drawn
 };
 
 bool SpecHas(const HangSpec& spec, int slot, int row) {
@@ -409,25 +590,54 @@ int HangChain(const Clone* c, const HangPart* chain[2]) {
     return n;
 }
 
+// Parts that come off (defined with SwingParts).
+Vec3 MatVec(const float m[9], Vec3 v);
+uint8_t* RigidFor(const CarState& car, void* renderInfo);
+bool StartDebris(CarState& car, void* renderInfo, int i, Vec3 kick, Vec3 spin);
+
 // Writes the clone's vertices to its buffer, swinging loose parts about their hinges (a mirror with its
-// door), followed by the overlay copy of the scratched and cracked ones.
+// door), followed by the overlay copy of the scratched and cracked ones. A part lying in the world (or one
+// mounted on it) is drawn through that body's pose, from the car's pose now.
 bool Upload(Clone* c) {
     const HangPart* chain[2];
     const int links = HangChain(c, chain);
+    float sway[2] = {0, 0};   // a dangling mirror's fore-and-aft swing, per link
+    const CarState* st = links ? g_cars.find(c->renderInfo)->second : nullptr;
+    const Debris* debris = nullptr;
+    int debrisLink = links;
+    world::Frame now{};
     bool fallen = false;
-    for (int k = 0; k < links; k++) fallen = fallen || chain[k]->fallen;
+    for (int k = 0; k < links; k++) {
+        const int spec = (int)(chain[k] - st->parts);
+        sway[k] = st->sway[spec];
+        if (st->debris[spec].active && chain[k]->fallen) {
+            if (world::CarFrame(RigidFor(*st, c->renderInfo), now)) {
+                debris = &st->debris[spec];
+                debrisLink = k;
+            } else {
+                fallen = true;
+            }
+            break;
+        }
+        if (chain[k]->fallen) {
+            fallen = true;
+            break;
+        }
+    }
     At<int>(c->mesh, kMeshStripCount) = fallen ? 0 : c->drawStrips;
     c->dirty = false;
     if (fallen) return true;
 
-    // A part in flight leaves its boxes far behind: open them up so it is not culled on the way.
+    // A part in flight or lying on the road leaves its boxes far behind: open them up so it is not culled.
     for (int k = 0; k < links; k++)
-        if (chain[k]->flying)
+        if (chain[k]->flying || debris) {
+            const float reach = debris ? g_settings.hang.debrisReach + 20.0f : 60.0f;
             for (int s = 0; s < c->drawStrips; s++)
                 for (int a = 0; a < 3; a++) {
-                    At<float>(c->strips + s * kStripSize, kStripBoxMin + a * 4) = -60.0f;
-                    At<float>(c->strips + s * kStripSize, kStripBoxMax + a * 4) = 60.0f;
+                    At<float>(c->strips + s * kStripSize, kStripBoxMin + a * 4) = -reach;
+                    At<float>(c->strips + s * kStripSize, kStripBoxMax + a * 4) = reach;
                 }
+        }
 
     if (!c->vb || Com(c->vb, kLock, {0, 0, g_out, 0}) != 0) return false;
     Vertex36* p = (Vertex36*)G(R32(g_out));
@@ -436,11 +646,22 @@ bool Upload(Clone* c) {
         Vertex36 v = c->verts[i];
         Vec3 pos = *(Vec3*)v.pos, nrm = *(Vec3*)v.nrm;
         for (int k = 0; k < links; k++) {
+            if (k == debrisLink) {   // where the part came off from, then the body's pose, then back into the car
+                const Vec3 y = MatVec(debris->rot0, pos) + debris->t0;
+                pos = now.ToLocal(debris->p + MatVec(debris->r, y - debris->c0));
+                nrm = now.DirToLocal(MatVec(debris->r, MatVec(debris->rot0, nrm)));
+                break;
+            }
             const HangPart* h = chain[k];
             const bool moved = h->offset.x != 0.0f || h->offset.y != 0.0f || h->offset.z != 0.0f;
-            if (!h->loose || (h->angle == 0.0f && !h->flying && !moved)) continue;
-            pos = h->hinge + Rotate(pos - h->hinge, h->axis, h->angle) + h->offset;
+            if (!h->loose || (h->angle == 0.0f && sway[k] == 0.0f && !h->flying && !moved)) continue;
+            Vec3 rel = Rotate(pos - h->hinge, h->axis, h->angle);
             nrm = Rotate(nrm, h->axis, h->angle);
+            if (sway[k] != 0.0f) {
+                rel = Rotate(rel, Vec3{0, 1, 0}, sway[k]);
+                nrm = Rotate(nrm, Vec3{0, 1, 0}, sway[k]);
+            }
+            pos = h->hinge + rel + h->offset;
         }
         const auto put = [&](Vertex36& out, Vec3 at) {
             const Vec3 lp = c->place.on ? c->place.ToLocal(at) : at;
@@ -1062,9 +1283,14 @@ void DamageParts(void* renderInfo, CarState& car, const Dent& dent) {
                               : spec.kind == HangKind::Door  ? hs.doorDamage
                               : spec.side < 0                ? hs.popDamage     // hood
                                                              : hs.trunkDamage;
-        if (spec.fallScale > 0 && total > hs.fallDamage * spec.fallScale)
-            h.fallen = true;
-        else if (!h.loose && h.damage[side] > threshold)
+        if (spec.fallScale > 0 && total > hs.fallDamage * spec.fallScale) {
+            // Knocked off: away from the hit, a little up, tumbling.
+            world::Frame f;
+            const bool posed = world::CarFrame(RigidFor(car, renderInfo), f);
+            const Vec3 kick = posed ? f.DirToWorld(dent.direction * -1.5f) + Vec3{0, 0, 1.5f} : Vec3{0, 0, 0};
+            const Vec3 spin{(float)(rand() % 200 - 100) * 0.04f, (float)(rand() % 200 - 100) * 0.04f, 0};
+            StartDebris(car, renderInfo, i, kick, spin);
+        } else if (!h.loose && h.damage[side] > threshold)
             Loosen(renderInfo, spec, h, mn, mx, side);
     }
 }
@@ -1176,9 +1402,10 @@ void ScrapeSurface(void* renderInfo, CarState& car, Vec3 push, float amount, flo
             !PartBox(renderInfo, spec.slots[0], spec.row, mn, mx))
             continue;
         h.damage[0] += magnitude * hs.mirrorPerImpulse;
-        if (spec.fallScale > 0 && h.damage[0] > hs.fallDamage * spec.fallScale)
-            h.fallen = true;
-        else if (!h.loose && h.damage[0] > hs.mirrorDamage)
+        if (spec.fallScale > 0 && h.damage[0] > hs.fallDamage * spec.fallScale) {
+            const Vec3 spin{(float)(rand() % 200 - 100) * 0.05f, 0, (float)(rand() % 200 - 100) * 0.05f};
+            StartDebris(car, renderInfo, i, Vec3{0, 0, 0.8f}, spin);
+        } else if (!h.loose && h.damage[0] > hs.mirrorDamage)
             Loosen(renderInfo, spec, h, mn, mx, 0);
     }
 }
@@ -1265,9 +1492,274 @@ CarState* StateFor(void* renderInfo, uint8_t* car, bool hit) {
     return state;
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Parts that come off, and doors that hit things (the world queries above).
+//
+// A part that comes off (torn off by the damage, by the airflow, or a door hit from behind) becomes a free body
+// in the world: a box the size of the part, with gravity, the air's drag, bounces and friction on the topology's
+// ground, its walls, and the cars, which push it about. It stays drawn by the car's clones: every frame its
+// vertices go from where the part was when it came off, through the body's pose, back into the car's space (the
+// car moves under it). It is gone after DebrisSeconds, or once the car is DebrisReach away.
+
+constexpr float kDebrisStep = 1.0f / 120.0f;
+
+Vec3 MatVec(const float m[9], Vec3 v) {
+    return {m[0] * v.x + m[1] * v.y + m[2] * v.z, m[3] * v.x + m[4] * v.y + m[5] * v.z,
+            m[6] * v.x + m[7] * v.y + m[8] * v.z};
+}
+Vec3 MatTVec(const float m[9], Vec3 v) {
+    return {m[0] * v.x + m[3] * v.y + m[6] * v.z, m[1] * v.x + m[4] * v.y + m[7] * v.z,
+            m[2] * v.x + m[5] * v.y + m[8] * v.z};
+}
+void MatMul(const float a[9], const float b[9], float o[9]) {
+    float r[9];
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++) r[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j];
+    memcpy(o, r, sizeof(r));
+}
+// The matrix of Rotate(., axis, angle), built by rotating the basis (columns).
+void RotationMatrix(Vec3 axis, float angle, float m[9]) {
+    const Vec3 c[3] = {Rotate({1, 0, 0}, axis, angle), Rotate({0, 1, 0}, axis, angle), Rotate({0, 0, 1}, axis, angle)};
+    for (int j = 0; j < 3; j++) m[j] = c[j].x, m[3 + j] = c[j].y, m[6 + j] = c[j].z;
+}
+void Orthonormalize(float m[9]) {   // the columns
+    Vec3 x{m[0], m[3], m[6]}, y{m[1], m[4], m[7]};
+    x = Normalize(x);
+    y = Normalize(y - x * Dot(x, y));
+    const Vec3 z = Cross(x, y);
+    const float o[9] = {x.x, y.x, z.x, x.y, y.y, z.y, x.z, y.z, z.z};
+    memcpy(m, o, sizeof(o));
+}
+
+// The rigid body the car's pose comes from.
+uint8_t* RigidFor(const CarState& car, void* renderInfo) {
+    if (car.rigid) return car.rigid;
+    return CarHas(car.car, renderInfo) ? world::RigidOf(car.car) : nullptr;
+}
+
+// The car-space transform of spec i's chain as it is drawn now (the part's own swing, then the part it is
+// mounted on): y = rot * x + t.
+void ChainTransform(const CarState& car, int i, float rot[9], Vec3& t) {
+    const float id[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    memcpy(rot, id, sizeof(id));
+    t = {0, 0, 0};
+    for (int s = i; s >= 0; s = kHangSpecs[s].parent) {
+        const HangPart& h = car.parts[s];
+        if (!h.loose) continue;
+        float a[9];
+        RotationMatrix(h.axis, h.angle, a);
+        if (car.sway[s] != 0.0f) {
+            float sw[9];
+            RotationMatrix({0, 1, 0}, car.sway[s], sw);
+            MatMul(sw, a, a);
+        }
+        MatMul(a, rot, rot);
+        t = h.hinge + MatVec(a, t - h.hinge) + h.offset;
+    }
+}
+
+// Spec i comes off: it becomes a body in the world, thrown with the car's velocity plus `kick`, spinning at
+// `spin` (both world). False when it cannot (no pose, no box): it is just gone.
+bool StartDebris(CarState& car, void* renderInfo, int i, Vec3 kick, Vec3 spin) {
+    HangPart& h = car.parts[i];
+    h.fallen = true;
+    h.flying = false;
+    Debris& d = car.debris[i];
+    d.active = false;
+    const HangSpec& spec = kHangSpecs[i];
+    uint8_t* rigid = RigidFor(car, renderInfo);
+    world::Frame f;
+    Vec3 mn, mx;
+    if (!g_settings.hang.debris || !world::CarFrame(rigid, f) ||
+        !PartBox(renderInfo, spec.slots[0], spec.row < 0 ? 0 : spec.row, mn, mx))
+        return false;
+    ChainTransform(car, i, d.rot0, d.t0);
+    Vec3 lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
+    for (int k = 0; k < 8; k++) {
+        const Vec3 corner{k & 1 ? mx.x : mn.x, k & 2 ? mx.y : mn.y, k & 4 ? mx.z : mn.z};
+        const Vec3 y = MatVec(d.rot0, corner) + d.t0;
+        for (int a = 0; a < 3; a++) {
+            (&lo.x)[a] = (&y.x)[a] < (&lo.x)[a] ? (&y.x)[a] : (&lo.x)[a];
+            (&hi.x)[a] = (&y.x)[a] > (&hi.x)[a] ? (&y.x)[a] : (&hi.x)[a];
+        }
+    }
+    d.c0 = (lo + hi) * 0.5f;
+    d.half = (hi - lo) * 0.5f;
+    for (int a = 0; a < 3; a++) (&d.half.x)[a] = (&d.half.x)[a] < 0.03f ? 0.03f : (&d.half.x)[a];
+    d.p = f.ToWorld(d.c0);
+    const float r[9] = {f.x.x, f.y.x, f.z.x, f.x.y, f.y.y, f.z.y, f.x.z, f.y.z, f.z.z};
+    memcpy(d.r, r, sizeof(r));
+    d.v = world::Velocity(rigid) + kick;
+    d.w = spin;
+    // A lid or a door is a plate: the air slows it more than a mirror.
+    d.drag = spec.kind == HangKind::Droop ? 0.01f : 0.025f;
+    d.age = d.still = 0;
+    d.asleep = false;
+    d.leftCar = false;
+    d.active = true;
+    return true;
+}
+
+// One substep of a body's motion on the ground plane (point g, normal n) when `grounded` says there is one.
+void DebrisSubstep(Debris& d, float dt, bool grounded, Vec3 g, Vec3 n) {
+    d.v.z -= 9.8f * dt;
+    d.v = d.v - d.v * (Length(d.v) * d.drag * dt);
+    d.w = d.w * expf(-0.3f * dt);
+    d.p = d.p + d.v * dt;
+    const float wl = Length(d.w);
+    if (wl > 1e-5f) {
+        float dr[9];
+        RotationMatrix(d.w * (1.0f / wl), wl * dt, dr);
+        MatMul(dr, d.r, d.r);
+        Orthonormalize(d.r);
+    }
+    if (!grounded) return;
+    // The box's corners against the ground: an impulse at each that goes down into it (restitution and friction).
+    const Vec3 inv{3.0f / (d.half.y * d.half.y + d.half.z * d.half.z), 3.0f / (d.half.x * d.half.x + d.half.z * d.half.z),
+                   3.0f / (d.half.x * d.half.x + d.half.y * d.half.y)};   // 1 / (m (b^2 + c^2) / 12), m = 1, full sizes
+    const auto iinv = [&](Vec3 l) {   // world inverse inertia
+        const Vec3 b = MatTVec(d.r, l);
+        return MatVec(d.r, Vec3{b.x * inv.x, b.y * inv.y, b.z * inv.z});
+    };
+    float deepest = 0;
+    for (int k = 0; k < 8; k++) {
+        const Vec3 arm = MatVec(d.r, Vec3{k & 1 ? d.half.x : -d.half.x, k & 2 ? d.half.y : -d.half.y,
+                                          k & 4 ? d.half.z : -d.half.z});
+        const Vec3 q = d.p + arm;
+        const float depth = Dot(g - q, n);
+        if (depth <= 0) continue;
+        deepest = depth > deepest ? depth : deepest;
+        const Vec3 vel = d.v + Cross(d.w, arm);
+        const float vn = Dot(vel, n);
+        if (vn >= 0) continue;
+        const float k1 = 1.0f + Dot(n, Cross(iinv(Cross(arm, n)), arm));
+        const float j = -(1.0f + 0.2f) * vn / k1;
+        Vec3 impulse = n * j;
+        const Vec3 vt = vel - n * vn;
+        const float vtl = Length(vt);
+        if (vtl > 1e-4f) {
+            const Vec3 t = vt * (1.0f / vtl);
+            const float kt = 1.0f + Dot(t, Cross(iinv(Cross(arm, t)), arm));
+            const float jt = fminf(vtl / kt, 0.6f * j);
+            impulse = impulse - t * jt;
+        }
+        d.v = d.v + impulse;
+        d.w = d.w + iinv(Cross(arm, impulse));
+    }
+    if (deepest > 0) {
+        d.p = d.p + n * deepest;
+        d.w = d.w * expf(-2.0f * dt);   // rolling resistance: a panel comes to rest rather than rocking forever
+    }
+}
+
+void StepDebris(CarState& car, Debris& d, float dt, const world::Frame& own) {
+    d.age += dt;
+    if (d.age > g_settings.hang.debrisSeconds || Length(d.p - own.o) > g_settings.hang.debrisReach) {
+        d.active = false;   // gone: the part stays lost
+        return;
+    }
+    // The cars push it: one that runs into it throws it along (the car itself too).
+    const float reach = fmaxf(d.half.x, fmaxf(d.half.y, d.half.z));
+    world::ForEachCar([&](uint8_t* other, uint8_t* rigid, Vec3 lo, Vec3 hi) {
+        Vec3 local;
+        const bool inside = world::InCarBox(rigid, lo, hi, d.p, reach * 0.5f, local);
+        if (other == car.car && !d.leftCar) {   // it comes off against its own car: only once clear of it
+            d.leftCar = !inside && !world::InCarBox(rigid, lo, hi, d.p, reach + 0.3f, local);
+            return;
+        }
+        if (!inside) return;
+        const float* m = (const float*)(rigid + world::kRigidRows);
+        const Vec3 ax{m[0], m[1], m[2]}, ay{m[4], m[5], m[6]};
+        // out through the nearest side
+        const float dx0 = local.x - lo.x, dx1 = hi.x - local.x, dy0 = local.y - lo.y, dy1 = hi.y - local.y;
+        const float best = fminf(fminf(dx0, dx1), fminf(dy0, dy1));
+        const Vec3 out = best == dx0 ? ax * -1.0f : best == dx1 ? ax : best == dy0 ? ay * -1.0f : ay;
+        const Vec3 vc = world::Velocity(rigid);
+        if (Dot(d.v - vc, out) < 1.0f) {
+            d.v = vc + out * (1.5f + Length(vc) * 0.15f) + Vec3{0, 0, 1.0f + Length(vc) * 0.08f};
+            d.w = d.w + Vec3{(float)(rand() % 200 - 100) * 0.06f, (float)(rand() % 200 - 100) * 0.06f,
+                             (float)(rand() % 200 - 100) * 0.06f};
+            d.p = d.p + out * (best + reach * 0.5f);
+            d.asleep = false;
+            d.still = 0;
+        }
+    });
+    if (d.asleep) return;
+    float gz = 0;
+    Vec3 gn{0, 0, 1};
+    const bool grounded = world::Ground(d.p, gz, gn);
+    const Vec3 g{d.p.x, d.p.y, gz};
+    const Vec3 before = d.p;
+    for (float left = dt; left > 1e-5f; left -= kDebrisStep)
+        DebrisSubstep(d, left < kDebrisStep ? left : kDebrisStep, grounded, g, gn);
+    // A wall in the way: it bounces off.
+    Vec3 hit, wn;
+    const Vec3 move = d.p - before;
+    if (Length(move) > 1e-3f && world::Wall(before, d.p + Normalize(move) * reach * 0.5f, hit, wn)) {
+        d.p = hit + wn * (reach * 0.5f + 0.02f);
+        const float vn = Dot(d.v, wn);
+        if (vn < 0) d.v = d.v - wn * (1.4f * vn);
+        d.v = d.v * 0.7f;
+        d.w = d.w * 0.7f;
+    }
+    // At rest: it sleeps until something hits it.
+    const bool resting = grounded && d.p.z - gz < reach + 0.05f && Length(d.v) < 0.15f && Length(d.w) < 0.4f;
+    d.still = resting ? d.still + dt : 0;
+    if (d.still > 0.6f) {
+        d.asleep = true;
+        d.v = d.w = {0, 0, 0};
+    }
+}
+
+// An open door against the walls and the other cars. The obstacle pushes its free edge: towards shutting (the
+// car drives on with it open) it slams it, towards opening (hit from behind, or reversing) it swings it open, and
+// hard enough tears it off.
+void CollideDoor(CarState& car, void* renderInfo, int i, const world::Frame& now, const world::Frame& before, float dt) {
+    HangPart& h = car.parts[i];
+    if (car.doorCooldown[i] > 0) {
+        car.doorCooldown[i] -= dt;
+        return;
+    }
+    if (h.angle < 0.08f || h.lever < 0.3f) return;
+    const Vec3 edge{-h.lever, 0, 0};   // hinge to the free edge, closed (the hinge is at the door's front)
+    const Vec3 tip = h.hinge + Rotate(edge, h.axis, h.angle), mid = h.hinge + Rotate(edge * 0.5f, h.axis, h.angle);
+    const Vec3 tipW = now.ToWorld(tip), midW = now.ToWorld(mid);
+    const Vec3 vTip = (tipW - before.ToWorld(tip)) * (1.0f / dt);
+    const Vec3 open = now.DirToWorld(Normalize(Cross(h.axis, tip - h.hinge)));
+    bool hit = false;
+    Vec3 vObstacle{0, 0, 0}, wp, wn;
+    if (world::Wall(now.ToWorld(h.hinge + Rotate(edge * 0.2f, h.axis, h.angle)), tipW, wp, wn)) hit = true;
+    if (!hit)
+        world::ForEachCar([&](uint8_t* other, uint8_t* rigid, Vec3 lo, Vec3 hi) {
+            if (hit || other == car.car) return;
+            Vec3 local;
+            if (world::InCarBox(rigid, lo, hi, tipW, 0.02f, local) || world::InCarBox(rigid, lo, hi, midW, 0.02f, local)) {
+                hit = true;
+                vObstacle = world::Velocity(rigid);
+            }
+        });
+    if (!hit) return;
+    const Vec3 rel = vTip - vObstacle;
+    const float push = Dot(rel * -1.0f, open);   // how fast the obstacle pushes the edge the opening way
+    const HangSettings& hs = g_settings.hang;
+    if (push > hs.doorTearSpeed) {
+        const Vec3 kick = rel * -0.35f + Vec3{0, 0, 1.2f};
+        const Vec3 spin = now.z * (kHangSpecs[i].side * -3.0f) + now.x * ((float)(rand() % 200 - 100) * 0.02f);
+        StartDebris(car, renderInfo, i, kick, spin);
+        if (g_settings.logHits) Log("parts: %s torn off from behind (%.1f m/s)", kHangSpecs[i].name, push);
+        return;
+    }
+    if (push > 0)
+        h.rate = fmaxf(h.rate, 1.2f * push / h.lever);
+    else
+        h.rate = fminf(h.rate, 1.2f * push / h.lever - 0.5f);   // shut against it
+    car.doorCooldown[i] = 0.12f;
+}
+
 // Swings the loose parts of one car, as hinged plates driven by the car's acceleration (inertia), gravity
 // and the airflow. Droopers fall and bounce off the ground; lids rest slightly open and flutter; doors
-// swing out under braking and in turns and slam against the body when the airflow shuts them.
+// swing out under braking and in turns and slam against the body when the airflow shuts them; a dangling
+// mirror is thrown out and back against the door by the turns.
 void SwingParts(CarState& car, void* renderInfo, float dt) {
     if (!CarHas(car.car, renderInfo) || dt <= 0) return;
     const HangSettings& hs = g_settings.hang;
@@ -1276,30 +1768,67 @@ void SwingParts(CarState& car, void* renderInfo, float dt) {
     const Vec3 vw = car.rigid ? At<Vec3>(car.rigid, kRigidVelocity) : At<Vec3>(car.car, kCarVelocity);
     const Vec3 v{Dot(vw, ax), Dot(vw, ay), Dot(vw, az)};
     Vec3 a{0, 0, 0};
-    if (car.hasVelocity) a = (v - car.lastVelocity) * (1.0f / dt);
+    Vec3 aw{0, 0, 0};   // the true acceleration, in car space (turning at a steady speed included)
+    if (car.hasVelocity) {
+        a = (v - car.lastVelocity) * (1.0f / dt);
+        const Vec3 d = (vw - car.lastWorldVelocity) * (1.0f / dt);
+        aw = {Dot(d, ax), Dot(d, ay), Dot(d, az)};
+    }
     car.lastVelocity = v;
+    car.lastWorldVelocity = vw;
     car.hasVelocity = true;
     const auto clamp = [](float x, float lim) { return x < -lim ? -lim : x > lim ? lim : x; };
     a = {clamp(a.x, 40), clamp(a.y, 40), clamp(a.z, 40)};
+    aw = {clamp(aw.x, 40), clamp(aw.y, 40), clamp(aw.z, 40)};
     const float speed = Length(v);
     const float airflow = speed * speed * hs.windOpen;
     car.flutterPhase += dt * (6.0f + speed * 0.4f);
+    world::Frame frameNow{};
+    const bool posed = world::CarFrame(RigidFor(car, renderInfo), frameNow);
+    const bool hadFrame = car.hasFrame;
+    const world::Frame frameBefore = car.lastFrame;
+    car.hasFrame = posed;
+    if (posed) car.lastFrame = frameNow;
     const float gust = sinf(car.flutterPhase) * sinf(car.flutterPhase * 2.3f + 1.0f);
 
     for (int i = 0; i < kHangCount; i++) {
         const HangSpec& spec = kHangSpecs[i];
         HangPart& h = car.parts[i];
+        const bool mirror = spec.slots[0] == kSlotWingMirror && hs.mirrorSwing > 0;
+        // A dangling mirror rests on the body at MirrorDropDeg.
+        if (spec.slots[0] == kSlotWingMirror && h.loose) {
+            const float drop = hs.mirrorDropDeg * kPi / 180.0f;
+            if (h.maxAngle > drop) h.maxAngle = drop;
+            if (h.angle > h.maxAngle) h.angle = h.maxAngle;
+        }
+        if (!h.loose || h.fallen || !mirror) car.sway[i] = car.swayRate[i] = 0;
+        Debris& debris = car.debris[i];
+        if (!h.fallen) debris.active = false;   // repaired
+        if (debris.active) {
+            if (posed) StepDebris(car, debris, dt, frameNow);
+            continue;
+        }
         if (!h.loose || h.fallen) continue;
+        if (spec.kind == HangKind::Door && hs.doorCollide && posed && hadFrame) {
+            CollideDoor(car, renderInfo, i, frameNow, frameBefore, dt);
+            if (h.fallen) continue;
+        }
         // At speed the airflow tears an open hood away: it flips over the car, rises and drops behind.
         if (spec.kind == HangKind::Lift && spec.wind > 0 && !h.flying && speed > hs.hoodFlySpeed &&
             h.angle > 0.15f) {
             h.flying = true;
             h.flyTime = 0;
+            // Thrown up off its hinge, spinning over: the air slows it and it lands behind the car.
+            if (posed && StartDebris(car, renderInfo, i, frameNow.z * hs.hoodFlyLift, frameNow.DirToWorld(h.axis) * 6.0f))
+                continue;
+            h.fallen = false;   // no world to land in: the old flight
+            h.flying = true;
         }
         if (h.flying) {
             h.flyTime += dt;
             const float t = h.flyTime;
             h.angle += dt * 7.0f;
+            // Thrown up at HoodFlyLift m/s, falling at g, swept back by the airflow.
             h.offset = {-9.0f * t * t, 0.0f, hs.hoodFlyLift * t - 4.9f * t * t};
             if (t > 1.8f) h.fallen = true;
             continue;
@@ -1312,6 +1841,9 @@ void SwingParts(CarState& car, void* renderInfo, float dt) {
             switch (spec.kind) {
                 case HangKind::Droop:   // gravity, plus the car's vertical bumps
                     acc = 1.5f * (9.8f + a.z) * c / lever;
+                    // A dangling mirror: the turns throw it out or against the door, the airflow buffets it.
+                    if (mirror)
+                        acc += hs.mirrorSwing * (1.5f * aw.y * spec.side * s / lever + hs.flutter * speed * 0.08f * gust);
                     break;
                 case HangKind::Lift: {   // a spring towards the resting gap, the airflow, bumps and gusts
                     float rest = hs.popAngleDeg * kPi / 180.0f + spec.wind * airflow;
@@ -1335,6 +1867,118 @@ void SwingParts(CarState& car, void* renderInfo, float dt) {
                 if (h.rate < 0) h.rate = -h.rate * hs.bounce;
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Bent wheels (drawn only). A dent near a wheel bends it (CarState::wheel, from the physics wheels' positions);
+// Render(view, rig, pos, orient, tireMats, brakeMats, spinnerMats, ...) takes the four wheels' matrices as arrays
+// of 4 bMatrix4 (row vectors; the tyre's mid-plane at the origin, the axle along Y, so a matrix holds the spin and
+// the steering), which it reads at 0x62710D. They are copied here (into the guest heap), the damaged wheels bent,
+// and Render is handed the copies: the caller's matrices are left as they were. Render's wheel order: 0 FL, 1 FR,
+// 2 RR, 3 RL. Pre-multiplied (in the spinning frame) the bend is a bent rim that wobbles; post-multiplied (in the
+// car's axes) it is the bent suspension's lean and toe.
+
+constexpr size_t kCarKind = 0x28, kCarMover = 0x34;   // kind 1 = PhysicsMover
+constexpr uint32_t kMoverVtable = 0x7A25E0;
+constexpr size_t kMoverWheels = 0x38, kWheelInfo = 0x14;
+constexpr int kRenderTireArg = 4;   // Render's stack arguments: tyres, then brakes, then spinners
+
+// The car's PhysicsMover, when it has one.
+uint8_t* MoverOf(uint8_t* car) {
+    if (!car || !dmg_committed(A(car), kCarMover + 4) || At<int>(car, kCarKind) != 1) return nullptr;
+    uint8_t* mover = At<uint8_t*>(car, kCarMover);
+    return mover && dmg_committed(A(mover), kMoverWheels + 16) && At<uint32_t>(mover, 0) == kMoverVtable ? mover : nullptr;
+}
+
+// Car-space position of a physics wheel (its WheelInfo).
+Vec3 WheelPosition(uint8_t* mover, int i) {
+    const uint8_t* wheel = At<uint8_t*>(mover, kMoverWheels + i * 4);
+    if (!wheel || !dmg_committed(A(wheel) + kWheelInfo, 4)) return {0, 0, 0};
+    const uint8_t* info = At<uint8_t*>(wheel, kWheelInfo);
+    return info && dmg_committed(A(info), 12) ? At<Vec3>(info, 0) : Vec3{0, 0, 0};
+}
+
+// A dent bends the wheels near it.
+void BendNear(uint8_t* car, CarState& state, const Dent& dent) {
+    const WheelSettings& ws = g_settings.wheels;
+    uint8_t* mover = ws.enabled ? MoverOf(car) : nullptr;
+    if (!mover) return;
+    for (int i = 0; i < 4; i++) {
+        const Vec3 w = WheelPosition(mover, i);
+        const float d = sqrtf((w.x - dent.point.x) * (w.x - dent.point.x) + (w.y - dent.point.y) * (w.y - dent.point.y));
+        if (d >= ws.wheelReach) continue;
+        const float v = state.wheel[i] + dent.depth * ws.wheelPerDepth * (1.0f - d / ws.wheelReach);
+        state.wheel[i] = v > 1.0f ? 1.0f : v;
+    }
+}
+
+void MulRot(float* m, const float r[9], bool before) {   // m's 3x3 = r . m (before) or m . r
+    float o[9];
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++) {
+            float v = 0;
+            for (int k = 0; k < 3; k++) v += before ? r[i * 3 + k] * m[k * 4 + j] : m[i * 4 + k] * r[k * 3 + j];
+            o[i * 3 + j] = v;
+        }
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++) m[i * 4 + j] = o[i * 3 + j];
+}
+// Row-vector rotations: about X (+ moves Z towards -Y) and about Z (+ turns X towards +Y).
+void RotX(float r[9], float a) {
+    const float c = cosf(a), s = sinf(a);
+    const float m[9] = {1, 0, 0, 0, c, s, 0, -s, c};
+    memcpy(r, m, sizeof(m));
+}
+void RotZ(float r[9], float a) {
+    const float c = cosf(a), s = sinf(a);
+    const float m[9] = {c, s, 0, -s, c, 0, 0, 0, 1};
+    memcpy(r, m, sizeof(m));
+}
+
+uint32_t g_wheelMats = 0;   // guest: 4 sets x 3 kinds x 4 wheels x 16 floats
+int g_wheelMatSet = 0;
+
+void BendWheels(void* renderInfo, uint32_t args) {
+    const WheelSettings& ws = g_settings.wheels;
+    if (!ws.enabled || !args || !dmg_committed(args, (kRenderTireArg + 3) * 4)) return;
+    auto it = g_cars.find(renderInfo);
+    if (it == g_cars.end()) return;
+    const CarState& state = *it->second;
+    // Damage per render wheel, from the physics wheels' positions (order FL, FR, RR, RL when there is no car).
+    float hurt[4] = {state.wheel[0], state.wheel[1], state.wheel[2], state.wheel[3]};
+    if (uint8_t* mover = CarHas(state.car, renderInfo) ? MoverOf(state.car) : nullptr)
+        for (int j = 0; j < 4; j++) {
+            const Vec3 p = WheelPosition(mover, j);
+            if (p.x == 0.0f && p.y == 0.0f) continue;
+            const int r = p.x > 0 ? (p.y > 0 ? 0 : 1) : (p.y > 0 ? 3 : 2);
+            hurt[r] = state.wheel[j];
+        }
+    if (hurt[0] <= 0 && hurt[1] <= 0 && hurt[2] <= 0 && hurt[3] <= 0) return;
+    if (!g_wheelMats) g_wheelMats = dmg_alloc(4 * 3 * 4 * 64);
+    if (!g_wheelMats) return;
+    float (*set)[4][16] = (float (*)[4][16])G(g_wheelMats + (uint32_t)g_wheelMatSet * 3 * 4 * 64);
+    g_wheelMatSet = (g_wheelMatSet + 1) & 3;
+    const float deg = kPi / 180.0f;
+    for (int kind = 0; kind < 3; kind++) {   // tyres, brakes, spinners
+        const uint32_t srcAddr = R32(args + 4u * (kRenderTireArg + kind));
+        if (!srcAddr || !dmg_committed(srcAddr, 4 * 64)) continue;
+        memcpy(set[kind], G(srcAddr), sizeof(set[kind]));
+        for (int i = 0; i < 4; i++) {
+            if (hurt[i] <= 0) continue;
+            const float side = (i == 0 || i == 3) ? 1.0f : -1.0f;   // +1 left
+            float* m = set[kind][i];
+            float r[9];
+            if (kind != 1) {   // the rim's wobble turns with it (the brake does not spin)
+                RotX(r, hurt[i] * ws.bendWobbleDeg * deg);
+                MulRot(m, r, true);
+            }
+            RotX(r, side * hurt[i] * ws.bendCamberDeg * deg);   // the top leans in
+            MulRot(m, r, false);
+            RotZ(r, side * hurt[i] * ws.bendToeDeg * deg);      // the front turns out
+            MulRot(m, r, false);
+        }
+        At<uint32_t>(G(args), 4u * (kRenderTireArg + kind)) = A(set[kind]);
     }
 }
 
@@ -1389,7 +2033,10 @@ void OnFrame() {
                 memset(carDamage + kCarPartDamageValues, 0, kCarPartDamageCount * sizeof(float));
         for (int i = 0; i < kHangCount; i++) {
             HangPart& h = car.parts[i];
-            if (h.fallen == h.shownFallen && fabsf(h.angle - h.shownAngle) <= 0.002f) continue;
+            if (h.fallen == h.shownFallen && fabsf(h.angle - h.shownAngle) <= 0.002f &&
+                fabsf(car.sway[i] - car.shownSway[i]) <= 0.002f && !(car.debris[i].active && dt > 0) &&
+                car.debris[i].active == car.shownDebris[i])
+                continue;
             for (auto& c : g_clones) {
                 if (c.second->renderInfo != kv.first) continue;
                 const int spec = SpecOf(c.second);   // the part itself, or one mounted on it (a mirror)
@@ -1397,6 +2044,8 @@ void OnFrame() {
             }
             h.shownFallen = h.fallen;
             h.shownAngle = h.angle;
+            car.shownSway[i] = car.sway[i];
+            car.shownDebris[i] = car.debris[i].active;
         }
     }
 
@@ -1447,10 +2096,11 @@ extern "C" int dmg_init(void) {
 }
 
 // CarRenderInfo::Render, before the game's
-extern "C" void dmg_render_entry(uint32_t cri) {
+extern "C" void dmg_render_entry(uint32_t cri, uint32_t args) {
     void* renderInfo = G(cri);
     if (!dmg_committed(cri, kCriModels + 63 * 8 * 4)) return;
     OnFrame();
+    BendWheels(renderInfo, args);
     // A racer (it owns a CarDamage) gets its parts refined ahead of its first impact.
     if (uint8_t* car = At<uint8_t*>(renderInfo, kCriCar))
         if (CarHas(car, renderInfo) && At<void*>(car, kCarDamage)) Prewarm(renderInfo);
@@ -1520,6 +2170,7 @@ extern "C" void dmg_impulse(uint32_t bodyAddr, uint32_t impulseAddr, uint32_t po
         moved = DentCar(renderInfo, *state, dent);
         if (g_settings.hang.enabled) DamageParts(renderInfo, *state, dent);
         BreakLights(renderInfo, *state, dent);
+        BendNear(car, *state, dent);
     }
     if (magnitude > ws.scratchThreshold) {
         float amount = (magnitude - ws.scratchThreshold) * ws.scratchPerImpulse;
@@ -1662,10 +2313,52 @@ extern "C" void dmg_car_textures(uint32_t used, uint32_t nameAddr) {
     if (g_settings.logHits) Log("car textures: %s added (%d in all)", name, count);
 }
 
+// The windows' damage textures. CarRenderInfo::UpdateCarReplacementTextures (0x615280) swaps each window's texture
+// (WINDOW_FRONT, _REAR, _LEFT_FRONT...) for DamagedWindowHashes[level] (0x802740: WINDOW, WINDOW_DAMAGE0/1/2) and
+// drops the cached texture, so it is looked up by hash at the next draw. Levels 1..3 are pointed at the pack's
+// DAMAGE_GLASS1..3 (ProStreet's broken glass) once the pack is in. The table is global: every car with the game's
+// window damage gets them.
+constexpr uint32_t kDamagedWindowHashes = 0x802740;
+bool g_packLoaded = false, g_glassDone = false;
+int g_glassWait = 0;
+
+void PatchGlass() {
+    if (g_glassDone || !g_packLoaded) return;
+    if (!g_settings.wear.prostreetGlass) {
+        g_glassDone = true;
+        return;
+    }
+    uint32_t* table = (uint32_t*)G(kDamagedWindowHashes);
+    static const uint32_t kExpected[4] = {0x834B8017, 0x0A155545, 0x0A155546, 0x0A155547};
+    if (memcmp(table, kExpected, sizeof(kExpected)) != 0) {
+        g_glassDone = true;
+        Log("window damage table at %08X is not the game's: the game's own cracks stay", kDamagedWindowHashes);
+        return;
+    }
+    uint32_t hashes[3];
+    for (int i = 0; i < 3; i++) {
+        char name[16];
+        snprintf(name, sizeof name, "DAMAGE_GLASS%d", i + 1);
+        hashes[i] = HashName(name);
+        const uint32_t args[3] = {hashes[i], 0, 0};
+        if (!dmg_call(kGetTextureInfo, 3, args)) {
+            if (++g_glassWait > 600) {   // ten seconds of frames after the pack: it does not have them
+                g_glassDone = true;
+                Log("pack has no %s: the game's own window cracks stay", name);
+            }
+            return;
+        }
+    }
+    memcpy(table + 1, hashes, sizeof(hashes));
+    g_glassDone = true;
+    Log("windows: ProStreet's broken glass for the window damage levels");
+}
+
 // The main loop, once a frame: the texture pack (scratches, cracked lenses), given once to the game's
 // LoadChunks; it is permanent (the game keeps pointers into it).
 extern "C" void dmg_main_loop(void) {
     static bool tried = false;
+    PatchGlass();
     if (tried) return;
     tried = true;
     const char* win = g_settings.wear.pack;
@@ -1689,5 +2382,6 @@ extern "C" void dmg_main_loop(void) {
     memcpy(G(name), win, strlen(win) + 1);
     const uint32_t args[3] = {A(data), (uint32_t)size, name};
     dmg_call(kLoadChunks, 3, args);
+    g_packLoaded = true;
     Log("pack %s loaded (%ld bytes)", win, size);
 }

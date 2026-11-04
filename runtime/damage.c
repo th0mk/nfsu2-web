@@ -20,8 +20,9 @@
  *                                                  texture, <CAR>_ENGINE, loaded with the car's others, so the
  *                                                  engine a lost hood shows is not black (on Windows too)
  *
- * Only what is seen: dents, folds, loose and lost parts, scratches, broken lights
- * and the game's own window cracks.  Not ported (yet): the engine and suspension
+ * Only what is seen: dents, folds, loose and lost parts (lying on the road, the
+ * doors hitting walls and cars), scratches, broken lights, the game's own window
+ * cracks with ProStreet's broken glass, and bent wheels (drawn only).  Not ported (yet): the engine and suspension
  * damage, the health bar and "totaled", the career's saved damage and repairs, the
  * neon and the sounds.  The game's own repair (SetDamageToZero: a race's start, the
  * garage) takes the damage away.
@@ -40,7 +41,7 @@ void gheap_free(int heap, uint32_t p);
 
 /* damagecore.cpp */
 int  dmg_init(void);
-void dmg_render_entry(uint32_t cri);
+void dmg_render_entry(uint32_t cri, uint32_t args);
 void dmg_impulse(uint32_t body, uint32_t impulse, uint32_t point);
 void dmg_zero(uint32_t car_damage, uint32_t caller);
 void dmg_open_flags(uint32_t cri, uint32_t frame);
@@ -73,13 +74,26 @@ uint32_t dmg_thiscall(uint32_t fn, uint32_t self, int n, const uint32_t *a){
     g_c->ecx = ecx;
     return r;
 }
+/* a thiscall that returns a float in st0 (the topology's GetElevation): read before the CPU is put back */
+void dispatch_indirect(CPU *c, uint32_t addr);
+float dmg_thiscall_f(uint32_t fn, uint32_t self, int n, const uint32_t *a){
+    CPU *c = g_c;
+    CPU save = *c;
+    c->ecx = self;
+    for (int i = n - 1; i >= 0; i--){ c->esp -= 4u; MR32(c->esp) = a[i]; }
+    c->esp -= 4u; MR32(c->esp) = 0xDEADBEEFu;   /* fake return address */
+    dispatch_indirect(c, fn);
+    const double r = c->st[c->top & 7];
+    *c = save;
+    return (float)r;
+}
 uint32_t dmg_alloc(uint32_t n){ return gheap_alloc(1, n, 1); }
 void dmg_free(uint32_t p){ gheap_free(1, p); }
 int dmg_committed(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
 
 /* ---- overrides ------------------------------------------------------------ */
 void sub_00620ae0(CPU *c){
-    if (on()){ g_c = c; dmg_render_entry(c->ecx); }
+    if (on()){ g_c = c; dmg_render_entry(c->ecx, c->esp + 4u); }   /* its stack arguments: the bent wheels' matrices */
     sub_00620ae0_orig(c);
 }
 void sub_005a0b00(CPU *c){
