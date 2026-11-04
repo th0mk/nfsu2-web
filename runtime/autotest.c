@@ -999,10 +999,11 @@ static void status_line(double t, double tms, const char *label){
     if (k > 0 && k < (int)sizeof ms){ int pacer_spin_status(char *, size_t); pacer_spin_status(ms + k, sizeof ms - (size_t)k); }
 #endif
 #ifdef __wasm__
-    /* no ru_maxrss: rss = the wasm memory's size (it only grows), brk = the top of all the runtime heap ever took
-     * (runtime/web/sbrk.c): what of that memory the game has used, the guest's 640 MB included */
-    uint64_t memory_bytes(void), heap_break(void);
-    char rss[48]; snprintf(rss, sizeof rss, "%ldMB brk=%ldMB", (long)(memory_bytes() >> 20), (long)(heap_break() >> 20));
+    /* no ru_maxrss: rss = the wasm memory's size (it only grows), brk = all the runtime heap ever took
+     * (runtime/web/sbrk.c): what of that memory the game has used, the guest's 640 MB included (not the guest heap's
+     * window above the runtime: what the runtime's heap stepped over it is left out) */
+    uint64_t memory_bytes(void), heap_taken(void);
+    char rss[48]; snprintf(rss, sizeof rss, "%ldMB brk=%ldMB", (long)(memory_bytes() >> 20), (long)(heap_taken() >> 20));
 #else
     char rss[24]; snprintf(rss, sizeof rss, "%ldMB", (long)(ru.ru_maxrss / (1024 * 1024)));
 #endif

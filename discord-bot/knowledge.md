@@ -239,6 +239,12 @@ context lists every problem the developer has a report on, with its first thread
   small for its next big load (better since 10fc93d3, there only once the live version has that commit), and the
   friends' cars' textures that come in then can fill it anyway. Not fixed yet; no setting avoids it for sure. With
   10fc93d3 the log also says what holds the memory (`[heap] no room for ...` lines): escalate such a log.
+  Since 4 November (pending release) a computer's browser gives the game 768 MB more of that memory, 1.25 GB in all
+  (Chrome, Edge or Firefox; not Safari, phones or tablets, nor a computer whose browser says it has less than 8 GB):
+  its log then says `[memory] 2048 MB` and `[heap] window above the runtime`. A computer's log with those lines and
+  still these failures: escalate it. `[heap] no window above the runtime` means the browser did not give the 2 GB
+  (the `[memory]` line says what it refused), and the game runs with 512 MB as before. A settings.ini line
+  `NFSU2_HEAP_WINDOW = 0` turns the extra memory off.
 - Free roam: the world's loading screen, or roads missing, while driving among many players (seconds on a PC, half a
   minute on a phone; once it never ended). Cause found on 29 October: the game loads no part of the city while it
   loads a player's car, and with players coming and going their cars load one after another, so the city waited for

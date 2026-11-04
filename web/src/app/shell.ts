@@ -27,7 +27,7 @@ import { LogRing, downloadBlob, stamp } from './logs';
 import { LastGameKeeper, lastGameEnd, lastGameLine, lastGameToOffer, type LastGame } from './lastgame';
 import { androidMajor, browserBrief, deviceBrief } from './devicelog';
 import { canFullscreen, enterFullscreen, exitFullscreen, fromHomeScreen, homeScreenInstead, isFullscreen, keepScreenOn, measureRefresh, settledSize, trackCanvasSize } from './display';
-import { deviceDefaults, deviceKind, isPhone, markTouch, noPinchZoom, padSeen, phoneScreen, touchFirst } from './device';
+import { deviceDefaults, deviceKind, heapWindow, isPhone, markTouch, noPinchZoom, padSeen, phoneScreen, touchFirst } from './device';
 import { phoneSeed, phoneUpgrade } from './phonegraphics';
 import { markPad, padPress, pageDialog } from './padnav';
 import { controlsSheet, type ControlsSheet, type Tab } from './controls';
@@ -623,6 +623,9 @@ async function startGame() {
   // Players' cars shown by this device's default, not the player's pick: the game shows 32 after all once its frames
   // are slow with more (roam_game.c cars_cut)
   if (r.source.NFSU2_ROAM_MAX_CARS === 'device') r.env.NFSU2_ROAM_CARS_AUTO = '1';
+  // a computer's game gets the guest heap's window (device.ts heapWindow; process.ts asks for the memory, the game's
+  // log says whether it got it); a settings.ini line NFSU2_HEAP_WINDOW = 0 or 1 decides instead
+  if (!('NFSU2_HEAP_WINDOW' in r.env) && heapWindow()) r.env.NFSU2_HEAP_WINDOW = '1';
   // the room and crews in Unicode's composed form, as the page hashes them (players.ts roomText): one "é" whichever way
   for (const k of ['NFSU2_ROAM_ROOM', 'NFSU2_ROAM_CREW'] as const) if (r.env[k]) r.env[k] = roomText(r.env[k]);
   // the names this game goes by, for the log as it leaves the browser (privacy.ts)

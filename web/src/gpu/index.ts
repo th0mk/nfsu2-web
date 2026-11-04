@@ -232,7 +232,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   const [reg, vreg] = await Promise.all([untilExit(proc.registered(HostKind.Gpu)), untilExit(proc.registered(HostKind.Vsync))]).catch(giveUp);
   const mem = proc.memory;
   const i32 = () => new Int32Array(mem.buffer), u32 = () => new Uint32Array(mem.buffer);
-  const cw = reg.ptr >> 2;
+  const cw = reg.ptr >>> 2;   // (unsigned: the runtime's memory may be at 2 GB or more, runtime/guest_span.h)
   {
     const u = u32();
     if (u[cw + C.magic] !== P.GW_MAGIC || u[cw + C.layout] !== P.LAYOUT) {
@@ -256,7 +256,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   // pipelines of earlier sessions, created asynchronously as their shaders arrive
   const WARM_KEY = 'nfsu2.gpu.pipelines.v1';
   try { const j = localStorage.getItem(WARM_KEY); if (j) enc.loadWarm(JSON.parse(j)); } catch { /* storage off: no warm-up */ }
-  const vw = vreg.ptr >> 2, vf = vreg.ptr >> 3;
+  const vw = vreg.ptr >>> 2, vf = vreg.ptr >>> 3;
 
   // page -> game: view size, pixel ratio, features.  The view is the canvas element's box in device pixels (what
   // canvas.width/height are when the page sizes the canvas), kept apart from canvas.width/height, which follow the

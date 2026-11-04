@@ -177,7 +177,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     const o = base + IM_OFF_EV + (w & (INPUT_EV_N - 1)) * 16;
     u8[o] = type; u8[o + 1] = dik; u8[o + 2] = vk; u8[o + 3] = flags;
     u8[o + 4] = Math.min(chars.length, 3); u8[o + 5] = chars[0] ?? 0; u8[o + 6] = chars[1] ?? 0; u8[o + 7] = chars[2] ?? 0;
-    i32[(o + 8) >> 2] = a | 0; i32[(o + 12) >> 2] = b | 0;
+    i32[(o + 8) >>> 2] = a | 0; i32[(o + 12) >>> 2] = b | 0;
     Atomics.store(h, IM_EV_W, (w + 1) | 0);       // publishes the record (a sequentially consistent store)
     Atomics.notify(h, IM_EV_W, 1);
   }

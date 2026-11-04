@@ -18,7 +18,23 @@
  *             growth), and holds only what a few long-lived blocks pin
  *   trips     60 trips out of a crowded world and back: no allocation fails,
  *             the address space stays bounded, and a 60 MB run is free at
- *             every trip back */
+ *             every trip back
+ *   trace     (every run) an FNV-1a of every address handed out: the same
+ *             with the window asked for but refused (heap-va.test.mjs); with
+ *             no window it was the base heap.c's when the window came in
+ *             (3726865a for track/heapva ee93ad06's heap.c: a phone's start
+ *             places every block where it did before)
+ * With NFSU2_HEAP_WINDOW=1 and a 2 GB memory (WASI_PAGES=32768) the guest
+ * heap's window above the runtime is on (runtime/guest_span.h) and these run
+ * instead:
+ *   win       the window is on; large blocks and VirtualAlloc go into it,
+ *             heap segments stay low; nothing ever lands in the runtime's
+ *             memory between; 1.4 MB blocks fill 1200 MB or more of the two
+ *             (pages committed, written and read back), and all of it comes
+ *             back; VirtualQuery and a fixed-address VirtualAlloc see the hole
+ *             as nobody's
+ *   wtrips    60 trips with 64 friends' cars and the car pool at 128000 KB:
+ *             no allocation fails and the streamer's run is always there */
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +60,12 @@ int win32_threads_live(void){ return 0; }
 
 static int fails = 0;
 #define CHK(name, cond) do{ if (cond) printf("PASS %s\n", name); else { printf("FAIL %s\n", name); fails++; } }while(0)
+/* every address handed out, in order (the trace's FNV-1a) */
+static uint32_t g_trace = 0x811C9DC5u;
+static uint32_t traced(uint32_t a){ for (int i = 0; i < 4; i++){ g_trace ^= (a >> (8 * i)) & 0xffu; g_trace *= 0x01000193u; } return a; }
+extern __attribute__((weak)) uint32_t g_gwin_lo, g_gwin_hi;   /* mem.c (none in the base heap.c's) */
+static uint32_t win_lo(void){ return &g_gwin_lo ? g_gwin_lo : 0; }
+static uint32_t win_hi(void){ return &g_gwin_hi ? g_gwin_hi : 0; }
 
 /* a Win32 heap call as the import bridge makes it: stdcall arguments at esp */
 #define STK 0x00E0F000u
@@ -57,10 +79,10 @@ static uint32_t call(const char *fn, int n, const uint32_t *a){
 #define H(fn, ...) ({ uint32_t _a[] = { __VA_ARGS__ }; call(fn, (int)(sizeof _a / 4), _a); })
 static uint32_t rnd(uint32_t *s){ *s = *s * 1103515245u + 12345u; return *s >> 7; }
 static uint32_t g_h;                                   /* the game's CRT heap (HeapCreate) */
-static uint32_t crt(uint32_t n){ return H("HeapAlloc", g_h, 0u, n); }
+static uint32_t crt(uint32_t n){ return traced(H("HeapAlloc", g_h, 0u, n)); }
 static void crt_free(uint32_t p){ if (p) H("HeapFree", g_h, 0u, p); }
 static CPU g_c;
-static uint32_t gbuf(uint32_t n){ return gheap_alloc_c(&g_c, g_gh_gbuf, n, 0); }
+static uint32_t gbuf(uint32_t n){ return traced(gheap_alloc_c(&g_c, g_gh_gbuf, n, 0)); }
 static void gbuf_free(uint32_t p){ if (p) gheap_free_c(&g_c, g_gh_gbuf, p); }
 static uint64_t va(void){ uint64_t v; heap_totals(0, 0, &v, 0); return v; }
 /* the longest free run of the address space, MB (the [status] line's vrun=) */
@@ -153,7 +175,9 @@ static void segments(void){
  * blocks in the COM buffers' heap, some kept for longer: shared packs), 48
  * friends' cars (a 1.4 MB block in each heap and their small textures) coming
  * and going; each trip out all that goes and the front end's textures come. */
-enum { NCAR = 48, NWORLD = 3000, NFE = 2600, NKEEP = 200, TRIPS = 60 };
+enum { NCAR = 64, NWORLD = 3000, NFE = 2600, NKEEP = 200, TRIPS = 60 };
+static int g_ncar = 48;                                 /* friends' cars (64 in wtrips) */
+static uint32_t g_carpool = 64512172u;                  /* the car pool's extra block (128000 KB's in wtrips) */
 static uint32_t g_world[NWORLD], g_wcrt[NWORLD], g_fe[NFE], g_fecrt[NFE], g_keep[NKEEP];
 static uint32_t g_car[NCAR][2], g_cartex[NCAR][40];
 static void car_in(int k, uint32_t *s){
@@ -166,7 +190,7 @@ static void car_out(int k){
 }
 static void trips(void){
     uint32_t s = 4242, nkeep = 0;
-    uint32_t pool1 = crt(9228288u), pool2 = crt(8073216u), carpool = crt(64512172u);
+    uint32_t pool1 = crt(9228288u), pool2 = crt(8073216u), carpool = crt(g_carpool);
     int failed = !pool1 || !pool2 || !carpool;
     uint64_t vmax = 0; unsigned minrun = ~0u;
     for (int trip = 0; trip < TRIPS; trip++){
@@ -178,13 +202,13 @@ static void trips(void){
             failed += !(g_world[i] = gbuf(1024u + rnd(&s) % 61440u));
             failed += !(g_wcrt[i] = crt(16u + rnd(&s) % 4000u));
         }
-        for (int k = 0; k < NCAR; k++) car_in(k, &s);
+        for (int k = 0; k < g_ncar; k++) car_in(k, &s);
         for (int round = 0; round < 6; round++)                      /* friends come and go */
-            for (int k = 0; k < NCAR; k++) if (rnd(&s) & 1){ car_out(k); car_in(k, &s); }
-        for (int k = 0; k < NCAR; k++) failed += !g_car[k][0] || !g_car[k][1] || !g_cartex[k][39];
+            for (int k = 0; k < g_ncar; k++) if (rnd(&s) & 1){ car_out(k); car_in(k, &s); }
+        for (int k = 0; k < g_ncar; k++) failed += !g_car[k][0] || !g_car[k][1] || !g_cartex[k][39];
         if (va() > vmax) vmax = va();
         crt_free(streamer);                                          /* the track unload */
-        for (int k = 0; k < NCAR; k++) car_out(k);
+        for (int k = 0; k < g_ncar; k++) car_out(k);
         for (int i = 0; i < NWORLD; i++){
             if (!(rnd(&s) % 300) && nkeep < NKEEP) g_keep[nkeep++] = g_world[i];   /* kept for longer */
             else gbuf_free(g_world[i]);
@@ -197,14 +221,52 @@ static void trips(void){
         }
         if (va() > vmax) vmax = va();
     }
-    printf("  %d trips: VA at most %llu MB, the longest free run at a trip back at least %u MB, %d failed\n",
-           TRIPS, (unsigned long long)(vmax >> 20), minrun, failed);
-    CHK("trips-no-failure", failed == 0);
-    CHK("trips-bounded", vmax < 480ull * MB);
-    CHK("trips-streamer-room", minrun >= 60u);
+    printf("  %d trips, %d cars: VA at most %llu MB, the longest free run at a trip back at least %u MB, %d failed\n",
+           TRIPS, g_ncar, (unsigned long long)(vmax >> 20), minrun, failed);
+    if (win_hi()){
+        CHK("wtrips-no-failure", failed == 0);
+        CHK("wtrips-streamer-room", minrun >= 60u);
+    } else {
+        CHK("trips-no-failure", failed == 0);
+        CHK("trips-bounded", vmax < 480ull * MB);
+        CHK("trips-streamer-room", minrun >= 60u);
+    }
     for (int i = 0; i < NFE; i++){ gbuf_free(g_fe[i]); crt_free(g_fecrt[i]); }
     for (uint32_t i = 0; i < nkeep; i++) gbuf_free(g_keep[i]);
     crt_free(pool1); crt_free(pool2); crt_free(carpool);
+}
+
+/* the runtime's memory between the two ranges */
+static int in_hole(uint32_t a, uint32_t n){ return (uint64_t)a + n > 0x28000000u && a < win_lo(); }
+enum { NFILL = 1200 };
+static uint32_t g_fill[NFILL];
+static void win(void){
+    CHK("win-on", win_lo() == 0x50000000u && win_hi() == 0x7FFE0000u);
+    uint32_t big = crt(1398016u), seg = gbuf(4000u), v = H("VirtualAlloc", 0u, 3u * MB, 0x3000u, 4u);
+    CHK("win-large-high", big >= win_lo() && big < win_hi() && v >= win_lo() && v < win_hi());
+    CHK("win-segments-low", seg >= 0x08000000u && seg < 0x28000000u);
+    CHK("win-committed", mem_is_committed(big) && mem_is_committed(big + 1398015u) && mem_is_committed(v + 3u * MB - 1u));
+    crt_free(big); gbuf_free(seg); H("VirtualFree", v, 0u, 0x8000u);
+    uint64_t va0 = va(); uint32_t n = 0, hole = 0, bad = 0;
+    while (n < NFILL && (g_fill[n] = crt(1398016u))){
+        uint32_t p = g_fill[n++];
+        hole += in_hole(p, 1398016u);
+        for (uint32_t o = 0; o < 1398016u; o += 65536u){ MR32(p + o) = p ^ o; }
+    }
+    for (uint32_t i = 0; i < n; i++) for (uint32_t o = 0; o < 1398016u; o += 65536u) bad += MR32(g_fill[i] + o) != (g_fill[i] ^ o);
+    printf("  1.4 MB blocks until none: %u (%llu MB), %u in the runtime's memory, %u read back wrong\n",
+           n, (unsigned long long)((uint64_t)n * 1398016u >> 20), hole, bad);
+    CHK("win-fill", (uint64_t)n * 1398016u >= 1200ull * MB && n < NFILL);
+    CHK("win-no-hole", hole == 0 && bad == 0);
+    for (uint32_t i = 0; i < n; i++) crt_free(g_fill[i]);
+    CHK("win-back", va() <= va0 + 4u * MB);
+    /* the hole as the game sees it: free (nobody's), and no VirtualAlloc there */
+    uint32_t mbi = 0x00E0E000u; mem_commit(mbi, 4096u);
+    H("VirtualQuery", 0x30000000u, mbi, 28u);
+    uint32_t at = H("VirtualAlloc", 0x30000000u, 1u * MB, 0x3000u, 4u);
+    CHK("win-hole-nobodys", MR32(mbi + 16u) == 0x10000u && at == 0);
+    H("VirtualQuery", 0x60000000u, mbi, 28u);
+    CHK("win-query-free", MR32(mbi + 16u) == 0x10000u);
 }
 
 int main(void){
@@ -212,7 +274,14 @@ int main(void){
     mem_commit(0x00E00000u, 0x00010000u);                /* the calls' guest stack */
     heap_init();
     g_h = H("HeapCreate", 0u, 0x1000u, 0u);
-    bestfit(); bighole(); racehole(); segments(); trips();
+    if (win_hi()){
+        win();
+        g_ncar = 64; g_carpool = 131072000u + 172u;
+        trips();
+    } else {
+        bestfit(); bighole(); racehole(); segments(); trips();
+    }
+    printf("trace %08x\n", g_trace);
     printf("heap_va_unit: %s (%d failed)\n", fails ? "FAILED" : "passed", fails);
     return fails != 0;
 }

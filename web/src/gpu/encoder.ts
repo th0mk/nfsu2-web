@@ -167,7 +167,7 @@ export class Encoder {
   private seenFmt = new Set<string>();
 
   constructor(device: GPUDevice, memory: WebAssembly.Memory, ctlPtr: number, log: (s: string) => void) {
-    this.device = device; this.queue = device.queue; this.memory = memory; this.ctlW = ctlPtr >> 2; this.log = log;
+    this.device = device; this.queue = device.queue; this.memory = memory; this.ctlW = ctlPtr >>> 2; this.log = log;
     const f = device.features;
     this.feat = { bc: f.has('texture-compression-bc'), astc: f.has('texture-compression-astc'), swizzle: f.has('texture-component-swizzle'),
       unaligned: f.has('texture-compression-unaligned' as GPUFeatureName) };
@@ -226,7 +226,7 @@ export class Encoder {
     let tail = u32[c + P.C.rqTail];
     let n = 0;
     while (((limit - tail) | 0) > 0) {
-      const p = base + (tail & (cap - 1)), w = p >> 2;
+      const p = base + (tail & (cap - 1)), w = p >>> 2;
       const op = u32[w], len = u32[w + 1];
       if (len < 16 || len > cap) { this.log(`[gpu] corrupt resource queue record op=${op} len=${len} at ${tail}`); tail = limit; break; }
       const a0 = u32[w + 2], a1 = u32[w + 3], a2 = u32[w + 4], a3 = u32[w + 5], a4 = u32[w + 6], a5 = u32[w + 7];
@@ -639,7 +639,7 @@ export class Encoder {
     const u32 = this.u32, i32 = this.i32, f32 = this.f32, dev = this.device;
     const fw = this.ctlW + P.C.frame + b * (P.FRAME_BYTES >> 2);
     const dn = u32[fw + F.dn], vn = u32[fw + F.vn], rvn = u32[fw + F.rvn], kn = u32[fw + F.kn];
-    const drawsW = u32[fw + F.draws] >> 2, pscW = u32[fw + F.psc] >> 2;
+    const drawsW = u32[fw + F.draws] >>> 2, pscW = u32[fw + F.psc] >>> 2;
     const bbW = u32[fw + F.bbW] || 1280, bbH = u32[fw + F.bbH] || 720;
     let isDirect = !!direct && direct.width === bbW && direct.height === bbH;
     if (isDirect && this.readsScreenFirst(drawsW, dn)) {
@@ -902,7 +902,7 @@ export class Encoder {
     endPass();
     if (tr) {
       // the first vertices of every TVert draw: clip position, oD0, oT0
-      const tv = u32[fw + F.tv] >> 2;
+      const tv = u32[fw + F.tv] >>> 2;
       for (let i = 0; i < dn; i++) {
         const w = drawsW + i * P.DRAW_WORDS;
         if (u32[w + D.kind] !== Kind.Draw || i32[w + D.vsid] > 0) continue;
@@ -917,12 +917,12 @@ export class Encoder {
       for (let i = 0; i < dn; i++) {
         const w = drawsW + i * P.DRAW_WORDS;
         if (u32[w + D.kind] !== Kind.Draw || i32[w + D.vsid] <= 0 || u32[w + D.ixIsz]) continue;
-        const a = (raw + u32[w + D.rawoff]) >> 2, k = (kb + u32[w + D.koff]) >> 2;
+        const a = (raw + u32[w + D.rawoff]) >>> 2, k = (kb + u32[w + D.koff]) >>> 2;
         const hex = [...u32.subarray(a, a + 8)].map(x => x.toString(16).padStart(8, '0')).join(' ');
         const flt = [...f32.subarray(a, a + 3)].map(x => x.toPrecision(5)).join(' ');
         const kc = [...f32.subarray(k + 4, k + 4 + 20)].map(x => x.toPrecision(4)).join(' ');
         tr.push(`  raw #${i}: v0 ${hex} (xyz ${flt}) K stride ${u32[k]} tsel ${u32[k + 1].toString(16)} base ${u32[k + 2]} c0-4 ${kc}`);
-        const st = u32[k] >> 2, n = Math.min(u32[w + D.count], 6);
+        const st = u32[k] >>> 2, n = Math.min(u32[w + D.count], 6);
         if (st) for (let v = 1; v < n; v++) tr.push(`  raw #${i}.${v}: xyz ${[...f32.subarray(a + v * st, a + v * st + 3)].map(x => x.toPrecision(6)).join(' ')} word3 ${u32[a + v * st + 3].toString(16)}`);
       }
       // per vertex shader, the first draw's constants c0..c15 (matrices)
@@ -931,7 +931,7 @@ export class Encoder {
         const w = drawsW + i * P.DRAW_WORDS, vs = i32[w + D.vsid];
         if (u32[w + D.kind] !== Kind.Draw || vs <= 0 || seenVs.has(vs)) continue;
         seenVs.add(vs);
-        const k = (kb + u32[w + D.koff]) >> 2, nk = (u32[w + D.ksz] - 16) >> 4;
+        const k = (kb + u32[w + D.koff]) >>> 2, nk = (u32[w + D.ksz] - 16) >> 4;
         const rows: string[] = [];
         for (let r = 0; r < Math.min(nk, 16); r++) rows.push(`c${r}(${[...f32.subarray(k + 4 + r * 4, k + 8 + r * 4)].map(x => x.toPrecision(4)).join(' ')})`);
         tr.push(`  consts vs ${vs} (#${i}, ${nk} rows): ${rows.join(' ')}`);
