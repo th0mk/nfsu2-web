@@ -34,8 +34,8 @@
 //!
 //! The work runs on many cores: a tokio runtime with half the cores as workers, 2 to 8 (NFSU2_THREADS), the
 //! compression of the game data on a pool of its own (half the cores), the Online host and the free-roam hub on a
-//! thread each.  The repository the defaults are in (web/dist, out/web/nfsu2.wasm, out/web/server): the one this
-//! binary was built from, or NFSU2_REPO.
+//! thread each.  The repository the defaults are in (web/dist, out/web/nfsu2.wasm, out/web/server): NFSU2_REPO, else
+//! the checkout whose out/web/server-rs the binary is in, else the one it was built from.
 
 use mimalloc::MiMalloc;
 
@@ -53,11 +53,39 @@ pub fn die(msg: &str) -> ! {
     std::process::exit(1)
 }
 
-/// the repository the defaults are in: NFSU2_REPO, else the one this binary was built from
+/// the repository the defaults are in: NFSU2_REPO, else the checkout this binary sits in, else the one it was built
+/// from
 fn repo(cwd: &str) -> String {
     match std::env::var_os("NFSU2_REPO") {
         Some(r) if !r.is_empty() => paths::resolve(cwd, &r.to_string_lossy()),
-        _ => paths::normalize_abs(&format!("{}/../..", env!("CARGO_MANIFEST_DIR"))),
+        _ => std::env::current_exe()
+            .ok()
+            .and_then(|e| checkout_of(&e))
+            .unwrap_or_else(|| paths::normalize_abs(&format!("{}/../..", env!("CARGO_MANIFEST_DIR")))),
+    }
+}
+
+/// <repo> for <repo>/out/web/server-rs/<binary>, where web/server-rs/build.sh puts it, also as a copy of a build of
+/// the same sources made in another checkout (its cache)
+fn checkout_of(exe: &std::path::Path) -> Option<String> {
+    let dir = exe.parent()?;
+    if !dir.ends_with("out/web/server-rs") {
+        return None;
+    }
+    Some(dir.parent()?.parent()?.parent()?.to_str()?.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checkout_of;
+    use std::path::Path;
+
+    #[test]
+    fn checkout_of_the_binary() {
+        assert_eq!(checkout_of(Path::new("/home/a/wt/x/out/web/server-rs/nfsu2-server")).as_deref(), Some("/home/a/wt/x"));
+        assert_eq!(checkout_of(Path::new("/home/a/wt/x/out/web/server-rs/target/release/nfsu2-server")), None);
+        assert_eq!(checkout_of(Path::new("/nfsu2-server")), None);
+        assert_eq!(checkout_of(Path::new("/x/myout/web/server-rs/nfsu2-server")), None);
     }
 }
 

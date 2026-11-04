@@ -15,6 +15,8 @@ WASI="${WASI:-$(ls -d "$ROOT"/deps/wasi-sdk-*-arm64-macos "$ROOT"/deps/wasi-sdk-
 [ -x "$WASI/bin/clang" ] || { echo "wasi-sdk not found in deps/ (set WASI=...)"; exit 1; }
 # guest memory accesses must keep their may_alias types (cpu.h)
 WASI="$WASI" web/tools/aliasguard.sh > /dev/null || { WASI="$WASI" web/tools/aliasguard.sh; exit 1; }
+# a worktree's gen links: to the lift of this checkout's sources made before, if there is one (web/tools/gencache.sh)
+web/tools/gencache.sh link
 [ -f gen/all/fntab.c ] || { echo "gen/all missing: run web/gen.sh <path to SPEED2.EXE>"; exit 1; }
 [ -f gen/server/fntab.c ] || { echo "gen/server missing: run web/gen.sh <path to SPEED2.EXE> (it lifts server.dll too)"; exit 1; }
 # The lift must be the one this runtime needs: its _orig declarations, and
