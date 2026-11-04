@@ -69,7 +69,6 @@
   "Pause": "Pausa",
   "Controller: {list}": "Controller: {list}",
   "In menus: D-pad and {a}, {b} goes back.": "Nei menu: croce direzionale e {a}, {b} per tornare indietro.",
-  "Right stick up: headlights off or on; hold it for high beam.": "Stick destro in su: fari spenti o accesi; tienilo su per gli abbaglianti.",
   "Button names": "Nomi dei pulsanti",
   "On": "Attivato",
   "Off": "Disattivato",
@@ -824,7 +823,6 @@
   "Camera, look back": "Visuale, guarda indietro",
   "Hydraulics (hold, then the arrows)": "Sistema idraulico (tieni premuto, poi le frecce)",
   "Horn (with other players)": "Clacson (con altri giocatori)",
-  "Headlights off or on; hold for high beam": "Fari spenti o accesi; tieni premuto per gli abbaglianti",
   "Start an event, take an outrun": "Inizia una gara, accetta un inseguimento",
   "Map, messages": "Mappa, messaggi",
   "In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls.": "Nei menu: frecce ed Enter, Esc per tornare indietro. Cambia i tasti nel gioco, in Opzioni, Controlli.",
@@ -1414,7 +1412,6 @@
   "{key} or Home on the controller": "{key} o Home sul controller",
   "Drift mode": "Modalità dérapage",
   "Trunk, hood, doors": "Bagagliaio, cofano, portiere",
-  "Headlights": "Fari",
   "Add friend": "Aggiungi amico",
   "Add a friend (front bumpers touching)": "Aggiungi un amico (paraurti anteriori a contatto)",
   "Photo mode, then the photo": "Modalità foto, poi la foto",
@@ -1440,5 +1437,6 @@
   "Scotland": "Scozia",
   "Wales": "Galles",
   "Northern Ireland": "Irlanda del Nord",
-  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "un codice paese come nl, oppure gb-eng, gb-sct, gb-wls o gb-nir"
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "un codice paese come nl, oppure gb-eng, gb-sct, gb-wls o gb-nir",
+  "Greek": "Greco"
 }

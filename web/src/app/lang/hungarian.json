@@ -105,7 +105,6 @@
   "Pause": "Szünet",
   "Controller: {list}": "Kontroller: {list}",
   "In menus: D-pad and {a}, {b} goes back.": "Menükben: iránygombok és {a}, {b}: vissza.",
-  "Right stick up: headlights off or on; hold it for high beam.": "Jobb analóg kar felfelé: fényszóró ki vagy be; tartsd ott a távolsági fényhez.",
   "Button names": "Gombnevek",
   "On": "Be",
   "Off": "Ki",
@@ -1116,7 +1115,6 @@
   "Camera, look back": "Kamera, hátranézés",
   "Hydraulics (hold, then the arrows)": "Hidraulika (tartsd lenyomva, aztán a nyilak)",
   "Horn (with other players)": "Duda (más játékosokkal)",
-  "Headlights off or on; hold for high beam": "Fényszóró ki vagy be; tartsd lenyomva a távolsági fényhez",
   "Quick chat (with other players): group, then phrase": "Gyorschat (más játékosokkal): csoport, aztán mondat",
   "Start an event, take an outrun": "Verseny indítása, Párbaj elfogadása",
   "Map, messages": "Térkép, üzenetek",
@@ -1309,7 +1307,6 @@
   "{key} or Home on the controller": "{key} vagy a kontroller Home gombja",
   "Drift mode": "Drift mód",
   "Trunk, hood, doors": "Csomagtartó, motorháztető, ajtók",
-  "Headlights": "Fényszóró",
   "Add friend": "Barát hozzáadása",
   "Add a friend (front bumpers touching)": "Barát hozzáadása (összeérő első lökhárítókkal)",
   "Photo mode, then the photo": "Fotó mód, aztán a fotó",
@@ -1335,5 +1332,6 @@
   "Scotland": "Skócia",
   "Wales": "Wales",
   "Northern Ireland": "Észak-Írország",
-  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "országkód, például nl, vagy gb-eng, gb-sct, gb-wls vagy gb-nir"
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "országkód, például nl, vagy gb-eng, gb-sct, gb-wls vagy gb-nir",
+  "Greek": "Görög"
 }

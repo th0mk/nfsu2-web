@@ -69,7 +69,6 @@
   "Pause": "一時停止",
   "Controller: {list}": "コントローラー: {list}",
   "In menus: D-pad and {a}, {b} goes back.": "メニューでは十字キーと{a}、{b}で戻ります。",
-  "Right stick up: headlights off or on; hold it for high beam.": "右スティックを上：ヘッドライトのオン・オフ。倒したままでハイビーム。",
   "Button names": "ボタン表記",
   "On": "オン",
   "Off": "オフ",
@@ -736,7 +735,6 @@
   "Camera, look back": "カメラ、後方確認",
   "Hydraulics (hold, then the arrows)": "ハイドロ（押したまま矢印キー）",
   "Horn (with other players)": "ホーン（他のプレイヤーといるとき）",
-  "Headlights off or on; hold for high beam": "ヘッドライトのオン・オフ（長押しでハイビーム）",
   "Start an event, take an outrun": "イベントを開始、アウトランを受ける",
   "Map, messages": "マップ、メッセージ",
   "In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls.": "メニューでは矢印キーとEnter、Escで戻ります。キーはゲームの「オプション」>「コントロール」で変更できます。",
@@ -1306,7 +1304,6 @@
   "{key} or Home on the controller": "{key}またはコントローラーのHome",
   "Drift mode": "ドリフトモード",
   "Trunk, hood, doors": "トランク、ボンネット、ドア",
-  "Headlights": "ヘッドライト",
   "Add friend": "フレンド追加",
   "Add a friend (front bumpers touching)": "フレンド追加（フロントバンパー同士が接触）",
   "Photo mode, then the photo": "フォトモード。もう一度押すと撮影",
@@ -1332,5 +1329,6 @@
   "Scotland": "スコットランド",
   "Wales": "ウェールズ",
   "Northern Ireland": "北アイルランド",
-  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "nl などの国コード、または gb-eng、gb-sct、gb-wls、gb-nir"
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "nl などの国コード、または gb-eng、gb-sct、gb-wls、gb-nir",
+  "Greek": "ギリシャ語"
 }

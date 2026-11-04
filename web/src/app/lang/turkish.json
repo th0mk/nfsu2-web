@@ -69,7 +69,6 @@
   "Pause": "Duraklat",
   "Controller: {list}": "Oyun kolu: {list}",
   "In menus: D-pad and {a}, {b} goes back.": "Menülerde: yön tuşları ve {a}; {b} geri döner.",
-  "Right stick up: headlights off or on; hold it for high beam.": "Sağ çubuk yukarı: farlar kapalı ya da açık; uzun far için yukarıda tut.",
   "Button names": "Düğme adları",
   "On": "Açık",
   "Off": "Kapalı",
@@ -745,7 +744,6 @@
   "Camera, look back": "Kamera, arkaya bak",
   "Hydraulics (hold, then the arrows)": "Hidrolik (basılı tut, sonra oklar)",
   "Horn (with other players)": "Korna (diğer oyuncularla)",
-  "Headlights off or on; hold for high beam": "Farlar kapalı ya da açık; uzun far için basılı tut",
   "Start an event, take an outrun": "Etkinlik başlat, outrun yarışına gir",
   "Map, messages": "Harita, mesajlar",
   "In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls.": "Menülerde: ok tuşları ve Enter, Esc geri gider. Tuşları oyunun Seçenekler, Kontroller bölümünden değiştir.",
@@ -1315,7 +1313,6 @@
   "{key} or Home on the controller": "{key} ya da oyun kolundaki Home",
   "Drift mode": "Drift modu",
   "Trunk, hood, doors": "Bagaj, kaput, kapılar",
-  "Headlights": "Farlar",
   "Add friend": "Arkadaş ekle",
   "Add a friend (front bumpers touching)": "Arkadaş ekle (ön tamponlar birbirine değerken)",
   "Photo mode, then the photo": "Fotoğraf modu, sonra fotoğraf",
@@ -1341,5 +1338,6 @@
   "Scotland": "İskoçya",
   "Wales": "Galler",
   "Northern Ireland": "Kuzey İrlanda",
-  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "nl gibi bir ülke kodu ya da gb-eng, gb-sct, gb-wls veya gb-nir"
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "nl gibi bir ülke kodu ya da gb-eng, gb-sct, gb-wls veya gb-nir",
+  "Greek": "Yunanca"
 }

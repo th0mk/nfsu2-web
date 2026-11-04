@@ -69,7 +69,6 @@
   "Pause": "Pause",
   "Controller: {list}": "Controller: {list}",
   "In menus: D-pad and {a}, {b} goes back.": "I menuer: D-pad og {a}, {b} går tilbage.",
-  "Right stick up: headlights off or on; hold it for high beam.": "Højre stick op: forlygter fra eller til; hold den der for fjernlys.",
   "Button names": "Knapnavne",
   "On": "Til",
   "Off": "Fra",
@@ -802,7 +801,6 @@
   "Camera, look back": "Kamera, se bagud",
   "Hydraulics (hold, then the arrows)": "Hydraulik (hold nede, derefter piletasterne)",
   "Horn (with other players)": "Horn (med andre spillere)",
-  "Headlights off or on; hold for high beam": "Forlygter fra eller til; hold nede for fjernlys",
   "Start an event, take an outrun": "Start en begivenhed, tag imod en Outrun-udfordring",
   "Map, messages": "Kort, beskeder",
   "In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls.": "I menuer: piletasterne og Enter, Esc går tilbage. Skift taster under Indstillinger, Kommandoer i spillet.",
@@ -1387,7 +1385,6 @@
   "{key} or Home on the controller": "{key} eller Home på controlleren",
   "Drift mode": "Drift-tilstand",
   "Trunk, hood, doors": "Bagagerum, motorhjelm, døre",
-  "Headlights": "Forlygter",
   "Add friend": "Tilføj ven",
   "Add a friend (front bumpers touching)": "Tilføj en ven (forkofangerne mod hinanden)",
   "Photo mode, then the photo": "Fototilstand, så billedet",
@@ -1413,5 +1410,6 @@
   "Scotland": "Skotland",
   "Wales": "Wales",
   "Northern Ireland": "Nordirland",
-  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "en landekode som nl, eller gb-eng, gb-sct, gb-wls eller gb-nir"
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "en landekode som nl, eller gb-eng, gb-sct, gb-wls eller gb-nir",
+  "Greek": "Græsk"
 }

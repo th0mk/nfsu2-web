@@ -69,7 +69,6 @@
   "Pause": "หยุดชั่วคราว",
   "Controller: {list}": "คอนโทรลเลอร์: {list}",
   "In menus: D-pad and {a}, {b} goes back.": "ในเมนู: ใช้ปุ่มทิศทางและ {a} ส่วน {b} คือย้อนกลับ",
-  "Right stick up: headlights off or on; hold it for high beam.": "อนาล็อกขวาขึ้น: ไฟหน้า ปิดหรือเปิด ดันค้างไว้เพื่อเปิดไฟสูง",
   "Button names": "ชื่อปุ่ม",
   "On": "เปิด",
   "Off": "ปิด",
@@ -736,7 +735,6 @@
   "Camera, look back": "มุมกล้อง มองหลัง",
   "Hydraulics (hold, then the arrows)": "ไฮดรอลิก (กดค้าง แล้วกดลูกศร)",
   "Horn (with other players)": "แตร (เมื่อเล่นกับผู้เล่นคนอื่น)",
-  "Headlights off or on; hold for high beam": "ไฟหน้า ปิดหรือเปิด (กดค้างเพื่อเปิดไฟสูง)",
   "Start an event, take an outrun": "เริ่มอีเวนต์ รับคำท้าเอาท์รัน",
   "Map, messages": "แผนที่ ข้อความ",
   "In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls.": "ในเมนู: ใช้ปุ่มลูกศรและ Enter ส่วน Esc คือย้อนกลับ เปลี่ยนปุ่มได้ใน ตัวเลือก > การควบคุม ของเกม",
@@ -1306,7 +1304,6 @@
   "{key} or Home on the controller": "{key} หรือปุ่ม Home บนคอนโทรลเลอร์",
   "Drift mode": "โหมดดริฟต์",
   "Trunk, hood, doors": "ฝากระโปรงท้าย ฝากระโปรงหน้า ประตู",
-  "Headlights": "ไฟหน้า",
   "Add friend": "เพิ่มเพื่อน",
   "Add a friend (front bumpers touching)": "เพิ่มเพื่อน (กันชนหน้าแตะกัน)",
   "Photo mode, then the photo": "โหมดถ่ายภาพ กดอีกครั้งเพื่อถ่ายภาพ",
@@ -1332,5 +1329,6 @@
   "Scotland": "สกอตแลนด์",
   "Wales": "เวลส์",
   "Northern Ireland": "ไอร์แลนด์เหนือ",
-  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "รหัสประเทศ เช่น nl หรือ gb-eng, gb-sct, gb-wls หรือ gb-nir"
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "รหัสประเทศ เช่น nl หรือ gb-eng, gb-sct, gb-wls หรือ gb-nir",
+  "Greek": "ภาษากรีก"
 }

@@ -69,7 +69,6 @@
   "Pause": "Pauze",
   "Controller: {list}": "Controller: {list}",
   "In menus: D-pad and {a}, {b} goes back.": "In menu's: D-pad en {a}, {b} gaat terug.",
-  "Right stick up: headlights off or on; hold it for high beam.": "Rechterstick omhoog: koplampen uit of aan; vasthouden voor grootlicht.",
   "Button names": "Knopnamen",
   "On": "Aan",
   "Off": "Uit",
@@ -802,7 +801,6 @@
   "Camera, look back": "Camera, terugkijken",
   "Hydraulics (hold, then the arrows)": "Hydraulica (ingedrukt houden, dan de pijltjestoetsen)",
   "Horn (with other players)": "Claxon (met andere spelers)",
-  "Headlights off or on; hold for high beam": "Koplampen uit of aan; ingedrukt houden voor grootlicht",
   "Start an event, take an outrun": "Event starten, outrun aannemen",
   "Map, messages": "Kaart, berichten",
   "In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls.": "In menu's: pijltjestoetsen en Enter, Esc gaat terug. Wijzig toetsen in het spel bij Opties, Besturing.",
@@ -1387,7 +1385,6 @@
   "{key} or Home on the controller": "{key} of Home op de controller",
   "Drift mode": "Driftmodus",
   "Trunk, hood, doors": "Kofferbak, motorkap, deuren",
-  "Headlights": "Koplampen",
   "Add friend": "Vriend toevoegen",
   "Add a friend (front bumpers touching)": "Een vriend toevoegen (voorbumpers tegen elkaar)",
   "Photo mode, then the photo": "Fotomodus, dan de foto",
@@ -1413,5 +1410,6 @@
   "Scotland": "Schotland",
   "Wales": "Wales",
   "Northern Ireland": "Noord-Ierland",
-  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "een landcode zoals nl, of gb-eng, gb-sct, gb-wls of gb-nir"
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "een landcode zoals nl, of gb-eng, gb-sct, gb-wls of gb-nir",
+  "Greek": "Grieks"
 }

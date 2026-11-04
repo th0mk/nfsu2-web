@@ -115,7 +115,6 @@ While you drive:
 | Space | Handbrake |
 | Left Shift, left Ctrl | Gear up, gear down (manual gearbox) |
 | C, B | Camera (the game's four views, then the drift races' camera, in every drive), look back |
-| G | Headlights: a tap turns them off, or back on; held, high beam (brighter, reaching farther) until you let go. Friends in free roam see it, so you can flash your lights at them. On a controller the right stick straight up (see Controller below). Another key, or none, in Controls, Site |
 | R | Respawn |
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
@@ -138,12 +137,12 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Change the keys:** in the game, Options, Controls. It opens on Keyboard Configuration; Up to that title, then
   Right, is Joypad Configuration, the controller's buttons. The game lists a controller once it has seen it: press a
   button on it before opening Controls. A controller's buttons are kept with the profile (leaving Options saves them),
-  the keys for every profile. The site's own keys and buttons (drift mode, the trunk, the horn, the headlights, quick
-  chat's controller button, messages, friends, photo mode, the page menu, the next song, the counter) are set on the
-  start page, Controls, Site: click one, then press the new key or controller button, or pick Off (the page menu
-  always has a key, and Home). Keys the game itself uses can't be picked; one of the game's controls you put on one of
-  the site's keys in the game's Controls takes it: the site's control leaves it to the game, and Site says so. D-pad
-  down and the stick clicks with the game's own controls on them as it comes (Career Status, hydraulics) are shared as
+  the keys for every profile. The site's own keys and buttons (drift mode, the trunk, the horn, quick chat's
+  controller button, messages, friends, photo mode, the page menu, the next song, the counter) are set on the start
+  page, Controls, Site: click one, then press the new key or controller button, or pick Off (the page menu always has
+  a key, and Home). Keys the game itself uses can't be picked; one of the game's controls you put on one of the
+  site's keys in the game's Controls takes it: the site's control leaves it to the game, and Site says so. D-pad down
+  and the stick clicks with the game's own controls on them as it comes (Career Status, hydraulics) are shared as
   before: a short press, and a car with hydraulics, stay the game's. The touch controls' Drift and Horn work whatever
   keys those have.
 - **Drift mode (X):** in free roam, the car handles as in the game's drift races (their handling and drift assist,
@@ -184,8 +183,6 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   game's own look back, as B (whatever button you bound to it). If you steer, accelerate or brake with the right
   stick (the game's Options, Controls, Joypad Configuration), the left stick looks round instead, as long as the game
   uses nothing of it (no steering or pedal, no direction bound to a control); if it does, neither stick looks round.
-  The stick that looks round, pushed straight up, is the headlights (G): a flick up turns them off or back on, held up
-  is high beam until you let go.
   In free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
   bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. With the
   right stick steering or on a pedal, its click stays the game's (bounce), and 1 to 4 open quick chat. In the
@@ -266,7 +263,7 @@ that room.
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
-  Thai, Portuguese (Brazil), Polish, Turkish, Hungarian or Ukrainian, for the menus and all the game's text. Where the
+  Thai, Portuguese (Brazil), Polish, Turkish, Hungarian, Ukrainian or Greek, for the menus and all the game's text. Where the
   server has the language packs, French, German, Italian, Spanish, Japanese and Russian also play with
   their dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish,
   Turkish, Hungarian and Ukrainian with their text at all. Without the packs those six play in English, and the other

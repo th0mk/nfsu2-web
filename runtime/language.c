@@ -2,7 +2,7 @@
  *
  *   english (default), french, german, italian, spanish, dutch, swedish,
  *   danish, korean, chinese, japanese, russian, thai, portuguese, polish,
- *   turkish, hungarian, ukrainian
+ *   turkish, hungarian, ukrainian, greek
  *
  * SPEED2.EXE reads its language once at startup from the registry value
  * "Language" (0x5b7955, against the names at 0x7fca08: "English US" ...
@@ -16,7 +16,7 @@
  *
  * What a language needs beyond the retail folder (the dubbed speech and
  * movies, the full Chinese, Japanese and Thai text with the fonts drawn for
- * it, Russian, Portuguese, Polish, Turkish, Hungarian, Ukrainian) comes from LANGPACKS/<language>
+ * it, Russian, Portuguese, Polish, Turkish, Hungarian, Ukrainian, Greek) comes from LANGPACKS/<language>
  * in the game folder, built by tools/langpacks.py: fileio.c reads a file there
  * in place of the game folder's file of the same path.  A language without a
  * pack plays its text with English voices and movies.  English's own pack,
@@ -36,7 +36,7 @@
  * Russian, Portuguese (Brazil's), Polish, Turkish, Hungarian and Ukrainian are
  * no languages of the North American game: they play as English, with
  * English's files from LANGPACKS/russian, /portuguese, /polish, /turkish,
- * /hungarian or /ukrainian.  Ukrainian's are Russian's fonts with its text in
+ * /hungarian, /ukrainian or /greek.  Ukrainian's are Russian's fonts with its text in
  * their letters (І і Ї ї Є є at 0xE2-0xE7).
  * Polish's and Turkish's texts spell their letters with accented ones of the
  * game's fonts, whose textures in their packs draw them as the Polish or
@@ -93,6 +93,7 @@ static const struct lang { const char *key, *reg; uint32_t fonts; int thai; } LA
     { "turkish",  "English", 0, 0 },
     { "hungarian", "English", 0, 0 },
     { "ukrainian", "English", 0, 0 },
+    { "greek",    "English", 0, 0 },
 };
 static const struct lang *g_lang = &LANGS[0];
 static int g_subtitles = 1;       /* NFSU2_SUBTITLES */
@@ -213,7 +214,7 @@ void language_texts_frame(CPU *c){
  * i 0xED, s-cedilla 0xFF, g-breve 0xFD ...; its English.bin's), Hungarian's
  * o and u with the double acute as its text has them (o-tilde 0xF5,
  * u-circumflex 0xFB); a letter the fonts lack as '?'.  Korean, Chinese,
- * Japanese, Thai, Russian and Ukrainian draw ASCII as it is (car names), not
+ * Japanese, Thai, Russian, Ukrainian and Greek draw ASCII as it is (car names), not
  * Latin-1's accented letters. */
 void language_game_letters(const char *utf8, char *out, size_t n){
     static const struct { uint16_t u; uint8_t b; } PL[] = {
@@ -225,9 +226,97 @@ void language_game_letters(const char *utf8, char *out, size_t n){
     }, HU[] = {
         { 0x151, 0xf5 }, { 0x150, 0xd5 }, { 0x171, 0xfb }, { 0x170, 0xdb },
     };
+    /* Generated from tools/greekfont/build_greek.py. Must match its pack. */
+    static const struct { uint16_t u; uint8_t b; } EL[] = {
+        { 0x00a0, 0xa0 },
+        { 0x00a9, 0xa9 },
+        { 0x00ab, 0xab },
+        { 0x00ae, 0xae },
+        { 0x00b7, 0xb7 },
+        { 0x00bb, 0xbb },
+        { 0x00bc, 0xbc },
+        { 0x00d1, 0xd1 },
+        { 0x0386, 0xa1 },
+        { 0x0388, 0xa2 },
+        { 0x0389, 0xa3 },
+        { 0x038a, 0xa4 },
+        { 0x038c, 0xa5 },
+        { 0x038e, 0xa6 },
+        { 0x038f, 0xa7 },
+        { 0x0390, 0xa8 },
+        { 0x0391, 0xaa },
+        { 0x0392, 0xac },
+        { 0x0393, 0xad },
+        { 0x0394, 0xaf },
+        { 0x0395, 0xb0 },
+        { 0x0396, 0xb1 },
+        { 0x0397, 0xb2 },
+        { 0x0398, 0xb3 },
+        { 0x0399, 0xb4 },
+        { 0x039a, 0xb5 },
+        { 0x039b, 0xb6 },
+        { 0x039c, 0xb8 },
+        { 0x039d, 0xb9 },
+        { 0x039e, 0xba },
+        { 0x039f, 0xbd },
+        { 0x03a0, 0xbe },
+        { 0x03a1, 0xbf },
+        { 0x03a3, 0xc0 },
+        { 0x03a4, 0xc1 },
+        { 0x03a5, 0xc2 },
+        { 0x03a6, 0xc3 },
+        { 0x03a7, 0xc4 },
+        { 0x03a8, 0xc5 },
+        { 0x03a9, 0xc6 },
+        { 0x03aa, 0xc7 },
+        { 0x03ab, 0xc8 },
+        { 0x03ac, 0xc9 },
+        { 0x03ad, 0xca },
+        { 0x03ae, 0xcb },
+        { 0x03af, 0xcc },
+        { 0x03b0, 0xcd },
+        { 0x03b1, 0xce },
+        { 0x03b2, 0xcf },
+        { 0x03b3, 0xd0 },
+        { 0x03b4, 0xd2 },
+        { 0x03b5, 0xd3 },
+        { 0x03b6, 0xd4 },
+        { 0x03b7, 0xd5 },
+        { 0x03b8, 0xd6 },
+        { 0x03b9, 0xd7 },
+        { 0x03ba, 0xd8 },
+        { 0x03bb, 0xd9 },
+        { 0x03bc, 0xda },
+        { 0x03bd, 0xdb },
+        { 0x03be, 0xdc },
+        { 0x03bf, 0xdd },
+        { 0x03c0, 0xde },
+        { 0x03c1, 0xdf },
+        { 0x03c2, 0xe0 },
+        { 0x03c3, 0xe1 },
+        { 0x03c4, 0xe2 },
+        { 0x03c5, 0xe3 },
+        { 0x03c6, 0xe4 },
+        { 0x03c7, 0xe5 },
+        { 0x03c8, 0xe6 },
+        { 0x03c9, 0xe7 },
+        { 0x03ca, 0xe8 },
+        { 0x03cb, 0xe9 },
+        { 0x03cc, 0xea },
+        { 0x03cd, 0xeb },
+        { 0x03ce, 0xec },
+        { 0x2013, 0x83 },
+        { 0x2014, 0x8d },
+        { 0x2019, 0x81 },
+        { 0x201c, 0x87 },
+        { 0x201d, 0x84 },
+        { 0x2026, 0x86 },
+        { 0x2122, 0x82 },
+    };
+    int greek = !strcmp(g_lang->key, "greek");
     int polish = !strcmp(g_lang->key, "polish"), turkish = !strcmp(g_lang->key, "turkish");
     int hungarian = !strcmp(g_lang->key, "hungarian");
-    int latin = !g_lang->fonts && strcmp(g_lang->key, "russian") && strcmp(g_lang->key, "ukrainian");
+    int latin = !g_lang->fonts && strcmp(g_lang->key, "russian") && strcmp(g_lang->key, "ukrainian") && strcmp(g_lang->key, "greek");
     const uint8_t *s = (const uint8_t *)utf8;
     size_t o = 0;
     while (*s && o + 1 < n){
@@ -241,6 +330,7 @@ void language_game_letters(const char *utf8, char *out, size_t n){
         if (u < 0x80) b = (uint8_t)u;
         else if (u == 0x2019 || u == 0x2018) b = '\'';
         else if (u == 0x2013 || u == 0x2014) b = '-';
+        else if (greek){ for (unsigned i = 0; i < sizeof EL / sizeof EL[0]; i++) if (EL[i].u == u) b = EL[i].b; }
         else if (polish){ for (unsigned i = 0; i < sizeof PL / sizeof PL[0]; i++) if (PL[i].u == u) b = PL[i].b; }
         else if (turkish && u >= 0x100){ for (unsigned i = 0; i < sizeof TR / sizeof TR[0]; i++) if (TR[i].u == u) b = TR[i].b; }
         else if (hungarian && u >= 0x100){ for (unsigned i = 0; i < sizeof HU / sizeof HU[0]; i++) if (HU[i].u == u) b = HU[i].b; }
@@ -295,6 +385,17 @@ void language_install(void){
     }
     fprintf(stderr, "language: %s (registry \"%s\"), %s: %d file%s\n", g_lang->key, g_lang->reg,
             pack, files, files == 1 ? "" : "s");
+    /* The experimental Greek pack adds glyph records, including Unicode
+     * aliases. Reserve 64 KiB beyond the stock Latin language pool. This is
+     * runtime data only, not an edit to SPEED2.EXE. */
+    if (!strcmp(g_lang->key, "greek")){
+        if (MR32(FONT_SIZES) == MR32(LATIN_FONTS) && MR32(FONT_SIZES + 4) == 0){
+            MR32(FONT_SIZES + 4) = 65536u;
+            fprintf(stderr, "language: greek font records, 64 KB extra pool reserve\n");
+        } else {
+            fprintf(stderr, "language: unexpected font table; Greek pool reserve not applied\n");
+        }
+    }
     if (!g_lang->fonts) return;
 
     /* only on the data of the exe this port is made for */
