@@ -2,7 +2,7 @@
  *
  *   english (default), french, german, italian, spanish, dutch, swedish,
  *   danish, korean, chinese, japanese, russian, thai, portuguese, polish,
- *   turkish, hungarian, ukrainian, czech, slovak
+ *   turkish, hungarian, ukrainian, czech, slovak, greek
  *
  * SPEED2.EXE reads its language once at startup from the registry value
  * "Language" (0x5b7955, against the names at 0x7fca08: "English US" ...
@@ -16,7 +16,7 @@
  *
  * What a language needs beyond the retail folder (the dubbed speech and
  * movies, the full Chinese, Japanese and Thai text with the fonts drawn for
- * it, Russian, Portuguese, Polish, Turkish, Hungarian, Ukrainian, Czech, Slovak) comes from LANGPACKS/<language>
+ * it, Russian, Portuguese, Polish, Turkish, Hungarian, Ukrainian, Czech, Slovak, Greek) comes from LANGPACKS/<language>
  * in the game folder, built by tools/langpacks.py: fileio.c reads a file there
  * in place of the game folder's file of the same path.  A language without a
  * pack plays its text with English voices and movies.  English's own pack,
@@ -33,10 +33,10 @@
  *    but has no entry.  In a Thai game Japanese's entry becomes Thai's: its
  *    id, its name and file ("JAPANESE" -> "THAILAND", the same length) and
  *    the font hashes of its block.
- * Russian, Portuguese (Brazil's), Polish, Turkish, Hungarian, Ukrainian, Czech
- * and Slovak are no languages of the North American game: they play as
- * English, with English's files from LANGPACKS/russian, /portuguese, /polish,
- * /turkish, /hungarian, /ukrainian, /czech or /slovak.  Ukrainian's are
+ * Russian, Portuguese (Brazil's), Polish, Turkish, Hungarian, Ukrainian,
+ * Czech, Slovak and Greek are no languages of the North American game: they
+ * play as English, with English's files from LANGPACKS/russian, /portuguese,
+ * /polish, /turkish, /hungarian, /ukrainian, /czech, /slovak or /greek.  Ukrainian's are
  * Russian's fonts with its text in their letters (І і Ї ї Є є at 0xE2-0xE7).
  * Polish's and Turkish's texts spell their letters with accented ones of the
  * game's fonts, whose textures in their packs draw them as the Polish or
@@ -45,7 +45,10 @@
  * Czech's keeps the game's fonts and writes its letters with the caron and u
  * with the ring without them (c, r, s, z, e, u ...), as its translation does.
  * Slovak's text is Windows-1250 (s-caron 0x9A, c-caron 0xE8, l-caron 0xBE
- * ...), which its pack's fonts draw.
+ * ...), which its pack's fonts draw.  Greek's pack is made by
+ * tools/greekfont/build_greek.py: the game's fonts with Greek letters added,
+ * which its text writes as bytes 0xA1-0xEC (EL below); the bigger fonts get
+ * the language pool 64 KB more.
  *
  * The movies' subtitles (SUBTITLES/<movie>: when to show which of the
  * language's texts) are shown by the game's region ([0x864f24], 0x570a30),
@@ -99,6 +102,7 @@ static const struct lang { const char *key, *reg; uint32_t fonts; int thai; } LA
     { "ukrainian", "English", 0, 0 },
     { "czech",    "English", 0, 0 },
     { "slovak",   "English", 0, 0 },
+    { "greek",    "English", 0, 0 },
 };
 static const struct lang *g_lang = &LANGS[0];
 static int g_subtitles = 1;       /* NFSU2_SUBTITLES */
@@ -220,9 +224,31 @@ void language_texts_frame(CPU *c){
  * o and u with the double acute as its text has them (o-tilde 0xF5,
  * u-circumflex 0xFB), Czech's letters with the caron and u with the ring
  * without them (c, r, s, u ...), Slovak's in Windows-1250 as its pack's fonts
- * draw them; a letter the fonts lack as '?'.  Korean, Chinese,
- * Japanese, Thai, Russian and Ukrainian draw ASCII as it is (car names), not
- * Latin-1's accented letters. */
+ * draw them, Greek's as greek_byte puts them; a letter the fonts lack as '?'.
+ * Korean, Chinese, Japanese, Thai, Russian and Ukrainian draw ASCII as it is
+ * (car names), not Latin-1's accented letters. */
+/* Greek's letters in its pack (tools/greekfont/build_greek.py: GREEK, SLOTS,
+ * PUNCT, PRESERVE): the 69 of monotonic Greek in Unicode's order (Ά, Έ Ή Ί, Ό,
+ * Ύ to Ρ, Σ to ώ) on bytes 0xA1 up, past the Latin-1 letters it keeps (NBSP,
+ * © « ® · » ¼ Ñ, as they are); the quotes, … and ™ on the English file's own
+ * bytes for them; '?' for any other */
+static uint8_t greek_byte(uint32_t u){
+    static const uint8_t KEEP[] = { 0xa0, 0xa9, 0xab, 0xae, 0xb7, 0xbb, 0xbc, 0xd1 };
+    for (unsigned i = 0; i < sizeof KEEP; i++) if (u == KEEP[i]) return (uint8_t)u;
+    if (u == 0x201c) return 0x87;
+    if (u == 0x201d) return 0x84;
+    if (u == 0x2026) return 0x86;
+    if (u == 0x2122) return 0x82;
+    int k = u == 0x386 ? 0 : u >= 0x388 && u <= 0x38a ? 1 + (int)(u - 0x388) : u == 0x38c ? 4
+          : u >= 0x38e && u <= 0x3a1 ? 5 + (int)(u - 0x38e) : u >= 0x3a3 && u <= 0x3ce ? 25 + (int)(u - 0x3a3) : -1;
+    if (k < 0) return '?';
+    for (unsigned b = 0xa1; b < 0x100; b++){
+        int kept = 0;
+        for (unsigned i = 0; i < sizeof KEEP; i++) kept |= b == KEEP[i];
+        if (!kept && k-- == 0) return (uint8_t)b;
+    }
+    return '?';
+}
 void language_game_letters(const char *utf8, char *out, size_t n){
     static const struct { uint16_t u; uint8_t b; } PL[] = {
         { 0x105, 0xe7 }, { 0x107, 0xe9 }, { 0x119, 0xbf }, { 0x142, 0xee }, { 0x144, 0xf1 }, { 0xf3, 0xf3 },
@@ -246,7 +272,8 @@ void language_game_letters(const char *utf8, char *out, size_t n){
     };
     int polish = !strcmp(g_lang->key, "polish"), turkish = !strcmp(g_lang->key, "turkish");
     int hungarian = !strcmp(g_lang->key, "hungarian"), czech = !strcmp(g_lang->key, "czech"), slovak = !strcmp(g_lang->key, "slovak");
-    int latin = !g_lang->fonts && strcmp(g_lang->key, "russian") && strcmp(g_lang->key, "ukrainian") && !slovak;
+    int greek = !strcmp(g_lang->key, "greek");
+    int latin = !g_lang->fonts && strcmp(g_lang->key, "russian") && strcmp(g_lang->key, "ukrainian") && !slovak && !greek;
     const uint8_t *s = (const uint8_t *)utf8;
     size_t o = 0;
     while (*s && o + 1 < n){
@@ -265,6 +292,7 @@ void language_game_letters(const char *utf8, char *out, size_t n){
         else if (hungarian && u >= 0x100){ for (unsigned i = 0; i < sizeof HU / sizeof HU[0]; i++) if (HU[i].u == u) b = HU[i].b; }
         else if (czech && u >= 0x100){ for (unsigned i = 0; i < sizeof CS / sizeof CS[0]; i++) if (CS[i].u == u) b = CS[i].b; }
         else if (slovak){ for (unsigned i = 0; i < sizeof SK / sizeof SK[0]; i++) if (SK[i].u == u) b = SK[i].b; }
+        else if (greek) b = greek_byte(u);
         else if (latin && u >= 0xa0 && u < 0x100) b = (uint8_t)u;
         out[o++] = (char)b;
     }
@@ -316,6 +344,14 @@ void language_install(void){
     }
     fprintf(stderr, "language: %s (registry \"%s\"), %s: %d file%s\n", g_lang->key, g_lang->reg,
             pack, files, files == 1 ? "" : "s");
+    /* Greek's pack adds its letters' glyph records to the fonts (each letter twice: its byte and its Unicode):
+     * the language pool 64 KB more, as a font block's size in the table does */
+    if (!strcmp(g_lang->key, "greek") && files){
+        if (MR32(FONT_SIZES) == MR32(LATIN_FONTS) && MR32(FONT_SIZES + 4) == 0){
+            MR32(FONT_SIZES + 4) = 65536u;
+            fprintf(stderr, "language: the language pool 64 KB more for Greek's letters\n");
+        } else fprintf(stderr, "language: the exe's font table is not the one expected, Greek's pool left as it is\n");
+    }
     if (!g_lang->fonts) return;
 
     /* only on the data of the exe this port is made for */
