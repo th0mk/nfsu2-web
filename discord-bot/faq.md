@@ -5,10 +5,11 @@ The FAQ the bot posts with /faq (faq.mjs). A push changes the posted message wit
 A button keeps working while its label stays the same. #channel-name becomes a link to that channel.
 Answers go to each reader in their Discord language (translated once, kept until the answer changes).
 The bot also replies with an answer in #help (help.mjs) when a question there asks exactly that: keep each one whole on its own.
-No small text (-#). Discord takes 40 parts in a message: 6 topics with 19 questions take 39.
+No small text (-#). Discord takes 40 parts in a message: 6 topics with 20 questions take all 40 (a new question
+needs one out, or a new row: none left).
 -->
 # Frequently asked questions
-Pick a question: only you see the answer.
+Pick a question: only you see the answer, in your Discord language.
 
 ## Starting
 ### Which devices and browsers can run it?
@@ -16,15 +17,16 @@ label: Devices and browsers
 - **PC and Mac:** Chrome or Edge (the most tested), Brave, Opera, Firefox, or Safari 26.
 - **Android:** Chrome. Firefox for Android can't run it.
 - **iPhone and iPad:** Safari on iOS 26 or iPadOS 26.
-- **Can't run it:** TV and console browsers (Xbox, PlayStation), and Windows PCs whose graphics have no Direct3D 12 (Intel HD 4000 and older).
+- **Can't run it:** TV and console browsers (Xbox, PlayStation), and Windows PCs whose graphics have no Direct3D 12 (Intel HD 4000, 4400, 4600 and older).
 
 ### The game won't start
 label: It won't start
 The start page says what is wrong, with a code. The most common:
 - `GPU-ACCEL-OFF`: turn on "Use graphics acceleration when available" in `chrome://settings/system`, then restart Chrome.
 - `PAGE-NOT-ISOLATED`: an extension changes the page. Try a guest window; if it starts there, turn your extensions off one by one.
-- `GPU-ADAPTER-WIN`: your graphics have no Direct3D 12 driver. Update the graphics driver; older graphics (Intel HD 4000 and older) can't run it.
+- `GPU-ADAPTER-WIN`: your graphics have no Direct3D 12 driver. Update the graphics driver; older graphics (Intel HD 4000, 4400, 4600 and older) can't run it.
 - `GPU-ADAPTER-ANDROID`: update Android and Chrome. Then turn on `chrome://flags/#enable-unsafe-webgpu` and restart Chrome.
+- `Error code 1` right after Play: on the start page, Other, **Delete game data**, then reload and Play. Your saves stay.
 It worked yesterday? Reload the page (Ctrl+F5 on a PC). Something else: post a screenshot of the message in #bug-reports.
 
 ### The site or the server can't be reached
@@ -34,10 +36,14 @@ Your network blocks it: the game works wherever Cloudflare does. Try mobile data
 - **Kaspersky, other antivirus, NordVPN Threat Protection:** allow `nfsu2.xyz`, or turn the web filter off.
 - **School or work network:** set your DNS to `1.1.1.1`.
 
+### There's no sound on my iPhone
+label: No sound on iPhone
+Turn off Silent mode: the switch on the side, or on newer iPhones the Action button or Control Center. In Silent mode Safari plays no sound from a page.
+
 ### The game runs slowly
 label: Low frame rate
 - **Laptop with a graphics card:** Windows Settings, System, Display, Graphics: set Chrome to **High performance**, then quit Chrome completely and start it again.
-- **Phone that stutters:** Settings, Display, Frame rate **30** is the steady choice.
+- **Phone that stutters:** on the start page, Game, Display, **Frame rate** 30 is the steady choice.
 - Keep the game's tab in front, and close other heavy tabs.
 
 ## Saves
@@ -66,7 +72,7 @@ A new profile starts on the game's Save = Prompt: its "save?" question opens on 
 label: No races left
 1. Press **T** or **F4** (D-pad Down on a controller): Career Status says what the stage still needs.
 2. Most often it is your car's stars. A sponsor's DVD shoot only shows once your car has enough: add body kits, paint, vinyls, rims, neons, tint, hydraulics or audio.
-3. Still nothing? The game's hidden races only show on the street when you drive near. Settings, Game, More game settings, **Show hidden races** puts them on the map.
+3. Still nothing? The game's hidden races only show on the street when you drive near. On the start page, Game, More game settings, **Show hidden races** puts them on the map.
 
 ### How do I get wide body kits?
 label: Wide body kits
@@ -91,7 +97,7 @@ label: Play with others
 
 ### Is there chat?
 label: Chat
-- **Quick chat:** **1** to **4**, then **1** to **4** sends a phrase to the players near you. Pick your phrases in Settings, Online.
+- **Quick chat:** **1** to **4**, then **1** to **4** sends a phrase to the players near you. Pick your phrases on the start page, Online.
 - **Friends:** press **I** in free roam to write to a friend.
 - No open text chat in free roam: it would need moderation. The game's Online mode has its lobby chat.
 
@@ -99,7 +105,7 @@ label: Chat
 ### My controller doesn't work
 label: Controller
 - Press a button on it with the game's page in front: the browser shows a pad only after that.
-- In Settings, Controller, More controller settings, set **Controller** to **On** or **Hotplug** (not **Off**).
+- On the start page, Controls, More controller settings: set **Controller** to **On** or **Hotplug** (not **Off**).
 - Close Steam, DS4Windows and other pad software. Still nothing? Try Edge.
 - Steering wheels work too, without force feedback.
 
@@ -120,8 +126,8 @@ label: Keys
 ### Can I add mods or my own music?
 label: Mods and music
 - **Music:** F9, **Radio** plays a folder of your own songs in place of the game's (not on iPhone or iPad).
-- **The game's songs:** Settings, Game, **Songs**: Uncensored (the default, some in longer versions) or Original, as the game shipped them. **F7** plays the next song.
-- **Mods:** you can't add your own. A few come built in: Upscaled HUD and Detailed Map (Settings, Display: Upscaled), English Subtitles Fixed and Show hidden races (Settings, Game).
+- **The game's songs:** start page, Game, **Songs**: Uncensored (the default, some in longer versions) or Original, as the game shipped them. **F7** plays the next song.
+- **Mods:** you can't add your own. A few come built in: Upscaled HUD and Detailed Map (start page, Game, Display: Upscaled), English Subtitles Fixed and Show hidden races (start page, Game).
 - **Other games:** this project is Underground 2. Nothing else has been announced.
 
 ### How do I report a bug?

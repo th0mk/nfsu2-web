@@ -28,7 +28,7 @@ const system = questions => `You read #help, the help channel of the Discord ser
 - asks: true when [A1] asks something of their own, or tells of a problem of their own, in their marked lines. False for chat, thanks, jokes, opinions, an answer or advice to someone else, someone else's question, or a reply to a member who is already helping them.
 - handled: true when someone in the chat already answered them with something that fits (an explanation, something to try, a question back), or they found it themselves. A joke, "same here" or "read the FAQ" alone is no answer.
 - faq: the id of the answer that settles exactly what they ask, so they need nothing more. "" when none does, when an answer only touches it, when they ask something more specific than the answer covers, or when unsure: a wrong answer in public is worse than none. A problem fits a troubleshooting answer only when it is that problem (the game won't start, can't connect, runs slowly, a controller that doesn't work, saves gone, progress not saved). The answer on reporting a bug only when they ask how or where to report one, not when they tell of one.
-- lang: the language of their own words, as a two-letter code (en, pt, es, ru, tr, pl, fr, de, it, ...); never a guess from their name or a screenshot.
+- lang: the language their own words are written in, as a two-letter code (en, pt, es, ru, tr, pl, fr, de, it, ...). Words in English are "en", whatever the letters of their name; never a guess from their name or a screenshot.
 
 <faq>
 ${questions.map(x => `[${x.id}] ${x.q}\n${x.a}`).join('\n\n')}
