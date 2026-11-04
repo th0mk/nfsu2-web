@@ -242,6 +242,7 @@ static struct {
     long n, pause_at;
     double t, val[NSLOTS];
     uint32_t freeze_was, label, quiet, after;    /* after: the Replay item Photo Mode goes in behind */
+    uint32_t coop_after;                         /* the item coop.c's Add Player 2 goes in behind */
     uint32_t least[2];                           /* the Car detail option's least models, while photo mode has 0 there */
     uint32_t mb_was, hl_was;                     /* the Motion Blur and Headlights options, while photo mode changes them */
     int speed_blur;                              /* tests (photo speedblur 1): the game's motion blur stays on */
@@ -703,16 +704,20 @@ void sub_004c2640(CPU *c){
     fprintf(stderr, "[photo] f=%ld the pause menu's Replay%s, Photo Mode %s%s (camera %u)\n", autotest_frame(),
             ok(it, IT_GREY) && MR8(it + IT_GREY) ? " (greyed out)" : "", no ? "not: " : "after it", no ? no : "", mover_type(pl));
     P.after = no ? 0u : it;
+    P.coop_after = no ? it : 0u;        /* coop.c's Add Player 2 after Photo Mode, or after Replay without it */
 }
 /* A menu's AddOption (thiscall: item; ret 4): after that Replay, Photo Mode, an item of Replay's kind with its own
  * icon and label (and savegame.c's Save after Return to Explore Mode). */
 void sub_0050dab0(CPU *c);
 void savegame_item(CPU *c, uint32_t menu, uint32_t it);
 int savegame_accept(CPU *c);
+void coop_item(CPU *c, uint32_t menu);
+int coop_act(CPU *c);
 static void add_item(CPU *c){
     uint32_t menu = c->ecx, it = MR32(c->esp + 4u);
     sub_0050dab0(c);
     savegame_item(c, menu, it);
+    if (it && it == P.coop_after){ P.coop_after = 0; coop_item(c, menu); }
     if (!it || it != P.after) return;
     P.after = 0;
     uint32_t n = ITEM_BYTES, ph = gcall(c, FN_NEW, 0, 1, &n);
@@ -720,6 +725,7 @@ static void add_item(CPU *c){
     uint32_t arg[3] = { ICON_PHOTO, P.label, 0 };
     gcall(c, FN_ITEM, ph, 3, arg);
     MR32(ph) = VT_REPLAY;
+    P.coop_after = ph;
     gcall(c, FN_ADD_ITEM, menu, 1, &ph);
 }
 /* Their action (thiscall: package, message, ...; ret 0x14): Photo Mode's Accept asks for photo mode, then resumes
@@ -729,6 +735,10 @@ void sub_004c2510(CPU *c);
 void sub_004c24c0(CPU *c);
 static void act(CPU *c){
     if (savegame_accept(c)) return;
+    /* coop.c's item: 1 handled (thiscall, 5 arguments), 2 handled and returned (the menu's Resume) */
+    int co = coop_act(c);
+    if (co == 1){ POP32(c->eip); c->esp += 0x14u; return; }
+    if (co == 2) return;
     uint32_t it = c->ecx, msg = MR32(c->esp + 8u);
     if (msg != MSG_ACCEPT || !ok(it, IT_LABEL + 4u) || MR32(it + IT_LABEL) != P.label || MR8(it + IT_GREY)){ sub_004c26b0(c); return; }
     P.pause_at = autotest_frame();

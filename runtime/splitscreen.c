@@ -121,16 +121,20 @@ static const uint8_t SPLIT_KB_KEYS[3][6][2] = {
     { {0x36, 0}, {0x9d, 0x35}, {0x34, 0}, {0x33, 0}, {0x26, 0}, {0x27, 0} },  /* Right Shift, Right Ctrl or /, . , L ; */
     { {0x2a, 0}, {0x39, 0}, {0x12, 0}, {0x10, 0}, {0x2e, 0}, {0x30, 0} },     /* Left Shift, Space, E, Q, C, B */
 };
+static int split_pause_port;            /* (below: the pause menu's owner while it is up) */
 static void split_kb_read(int side, int both, PadState *pad){
     uint8_t keys[256]; kbd_state(keys, sizeof keys);
     memset(pad, 0, sizeof *pad);
     pad->connected = 1; pad->family = PADF_XBOX;
     strcpy(pad->name, "Keyboard");
-    int racing = MR32(0x8654a4u) == 6;
+    /* driving: in the world with no menu up (a split race's pause menu, co-op's menus and dialogs); the arrows as a
+     * stick in a menu would be a second press of each (the pad's menu keystrokes, dinput_pad.c) */
+    int split = MR32(0x850078u) == 4;
+    int racing = MR32(0x8654a4u) == 6 && (split ? split_pause_port < 0 : coop_driving());
     /* START: Enter (only Enter's player's while two share the keyboard), and Space's player's Space outside a
-     * race (in one it is the handbrake) */
+     * split race (in one it is the handbrake; co-op's player 2 pauses with the keyboard's Esc) */
     if ((!both || side == SPLIT_KB_ENTER) && (keys[0x1c] || keys[0x9c])) pad->buttons |= 1u << PAD_START;
-    if (side == SPLIT_KB_SPACE && !racing && keys[0x39]) pad->buttons |= 1u << PAD_START;
+    if (side == SPLIT_KB_SPACE && split && !racing && keys[0x39]) pad->buttons |= 1u << PAD_START;
     /* Native keyboard messages handle car/menu navigation once, rather
      * than duplicating Enter and arrows through the virtual pad. */
     if (!racing) return;
@@ -159,7 +163,7 @@ static int split_coop_seat(unsigned seat, PadState *pad){
 }
 /* the game's own keyboard while two share it in co-op: player 2's half is player 2's alone (dinput_kbd.c) */
 int split_kb_hidden(unsigned dik){
-    if (dik >= 256u || coop_device() != COOP_DEV_KB || !coop_in()) return 0;
+    if (dik >= 256u || coop_device() != COOP_DEV_KB || !coop_driving()) return 0;   /* a menu has the whole keyboard */
     if (dik == 0x11 || dik == 0x1e || dik == 0x1f || dik == 0x20) return 1;          /* W A S D */
     for (unsigned b = 0; b < 6; ++b) if (SPLIT_KB_KEYS[2][b][0] == dik || SPLIT_KB_KEYS[2][b][1] == dik) return 1;
     return 0;
@@ -1508,7 +1512,15 @@ void sub_005cfd60(CPU *c){
             uint32_t native = c->eax;
             port_type = type ? MR32(type) : 0;
             split_poll(c);
-            if (coop_device() == COOP_DEV_KB && native) split_merge_input(native, SPLIT_INPUT_CURRENT);
+            /* driving only: a menu reads port 0 as well (an arrow would count twice) */
+            if (coop_device() == COOP_DEV_KB && native && coop_driving()) split_merge_input(native, SPLIT_INPUT_CURRENT);
+            /* a menu or dialog up: player 2's port at rest (the menus read the ports too: a gas held when the pause
+             * menu came up moved it) */
+            if (!coop_driving()){
+                uint32_t p2 = SPLIT_INPUT_CURRENT + 16u;
+                MR32(p2) = MR32(p2 + 4) = 0xffffffffu;
+                MR8(p2 + 8) = MR8(p2 + 9) = 0; MR8(p2 + 10) = MR8(p2 + 11) = 0x80;
+            }
             return;
         }
         POP32(c->eip);

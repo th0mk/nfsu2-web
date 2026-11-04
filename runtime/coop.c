@@ -210,6 +210,13 @@ uint32_t coop_fe_top(uint32_t mg){
     if (top && coop_pl && fe_named(top, MR32(coop_pl + 0x9a4u)) && MR32(top + 4u)) return MR32(top + 4u);
     return top;
 }
+/* driving: player 2 in, and player 1's HUD the screen in front (no pause menu, dialog, map or SMS over it: those
+ * take the whole keyboard, and read port 0 as well) */
+int coop_driving(void){
+    if (!coop_in()) return 0;
+    uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0, p1 = MR32(SPLIT_PLAYERS_INDEX);
+    return mg && p1 && fe_named(coop_fe_top(mg), MR32(p1 + 0x9a4u));
+}
 void sub_0050c8e0_orig(CPU *c);
 void sub_0050c8e0(CPU *c){
     sub_0050c8e0_orig(c);
@@ -237,6 +244,7 @@ void coop_frame(CPU *c){
         if (!coop_make(c)) { coop_want = 0; fprintf(stderr, "[coop] player 2 could not join: co-op off\n"); }
     }
     if (!coop_want && coop_pl) coop_drop(c);
+    void coop_ask_frame_(CPU *c); coop_ask_frame_(c);
 #ifdef __wasm__
     /* the page lets player 2's controller drive nothing but its seat */
     static int told = -1;
@@ -289,3 +297,186 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
     }
     return 1;
 }
+
+/* ---- the pause menu's Add Player 2 / Remove Player 2 --------------------------------------------------------------
+ * An item of Replay's kind (photo.c adds it after Replay and Photo Mode, free roam only), its action photo.c's patch
+ * of Replay's (items get every message their menu gets).  Add Player 2 asks with the world's generic dialog
+ * (0x558750, IG_GenericDialog_MED.fng; its answers come back to the menu, so to this item): player 2 presses START on
+ * a controller (a local seat's START, input_web.c's join stamp), or picks Keyboard (the keyboard's WASD half); Cancel
+ * or Back leaves it.  Remove Player 2 lets player 2 go.  Both then resume the game. */
+#define FN_ITEM       0x0051f670u   /* thiscall (icon, label, 0; ret 0xC): a menu item */
+#define FN_ADD_ITEM   0x0050dab0u   /* thiscall (item; ret 4): a menu's AddOption */
+#define VT_REPLAY     0x007954f0u
+#define ITEM_BYTES    0x48u
+#define IT_GREY       0x20u
+#define IT_LABEL      0x2cu
+#define MSG_ACCEPT    0x0c407210u
+#define MSG_BACK      0x911ab364u   /* PAD_BACK */
+#define FN_DIALOG2    0x00558750u   /* cdecl (from, dialog package, label1, label2, msg1, msg2, back msg, first, fmt, ...) */
+#define FN_FE_MSG     0x0055dda0u   /* cdecl (message, package name): a message to a package */
+#define G_DLG_ID      0x00838974u   /* the dialog up now (0 none) */
+#define ICON_COOP     0x84d1d864u   /* (Replay's video camera until a two-player icon is drawn) */
+#define MSG_KB        0xc0c0a001u   /* our dialog's answers */
+#define MSG_CANCEL    0xc0c0a002u
+#define MSG_DBACK     0xc0c0a003u
+#define COOP_STR      0x00d0ea00u   /* the dialog's strings: package name, format, text */
+
+const char *language_name(void);
+uint32_t language_add_text(const char *name, const char *text);
+void language_game_letters(const char *utf8, char *out, size_t n);
+void language_texts_frame(CPU *c);
+void sub_004c2510(CPU *c);         /* the free-roam pause menu's Resume */
+
+static const struct { const char *lang, *add, *rem, *ask, *kb, *cancel; } COOP_TEXTS[] = {
+    { "english", "Add Player 2", "Remove Player 2",
+      "Player 2: press START on your controller, or choose Keyboard to play on the left half of this keyboard.", "Keyboard", "Cancel" },
+    { "french", "Ajouter le joueur 2", "Retirer le joueur 2",
+      "Joueur 2 : appuie sur START sur ta manette, ou choisis Clavier pour jouer sur la moitié gauche de ce clavier.", "Clavier", "Annuler" },
+    { "german", "Spieler 2 hinzufügen", "Spieler 2 entfernen",
+      "Spieler 2: Drück START auf deinem Controller oder wähle Tastatur, um auf der linken Hälfte dieser Tastatur zu spielen.", "Tastatur", "Abbrechen" },
+    { "italian", "Aggiungi giocatore 2", "Rimuovi giocatore 2",
+      "Giocatore 2: premi START sul tuo controller, oppure scegli Tastiera per giocare sulla metà sinistra di questa tastiera.", "Tastiera", "Annulla" },
+    { "spanish", "Añadir jugador 2", "Quitar jugador 2",
+      "Jugador 2: pulsa START en tu mando o elige Teclado para jugar en la mitad izquierda de este teclado.", "Teclado", "Cancelar" },
+    { "dutch", "Speler 2 toevoegen", "Speler 2 verwijderen",
+      "Speler 2: druk op START op je controller, of kies Toetsenbord om op de linkerhelft van dit toetsenbord te spelen.", "Toetsenbord", "Annuleren" },
+    { "swedish", "Lägg till spelare 2", "Ta bort spelare 2",
+      "Spelare 2: tryck på START på din handkontroll, eller välj Tangentbord för att spela på vänstra halvan av det här tangentbordet.", "Tangentbord", "Avbryt" },
+    { "danish", "Tilføj spiller 2", "Fjern spiller 2",
+      "Spiller 2: tryk på START på din controller, eller vælg Tastatur for at spille på venstre halvdel af dette tastatur.", "Tastatur", "Annuller" },
+    { "portuguese", "Adicionar jogador 2", "Remover jogador 2",
+      "Jogador 2: pressione START no seu controle ou escolha Teclado para jogar na metade esquerda deste teclado.", "Teclado", "Cancelar" },
+    { "polish", "Dodaj gracza 2", "Usuń gracza 2",
+      "Gracz 2: wciśnij START na swoim kontrolerze albo wybierz Klawiatura, aby grać na lewej połowie tej klawiatury.", "Klawiatura", "Anuluj" },
+    { "turkish", "Oyuncu 2'yi ekle", "Oyuncu 2'yi çıkar",
+      "Oyuncu 2: kumandanda START'a bas ya da bu klavyenin sol yarısında oynamak için Klavye'yi seç.", "Klavye", "İptal" },
+    { "hungarian", "2. játékos hozzáadása", "2. játékos eltávolítása",
+      "2. játékos: nyomd meg a START gombot a kontrollereden, vagy válaszd a Billentyűzetet, hogy a billentyűzet bal felén játssz.", "Billentyűzet", "Mégse" },
+};
+static struct { const char *lang; uint32_t add, rem, kb, cancel; char ask[256]; } T;
+static void coop_texts(CPU *c){
+    const char *l = language_name();
+    if (T.add && l == T.lang) return;
+    T.lang = l;
+    unsigned e = 0;
+    for (unsigned i = 0; i < sizeof COOP_TEXTS / sizeof COOP_TEXTS[0]; i++) if (l && !strcmp(l, COOP_TEXTS[i].lang)) e = i;
+    char s[256];
+    language_game_letters(COOP_TEXTS[e].add, s, sizeof s);    T.add = language_add_text("COOP_ADD_N2", s);
+    language_game_letters(COOP_TEXTS[e].rem, s, sizeof s);    T.rem = language_add_text("COOP_REMOVE_N2", s);
+    language_game_letters(COOP_TEXTS[e].kb, s, sizeof s);     T.kb = language_add_text("COOP_KEYBOARD_N2", s);
+    language_game_letters(COOP_TEXTS[e].cancel, s, sizeof s); T.cancel = language_add_text("COOP_CANCEL_N2", s);
+    language_game_letters(COOP_TEXTS[e].ask, T.ask, sizeof T.ask);
+    language_texts_frame(c);
+}
+
+static int coop_asking;             /* the dialog is up: player 2's START on a controller joins */
+static uint32_t coop_ask_stamps[6], coop_ask_pkg, coop_ask_held;   /* held: the seats' START when asked */
+static int coop_close_steps;        /* after a START: Back to the dialog, then Back to the pause menu (resume) */
+uint32_t gamepad_local_join_stamp(unsigned seat);
+
+/* photo.c: the pause menu is being made: our item goes in (free roam's career only) */
+void coop_item(CPU *c, uint32_t menu){
+    if (MR32(G_GAMEMODE) != 1u || MR32(G_RACEPARAMS + 0x10u) != 0u) return;
+    coop_texts(c);
+    uint32_t n = ITEM_BYTES, it = call(c, FN_NEW, 0, 0, 1, &n);
+    if (!it) return;
+    uint32_t arg[3] = { ICON_COOP, coop_want ? T.rem : T.add, 0 };
+    call(c, FN_ITEM, it, 0, 3, arg);
+    MR32(it) = VT_REPLAY;
+    call(c, FN_ADD_ITEM, menu, 0, 1, &it);
+    fprintf(stderr, "[coop] f=%ld the pause menu's %s\n", autotest_frame(), coop_want ? "Remove Player 2" : "Add Player 2");
+}
+static void coop_resume(CPU *c){ sub_004c2510(c); }
+/* photo.c's patch of Replay's action: 0 not ours, 1 ours (photo.c returns from the call), 2 ours and returned (the
+ * menu's Resume returns from it) */
+int coop_act(CPU *c){
+    uint32_t it = c->ecx, pkg = MR32(c->esp + 4u), msg = MR32(c->esp + 8u);
+    if (!it || MR32(it) != VT_REPLAY || !T.add || (MR32(it + IT_LABEL) != T.add && MR32(it + IT_LABEL) != T.rem)) return 0;
+    long f = autotest_frame();
+    if (msg == MSG_ACCEPT && MR32(it + IT_LABEL) == T.rem){
+        fprintf(stderr, "[coop] f=%ld Remove Player 2\n", f);
+        coop_leave(); coop_resume(c); return 2;
+    }
+    if (msg == MSG_ACCEPT && !MR32(G_DLG_ID)){
+        coop_texts(c);
+        char *s = (char *)g_mem + COOP_STR;
+        memset(s, 0, 0x200);
+        snprintf(s, 0x38, "IG_GenericDialog_MED.fng"); snprintf(s + 0x38, 8, "%%s"); snprintf(s + 0x40, 0x1c0, "%s", T.ask);
+        for (char *p = s + 0x40; *p; p++) if (*p == '%') *p = '?';
+        uint32_t a[10] = { pkg, COOP_STR, T.kb, T.cancel, MSG_KB, MSG_CANCEL, MSG_DBACK, 1, COOP_STR + 0x38u, COOP_STR + 0x40u };
+        call(c, FN_DIALOG2, 0, 0, 10, a);
+        coop_asking = 1; coop_ask_pkg = pkg;
+        coop_ask_held = 0;
+        for (unsigned k = 0; k < 6; k++){
+            coop_ask_stamps[k] = gamepad_local_join_stamp(k);
+            PadState p; if (gamepad_read_local(k, &p) && (p.buttons & 1u << PAD_START)) coop_ask_held |= 1u << k;
+        }
+        fprintf(stderr, "[coop] f=%ld Add Player 2: asking (dialog %08x)\n", f, MR32(G_DLG_ID));
+        return 1;
+    }
+    return 0;
+}
+/* the dialog's answer (read from the dialog: it never reaches the pause menu's screen): Keyboard joins, Cancel and
+ * Back leave (the pause menu stays), Back after player 2's START resumes */
+static int coop_resume_next;
+int coop_dialog_answer(CPU *c, uint32_t msg){
+    (void)c;
+    if (msg != MSG_KB && msg != MSG_CANCEL && msg != MSG_DBACK) return 0;
+    long f = autotest_frame();
+    if (!coop_asking) return 1;
+    coop_asking = 0;
+    if (msg == MSG_KB){
+        fprintf(stderr, "[coop] f=%ld Add Player 2: the keyboard's left half\n", f);
+        coop_join(COOP_DEV_KB); coop_resume_next = 1;
+    } else if (coop_close_steps){ coop_close_steps = 0; coop_resume_next = 1; }
+    else fprintf(stderr, "[coop] f=%ld Add Player 2: cancelled\n", f);
+    return 1;
+}
+/* the generic dialog up now (the FE manager's screens: n = [0x8637B4]; until n is the head: screen [n + 0x10]) */
+#define VT_DIALOG     0x0079c88cu
+static uint32_t coop_dialog(void){
+    uint32_t head = 0x008637b4u, n = MR32(head);
+    for (int k = 0; n && n != head && k < 64; k++, n = MR32(n)){
+        uint32_t scr = MR32(n - 4u + 0x14u);
+        if (scr && MR32(scr) == VT_DIALOG) return scr;
+    }
+    return 0;
+}
+/* while the dialog asks: a START on a controller's seat makes it player 2's; the dialog goes with Back */
+static void coop_ask_frame(CPU *c){
+    if (coop_resume_next && !MR32(G_DLG_ID)){
+        coop_resume_next = 0;
+        if (coop_ask_pkg){ uint32_t a[2] = { MSG_BACK, coop_ask_pkg }; call(c, FN_FE_MSG, 0, 0, 2, a); }
+        fprintf(stderr, "[coop] f=%ld Add Player 2: the pause menu resumes\n", autotest_frame());
+        return;
+    }
+    if (coop_asking){
+        /* a button: the dialog keeps its message at +0x50 until it goes (0x54C1BC) */
+        uint32_t d = coop_dialog(), v = d ? MR32(d + 0x50u) : 0;
+        if (v == MSG_KB || v == MSG_CANCEL || v == MSG_DBACK){ coop_dialog_answer(c, v); return; }
+    }
+    if (!coop_asking) return;
+    if (!MR32(G_DLG_ID) && coop_close_steps){
+        /* the dialog went after player 2's START: Back to the pause menu resumes the game */
+        coop_asking = coop_close_steps = 0;
+        if (coop_ask_pkg){ uint32_t a[2] = { MSG_BACK, coop_ask_pkg }; call(c, FN_FE_MSG, 0, 0, 2, a); }
+        fprintf(stderr, "[coop] f=%ld Add Player 2: the pause menu resumes\n", autotest_frame());
+        return;
+    }
+    if (!MR32(G_DLG_ID)){ coop_asking = 0; return; }   /* gone another way */
+    for (unsigned k = 0; k < 6 && !coop_close_steps; k++){
+        /* the page's join stamp (a START claims a seat, readable once let go), or a START read from the seat */
+        uint32_t st = gamepad_local_join_stamp(k);
+        PadState p; int start = gamepad_read_local(k, &p) && (p.buttons & 1u << PAD_START);
+        int edge = start && !(coop_ask_held & 1u << k);
+        if (start) coop_ask_held |= 1u << k; else coop_ask_held &= ~(1u << k);
+        if (st == coop_ask_stamps[k] && !edge) continue;
+        coop_ask_stamps[k] = st;
+        fprintf(stderr, "[coop] f=%ld Add Player 2: START on the controller of seat %u\n", autotest_frame(), k);
+        coop_join((int)k);
+        coop_close_steps = 1;
+        uint32_t a[2] = { MSG_BACK, COOP_STR };
+        call(c, FN_FE_MSG, 0, 0, 2, a);
+    }
+}
+void coop_ask_frame_(CPU *c){ coop_ask_frame(c); }
