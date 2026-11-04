@@ -1350,6 +1350,7 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
     if (s->conf.duels && s->conf.drifts) m->h.flags |= RC_HF_DRIFT;
     if (s->conf.lobbies) m->h.flags |= RC_HF_LOBBY;
     if (s->conf.say) m->h.flags |= RC_HF_SAY;
+    if (s->conf.seat2) m->h.flags |= RC_HF_SEAT2;
     if (!to) m->h.flags |= RC_HF_ALL;
     m->u.hello.core_ver = RC_CORE_VER; m->u.hello.platform = s->conf.platform; m->u.hello.status = s->status;
     m->u.hello.listen_port = s->conf.port; m->u.hello.cfg_rev = s->cfg_rev; m->u.hello.room = s->conf.room;

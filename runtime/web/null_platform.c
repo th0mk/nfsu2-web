@@ -253,6 +253,11 @@ WEAK int  texrep_status(char *buf, size_t n){ (void)buf; (void)n; return 0; }
 /* ------------------------------------------------ free-roam transport */
 WEAK int  roam_plat_start(const roam_plat_cfg *cfg, rc_session *s){ (void)cfg; (void)s; fprintf(stderr, "[roam] no transport in this build\n"); return -1; }
 WEAK void roam_plat_stop(uint8_t reason){ (void)reason; }
+WEAK int  roam_plat_start2(rc_session *s, uint16_t port){ (void)s; (void)port; return -1; }
+WEAK void roam_plat_stop2(uint8_t reason){ (void)reason; }
+WEAK int  roam_plat_own(uint32_t ip, uint16_t port){ (void)ip; (void)port; return 0; }
+WEAK int  roam_plat_coop(const char *json){ (void)json; return 0; }
+WEAK uint32_t roam_plat_name2(char out[33]){ (void)out; return 0; }
 WEAK void roam_plat_lock(void){ }
 WEAK void roam_plat_unlock(void){ }
 WEAK int64_t roam_plat_now_us(void){ return (int64_t)(now_s() * 1e6); }

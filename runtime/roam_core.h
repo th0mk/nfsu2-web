@@ -254,6 +254,11 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
 /* header flags (HELLO): this player takes drift battles (RC_DA_DRIFT, RC_DUEL_SCORE); an older core sends none, reads a
  * drift battle's challenge as an outrun's and counts a SCORE as bad */
 #define RC_HF_DRIFT      0x1000
+/* header flags (HELLO): this endpoint is the second local player of the browser at its address (co-op free roam:
+ * player 2 beside player 1 on one screen, coop.c), on a port of its own; the hub never links it with that browser's
+ * other endpoints, marks it as nobody's friend, answers no map question of it and lets its car appear beside player
+ * 1's (web/server-rs crates/roam).  An older core and an older hub ignore it */
+#define RC_HF_SEAT2      0x2000
 /* in the hub's crew marks, past the crews' bits: that player's friendship with
  * this one goes both ways (the server's friends lists, EA Messenger's); a hub
  * of before sets none, a core of before reads only the crews' bits */
@@ -552,6 +557,7 @@ typedef struct {
     int      links;                /* the players the hub links us with at most (our HELLO to it says so): the friends' cars
                                       the game shows, 1 .. RC_MAX_PEERS; 0: not said (the hub's own most, 32 for a core
                                       before version 10) */
+    int      seat2;                /* we are the second local player of our browser (HELLO says so: RC_HF_SEAT2) */
 } rc_config;
 
 enum { RC_PS_FREE = 0, RC_PS_CANDIDATE = 1, RC_PS_HEARD = 2, RC_PS_EST = 3 };
