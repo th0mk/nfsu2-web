@@ -86,8 +86,10 @@ static unsigned split_pad_of(unsigned seat){
     return pad;
 }
 void split_keyboard_device(PadState *pad){
-    int kb = MR32(0x850078u) == 4 ? split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0 : coop_device() == COOP_DEV_KB;
-    if (!pad->connected && kb){
+    /* the game's pad device converts every seat's input: it must exist (split screen: a keyboard seat; co-op: player
+     * 2's device, whose controller the page keeps from driving this pad) */
+    int need = MR32(0x850078u) == 4 ? split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0 : coop_device() >= 0;
+    if (!pad->connected && need){
         memset(pad, 0, sizeof *pad);
         pad->connected = 1; pad->family = PADF_XBOX;
         strcpy(pad->name, "Split Screen keyboard");
