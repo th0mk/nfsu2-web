@@ -348,6 +348,13 @@ World row's list says how many are in each world.
   Looks only: the cars drive as in the original game. In free roam, players who have it on see each other's damage;
   with it off you see every car undamaged and yours is shown undamaged to everyone. The game's own repair (a race's
   start, the garage) takes it away. Its scratches are a download of about 1 MB, fetched only when it is on.
+- **Rubberbanding:** Original by default. In a career race the game slows the opponents who are ahead of you and
+  gives the ones behind you more power, grip and top speed, more the farther back they are: up to 22% to 37% (more
+  for a better driver) at 320 m behind, while one 320 m ahead of you drives 10% to 15% slower. No boost keeps the
+  waiting but never lets an opponent behind beat its own pace; Off drops both, as a Quick Race with Catch Up off.
+  Quick Race keeps its own Catch Up option. The Binary scripts that set the career opponents' CatchUp byte to 0
+  ([No Catch Up](https://nfsmods.xyz/mod/3222)) change nothing: that byte picks between two identical rows of the
+  game's data.
 - **Upscaled HUD and Detailed Map** (Mods): Original (the default) is the game's own. Upscaled shows LunicAura106's
   [Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the
   server has their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times
