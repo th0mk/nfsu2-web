@@ -350,6 +350,11 @@ static int get_state(rc_r *r, rc_state *s){
     q_norm(s->q);
     return RC_OK;
 }
+void rc_state_put(rc_w *w, const rc_state *s, int ext){ put_state(w, s); if (ext) put_statex(w, s); }
+int rc_state_get(rc_r *r, rc_state *s, int ext){
+    int e = get_state(r, s);
+    return e ? e : ext ? get_statex(r, s) : RC_OK;
+}
 
 /* ---- messages ------------------------------------------------------------------- */
 /* a flag's code: lower case letters and '-' (roam_game.c looks it up; one it does not have shows none) */
@@ -862,12 +867,18 @@ int rc_extrap_arc = 1;
  * its velocity turned from the state before (what its path did), when the two are close in time and it moves; else
  * its own yaw rate, which in a slide is more than its path turns */
 #define ARC_MAX_RAD_S  3.f
+#define TURN_BASE_US   40000
 static float turn_rate(const rc_interp *ip){
     const rc_state *b = &ip->s[ip->n - 1];
     float k = b->w[2];
     if (rc_extrap_arc != 2 && ip->n >= 2){
-        const rc_state *a = &ip->s[ip->n - 2];
-        int64_t dt = ip->t[ip->n - 1] - ip->t[ip->n - 2];
+        /* the turn over the newest state at least TURN_BASE_US older: a race's car states come every frame (racecars.c,
+         * 16 ms apart), and its turn over one frame is mostly noise, carried on 150 ms.  Free roam's (50 ms apart): the
+         * state before, as ever */
+        int j = ip->n - 2;
+        while (j > 0 && ip->t[ip->n - 1] - ip->t[j] < TURN_BASE_US) j--;
+        const rc_state *a = &ip->s[j];
+        int64_t dt = ip->t[ip->n - 1] - ip->t[j];
         float sa = a->v[0] * a->v[0] + a->v[1] * a->v[1], sb = b->v[0] * b->v[0] + b->v[1] * b->v[1];
         if (dt >= 10000 && dt <= 150000 && sa > 9.f && sb > 9.f)
             k = rc_atan2f(a->v[0] * b->v[1] - a->v[1] * b->v[0], a->v[0] * b->v[0] + a->v[1] * b->v[1]) / ((float)(int32_t)dt * 1e-6f);

@@ -71,6 +71,12 @@ void sub_005f8900_orig(CPU *c){ (void)c; }
 void sub_00585d50_orig(CPU *c){ (void)c; }
 void sub_005891b0_orig(CPU *c){ (void)c; }
 void sub_005f8af0_orig(CPU *c){ (void)c; }
+/* racecars.c (its own test, racecars_unit.c): no racer's own states here, so racenet.c's way for every car */
+int  racecars_fed(uint32_t car){ (void)car; return 0; }
+int  racecars_pre(uint32_t car){ (void)car; return 0; }
+int  racecars_step(CPU *c, uint32_t ctl, uint32_t car){ (void)c; (void)ctl; (void)car; return 0; }
+void racecars_frame(CPU *c){ (void)c; }
+void racecars_log(double secs){ (void)secs; }
 /* the game's handler of the creator's messages, as dispatch_indirect calls it */
 static int g_calls; static uint32_t g_fn, g_len; static uint8_t g_bytes[64];
 void dispatch_indirect(CPU *c, uint32_t addr);
@@ -460,7 +466,7 @@ int main(void){
      * car drives 150 m meanwhile), a jump of 200 m 0.6 s later counted; a stall of 1.5 s and 600 m (a player who held
      * its states back, then teleported): 450 m; a name no car has: 0 */
     {
-        const uint32_t NP = 0x10050000u, CTL = 0x10060000u, ST = 0x10070000u;
+        const uint32_t NP = 0x10050000u, ST = 0x10070000u;   /* (CTL: the one above) */
         commit(NP, 0x40); commit(CTL, 0x20); commit(ST, 0x80);
         MR32(G_NET_HOST) = 0; g_npeer = 0; g_nsentto = 0;
         MR32(G_NETPLAYERS) = NP; memcpy(&g_mem[NP + NP_NAME], "Inv", 4);

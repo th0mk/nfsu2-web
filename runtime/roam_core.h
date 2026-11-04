@@ -321,6 +321,10 @@ typedef struct {
     uint8_t  open;                 /* the car's open parts (RC_OPEN_*: hood, trunk, doors), 0: none */
     uint8_t  hibeam;               /* its headlights are on high beam (RC_OPEN_HIBEAM, in the open parts' byte) */
 } rc_state;
+/* one state as a SNAP carries it (RC_STATE_BYTES, then with ext its extension as RC_HF_STATEX's), for another
+ * channel's messages (racecars.c: the cars of a race between players); get: RC_OK / RC_E_* */
+void rc_state_put(rc_w *w, const rc_state *s, int ext);
+int  rc_state_get(rc_r *r, rc_state *s, int ext);
 
 typedef struct {
     uint8_t  ver, type;
