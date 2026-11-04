@@ -613,6 +613,13 @@ void sub_005b2610(CPU *c){
 void sub_0056f170_orig(CPU *c);
 void roam_game_near_miss(CPU *c, void (*orig)(CPU *));
 void sub_0056f170(CPU *c){ roam_game_near_miss(c, sub_0056f170_orig); }
+/* The drive camera's test for a car its eye is in (0x44AC10, thiscall, ret
+ * 8, from 0x44B040 only, which lifts the eye over that car): with Ghost mode
+ * Everything the game's cars that pass through the player's car pass through
+ * the camera too (roam_game.c, roam_game_camera_cars) */
+void sub_0044ac10_orig(CPU *c);
+void roam_game_camera_cars(CPU *c, void (*orig)(CPU *));
+void sub_0044ac10(CPU *c){ roam_game_camera_cars(c, sub_0044ac10_orig); }
 /* The race's end, for the random encounters (0x42EFB0): new goals for the AI
  * range's cars that are out, through their brains; friends' cars have none
  * to give up and are left out (roam_game.c, roam_game_goals) */
