@@ -11,7 +11,8 @@
  *                reserve/commit/decommit/release semantics, VirtualQuery,
  *                VirtualProtect.  Heap segments and large blocks are VA
  *                regions too, so freed address space is shared by everyone;
- *                big blocks keep their holes (va_find).
+ *                big blocks keep their holes (va_find) and leave
+ *                room for the heaps' segments (va_alloc).
  *   heaps        GetProcessHeap (handle 1), HeapCreate (2, 3, ...), plus two
  *                internal heaps for the COM layer (objects, Lock buffers).
  *                TLSF (two-level segregated fit): O(1) alloc/free, immediate
@@ -247,11 +248,49 @@ static uint32_t va_take(uint32_t g0, uint32_t ng, int kind, int heap, uint32_t p
     }
     return GH_BASE + g0 * VA_GRAN;
 }
+/* Room for the heaps to grow: large blocks and VirtualAlloc's regions leave
+ * the free runs room for SEG_KEEP more heap segments.  Since empty segments go
+ * back (seg_free_whole), the 1.4 MB textures of a trip back could take the
+ * space the heaps had held, and the small blocks that came next found no
+ * 4 MB run for a new segment: random runs under pressure had several times as
+ * many small allocations failing as when the heaps kept their segments, and a
+ * failed small allocation (a list node, a string) is far likelier to bring the
+ * game down than a failed texture buffer. */
+#define SEG_G    (SEG_MIN / VA_GRAN)
+#define SEG_KEEP 4u
+static uint32_t va_seg_room(uint32_t x0, uint32_t xn){   /* segments the free runs hold, [x0, x0+xn) taken */
+    uint32_t room = 0, run = 0;
+    for (uint32_t g = 0; g <= VA_NG; g++){
+        if (g < VA_NG && !(g & 63) && !g_va_bits[g >> 6] && (g + 64u <= x0 || g >= x0 + xn)){ run += 64; g += 63; continue; }
+        if (g < VA_NG && !vbit(g_va_bits, g) && (g < x0 || g >= x0 + xn)){ run++; continue; }
+        room += run / SEG_G; run = 0;
+    }
+    return room;
+}
+/* Where ng granules go without taking that room: the top of the run where
+ * they cost the fewest segments' room, of those the shortest, the highest;
+ * a place that costs none is always fine.  -1: none. */
+static int64_t va_find_keep(uint32_t ng){
+    uint32_t room = va_seg_room(0, 0), run = 0, bcost = ~0u, blen = ~0u;
+    int64_t best = -1;
+    for (uint32_t g = 0; g <= VA_NG; g++){
+        if (g < VA_NG && !(g & 63) && !g_va_bits[g >> 6]){ run += 64; g += 63; continue; }
+        if (g < VA_NG && !vbit(g_va_bits, g)){ run++; continue; }
+        if (run >= ng){
+            uint32_t cost = run / SEG_G - (run - ng) / SEG_G;
+            if ((cost == 0 || room >= cost + SEG_KEEP) && (cost < bcost || (cost == bcost && run <= blen))){
+                best = (int64_t)g - ng; bcost = cost; blen = run; }
+        }
+        run = 0;
+    }
+    return best;
+}
 static uint32_t va_alloc(uint32_t bytes, int top, int kind, int heap, uint32_t prot){
     uint32_t ng = (uint32_t)(((uint64_t)bytes + VA_GRAN - 1) / VA_GRAN);
     if (!ng || ng > VA_NG) return 0;
     int64_t g0 = va_find(ng, top, 0);
     if (g0 < 0 && g_check){ memset(g_va_dead, 0, sizeof g_va_dead); g0 = va_find(ng, top, 1); }
+    if (g0 >= 0 && kind != VK_SEG && va_seg_room((uint32_t)g0, ng) < SEG_KEEP) g0 = va_find_keep(ng);
     if (g0 < 0) return 0;
     hint_drop((uint32_t)g0, ng);
     return va_take((uint32_t)g0, ng, kind, heap, prot);

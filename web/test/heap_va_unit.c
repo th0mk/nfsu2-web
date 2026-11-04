@@ -21,7 +21,10 @@
  *             every trip back
  *   dfree     a block freed into the free block before it: a second free of
  *             it is refused, it is not live for HeapSize/HeapValidate, and no
- *             block is handed out twice */
+ *             block is handed out twice
+ *   reserve   with the heaps' segments given back, 1.4 MB blocks filling the
+ *             window leave room for new segments: as many 900 KB blocks fit
+ *             after them as had fitted before */
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -234,12 +237,30 @@ static void dfree(void){
     for (int k = 0; k < NDF; k++) if (p[k] != x && p[k] != y) crt_free(p[k]);
 }
 
+/* 12 blocks of 900 KB (three segments) freed, the segments given back, the
+ * window then filled with 1.4 MB blocks: the 900 KB blocks still find new
+ * segments (before, the 1.4 MB blocks took all of it and only the one spare
+ * segment's 4 were left). */
+enum { NFILL = 512 };
+static uint32_t g_fill[NFILL];
+static void reserve(void){
+    uint32_t s[12], sm[64]; int nbig = 0, nsmall = 0, ok = 1;
+    for (int i = 0; i < 12; i++) ok &= (s[i] = crt(900u << 10)) != 0;
+    for (int i = 0; i < 12; i++) crt_free(s[i]);
+    while (nbig < NFILL && (g_fill[nbig] = crt(1398016u))) nbig++;
+    while (nsmall < 64 && (sm[nsmall] = crt(900u << 10))) nsmall++;
+    printf("  window filled with %d blocks of 1.4 MB, then %d blocks of 900 KB\n", nbig, nsmall);
+    CHK("reserve-small-after-big", ok && nbig > 300 && nsmall >= 12);
+    for (int i = 0; i < nsmall; i++) crt_free(sm[i]);
+    for (int i = 0; i < nbig; i++) crt_free(g_fill[i]);
+}
+
 int main(void){
     mem_init();
     mem_commit(0x00E00000u, 0x00010000u);                /* the calls' guest stack */
     heap_init();
     g_h = H("HeapCreate", 0u, 0x1000u, 0u);
-    bestfit(); bighole(); racehole(); segments(); trips(); dfree();
+    bestfit(); bighole(); racehole(); segments(); trips(); dfree(); reserve();
     printf("heap_va_unit: %s (%d failed)\n", fails ? "FAILED" : "passed", fails);
     return fails != 0;
 }
