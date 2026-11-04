@@ -10,8 +10,10 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-04 (d0832f6)
+## 2026-11-04 (01e41df)
 
+- **Free roam:** a country flag before your name over your car: pick yours on the start page, in Online, Your flag.
+- **Saves:** where the browser's storage stops answering, your saves are no longer taken for missing and written over: Play says what to do and offers to play without saving.
 - **Quick Race:** up to 127 laps (was 10) and 5 opponents (3 in Drag), Lap KO no longer locks the laps and opponents, and a one-lap circuit shows how far you are in percent, as sprints do.
 - **Split screen:** two players on one keyboard: Enter and Space each take a seat, one drives on the arrows, the other on WASD.
 - **Camera:** C goes through a fifth view in every drive: the drift races' camera, high behind the car.
