@@ -117,6 +117,11 @@ Checked against the guide or the code, and confirmed by players in threads:
   - "This site can't be reached" / the address can't be found (DNS) on a school, university or work network: setting
     the device's DNS to 1.1.1.1 or 9.9.9.9 fixed it.
 - Stuck behind a barrier or off the map: R respawns.
+- Stuck on the far side of a red locked-area wall (a later stage's area, e.g. Coal Harbor before stage 4), often
+  after a hard hit from another player, with R putting the car back there and reloads, the garage and races too
+  (the profile kept that spot): fixed on 4 November (0afdbb92), live with the release after that. Then R, and the
+  next Play, put the car on the open side of the wall, on the road just before it. Until then nothing in the game
+  gets the car out: ask for the log and a backup, and to keep the profile.
 - Career free roam with a black world and only the HUD (empty radar, often lower frame rate; menus and quick races
   fine), often after a hard hit from another player: the car was lost off the map and the profile kept that spot, so
   it came back at every Play. Fixed on 1 November (0f17d0a), live since the 2 November release: reload the page and
