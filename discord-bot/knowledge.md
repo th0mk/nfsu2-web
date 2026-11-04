@@ -333,6 +333,13 @@ context lists every problem the developer has a report on, with its first thread
   and the car that passed through went on through the camera behind; nothing else changed (no slow motion, the car's
   speed kept). Fixed on 4 November (77d744ad): the camera goes through those cars too. Until that is live there is no
   workaround but Ghost mode Players (traffic solid). Thread 1567227790888017980.
+- Rebinding: the game's own controls are set in its Options, Controls (Keyboard Configuration, Joypad Configuration).
+  The site's own keys and buttons (X drift mode, O trunk/hood/doors, N horn, I message, F add friend, 1-4 quick chat;
+  a controller's D-pad down held, left stick click horn, right stick click quick chat) can't be changed there. Before
+  3995e464 a game control the player put on one of them fired together with ours (D-pad down bound to something was
+  held back a second). Since 3995e464 such a key or button is left to the game, ours does nothing on it, and the log
+  says so once (`[keys] X is bound to Shift Up in the game: drift mode stays off it`, `[pad] D-pad down is bound to
+  ...`). A D-pad down, left stick or right stick still on its default (Career Status, hydraulics) works as before.
 
 ## Decided
 
