@@ -297,7 +297,7 @@ static char  g_type_q[256]; static int g_type_h, g_type_t; static long g_type_ne
 
 static long   g_frame = 0;               /* guest Present count */
 static int    g_fng_log = 0;
-static double g_t0 = 0;                  /* ms at first Present */
+static double g_t0 = 0;                  /* script clock (ms) at first Present */
 static long   g_quit_frames = 0, g_status_every = 0;
 static int    g_inited = 0;
 
@@ -1087,8 +1087,13 @@ void autotest_on_present(CPU *c){
     g_frame++;
     if (g_ctrace) car_trace();
     double t = now_ms();
-    if (g_frame == 1){ g_t0 = t; g_st_t = t; g_st_cpu = proc_cpu_s(); g_st_gcpu = thread_cpu_ms(); }
-    double tms = t - g_t0;
+    /* the scripts' "ms" lines: the wall clock, or the game's clock when
+     * fast-forwarding (framerate.c NFSU2_FAST), where it runs ahead of it */
+    double ts = t;
+    { static int ff = -1; if (ff < 0){ int hfr_fast(void); ff = hfr_fast(); }
+      if (ff){ uint64_t host_us(void); ts = (double)host_us() / 1e3; } }
+    if (g_frame == 1){ g_t0 = ts; g_st_t = t; g_st_cpu = proc_cpu_s(); g_st_gcpu = thread_cpu_ms(); }
+    double tms = ts - g_t0;
 
     if (g_fng_log == 2 && (g_frame == 400 || g_frame == 1500)){
         uint32_t fe = mem_is_committed(0x8384c4u) ? MR32(0x8384c4u) : 0;

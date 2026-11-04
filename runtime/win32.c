@@ -75,6 +75,8 @@ static _Atomic uint64_t g_vclock_base  = 0;   /* virtual time at frame start */
 static _Atomic uint64_t g_vclock_creep = 0;   /* busy-wait compensation     */
 static _Atomic uint64_t g_real_base    = 0;   /* real time of that frame    */
 static _Atomic uint32_t g_vclock_polls = 0;
+static _Atomic int      g_vclock_fast  = 0;   /* NFSU2_FAST: track the highest reading */
+static _Atomic uint64_t g_vclock_hw    = 0;   /* ... of this frame (vclock_tick)       */
 
 #ifdef __wasm__
 #include "web/host_abi.h"
@@ -124,14 +126,23 @@ void vclock_tick(void){
      *                  semitones flat).
      *   VCLOCK=real  : REAL elapsed time (default).  Game and music both
      *                  run in real time.  The per-frame step is capped at
-     *                  50 ms so the game does not enter its catch-up loop. */
+     *                  50 ms so the game does not enter its catch-up loop.
+     *   NFSU2_FAST   : (framerate.c, tests) the game time of the frame (one
+     *                  slot; 33.3 ms in a 30 fps cutscene), whatever the wall
+     *                  clock did, but never less than the frame's own
+     *                  readings ran ahead (g_vclock_hw): no step back. */
     { static _Atomic int mode = -1;
       int m = atomic_load(&mode);
-      if (m < 0){ const char *e = ENVC("VCLOCK");
-                  m = (e && *e == 'f') ? 0 : 1; atomic_store(&mode, m); }
+      if (m < 0){ const char *e = ENVC("VCLOCK"); int hfr_fast(void);
+                  m = hfr_fast() ? 2 : (e && *e == 'f') ? 0 : 1; atomic_store(&mode, m);
+                  if (m == 2) atomic_store(&g_vclock_fast, 1); }
       uint64_t rb = atomic_load(&g_real_base);
       uint64_t step = 16667ull;
-      if (m && rb && now > rb){
+      if (m == 2){
+          uint64_t hfr_fast_frame_us(void); step = hfr_fast_frame_us();
+          uint64_t hw = atomic_exchange(&g_vclock_hw, 0ull), b = atomic_load(&g_vclock_base);
+          if (hw > b + cr && hw - b - cr >= step) step = hw - b - cr + 1ull;
+      } else if (m && rb && now > rb){
           step = now - rb;
           /* above 250 fps: clamp.  The floor is 4 ms up to 120 fps content and
            * lower for 240 / uncapped (framerate.c), where frames routinely
@@ -198,7 +209,29 @@ uint64_t host_us(void){
              * frame's extra game time small. */
             atomic_fetch_add(&g_vclock_creep, 1ull);
     }
-    return base + d + atomic_load(&g_vclock_creep);
+    uint64_t v = base + d + atomic_load(&g_vclock_creep);
+    if (__builtin_expect(atomic_load_explicit(&g_vclock_fast, memory_order_relaxed), 0)){
+        uint64_t h = atomic_load(&g_vclock_hw);
+        while (v > h && !atomic_compare_exchange_weak(&g_vclock_hw, &h, v)) {}
+    }
+    return v;
+}
+/* the virtual clock for another thread that only watches it (audio_web.c's
+ * mixer under NFSU2_FAST): no poll counted, no safety valve; the base and the
+ * frame's own real time, uncapped.  A frame that runs for seconds (a replay's
+ * start, 11-04: 15 s in sub_005e6c10) waits on the DirectSound cursor, so the
+ * mixer must keep moving in real time as it does without NFSU2_FAST; with the
+ * time capped at one step it stood still and the game froze.  The reading
+ * raises the high-water mark, so the next frame's base is never behind it. */
+uint64_t vclock_peek_us(void){
+    uint64_t base = atomic_load(&g_vclock_base), rb = atomic_load(&g_real_base), now = real_us();
+    uint64_t d = (now > rb) ? (now - rb) : 0ull;
+    uint64_t v = base + d + atomic_load(&g_vclock_creep);
+    if (atomic_load(&g_vclock_fast)){
+        uint64_t h = atomic_load(&g_vclock_hw);
+        while (v > h && !atomic_compare_exchange_weak(&g_vclock_hw, &h, v)) {}
+    }
+    return v;
 }
 uint32_t host_ms(void){ return (uint32_t)(host_us() / 1000ull) + 1000u; }
 uint64_t host_qpc(void){ return host_us(); }
