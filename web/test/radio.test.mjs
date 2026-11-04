@@ -18,7 +18,7 @@ const { pickMusic, keptFolder } = await load('web/src/radio-folder.ts');
 const { RadioLink, RADIO_WORDS, RADIO_MAGIC, RADIO_VERSION } = await load('web/src/app/radio-link.ts');
 const W = Object.fromEntries(RADIO_WORDS.map((n, i) => [n, i]));
 
-const CTL = 16 + 32 * 24, RING = 1 << 12, TAG = 44, TEXT = CTL + RADIO_WORDS.length * 4;
+const CTL = 16 + 48 * 24, RING = 1 << 12, TAG = 44, TEXT = CTL + RADIO_WORDS.length * 4;
 const settle = async () => { for (let k = 0; k < 8; k++) await new Promise(r => setImmediate(r)); };
 const pcm = frames => ({ numberOfChannels: 2, getChannelData: c => new Float32Array(frames).fill(c ? 0.5 : 0.25) });
 const text = (m, p, k) => Buffer.from(m.buffer, TEXT, 2 * 3 * TAG).subarray((p * 3 + k) * TAG, (p * 3 + k + 1) * TAG).toString('latin1').replace(/\0.*/, '');
