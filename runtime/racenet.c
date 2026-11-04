@@ -174,6 +174,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 
 #define G_FLOW       0x008654a4u   /* 6: in the world */
@@ -201,6 +202,10 @@
 #define FS_N         (16 + NAME_N)
 #define NAME_N       16
 #define NCARS        8
+/* a car's jump right after a wait of over STALL_US for its states (within STALL_AFTER_US of the state that ended it)
+ * is what a stall does, not its owner: the race's report (racenet_jump) leaves it out */
+#define STALL_US       1000000u
+#define STALL_AFTER_US 500000u
 #define NLINKS       16
 #define SLOW_US      50000u        /* a frame longer than this is a stall */
 /* the car states (above) */
@@ -304,6 +309,9 @@ typedef struct {
     uint32_t car; char name[NAME_N];
     uint32_t n, direct, g100, g250, g500; uint64_t first, last, gap_max;
     Jumps shown, game;                                /* as drawn, and as the game had it */
+    uint64_t gap_last, gap_at;                        /* the wait before its last state, and when that came */
+    float jump;                                       /* its largest jump as the game had it, not after a stall
+                                                       * (racenet_jump: the race's report to the server) */
     uint32_t faded, kept;                             /* corrections faded, and shown (over FADE_MAX) */
     uint32_t unhit;                                   /* far "hits" passed (sub_005f8d40) */
     float age_min, age_max; double age_sum;           /* its states' age by our race clock (s) */
@@ -533,6 +541,7 @@ void sub_005f8900(CPU *c){
         if (e->n){
             uint64_t g = t - e->last;
             if (g > e->gap_max) e->gap_max = g;
+            e->gap_last = g; e->gap_at = t;
             e->g100 += g > 100000u; e->g250 += g > 250000u; e->g500 += g > 500000u;
         } else e->first = t;
         if (ok(st, ST_TIME + 4u)){                        /* the state's age by this game's race clock */
@@ -1159,11 +1168,11 @@ static void end(uint64_t t){
         double span = e->n > 1 ? (double)(e->last - e->first) / 1e6 : 0.;
         fprintf(stderr, "[racenet]   car %s: %u updates (%.1f/s, %u straight from their game), longest wait %.0f ms, "
                 "waits over 100/250/500 ms %u/%u/%u, jumps over 0.5 m %u, over 2 m %u (largest %.1f m), "
-                "as the game had them %u/%u (largest %.1f m), corrections faded %u, shown %u, far \"hits\" passed %u, "
-                "its states %.0f ms old by our race clock (%.0f to %.0f)",
+                "as the game had them %u/%u (largest %.1f m; %.1f m not after a stall), corrections faded %u, shown %u, "
+                "far \"hits\" passed %u, its states %.0f ms old by our race clock (%.0f to %.0f)",
                 e->name[0] ? e->name : "-", e->n, span > 0 ? (e->n - 1) / span : 0., e->direct, (double)e->gap_max / 1000.0,
                 e->g100, e->g250, e->g500, e->shown.jumps, e->shown.big, (double)e->shown.max,
-                e->game.jumps, e->game.big, (double)e->game.max, e->faded, e->kept, e->unhit,
+                e->game.jumps, e->game.big, (double)e->game.max, (double)e->jump, e->faded, e->kept, e->unhit,
                 e->n ? e->age_sum / e->n * 1000.0 : 0., (double)e->age_min * 1000.0, (double)e->age_max * 1000.0);
         Fps *f = 0;
         for (int j = 0; j < NCARS && e->name[0]; j++) if (!strcmp(g_fps[j].name, e->name)) f = &g_fps[j];
@@ -1175,9 +1184,9 @@ static void end(uint64_t t){
     R.on = 0;
 }
 
-/* a car's place this frame into its jumps (racenet_frame) */
-static void jumps_add(Jumps *j, const float *p, uint64_t dt, float step){
-    float d[3];
+/* a car's place this frame into its jumps (racenet_frame): the jump's length when this frame began one (m), else 0 */
+static float jumps_add(Jumps *j, const float *p, uint64_t dt, float step){
+    float d[3], got = 0.f;
     for (int i = 0; i < 3; i++) d[i] = p[i] - j->p[i];
     if (j->have > 1 && dt && j->step > 0.f){
         float s = step / j->step, x2 = 0;
@@ -1186,10 +1195,12 @@ static void jumps_add(Jumps *j, const float *p, uint64_t dt, float step){
         int jump = __builtin_isfinite(x) && x > 0.5f;
         if (jump && !j->jumped){ j->jumps++; j->big += x > 2.f; }
         if (jump && x > j->max) j->max = x;
+        if (jump && !j->jumped) got = x;   /* (a jump's next frame, back to the car's own move, differs as much) */
         j->jumped = jump;
     }
     if (j->have) memcpy(j->d, d, sizeof d);
     memcpy(j->p, p, sizeof j->p); j->step = step; j->have += j->have < 2;
+    return got;
 }
 
 /* every frame, on the game thread (roam.c's main-loop hook) */
@@ -1249,7 +1260,9 @@ void racenet_frame(CPU *c){
         float sp[3], gp[3];
         memcpy(sp, e->shown.p, sizeof sp); memcpy(gp, e->game.p, sizeof gp);
         jumps_add(&e->shown, p, dt, step);
-        jumps_add(&e->game, g, dt, step);
+        float x = jumps_add(&e->game, g, dt, step);
+        /* (the race's report: a jump right after a wait of over STALL_US is the car shown where it went meanwhile) */
+        if (x > e->jump && !(e->gap_last > STALL_US && t - e->gap_at < STALL_AFTER_US)) e->jump = x;
         if (trace){
             float ds = 0, dg = 0, o = 0;
             for (int i = 0; i < 3; i++){ ds += (p[i] - sp[i]) * (p[i] - sp[i]); dg += (g[i] - gp[i]) * (g[i] - gp[i]); o += (p[i] - g[i]) * (p[i] - g[i]); }
@@ -1275,4 +1288,12 @@ void racenet_frame(CPU *c){
         send_all(m, 0);
         R.w0 = t; R.wframes = 0; R.wslow = 0; R.wlongest = 0;
     }
+}
+
+/* the largest jump of the car of the player named so (its LAN name) in the race just raced, as our game had it, not
+ * right after a stall (m; 0: none, or no such car) */
+float racenet_jump(const char *name){
+    if (!name || !name[0]) return 0.f;
+    for (int i = 0; i < NCARS; i++) if (g_car[i].car && !strcasecmp(g_car[i].name, name)) return g_car[i].jump;
+    return 0.f;
 }

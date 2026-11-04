@@ -303,9 +303,9 @@ static void t_roundtrip(void){
        unknown flag, two rows ours, a time or a distance out of range refused, a byte more refused */
     memset(&m, 0, sizeof m); m.h.type = RC_MSG_RACERES; m.h.sender = 7;
     { rc_raceres *r = &m.u.raceres;
-      r->lobby = 0x1234ABCDu; r->race = 0x9E3779B9u; r->mode = 1; r->laps = 2; r->n = 3;
+      r->lobby = 0x1234ABCDu; r->race = 0x9E3779B9u; r->mode = 1; r->laps = 2; r->n = 3; r->heat = 2; r->heats = 3;
       r->row[0].id = 7; r->row[0].flags = RC_RS_FINISHED | RC_RS_OURS; r->row[0].time = 21.5f; r->row[0].done = 2.f; r->row[0].dist = 5800.f;
-      r->row[1].id = 8; r->row[1].flags = 0; r->row[1].done = 0.61f; r->row[1].dist = 1750.5f;
+      r->row[1].id = 8; r->row[1].flags = 0; r->row[1].done = 0.61f; r->row[1].dist = 1750.5f; r->row[1].jump = 280;
       r->row[2].id = 0; r->row[2].flags = 0; r->row[2].done = 0.f;
       int n = rc_encode(&m, b, sizeof b);
       const rc_raceres *e = &d.u.raceres;
@@ -313,11 +313,14 @@ static void t_roundtrip(void){
             e->race == 0x9E3779B9u && e->mode == 1 && e->laps == 2 && e->n == 3 && e->row[0].id == 7 &&
             e->row[0].flags == (RC_RS_FINISHED | RC_RS_OURS) && e->row[0].time == 21.5f && e->row[0].done == 2.f &&
             e->row[0].dist == 5800.f &&
-            e->row[1].id == 8 && !e->row[1].flags && e->row[1].done == 0.61f && e->row[1].dist == 1750.5f && !e->row[2].id,
+            e->row[1].id == 8 && !e->row[1].flags && e->row[1].done == 0.61f && e->row[1].dist == 1750.5f && !e->row[2].id &&
+            e->heat == 2 && e->heats == 3 && e->row[1].jump == 280 && !e->row[0].jump && b[RC_HDR + 11] == 0x32 &&
+            b[RC_HDR + RC_RACERES_HEAD + RC_RACERES_ROW + 5] == (280 & 255) && b[RC_HDR + RC_RACERES_HEAD + RC_RACERES_ROW + 6] == 1,
             "RACERES round trip (%d bytes)", n);
       static const struct { int at; uint8_t v; int zero3; } bad[] = { { RC_HDR, 0, 1 }, { RC_HDR + 4, 0, 1 }, { RC_HDR + 10, 0, 0 },
           { RC_HDR + 10, 7, 0 }, { RC_HDR + 16, 4, 0 }, { RC_HDR + 36, 2, 0 }, { RC_HDR + 23, 0xFF, 0 }, { RC_HDR + 27, 0x7F, 0 },
-          { RC_HDR + 31, 0xFF, 0 } };
+          { RC_HDR + 31, 0xFF, 0 }, { RC_HDR + 11, 0x34, 0 }, { RC_HDR + 11, 0x30, 0 }, { RC_HDR + 11, 0x11, 0 },
+          { RC_HDR + 11, 0x42, 0 }, { RC_HDR + 11, 0x02, 0 } };
       int nb = (int)(sizeof bad / sizeof bad[0]);
       for (int k = 0; k < nb; k++){
           uint8_t c[RC_MAX_DGRAM]; memcpy(c, b, (size_t)n);

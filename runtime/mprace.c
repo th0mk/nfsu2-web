@@ -89,6 +89,7 @@
 #include "cpu.h"
 #include "mprace.h"
 #include "mpcredit.h"
+#include "racenet.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1049,12 +1050,13 @@ static void results_read(int log){
         r->clock = t < 4000u * 3600u ? (float)t / 4000.f : 0.f;
         r->dist = avg >= 0.f && avg < 1000.f && t < 4000u * 3600u ? avg * (float)t / 4000.f : 0.f;
         r->finished = MR32(e[k] + 8u) == 1u && far >= 1.f && laps < 1000.f && floorf(laps) >= floorf(far);
+        r->jump = r->ours ? 0.f : racenet_jump(r->name);
         if (r->finished && drift) r->points = pts > 0.f && pts < 1e7f ? (int)(pts + 0.5f) : 0;
         else if (r->finished) r->time = t < 4000u * 3600u ? (float)t / 4000.f : 0.f;
         if (log) fprintf(stderr, "[mprace]   row %d: car %04x%s, %s, %s, %.2f s, %.0f points, %.3f laps, "
-                         "average %.2f m/s (%.0f m), top %.2f m/s\n", k + 1, id, r->ours ? " (ours)" : "", r->name,
-                         r->finished ? "finished" : "not finished", (double)t / 4000.0, (double)pts, (double)laps, (double)avg,
-                         (double)r->dist, (double)top);
+                         "average %.2f m/s (%.0f m), top %.2f m/s, its largest jump %.1f m\n", k + 1, id, r->ours ? " (ours)" : "",
+                         r->name, r->finished ? "finished" : "not finished", (double)t / 4000.0, (double)pts, (double)laps,
+                         (double)avg, (double)r->dist, (double)top, (double)r->jump);
     }
 }
 int mprace_results(MpResult *r, int max){
@@ -1096,6 +1098,8 @@ static struct {
     char     joined[SER_HEATS][40];                 /* the joiner: the games it was in, by name */
     MpResult hres[MPRACE_RESULTS_MAX]; int nhres, hplace;   /* the last heat's own rows and our place there (the race's
                                                              * report to the server: a heat's times, not the points) */
+    MpResult hall[SER_HEATS][MPRACE_RESULTS_MAX]; int nhall[SER_HEATS];   /* every heat's rows (the reports of the
+                                                             * heats before the last: mprace_heat_rows) */
     int      between;                               /* from the last heat's game room to the lobby, for the next game */
     int      alone;                                 /* the others quit mid-heat: the series is ours (quit_win) */
     char     step[48];
@@ -1182,6 +1186,7 @@ static void series_results(int first){
     if (first){
         fprintf(stderr, "[mprace] f=%ld heat %d of %d: its results\n", autotest_frame(), S.heat + 1, S.heats);
         results_read(1);
+        if (S.heat >= 0 && S.heat < SER_HEATS){ memcpy(S.hall[S.heat], M.res, sizeof S.hall[0]); S.nhall[S.heat] = M.nres; }
     }
     if (!series_last()) return;
     int was = M.place;
@@ -1250,6 +1255,19 @@ int mprace_heat_results(MpResult *r, int max){
     int n = S.nhres < max ? S.nhres : max;
     memcpy(r, S.hres, sizeof *r * (size_t)(n > 0 ? n : 0));
     return n;
+}
+int mprace_heat_rows(int k, MpResult *r, int max, int *laps){
+    if (!series_on() || k < 0 || k >= S.heats || k >= SER_HEATS || S.nhall[k] < 1) return 0;
+    int n = S.nhall[k] < max ? S.nhall[k] : max;
+    memcpy(r, S.hall[k], sizeof *r * (size_t)n);
+    if (laps) *laps = S.laps[k];
+    return n;
+}
+int mprace_heats(int *raced){
+    int n = 0;
+    while (series_on() && n < S.heats && n < SER_HEATS && S.nhall[n] > 0) n++;
+    if (raced) *raced = n;
+    return series_on() ? S.heats : 0;
 }
 int mprace_series(MpSeries *s){
     memset(s, 0, sizeof *s);

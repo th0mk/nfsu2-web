@@ -5203,6 +5203,25 @@ static void mp_send_one(uint8_t op, uint8_t arg, uint32_t to){ roam_plat_lock();
 /* the trip's race reported to the server's hub, back in free roam (RC_MSG_RACEREP): the race, our place, our car as
  * the game rated it in the race; the server logs it ([race] lines), for evening out the cars */
 static float rr_in(float v, float lo, float hi){ return !(v >= lo) ? lo : v > hi ? hi : v; }
+/* a heat's results (res, nr rows) as a RACERES of the race m reports: heat 1 .. of heats (0 and 0: a race of one) */
+static void mp_raceres(rc_raceres *q, const rc_racerep *m, const MpResult *res, int nr, uint8_t laps, int heat, int heats){
+    memset(q, 0, sizeof *q);
+    q->lobby = m->lobby; q->race = m->race; q->mode = m->mode; q->laps = laps;
+    q->heat = (uint8_t)heat; q->heats = (uint8_t)heats;
+    for (int k = 0; k < nr && q->n < RC_LOBBY_MAX; k++){
+        uint32_t id = 0;
+        for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++)
+            if (res[k].name[0] && !strcasecmp(g_mp.lan[i], res[k].name)) id = g_mp.l.ids[i];
+        if (res[k].ours) id = g_s.conf.self_id;
+        q->row[q->n].id = id;
+        q->row[q->n].flags = (uint8_t)((res[k].finished ? RC_RS_FINISHED : 0) | (res[k].ours ? RC_RS_OURS : 0));
+        q->row[q->n].jump = (uint16_t)(res[k].ours ? 0.f : rr_in(res[k].jump + 0.5f, 0.f, 65535.f));
+        q->row[q->n].time = rr_in(res[k].clock, 0.f, 100000.f);
+        q->row[q->n].done = rr_in(res[k].done, 0.f, 1000.f);
+        q->row[q->n].dist = rr_in(res[k].dist, 0.f, 1e6f);
+        q->n++;
+    }
+}
 static void mp_report(void){
     MpReport r;
     if (!g_mp.l.id || !g_mp.l.race || !mprace_report(&r)) return;
@@ -5219,27 +5238,28 @@ static void mp_report(void){
     m.time = rr_in(r.time, 0.f, 100000.f);
     for (int i = 0; i < RC_RACEREP_NAME && r.car.name[i]; i++){ char ch = r.car.name[i]; m.name[i] = ch >= 0x20 && ch < 0x7f ? ch : '?'; }
     /* and the race's results as our game showed them, each row by its player's id (the LAN names the trip gave the
-     * lobby's players): the server compares every player's results for a racer far ahead of the others (a URL race
-     * of heats: its last heat's) */
-    MpResult res[MPRACE_RESULTS_MAX]; int nr = mprace_heat_results(res, MPRACE_RESULTS_MAX);
-    rc_raceres q; memset(&q, 0, sizeof q);
-    q.lobby = m.lobby; q.race = m.race; q.mode = m.mode; q.laps = m.laps;
-    for (int k = 0; k < nr && q.n < RC_LOBBY_MAX; k++){
-        uint32_t id = 0;
-        for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++)
-            if (res[k].name[0] && !strcasecmp(g_mp.lan[i], res[k].name)) id = g_mp.l.ids[i];
-        if (res[k].ours) id = g_s.conf.self_id;
-        q.row[q.n].id = id;
-        q.row[q.n].flags = (uint8_t)((res[k].finished ? RC_RS_FINISHED : 0) | (res[k].ours ? RC_RS_OURS : 0));
-        q.row[q.n].time = rr_in(res[k].clock, 0.f, 100000.f);
-        q.row[q.n].done = rr_in(res[k].done, 0.f, 1000.f);
-        q.row[q.n].dist = rr_in(res[k].dist, 0.f, 1e6f);
-        q.n++;
-    }
+     * lobby's players): the server compares every player's results for a racer far ahead of the others, or whose car
+     * jumped (a URL race of heats: the last heat's first, then each heat before it; rc_raceres) */
+    MpResult res[MPRACE_RESULTS_MAX]; int raced = 0, heats = mprace_heats(&raced), nr = 0;
+    uint8_t laps = m.laps;
+    if (heats > 1 && heats <= RC_RACERES_HEATS && raced >= 1){       /* (a series cut short: its last heat raced) */
+        int l = 0; nr = mprace_heat_rows(raced - 1, res, MPRACE_RESULTS_MAX, &l);
+        if (l > 0 && l < 256) laps = (uint8_t)l;
+    } else { heats = raced = 0; nr = mprace_heat_results(res, MPRACE_RESULTS_MAX); }
+    int heat = raced;
+    rc_raceres q; mp_raceres(&q, &m, res, nr, laps, heat, heats);
     roam_plat_lock(); int sent = rc_send_racerep(&g_s, &m), sent_res = q.n && rc_send_raceres(&g_s, &q); roam_plat_unlock();
     rlog("[roam] f=%ld race lobby %08x: its race reported to the server%s: place %d of %d, %s%s rated %.1f (the cars' average %.1f); "
          "its results, %d rows%s\n", rh_frame(), m.lobby, sent ? "" : " (not sent: no hub)", m.place, m.players, m.name,
          m.flags & RC_RR_EDITED ? " (its game data edited)" : "", (double)m.rating, (double)m.field, q.n, sent_res ? "" : " (not sent)");
+    for (int k = 0; k + 1 < heat; k++){
+        int l = 0; nr = mprace_heat_rows(k, res, MPRACE_RESULTS_MAX, &l);
+        if (nr < 1) continue;
+        mp_raceres(&q, &m, res, nr, (uint8_t)(l > 0 && l < 256 ? l : m.laps), k + 1, heats);
+        roam_plat_lock(); sent_res = q.n && rc_send_raceres(&g_s, &q); roam_plat_unlock();
+        rlog("[roam] f=%ld race lobby %08x: heat %d of %d's results, %d rows%s\n", rh_frame(), m.lobby, k + 1, heats, q.n,
+             sent_res ? "" : " (not sent)");
+    }
 }
 /* we open a lobby for race r */
 static int mp_open(int64_t host, uint32_t r){

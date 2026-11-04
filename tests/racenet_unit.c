@@ -455,6 +455,41 @@ int main(void){
     CHECK(each_other && !to_s && !named_s, "host-list: the list only to the joiners the race link sends to, naming only them "
           "(%d lists, to the stranger %d, naming it %d)", g_npl_out, to_s, named_s);
 
+    /* the race's report of each car's largest jump (racenet_jump): a car that moves 1 m a frame (20 ms) with a state
+     * every frame, then 280 m at once: 280; a stall of 1.5 s and a jump of 300 m as its state ends it: left out, a
+     * jump of 200 m 0.6 s later counted; a name no car has: 0 */
+    {
+        const uint32_t NP = 0x10050000u, CTL = 0x10060000u, ST = 0x10070000u;
+        commit(NP, 0x40); commit(CTL, 0x20); commit(ST, 0x80);
+        MR32(G_NET_HOST) = 0; g_npeer = 0; g_nsentto = 0;
+        MR32(G_NETPLAYERS) = NP; memcpy(&g_mem[NP + NP_NAME], "Inv", 4);
+        MR16(CAR_A + 0xau) = 0; MR32(CTL + CTL_CAR) = CAR_A;
+        float x = 0.f;
+        #define STEP(dx, state) do{ x += (dx); MRF32(CAR_A + CAR_POS) = x; \
+            if (state){ g_c.ecx = CTL; MR32(g_c.esp + 4u) = ST; sub_005f8900(&g_c); } frame(); }while(0)
+        MR32(RC) = 0; frame(); MR32(RC) = RC_RACING; frame();        /* a new race */
+        for (int i = 0; i < 60; i++) STEP(1.f, 1);
+        float before = racenet_jump("Inv");
+        STEP(281.f, 1);
+        for (int i = 0; i < 10; i++) STEP(1.f, 1);
+        float j = racenet_jump("inv");
+        CHECK(before == 0.f && j > 279.f && j < 281.f && racenet_jump("Nobody") == 0.f,
+              "jump: 280 m at once is the car's largest (%.1f m; before it %.1f m)", (double)j, (double)before);
+        MR32(RC) = 0; frame(); MR32(RC) = RC_RACING; frame();        /* the next race */
+        for (int i = 0; i < 60; i++) STEP(1.f, 1);
+        for (int i = 0; i < 75; i++) STEP(1.f, 0);                  /* 1.5 s without its states */
+        STEP(301.f, 1);
+        for (int i = 0; i < 10; i++) STEP(1.f, 1);
+        float stalled = racenet_jump("Inv");
+        for (int i = 0; i < 20; i++) STEP(1.f, 1);
+        STEP(201.f, 1);
+        for (int i = 0; i < 5; i++) STEP(1.f, 1);
+        float later = racenet_jump("Inv");
+        CHECK(stalled < 1.f && later > 199.f && later < 201.f, "jump: after a 1.5 s stall left out (%.1f m), 200 m 0.6 s on "
+              "counted (%.1f m)", (double)stalled, (double)later);
+        #undef STEP
+    }
+
     fidelity();
 
     printf(g_fail ? "racenet unit tests: FAILED\n" : "racenet unit tests: all passed\n");

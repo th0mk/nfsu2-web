@@ -89,9 +89,11 @@
                                        flags, type, class (u8), 3 bytes 0; rating, field, factor, kW, kg, km/h, time (f32);
                                        the name (16 bytes, NUL padded) */
 #define RC_RACEREP_NAME  16         /* its car type's name */
-#define RC_RACERES_HEAD  12         /* a RACERES's payload: lobby, race (u32); mode, laps, n (u8), a byte 0; then n rows */
-#define RC_RACERES_ROW   20         /* ...each: the player's id (u32), flags (u8), 3 bytes 0, its time, how far it came,
-                                       the way it drove (f32) */
+#define RC_RACERES_HEAD  12         /* a RACERES's payload: lobby, race (u32); mode, laps, n (u8), the heat (u8: heats << 4
+                                       | heat, 0 a race of one heat); then n rows */
+#define RC_RACERES_ROW   20         /* ...each: the player's id (u32), flags (u8), its car's largest jump (u16, m), a byte
+                                       0, its time, how far it came, the way it drove (f32) */
+#define RC_RACERES_HEATS 3          /* a URL race's heats at most */
 #define RC_SAY_INBOX     16         /* SAY messages held for the game side */
 
 /* message types (header byte 5) */
@@ -362,10 +364,15 @@ typedef struct {
  * whether it finished and is ours (RC_RS_*), its row's time (s: a finisher's its finish; one still on the way, when
  * the race ended, 30 s after the first), how far it came (laps: the game's count, a finisher as many whole laps as
  * the farthest) and the way it drove (m: its average speed for its time, as the game counts it) */
+/* A URL race of 2 or 3 heats sends one a heat (heat 1 .. of heats; 0 and 0 for a race of one heat), the last heat's
+ * first: a hub before them took one report a lobby, the first (the last heat's, as it was), and none of its player's
+ * within 20 s (the others' are dropped there).  A row's jump: the largest one of that racer's car, as the reporter's
+ * game had it (racenet_jump: a frame's move unlike the frame before's, not right after a stall; m, 0 for its own row
+ * and in a game before it); a hub before it ignores the bytes */
 typedef struct {
     uint32_t lobby, race;
-    uint8_t  mode, laps, n;
-    struct { uint32_t id; uint8_t flags; float time, done, dist; } row[RC_LOBBY_MAX];
+    uint8_t  mode, laps, n, heat, heats;
+    struct { uint32_t id; uint8_t flags; uint16_t jump; float time, done, dist; } row[RC_LOBBY_MAX];
 } rc_raceres;
 
 typedef struct {

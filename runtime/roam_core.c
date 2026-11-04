@@ -380,6 +380,7 @@ static int racerep_ok(const rc_racerep *r){
 /* a RACERES's fields: a lobby and a race, 1 to RC_LOBBY_MAX rows, known flags (one row ours at most), numbers in range */
 static int raceres_ok(const rc_raceres *r){
     if (!r->lobby || !r->race || r->n < 1 || r->n > RC_LOBBY_MAX) return 0;
+    if (r->heats ? r->heats < 2 || r->heats > RC_RACERES_HEATS || r->heat < 1 || r->heat > r->heats : r->heat != 0) return 0;
     int ours = 0;
     for (int k = 0; k < r->n; k++){
         if (r->row[k].flags & ~(RC_RS_FINISHED | RC_RS_OURS) || !in(r->row[k].time, 0.f, 100000.f) || !in(r->row[k].done, 0.f, 1000.f)
@@ -490,9 +491,10 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
     case RC_MSG_RACERES: {
         const rc_raceres *r = &m->u.raceres;
         if (!raceres_ok(r)) return -1;
-        rc_put32(&w, r->lobby); rc_put32(&w, r->race); rc_put8(&w, r->mode); rc_put8(&w, r->laps); rc_put8(&w, r->n); rc_put8(&w, 0);
+        rc_put32(&w, r->lobby); rc_put32(&w, r->race); rc_put8(&w, r->mode); rc_put8(&w, r->laps); rc_put8(&w, r->n);
+        rc_put8(&w, (uint8_t)(r->heats << 4 | r->heat));
         for (int k = 0; k < r->n; k++){
-            rc_put32(&w, r->row[k].id); rc_put8(&w, r->row[k].flags); rc_put8(&w, 0); rc_put8(&w, 0); rc_put8(&w, 0);
+            rc_put32(&w, r->row[k].id); rc_put8(&w, r->row[k].flags); rc_put16(&w, r->row[k].jump); rc_put8(&w, 0);
             rc_putf(&w, r->row[k].time); rc_putf(&w, r->row[k].done); rc_putf(&w, r->row[k].dist);
         }
         break; }
@@ -668,11 +670,12 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
     case RC_MSG_RACERES: {
         rc_raceres *q = &m->u.raceres;
         q->lobby = rc_get32(&r); q->race = rc_get32(&r); q->mode = (uint8_t)rc_get8(&r); q->laps = (uint8_t)rc_get8(&r);
-        q->n = (uint8_t)rc_get8(&r); (void)rc_get8(&r);
+        q->n = (uint8_t)rc_get8(&r);
+        { uint8_t h = (uint8_t)rc_get8(&r); q->heat = h & 15u; q->heats = h >> 4; }
         if (r.err) return RC_E_SHORT;
         if (q->n < 1 || q->n > RC_LOBBY_MAX) return RC_E_FIELD;
         for (int k = 0; k < q->n; k++){
-            q->row[k].id = rc_get32(&r); q->row[k].flags = (uint8_t)rc_get8(&r); (void)rc_get8(&r); (void)rc_get8(&r); (void)rc_get8(&r);
+            q->row[k].id = rc_get32(&r); q->row[k].flags = (uint8_t)rc_get8(&r); q->row[k].jump = (uint16_t)rc_get16(&r); (void)rc_get8(&r);
             q->row[k].time = rc_getf(&r); q->row[k].done = rc_getf(&r); q->row[k].dist = rc_getf(&r);
         }
         if (r.err) return RC_E_SHORT;

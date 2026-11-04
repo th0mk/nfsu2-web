@@ -560,9 +560,9 @@ struct Player {
     /// linked first while each names the other (`duel_pairs`)
     duel: u32,
     /// the lobby of the race it last reported, and when (one report a race is logged); the same of its last results
-    /// (RACERES, sent with the report)
+    /// (RACERES, sent with the report), and the heats of it that came (bit 0: a race of one heat; 1 << heat)
     reported: Option<(u32, f64)>,
-    resulted: Option<(u32, f64)>,
+    resulted: Option<(u32, f64, u8)>,
     /// its links after the last tick (a HELLO of another start of the game empties them)
     links: Vec<Link>,
     /// how its car moves (watch.rs)
@@ -1340,8 +1340,13 @@ impl Hub {
                 report = Some(race_line(&p.name, &r) + &note);
                 edited = line;
             }
-            Msg::RaceRes(r) if sender == p.id && !p.resulted.is_some_and(|(l, t)| l == r.lobby || now - t < REPORT_GAP_MS) => {
-                p.resulted = Some((r.lobby, now));
+            // (a URL race of heats: one a heat of the lobby, at once)
+            Msg::RaceRes(r)
+                if sender == p.id
+                    && p.resulted.is_none_or(|(l, t, heats)| if l == r.lobby { heats & 1 << r.heat == 0 } else { now - t >= REPORT_GAP_MS }) =>
+            {
+                let heats = p.resulted.filter(|x| x.0 == r.lobby).map_or(0, |x| x.2);
+                p.resulted = Some((r.lobby, now, heats | 1 << r.heat));
                 res = Some((p.id, r));
             }
             _ => {}
@@ -2086,9 +2091,10 @@ impl Hub {
         for (o, v) in self.results.judged(now) {
             let who = |id: u32| o.names.get(&id).cloned().or_else(|| self.who(id)).unwrap_or_else(|| format!("player {id:08x}"));
             let result = results::result_line(&o, &who);
-            let cheat = v.map(|v| results::line(&v, &who));
+            let cheats: Vec<String> =
+                v.map(|v| results::line(&v, &who)).into_iter().chain(o.jumps.iter().map(|j| results::jump_line(&o, j, &who))).collect();
             (self.log)(&result);
-            if let Some(line) = cheat {
+            for line in cheats {
                 self.st.cheat_lines += 1;
                 (self.log)(&line);
             }

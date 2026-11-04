@@ -326,7 +326,8 @@ fn tagged(line: &str, m: &nfsu2_bans::Marked) -> String {
 
 /// the address and name a `[cheat]` line of a race begins with: `[cheat] 10.77.3.41 "Bob": won the online race "..."`
 /// or `finished 2 in the online race "..."` (nfsu2-online lobby.rs), `[cheat] 10.77.3.41 "Bob": won the race of lobby
-/// ...` (nfsu2-roam results.rs) or `raced in the race of lobby ...` (an edited car, hub.rs); None for any other line
+/// ...` or `its car jumped 280 m at once in the race of lobby ...` (nfsu2-roam results.rs) or `raced in the race of
+/// lobby ...` (an edited car, hub.rs); None for any other line
 fn race_cheat(line: &str) -> Option<(u32, &str)> {
     let (vip, rest) = line.strip_prefix("[cheat] ")?.split_once(" \"")?;
     let (name, what) = rest.split_once("\": ")?;
@@ -786,6 +787,12 @@ mod tests {
                 "[cheat] 10.77.1.3 \"Ed\": raced in the race of lobby 0000abcd (race 00001234: drag, 1 lap) in an edited car, \
                  1st of 3: 350Z",
                 "Ed",
+            ),
+            (
+                "[cheat] 10.77.1.3 \"Inv\": its car jumped 280 m at once in the race of lobby 0000abcd (race 00001234: URL, 3 \
+                 laps, heat 2 of 3), as 2 of 2 other players' games had it (the largest each: 280, 275 m; honest races' \
+                 largest are under 50 m); it won",
+                "Inv",
             ),
         ] {
             assert_eq!(race_cheat(line), Some((vip, name)), "{line}");

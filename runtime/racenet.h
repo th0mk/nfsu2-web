@@ -20,4 +20,9 @@ typedef struct {
 /* the race links with datagrams since the last reset, at most max of them
  * (their number), then their numbers back to 0 when reset is 1 */
 int vlan_race_links(RaceLink *o, int max, int reset);
+
+/* the largest jump of the car of the player named so (its LAN name) in the race just raced, as our game had it: a
+ * frame's move that differs from the frame before's, not right after a stall of its states (m; 0: none, or no such
+ * car).  Kept until the next race begins */
+float racenet_jump(const char *name);
 #endif
