@@ -6,7 +6,8 @@ into /changelog.json).
 Each day with a release gets one section, written when its module is built: `## <date> (<commit>)`, the commit being
 the last one the day's releases bring, so the next section covers the commits after it. A second release on the same
 day adds its lines to that day's section and moves its commit on (web/build.mjs stops on a date twice). One line per
-change, in plain text, as `- **Area:** what changed`, written for players. Left out: the server's insides, the forum
+change, in plain text, as `- **Area:** what changed`, written for players: new things and noticeable improvements
+first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
@@ -18,9 +19,13 @@ not guessed.
 - **Camera:** the drift races' camera in every drive (C).
 - **Vinyls:** the game's hidden Special vinyls.
 - **Controls:** this site's keys and buttons are set in Controls, Site.
-- **Free roam:** your car keeps its brakes, exhaust tips and spoiler after a shop.
-- **Saves:** where the browser's storage stops answering, your saves are kept and Play offers to play without saving.
+- **Saves:** Play without saving where the browser's storage stops answering.
 - **iPhone:** sound in Silent mode.
+- **Free roam:** your car keeps its brakes, exhaust tips and spoiler after a shop.
+- **Free roam:** a car reset past the career's red walls goes back on its roads.
+- **Ghost mode:** the camera no longer hops over traffic on Everything.
+- **Horns:** follow the game's Master Volume.
+- **Start page:** plainer error messages.
 
 ## 2026-11-03 (a5892ba)
 
