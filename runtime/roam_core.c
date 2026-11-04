@@ -747,11 +747,33 @@ int rc_carcfg_encode(const rc_carcfg *c, uint8_t *out, int cap){
     for (int i = 0; i < c->n_parts; i++){ rc_put8(&w, c->part[i].slot); rc_put32(&w, c->part[i].key); rc_put32(&w, c->part[i].owner); }
     /* extensions: count, then {u8 tag, u8 length, bytes}; unknown tags are
      * skipped by the reader */
-    rc_put8(&w, (c->has_perf ? 1u : 0u) + (c->has_horn ? 1u : 0u) + (c->has_rating ? 1u : 0u));
+    /* the damage's dents, the newest that fit: what is left of cap after the look, in extensions of RC_DMG_CHUNK */
+    const uint32_t have = c->dmg_n > RC_DMG_MAX ? RC_DMG_MAX : c->dmg_n;
+    uint32_t dn = have;
+    uint32_t look = w.n + 1u + (c->has_perf ? 2u + RC_PERF_BYTES : 0u) + (c->has_horn ? 3u : 0u) +
+                    (c->has_rating ? 5u : 0u);
+    while (dn && look + ((dn + RC_DMG_CHUNK - 1u) / RC_DMG_CHUNK) * 5u + dn * RC_DMG_BYTES > w.cap) dn--;
+    const uint32_t skip = have - dn;   /* the oldest ones that do not fit */
+    uint32_t nchunk = (dn + RC_DMG_CHUNK - 1u) / RC_DMG_CHUNK;
+    rc_put8(&w, (c->has_perf ? 1u : 0u) + (c->has_horn ? 1u : 0u) + (c->has_rating ? 1u : 0u) + nchunk);
     if (c->has_perf){ rc_put8(&w, RC_EXT_PERF); rc_put8(&w, RC_PERF_BYTES); rc_putb(&w, c->perf, RC_PERF_BYTES); }
     if (c->has_horn){ rc_put8(&w, RC_EXT_HORN); rc_put8(&w, 1); rc_put8(&w, c->horn); }
     if (c->has_rating){ rc_put8(&w, RC_EXT_RATING); rc_put8(&w, 3); rc_put8(&w, (uint8_t)c->rating_cls); rc_put16(&w, c->rating); }
+    for (uint32_t k = 0, at = skip; k < nchunk; k++){
+        uint32_t n = dn - (at - skip) < RC_DMG_CHUNK ? dn - (at - skip) : RC_DMG_CHUNK;
+        rc_put8(&w, RC_EXT_DAMAGE); rc_put8(&w, 3u + n * RC_DMG_BYTES);
+        rc_put8(&w, c->dmg_epoch); rc_put16(&w, (uint16_t)(c->dmg_first + at));
+        rc_putb(&w, c->dmg + at * RC_DMG_BYTES, n * RC_DMG_BYTES);
+        at += n;
+    }
     return w.err ? -1 : (int)w.n;
+}
+uint32_t rc_carcfg_look(const uint8_t *p, int len){
+    static rc_carcfg c; static uint8_t b[RC_CFG_MAX];
+    if (rc_carcfg_decode(p, len, &c) != RC_OK) return 0;
+    c.dmg_n = 0;
+    int n = rc_carcfg_encode(&c, b, sizeof b);
+    return n > 0 ? rc_fnv1a_bytes(b, (uint32_t)n) : 0;
 }
 int rc_carcfg_decode(const uint8_t *p, int len, rc_carcfg *c){
     memset(c, 0, sizeof *c);
@@ -784,6 +806,15 @@ int rc_carcfg_decode(const uint8_t *p, int len, rc_carcfg *c){
         else if (tag == RC_EXT_RATING && l == 3){
             c->rating_cls = (int8_t)rc_get8(&r); c->rating = (uint16_t)rc_get16(&r);
             c->has_rating = !r.err && c->rating_cls >= -1 && c->rating_cls <= 3 && c->rating <= 5000;
+        }
+        else if (tag == RC_EXT_DAMAGE && l >= 3u && (l - 3u) % RC_DMG_BYTES == 0 && r_have(&r, l)){
+            /* the dents, as long as each extension follows the one before (same epoch, the next numbers) */
+            uint32_t epoch = rc_get8(&r), first = rc_get16(&r), n = (l - 3u) / RC_DMG_BYTES;
+            if (!c->dmg_n){ c->dmg_epoch = (uint8_t)epoch; c->dmg_first = (uint16_t)first; }
+            if (epoch == c->dmg_epoch && first == (uint16_t)(c->dmg_first + c->dmg_n) && c->dmg_n + n <= RC_DMG_MAX){
+                rc_getb(&r, c->dmg + c->dmg_n * RC_DMG_BYTES, n * RC_DMG_BYTES);
+                c->dmg_n = (uint8_t)(c->dmg_n + n);
+            } else r.n += n * RC_DMG_BYTES;
         }
         else if (r_have(&r, l)) r.n += l;
     }

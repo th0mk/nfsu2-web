@@ -34,6 +34,10 @@
 #include "damage/Tessellate.h"
 
 extern "C" {
+#include "roam_core.h"   // RC_DMG_*: a dent on the wire (free roam)
+}
+
+extern "C" {
 uint32_t dmg_call(uint32_t fn, int n, const uint32_t* a);
 uint32_t dmg_thiscall(uint32_t fn, uint32_t self, int n, const uint32_t* a);
 float dmg_thiscall_f(uint32_t fn, uint32_t self, int n, const uint32_t* a);   // its return in st0
@@ -2084,6 +2088,151 @@ int NextDrawIndex(void* model) {
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------------------
+// Free roam: friends see the damage (RC_EXT_DAMAGE in the car record, roam_game.c).
+//
+// The player's car is the only one whose damage its game decides: each dent (after its snap to the surface) goes in
+// a log, quantized as it goes on the wire, so the dents made here are bit for bit the ones a friend's game makes. The
+// log is published (a new revision, which roam_game.c puts in the record) at most every 1.5 s, 0.4 s after the last
+// dent: a crash's burst of contacts is one record. A repair, or another car, starts a new epoch. A friend's car gets
+// the dents its player's record has through the same steps as an impact here (dents, loose and lost parts, lights,
+// wheels, the scratches around the dent), only the ones not made yet, one car's a frame; when its parts are rebuilt
+// (or the game repairs it) they are made again from the first. Impacts on a friend's car here make nothing: theirs do.
+
+namespace {
+
+struct NetDent {
+    uint8_t b[RC_DMG_BYTES];
+};
+struct NetMine {
+    void* renderInfo = nullptr;   // the player's car the log is of
+    uint8_t epoch = 0;
+    uint16_t first = 0;           // the number of the log's first dent in the epoch
+    std::deque<NetDent> dents;
+    bool pending = false;         // changed since the last publication
+    double lastDent = 0, lastPub = -1e9;
+    // as published
+    uint32_t rev = 0;
+    uint8_t pubEpoch = 0;
+    uint16_t pubFirst = 0;
+    std::vector<NetDent> pub;
+} g_mine;
+
+struct NetSlot {
+    uint32_t car = 0, peer = 0;
+    void* renderInfo = nullptr;
+    uint8_t epoch = 0;
+    uint32_t next = 0;            // the first dent not made yet
+    bool any = false;             // dents made on the car
+    uint32_t seen = 0;            // frame the slot last had this car
+};
+constexpr int kNetSlots = 64;
+NetSlot g_netSlots[kNetSlots];
+uint32_t g_netBusy = 0xFFFFFFFF;  // frame a car's dents were made last (one car's a frame)
+
+constexpr uint32_t kPlayers = 0x8900B4;   // Player*[]: +4 its car
+uint8_t* PlayerCar() {
+    const uint32_t p = R32(kPlayers);
+    return p && dmg_committed(p + 4, 4) ? G(R32(p + 4)) : nullptr;
+}
+
+// A friend's car (slot of roam_game.c), as of the last frames.
+bool IsRemote(uint32_t car) {
+    if (!car) return false;
+    for (const NetSlot& s : g_netSlots)
+        if (s.car == car && Frame() - s.seen < 120) return true;
+    return false;
+}
+
+void EncodeDent(const Dent& d, float magnitude, NetDent& o) {
+    const auto i16 = [](float v) { v = roundf(v * 1000.0f); return (int16_t)(v < -32767 ? -32767 : v > 32767 ? 32767 : v); };
+    const auto i8 = [](float v) { v = roundf(v * 127.0f); return (int8_t)(v < -127 ? -127 : v > 127 ? 127 : v); };
+    const int16_t p[3] = {i16(d.point.x), i16(d.point.y), i16(d.point.z)};
+    memcpy(o.b, p, 6);   // little-endian, as the wire
+    o.b[6] = (uint8_t)i8(d.direction.x), o.b[7] = (uint8_t)i8(d.direction.y), o.b[8] = (uint8_t)i8(d.direction.z);
+    const float depth = roundf(d.depth / RC_DMG_DEPTH * 255.0f);
+    o.b[9] = (uint8_t)(depth < 0 ? 0 : depth > 255 ? 255 : depth);
+    const float m = roundf(magnitude);
+    o.b[10] = (uint8_t)(m < 0 ? 0 : m > 255 ? 255 : m);
+}
+void DecodeDent(const uint8_t* b, Dent& d, float& magnitude) {
+    int16_t p[3];
+    memcpy(p, b, 6);
+    d.point = {p[0] / 1000.0f, p[1] / 1000.0f, p[2] / 1000.0f};
+    d.direction = Normalize(Vec3{(int8_t)b[6] / 127.0f, (int8_t)b[7] / 127.0f, (int8_t)b[8] / 127.0f});
+    d.depth = b[9] * RC_DMG_DEPTH / 255.0f;
+    magnitude = b[10];
+}
+
+void NetReset(void* renderInfo) {
+    g_mine.renderInfo = renderInfo;
+    g_mine.epoch++;
+    g_mine.first = 0;
+    g_mine.dents.clear();
+    g_mine.pending = true;
+    g_mine.lastDent = NowMs();
+}
+
+// A dent of the player's car: quantized as it goes on the wire (made so here too), and logged.
+void NetRecord(void* renderInfo, Dent& dent, float magnitude) {
+    if (g_mine.renderInfo != renderInfo) NetReset(renderInfo);
+    NetDent d;
+    EncodeDent(dent, magnitude, d);
+    float m;
+    DecodeDent(d.b, dent, m);
+    g_mine.dents.push_back(d);
+    if ((int)g_mine.dents.size() > RC_DMG_MAX) {
+        g_mine.dents.pop_front();
+        g_mine.first++;
+    }
+    g_mine.pending = true;
+    g_mine.lastDent = NowMs();
+}
+
+// Once a frame: the player's car gone or changed (a new log), and the log published when due.
+void NetFrame() {
+    uint8_t* car = PlayerCar();
+    void* ri = car && dmg_committed(A(car) + kCarRenderInfo, 4) ? At<void*>(car, kCarRenderInfo) : nullptr;
+    if (ri != g_mine.renderInfo && !g_mine.dents.empty()) NetReset(ri);
+    const double now = NowMs();
+    if (!g_mine.pending || now - g_mine.lastDent < 400.0 || now - g_mine.lastPub < 1500.0) return;
+    g_mine.pending = false;
+    g_mine.lastPub = now;
+    g_mine.pubEpoch = g_mine.epoch;
+    g_mine.pubFirst = g_mine.first;
+    g_mine.pub.assign(g_mine.dents.begin(), g_mine.dents.end());
+    g_mine.rev++;
+    if (g_settings.logHits) Log("free roam: damage published (epoch %u, dents %u..%u)", g_mine.pubEpoch, g_mine.pubFirst,
+                                (unsigned)(g_mine.pubFirst + g_mine.pub.size()));
+}
+
+// The steps of an impact, for a dent of a friend's car.
+void ApplyNetDent(void* renderInfo, uint8_t* car, const Dent& dent, float magnitude) {
+    CarState* state = StateFor(renderInfo, car, true);
+    SetCar(*state, car);
+    uint8_t* carDamage = dmg_committed(A(car) + kCarDamage, 4) ? At<uint8_t*>(car, kCarDamage) : nullptr;
+    if (g_settings.wear.nativeGlass && carDamage && dmg_committed(A(carDamage) + kCarDamageVisible, 1) &&
+        !At<uint8_t>(carDamage, kCarDamageVisible)) {
+        const uint32_t one = 1;
+        dmg_thiscall(kSetVisibleDamageEnabled, A(carDamage), 1, &one);
+    }
+    EnsureClones(renderInfo);
+    if (dent.depth > 0) {
+        DentCar(renderInfo, *state, dent);
+        if (g_settings.hang.enabled) DamageParts(renderInfo, *state, dent);
+        BreakLights(renderInfo, *state, dent);
+        BendNear(car, *state, dent);
+    }
+    const WearSettings& ws = g_settings.wear;
+    if (magnitude > ws.scratchThreshold) {
+        float amount = (magnitude - ws.scratchThreshold) * ws.scratchPerImpulse;
+        amount = amount > 1.0f ? 1.0f : amount;
+        ScratchCar(renderInfo, dent.point, amount, ws.scratchRadius + 0.015f * magnitude);
+    }
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------------------------------------------------
 // From runtime/damage.c
 
 extern "C" int dmg_init(void) {
@@ -2103,7 +2252,7 @@ extern "C" void dmg_render_entry(uint32_t cri, uint32_t args) {
     BendWheels(renderInfo, args);
     // A racer (it owns a CarDamage) gets its parts refined ahead of its first impact.
     if (uint8_t* car = At<uint8_t*>(renderInfo, kCriCar))
-        if (CarHas(car, renderInfo) && At<void*>(car, kCarDamage)) Prewarm(renderInfo);
+        if (CarHas(car, renderInfo) && (At<void*>(car, kCarDamage) || IsRemote(A(car)))) Prewarm(renderInfo);
     g_drawCar = renderInfo;
     g_bodyKnown = false;
     g_drawCountUsed = 0;
@@ -2119,6 +2268,7 @@ extern "C" void dmg_impulse(uint32_t bodyAddr, uint32_t impulseAddr, uint32_t po
     const float* point = (const float*)G(pointAddr);
     uint8_t* car = At<uint8_t*>(body, kBodyCar);
     if (!car || !dmg_committed(A(car), kCarDamage + 4) || !At<void*>(car, kCarDamage)) return;   // racers only
+    if (IsRemote(A(car))) return;   // a friend's car (free roam): its player's game makes its damage
     // The game's part damage (it hides aftermarket mirrors) has just been fed: our loose parts replace it.
     memset(At<uint8_t*>(car, kCarDamage) + kCarPartDamageValues, 0, kCarPartDamageCount * sizeof(float));
     void* renderInfo = At<void*>(car, kCarRenderInfo);
@@ -2167,6 +2317,7 @@ extern "C" void dmg_impulse(uint32_t bodyAddr, uint32_t impulseAddr, uint32_t po
             (int)(g_clones.size() - clonesBefore), NowMs() - t0, g_refinedAhead, g_refinedNow);
     int moved = 0;
     if (dents) {
+        if (car == PlayerCar()) NetRecord(renderInfo, dent, magnitude);   // friends make the same dent
         moved = DentCar(renderInfo, *state, dent);
         if (g_settings.hang.enabled) DamageParts(renderInfo, *state, dent);
         BreakLights(renderInfo, *state, dent);
@@ -2207,6 +2358,7 @@ extern "C" void dmg_zero(uint32_t carDamage, uint32_t caller) {
     uint8_t* car = At<uint8_t*>(G(carDamage), 0);
     if (!car || !dmg_committed(A(car), kCarRenderInfo + 4)) return;
     void* renderInfo = At<void*>(car, kCarRenderInfo);
+    if (renderInfo && renderInfo == g_mine.renderInfo) NetReset(renderInfo);   // friends see the repair
     if (renderInfo && g_cars.count(renderInfo)) {
         RepairRenderInfo(renderInfo);
         if (g_settings.logHits) Log("car %08X repaired by the game", A(car));
@@ -2359,6 +2511,7 @@ void PatchGlass() {
 extern "C" void dmg_main_loop(void) {
     static bool tried = false;
     PatchGlass();
+    NetFrame();
     if (tried) return;
     tried = true;
     const char* win = g_settings.wear.pack;
@@ -2384,4 +2537,52 @@ extern "C" void dmg_main_loop(void) {
     dmg_call(kLoadChunks, 3, args);
     g_packLoaded = true;
     Log("pack %s loaded (%ld bytes)", win, size);
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Free roam (roam_game.c through damage.c)
+
+extern "C" uint32_t dmg_net_rev(void) { return g_mine.rev; }
+
+extern "C" int dmg_net_mine(uint8_t* epoch, uint16_t* first, uint8_t* dents, int max) {
+    *epoch = g_mine.pubEpoch;
+    const int n = (int)g_mine.pub.size() < max ? (int)g_mine.pub.size() : max;
+    const int skip = (int)g_mine.pub.size() - n;   // the newest that fit
+    *first = (uint16_t)(g_mine.pubFirst + skip);
+    for (int i = 0; i < n; i++) memcpy(dents + i * RC_DMG_BYTES, g_mine.pub[skip + i].b, RC_DMG_BYTES);
+    return n;
+}
+
+extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t first, int n, const uint8_t* dents) {
+    if (k < 0 || k >= kNetSlots) return;
+    NetSlot& s = g_netSlots[k];
+    if (!car || !dmg_committed(car, kCarRenderInfo + 4)) return;   // not shown now: kept as it is
+    void* renderInfo = At<void*>(G(car), kCarRenderInfo);
+    if (!renderInfo || !dmg_committed(A(renderInfo), kCriModels + 63 * 8 * 4)) return;
+    s.seen = Frame();
+    // another car or another player in the slot: the old one's damage off it (a parked car is reused)
+    if (car != s.car || peer != s.peer || renderInfo != s.renderInfo) {
+        if (s.any && s.renderInfo && g_cars.count(s.renderInfo) && CarHas(G(s.car), s.renderInfo)) RepairRenderInfo(s.renderInfo);
+        s = NetSlot{};
+        s.car = car, s.peer = peer, s.renderInfo = renderInfo, s.epoch = epoch, s.seen = Frame();
+    }
+    if (epoch != s.epoch) {   // the friend's car was repaired
+        if (s.any && g_cars.count(renderInfo)) RepairRenderInfo(renderInfo);
+        s.epoch = epoch, s.next = 0, s.any = false;
+    }
+    if (s.any && !g_cars.count(renderInfo)) s.next = 0, s.any = false;   // rebuilt or repaired here: again from the first
+    const uint32_t last = (uint32_t)first + (uint32_t)n;
+    if (n <= 0 || s.next >= last || g_netBusy == Frame()) return;
+    g_netBusy = Frame();
+    const double t0 = NowMs();
+    for (uint32_t i = s.next > first ? s.next : first; i < last; i++) {
+        Dent d;
+        float magnitude;
+        DecodeDent(dents + (i - first) * RC_DMG_BYTES, d, magnitude);
+        ApplyNetDent(renderInfo, G(car), d, magnitude);
+    }
+    if (g_settings.logHits) Log("free roam: friend's car %08X: dents %u..%u made (epoch %u) in %.1f ms", car,
+                                s.next > first ? s.next : first, last, epoch, NowMs() - t0);
+    s.next = last;
+    s.any = true;
 }

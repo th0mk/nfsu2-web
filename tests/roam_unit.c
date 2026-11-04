@@ -367,6 +367,25 @@ static void t_roundtrip(void){
       CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_rating && d2.has_horn, "rating extension skipped as unknown");
       r2[n2 - 5] = RC_EXT_RATING; r2[n2 - 1] = 0x40;         /* a rating past 5000: none */
       CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_rating, "a rating past 5000 is none"); }
+    /* with the crash damage (RC_EXT_DAMAGE): its dents in extensions of RC_DMG_CHUNK, the newest that fit the room, the
+     * look's hash the same with them or without */
+    { rc_carcfg cp = cc, d2; cp.n_parts = 40; cp.has_horn = 1; cp.horn = 3;
+      uint8_t r2[RC_CFG_MAX], r3[RC_CFG_MAX]; int n3 = rc_carcfg_encode(&cp, r3, sizeof r3);
+      cp.dmg_epoch = 7; cp.dmg_first = 100; cp.dmg_n = 50;
+      for (int i = 0; i < 50 * RC_DMG_BYTES; i++) cp.dmg[i] = (uint8_t)(i * 13 + 5);
+      int n2 = rc_carcfg_encode(&cp, r2, sizeof r2);
+      CHECK(n2 == n3 + 3 * 5 + 50 * RC_DMG_BYTES, "car record with 50 dents: %d bytes", n2);
+      CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && d2.has_horn && d2.horn == 3 && d2.dmg_n == 50 && d2.dmg_epoch == 7 &&
+            d2.dmg_first == 100 && !memcmp(d2.dmg, cp.dmg, 50 * RC_DMG_BYTES), "damage extension round trip");
+      CHECK(rc_carcfg_look(r2, n2) && rc_carcfg_look(r2, n2) == rc_carcfg_look(r3, n3), "the look without the damage");
+      /* a room for 10 dents: the 10 newest */
+      n2 = rc_carcfg_encode(&cp, r2, n3 + 5 + 10 * RC_DMG_BYTES);
+      CHECK(n2 == n3 + 5 + 10 * RC_DMG_BYTES && rc_carcfg_decode(r2, n2, &d2) == RC_OK && d2.dmg_n == 10 && d2.dmg_first == 140 &&
+            !memcmp(d2.dmg, cp.dmg + 40 * RC_DMG_BYTES, 10 * RC_DMG_BYTES), "the newest dents that fit");
+      /* every part and the most dents: the record stays within RC_CFG_MAX */
+      cp.n_parts = RC_PART_SLOTS; cp.dmg_n = RC_DMG_MAX; n2 = rc_carcfg_encode(&cp, r2, sizeof r2);
+      CHECK(n2 > 0 && n2 <= RC_CFG_MAX && rc_carcfg_decode(r2, n2, &d2) == RC_OK && d2.dmg_n > 0 &&
+            d2.dmg_first == 100 + RC_DMG_MAX - d2.dmg_n, "a full record keeps the newest %d dents", d2.dmg_n); }
     CHECK(rc_carcfg_decode(rec, n, &c2) == RC_OK && c2.type_hash == cc.type_hash && !strcmp(c2.type_name, "350Z") && c2.n_parts == RC_PART_SLOTS &&
           !memcmp(c2.part, cc.part, sizeof cc.part), "car record round trip");
     /* record: version 1, type hash 4, name 16, ride bytes 4, count 1 = 26, then 9 per part */

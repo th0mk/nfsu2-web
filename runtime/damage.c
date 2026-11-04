@@ -27,6 +27,8 @@
  * damage, the health bar and "totaled", the career's saved damage and repairs, the
  * neon and the sounds.  The game's own repair (SetDamageToZero: a race's start, the
  * garage) takes the damage away.
+ * In free roam friends see the player's damage (RC_EXT_DAMAGE in the car record, roam_game.c): the player's dents
+ * are published (damage_net_*), and a friend's car gets the dents its player's record has.
  *   NFSU2_DAMAGE=0 turns it off; NFSU2_DAMAGE_LOG=1 logs every impact. */
 #include "cpu.h"
 #include "widescreen.h"           /* HOOK_SITE */
@@ -49,6 +51,9 @@ void dmg_body_draw(uint32_t model, uint32_t l2w);
 void dmg_marker_pre(int slot, uint32_t model, uint32_t l2w);
 void dmg_marker_post(void);
 void dmg_main_loop(void);
+uint32_t dmg_net_rev(void);
+int  dmg_net_mine(uint8_t *epoch, uint16_t *first, uint8_t *dents, int max);
+void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t first, int n, const uint8_t *dents);
 void dmg_car_textures(uint32_t used, uint32_t name);
 
 #define APPLY_IMPULSE   0x005a0b00u
@@ -133,6 +138,19 @@ int damage_hook(CPU *c, uint32_t ip){
         return 1;
     }
     return 0;
+}
+
+/* ---- free roam (roam_game.c through roam_host.h): friends see the damage ------- */
+/* the player's car's damage as published (+1 for each change), and its dents (RC_EXT_DAMAGE's) */
+uint32_t damage_net_rev(void){ return on() ? dmg_net_rev() : 0u; }
+int damage_net_mine(uint8_t *epoch, uint16_t *first, uint8_t *dents, int max){
+    return on() ? dmg_net_mine(epoch, first, dents, max) : 0;
+}
+/* slot k's friend's car (0: none shown) and the dents its player's record has: made on it */
+void damage_net_car(CPU *c, int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t first, int n, const uint8_t *dents){
+    if (!on()) return;
+    g_c = c;
+    dmg_net_car(k, car, peer, epoch, first, n, dents);
 }
 
 /* roam.c's main-loop hook, once a frame */

@@ -80,6 +80,19 @@
 #define RC_EXT_PERF      1
 #define RC_EXT_HORN      2          /* car-look record extension 2: the player's horn, 1 byte */
 #define RC_EXT_RATING    3          /* car-look record extension 3: the car's class (int8) and rating (u16), 3 bytes */
+/* car-look record extension 4 (any number of times, in order): the car's crash damage (damage.c), as the dents its
+ * owner's game made, oldest first, so that a friend's game makes the same ones on its copy of the car (the same parts,
+ * refined the same way, dented the same way: the same shape, the loose and lost parts, the broken lights and bent
+ * wheels that follow from them).  Each: the damage's epoch (u8: +1 at every repair), the number of its first dent in
+ * the car's dents since that repair (u16), then up to RC_DMG_CHUNK dents of RC_DMG_BYTES: where (3 x int16, mm, car
+ * space), the push (3 x int8, x 127), the depth (u8, of RC_DMG_DEPTH m) and the impact's strength (u8, impulse
+ * units).  The dents of one record follow each other; the oldest go first when they do not fit (RC_DMG_MAX, or the
+ * record's room).  A core before it skips the tag (and shows the car undamaged) */
+#define RC_EXT_DAMAGE    4
+#define RC_DMG_BYTES     11
+#define RC_DMG_CHUNK     22         /* dents per extension: (255 - 3) / RC_DMG_BYTES */
+#define RC_DMG_MAX       66         /* dents per record at most: 3 extensions */
+#define RC_DMG_DEPTH     0.25f      /* a dent's depth on the wire: u8 steps of this / 255 (m) */
 #define RC_DUEL_INBOX    16         /* DUEL messages held for the game side */
 #define RC_MAP_MAX       4096       /* entries per answer at most (the hub's nearest) */
 #define RC_MAPD_GONE     0x8000u    /* a MAPD entry's key (u16: the hub's slot of the player) with this: it went */
@@ -502,9 +515,18 @@ typedef struct {
      * rating, rounded): a remote car is built without its physics pass, so the others' games cannot rate it.  The
      * race lobby's card shows each car against ours (roam_game.c mp_rating) */
     uint8_t  has_rating; int8_t rating_cls; uint16_t rating;
+    /* extension 4 (RC_EXT_DAMAGE): the crash damage's dents, dmg_first .. dmg_first + dmg_n - 1 of epoch dmg_epoch
+     * (dmg_n 0: none, or a record from a core before it) */
+    uint8_t  dmg_epoch, dmg_n;
+    uint16_t dmg_first;
+    uint8_t  dmg[RC_DMG_MAX * RC_DMG_BYTES];
 } rc_carcfg;
+/* the encoder leaves out the oldest dents that do not fit cap (dmg_first moves on) */
 int rc_carcfg_encode(const rc_carcfg *c, uint8_t *out, int cap);   /* bytes, or -1 */
 int rc_carcfg_decode(const uint8_t *p, int len, rc_carcfg *c);     /* RC_OK / RC_E_* */
+/* a hash of the record as the car looks without its damage (0 when it cannot be read): a new record whose look is the
+ * same needs no new load, only its damage */
+uint32_t rc_carcfg_look(const uint8_t *p, int len);
 
 /* ---- interpolation ---------------------------------------------------------- */
 typedef struct {

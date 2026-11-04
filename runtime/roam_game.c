@@ -457,7 +457,9 @@ typedef struct {
     uint32_t h_orig;                          /* a car of our own: its first ride (an opponent's copy) */
     int      have_orig, activated;
     uint32_t cfg_gen;  int pending_cfg;       /* the record the car shows / one waiting */
-    uint32_t look;                            /* hash of the record the car shows (0: none) */
+    uint32_t look;                            /* hash of the record the car shows, its damage left out (rec_look; 0: none) */
+    /* the crash damage of the record the car shows (RC_EXT_DAMAGE: damage_peers makes it on the car) */
+    uint8_t  dmg_epoch; uint16_t dmg_first; int dmg_n; uint8_t dmg[RC_DMG_MAX * RC_DMG_BYTES];
     int64_t  load_t0, load_wait; long load_f0;    /* load_wait: how long the load may take (loads_waiting) */
     int      hidden;
     int      paused;                          /* the friend is paused (for a second now): so says the name over the car */
@@ -725,6 +727,19 @@ static int car_state(uint32_t car, rc_state *s, int horn, uint8_t *thumps, int *
     return 1;
 }
 static int local_state(rc_state *s){ return car_state(player_car(), s, g_horn, &g_thumps, &g_landed, rh_showoff_mine()); }
+/* the look of a car record, its crash damage left out: a record with new damage but the same look needs no new load */
+static uint32_t rec_look(const uint8_t *cfg, int len){
+    uint32_t h = rc_carcfg_look(cfg, len);
+    return h ? h : rc_fnv1a_bytes(cfg, (uint32_t)len);
+}
+/* the crash damage a slot's car is to show, from its record */
+static void slot_damage(Slot *s, const uint8_t *cfg, int len){
+    static rc_carcfg dc;
+    s->dmg_n = 0;
+    if (rc_carcfg_decode(cfg, len, &dc) != RC_OK || !dc.dmg_n) return;
+    s->dmg_epoch = dc.dmg_epoch; s->dmg_first = dc.dmg_first; s->dmg_n = dc.dmg_n;
+    memcpy(s->dmg, dc.dmg, (size_t)dc.dmg_n * RC_DMG_BYTES);
+}
 /* the car look: type name hash and one (slot, key, owner) per filled part
  * slot of the car's RideInfo (player 1's: its drift setup and its horn; player 2's, co-op: the ride's own, no horn) */
 #if MPRACES
@@ -755,6 +770,8 @@ static int car_cfg(uint32_t car, int mine, uint8_t *out, int cap, char *tname){
     cfg_rating(car, &c);                             /* the car as the game rates it (the others' games cannot: RC_EXT_RATING) */
     int horn = mine ? rh_horn_mine() : -1;           /* the horn the others hear from this car */
     if (horn >= 0){ c.has_horn = 1; c.horn = (uint8_t)horn; }
+    /* the crash damage's dents (damage.c), for friends to make on their copy of the car (player 1's car only) */
+    if (mine) c.dmg_n = (uint8_t)rh_damage_mine(&c.dmg_epoch, &c.dmg_first, c.dmg, RC_DMG_MAX);
     for (uint32_t sl = 0; sl < RC_PART_SLOTS; sl++){
         uint32_t part = MR32(ride + 0x590u + 4u * sl);
         if (!part || !ok(part, 0xe)) continue;
@@ -2027,7 +2044,8 @@ static int begin_load(CPU *c, int k, const uint8_t *cfg, int len, uint32_t gen){
     roam_texlist_engine = 0;
     uint32_t a2[2] = { 0, 0 }; rh_call(c, FN_LOADER_SERVICE, G_CARLOADER, 0, 2, a2);
     s->load_t0 = roam_plat_now_us(); s->load_f0 = rh_frame(); s->pending_cfg = 1; s->cfg_gen = gen;
-    s->look = rc_fnv1a_bytes(cfg, (uint32_t)len);
+    s->look = rec_look(cfg, len);
+    slot_damage(s, cfg, len);
     snprintf(s->carname, sizeof s->carname, "%s", cc.type_name);
     s->loads++;
     rlog("[roam] f=%ld slot %d: loading %s's %s (%u parts, skin %u, handle 0x%x)\n", rh_frame(), k, s->name,
@@ -4566,6 +4584,15 @@ static void showoff_peers(CPU *c){
     for (int k = 0; k < NSLOT; k++){
         uint32_t car = g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
         rh_showoff_car(c, k, ok(car, 0x9e0) ? car : 0, open[k]);
+    }
+}
+/* friends' crash damage (damage.c): each shown car gets the dents its player's record has; damage.c makes only those it
+ * has not made yet (one car's a frame), and takes them off a car that goes to another player */
+static void damage_peers(CPU *c){
+    for (int k = 0; k < NSLOT; k++){
+        const Slot *s = &g_sl[k];
+        uint32_t car = s->st == SL_ACTIVE && !s->hidden ? s->car : 0;
+        rh_damage_car(c, k, ok(car, 0x9e0) ? car : 0, s->peer_id, s->dmg_epoch, s->dmg_first, s->dmg_n, s->dmg);
     }
 }
 /* friends' headlights (lightkey.c): off (RC_BIT_DARK) or on high beam (the extension's RC_OPEN_HIBEAM), each shown
@@ -8828,6 +8855,7 @@ static void assign(CPU *c, int64_t host){
         memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode);
         if (reuse){
             s->st = SL_ACTIVE; s->cfg_gen = v->cfg_gen; s->hidden = 1; g_acquires++; g_reuses++;
+            slot_damage(s, v->cfg, v->cfg_len);
             set_name(s);
             rlog("[roam] f=%ld slot %d for %s, %.0f m away: the parked %s already wears this look\n", rh_frame(), k,
                     s->name, (double)v->dist, s->carname);
@@ -9436,7 +9464,9 @@ void roam_game_frame(CPU *c){
     if (have_ls && (!O.collide || g_pass.me)) ls.bits |= RC_BIT_PASS;
     if (have_ls && g_du.busy) ls.bits |= RC_BIT_BUSY;
     uint8_t cfgb[RC_CFG_MAX]; int cfgn = 0; char tname[RC_CFG_TYPE_NAME + 1] = {0};
-    if (in_roam && host >= g_cfg_next){ cfgn = local_cfg(cfgb, sizeof cfgb, tname); g_cfg_next = host + 5000000; }
+    static uint32_t dmg_rev;
+    uint32_t dr = rh_damage_rev();
+    if (in_roam && (host >= g_cfg_next || dr != dmg_rev)){ cfgn = local_cfg(cfgb, sizeof cfgb, tname); g_cfg_next = host + 5000000; dmg_rev = dr; }
     if (have_ls){
         if (g_lp_ok){
             float dx = ls.p[0] - g_lp[0], dy = ls.p[1] - g_lp[1], dz = ls.p[2] - g_lp[2];
@@ -9530,7 +9560,7 @@ void roam_game_frame(CPU *c){
             if (slotted >= 0){ g_sl[slotted].crew = v->crew; g_sl[slotted].friend = rc_peer_friend(ses, i) != 0; }
             /* the record only when a slot will need it */
             if (p->cfg_len && (slotted < 0 || g_sl[slotted].cfg_gen != p->cfg_gen)){
-                memcpy(v->cfg, p->cfg, (size_t)p->cfg_len); v->cfg_len = p->cfg_len; v->look = rc_fnv1a_bytes(p->cfg, (uint32_t)p->cfg_len); }
+                memcpy(v->cfg, p->cfg, (size_t)p->cfg_len); v->cfg_len = p->cfg_len; v->look = rec_look(p->cfg, p->cfg_len); }
             /* their horn: the record's (read once a record), the dual one without */
             if (g_phorn[gi].id != p->id || g_phorn[gi].gen != p->cfg_gen){
                 static rc_carcfg hc;
@@ -9632,6 +9662,9 @@ void roam_game_frame(CPU *c){
                 continue;
             }
             if (!ok(s->car, 0x9e0)) continue;
+            /* a new record of the same look (its crash damage changed): no load, only the damage */
+            if (!s->h_new && v->cfg_len > 0 && v->cfg_gen != s->cfg_gen && v->look && v->look == s->look){
+                s->cfg_gen = v->cfg_gen; slot_damage(s, v->cfg, v->cfg_len); }
             /* a new look: load it while the old one stays on */
             if (!s->h_new && v->cfg_len > 0 && v->cfg_gen != s->cfg_gen && g_heavy < HEAVY_PER_FRAME && load_may_start(c)
                 && begin_load(c, k, v->cfg, v->cfg_len, v->cfg_gen))
@@ -9721,6 +9754,7 @@ void roam_game_frame(CPU *c){
     sounds_update(have_ls ? &ls : 0, world_runs);
     showoff_peers(c);
     lights_peers();
+    damage_peers(c);
     if (g_poselog && have_ls){
         uint32_t me = player_car();
         rh_fprintf(g_poselog, "L,%lld,%.0f,%08x,%.4f,%.4f,%.4f,%.3f,0,0,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", (long long)host, g_sync, g_s.conf.self_id,
