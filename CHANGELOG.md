@@ -11,7 +11,7 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-04 (b1aa699)
+## 2026-11-04 (af448e5)
 
 - **Races:** other players' cars come straight from their games every frame; close ones drive on the game's physics and bump back.
 - **Headlights:** G turns them off or on, hold it for high beam; friends see them.
@@ -30,6 +30,7 @@ not guessed.
 - **Horns:** follow the game's Master Volume.
 - **Start page:** plainer error messages.
 - **Free roam:** fewer error 134 crashes in a crowded free roam; on a computer the game has more memory for it.
+- **Firefox:** the game no longer stops with a graphics error a few seconds after Play.
 
 ## 2026-11-03 (a5892ba)
 
