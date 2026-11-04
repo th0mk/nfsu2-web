@@ -300,10 +300,12 @@ context lists every problem the developer has a report on, with its first thread
   (in tlsf_alloc < gbuf_alloc while friends' cars load, or in sub_00401aa0 on a race's loading screen). The game's
   512 MB of memory runs short on the way back into a crowded free roam: its freed memory came back in pieces too
   small for its next big load (better since d28b0b03), and the textures the game had let go waited to be released
-  while the friends' cars' new ones came in (since 8ddeacb8 they go at once: the peak on a trip back about 80 MB
-  lower in tests). Since 8ddad1c9 a block freed twice no longer damages the game's memory. All only once the live
-  version has those commits; no setting avoids it for sure before. With them the log says what holds the memory
-  (`[heap] no room for ...` lines) and names anything freed twice (`DOUBLE FREE` lines): escalate such a log.
+  while the friends' cars' new ones came in (since 8ddeacb8 they go within a few frames: the peak on a trip back
+  50-80 MB lower in tests). Since 8ddad1c9 a block freed twice no longer damages the game's memory, and since
+  216569ab a texture the memory has no room for no longer writes over other memory (`[com] no memory for ... Lock
+  buffer` and `scratch area` lines: the memory was that full). All only once the live version has those commits; no
+  setting avoids it for sure before. With them the log says what holds the memory (`[heap] no room for ...` lines)
+  and names anything freed twice (`DOUBLE FREE` lines): escalate such a log.
 - Free roam: the world's loading screen, or roads missing, while driving among many players (seconds on a PC, half a
   minute on a phone; once it never ended). Cause found on 29 October: the game loads no part of the city while it
   loads a player's car, and with players coming and going their cars load one after another, so the city waited for
