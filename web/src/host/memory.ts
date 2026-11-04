@@ -17,12 +17,20 @@
 // initial size, so a smaller start that was to grow could not.
 
 const MAX_PAGES = 65536;                    // 4 GB
+// The guest heap's window above the runtime, up to 2 GB (runtime/guest_span.h GWIN_HI): asked for first on a computer
+// (app/device.ts heapWindow, NFSU2_HEAP_WINDOW=1), and the game uses it only if the memory is that large at its start.
+// Elsewhere, or where the browser refuses it, the tries of before, unchanged.
+export const WINDOW_PAGES = 32768;
 
-export interface MemoryTry { initial: number; maximum: number }
+/** optional: the guest heap's window's try, which any refusal passes over (Firefox reports a memory it could not
+ *  commit as "out of memory", not a RangeError); a TypeError (no shared memory at all) still stops */
+export interface MemoryTry { initial: number; maximum: number; optional?: boolean }
 
-/** The sizes to try, best first: initial = the build's pages (game.json "pages") */
-export function memoryTries(initial: number): MemoryTry[] {
-  return [{ initial, maximum: MAX_PAGES }, { initial, maximum: initial }];
+/** The sizes to try, best first: initial = the build's pages (game.json "pages"); window: 2 GB first (the guest
+ *  heap's window) */
+export function memoryTries(initial: number, window = false): MemoryTry[] {
+  const plain = [{ initial, maximum: MAX_PAGES }, { initial, maximum: initial }];
+  return window && initial < WINDOW_PAGES ? [{ initial: WINDOW_PAGES, maximum: MAX_PAGES, optional: true }, ...plain] : plain;
 }
 
 /** what a try was, for the log: "1024 MB, up to 4096 MB" */
@@ -34,7 +42,7 @@ export function sizeText(t: MemoryTry): string {
 /** The first of the tries the browser gives, and a line for the log saying which (and what it refused before it).
  *  Throws the last refusal when it gives none, with the log's line as its note.  make: the constructor (tests pass
  *  their own). */
-export function allocMemory(tries: MemoryTry[], make = (t: MemoryTry) => new WebAssembly.Memory({ ...t, shared: true })):
+export function allocMemory(tries: MemoryTry[], make = (t: MemoryTry) => new WebAssembly.Memory({ initial: t.initial, maximum: t.maximum, shared: true })):
     { memory: WebAssembly.Memory; note: string } {
   const refused: string[] = [];
   let last: unknown = null;
@@ -46,9 +54,10 @@ export function allocMemory(tries: MemoryTry[], make = (t: MemoryTry) => new Web
         : `[memory] ${sizeText(t)}`;
       return { memory, note };
     } catch (e) {
-      // anything but "too much" (a TypeError: no shared memory at all) is not a size question
-      if (!(e instanceof RangeError)) throw e;
-      refused.push(`${sizeText(t)} (${e.message})`);
+      // anything but "too much" (a TypeError: no shared memory at all) is not a size question; the window's try
+      // passes over any other refusal
+      if (!(e instanceof RangeError) && !(t.optional && !(e instanceof TypeError))) throw e;
+      refused.push(`${sizeText(t)} (${e instanceof Error ? e.message : String(e)})`);
       last = e;
     }
   }

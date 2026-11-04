@@ -7,6 +7,7 @@
  *   2) visited set: each node at most once per top-level walk
  * That way the walk terminates and the game can make progress.            */
 #include "cpu.h"
+#include "guest_span.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -29,10 +30,16 @@ static CPU *g_guard_cpu = 0;
 #define HEAP_HI 0x2F000000u
 #endif
 
-/* Find the heap block that contains a guest address (header: +0 size, +4 signature) */
+/* Find the heap block that contains a guest address (header: +0 size, +4 signature); on wasm also in the guest
+ * heap's window above the runtime (guest_span.h), whose blocks start in it */
 static int block_of(uint32_t addr, uint32_t *ubeg, uint32_t *uend){
+    uint32_t lo = HEAP_LO;
+#ifdef __wasm__
+    if (g_gwin_hi && addr >= g_gwin_lo && addr < g_gwin_hi) lo = g_gwin_lo;
+    else
+#endif
     if (addr < HEAP_LO || addr >= HEAP_HI) return 0;
-    for (uint32_t p = (addr & ~15u); p >= HEAP_LO; p -= 16u){
+    for (uint32_t p = (addr & ~15u); p >= lo; p -= 16u){
         if (!mem_is_committed(p+4)) return 0;
         if (MR32(p+4) == 0xA110C8EDu){
             uint32_t sz = MR32(p), beg = p + 16u, end = beg + sz;

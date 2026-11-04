@@ -46,6 +46,21 @@ export function deviceKind(): 'phone' | 'tablet' | 'pc' {
   return isPhone() ? 'phone' : touchFirst() ? 'tablet' : 'pc';
 }
 
+/** The guest heap's window (runtime/guest_span.h): the game's memory 2 GB from the start, 768 MB more of it for the
+ *  game's own heap than its 512 MB, which a crowded free roam fills on its trips out and back (450-507 MB measured,
+ *  2026-11-04).  On a computer only: a phone's or tablet's Chrome for Android is a 32-bit program on most such devices
+ *  and sets aside 1 GB at most (host/memory.ts), and Safari keeps every buffer in one area that a few large memories
+ *  use up (WebKit bug 269937).  Not where the browser says the device has less than 8 GB (Chrome and Edge say 8 at
+ *  most; Firefox says nothing): the memory counts against the computer's commit limit on Windows. */
+export function heapWindow(kind = deviceKind(), ua = navigator.userAgent,
+                           memoryGB = (navigator as unknown as { deviceMemory?: number }).deviceMemory,
+                           platform = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform): boolean {
+  const safari = /AppleWebKit\//.test(ua) && !/Chrome\/|Chromium\/|Firefox\//.test(ua);
+  // (an Android tablet with a mouse, or a phone on a desktop screen (DeX), reads as a computer: its platform says Android)
+  const android = platform === 'Android' || /Android/.test(ua);
+  return kind === 'pc' && !safari && !android && (memoryGB === undefined || memoryGB >= 8);
+}
+
 /** the render check's verdict on this phone: in this browser only, like the other device defaults (settings.ini,
  *  and with it the cloud saves, never has it) */
 const RENDER_KEY = 'nfsu2.device.render';
