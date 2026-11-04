@@ -1788,8 +1788,11 @@ int splitscreen_hook(CPU *c, uint32_t ip){
     }
     if (ip == 0x51b0b0u && split_coop_hud() && MR32(c->esp + 16) == 0){
         /* co-op: a full-screen HUD (640x480, centred units) into its half: s times as big, an element left or right
-         * of the middle kept on that screen edge, one above the middle at the half's top, one below at its bottom */
+         * of the middle kept on that screen edge, one above the middle at the half's top, one below at its bottom
+         * (the names over online players' cars are placed in their half already: roam_game.c) */
         uint32_t data = MR32(c->esp + 4);
+        int roam_game_placed(uint32_t data);
+        if (roam_game_placed(data)) return 1;
         for (unsigned i = 0; data && i < split_hud_data_count; ++i) if (split_hud_data[i].data == data){
             uint32_t copy = 0x00d08000u + (split_hud_copy++ & 15) * 0x50;
             memcpy(g_mem + copy, g_mem + data, 0x50);

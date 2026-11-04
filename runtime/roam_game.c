@@ -2299,7 +2299,10 @@ static void push_pose(Slot *s, rc_pose *P, int64_t newest, int64_t rt, float dt)
 #define TAG_MPN         4
 #define TAG_ALL         (TAG_N + 1 + TAG_MPN)
 #define TAG_DUEL_MAX    120
-static struct { uint32_t hud, obj[TAG_ALL]; uint8_t looked[TAG_ALL], shown[TAG_ALL], alpha[TAG_ALL]; char text[TAG_ALL][TAG_DUEL_MAX]; uint32_t rgb[TAG_ALL]; } g_tag;
+/* the names' objects in a HUD; co-op free roam has a set for each player's (its half of the screen) */
+typedef struct { uint32_t hud, obj[TAG_ALL]; uint8_t looked[TAG_ALL], shown[TAG_ALL], alpha[TAG_ALL]; char text[TAG_ALL][TAG_DUEL_MAX]; uint32_t rgb[TAG_ALL]; } TagSet;
+static TagSet g_tags[2], *g_tagp = &g_tags[0];
+#define g_tag (*g_tagp)
 static void gstr(uint32_t a, const char *s, uint32_t cap){
     uint32_t i = 0;
     for (; s[i] && i + 1 < cap; i++) MR8(a + i) = (uint8_t)s[i];
@@ -2468,8 +2471,14 @@ static void tag_text(CPU *c, int k, uint32_t obj, const char *name){ tag_text_rg
 /* the HUD's package is the top one: no screen over it (the world map, the
  * pause menu, a message), which hides the HUD's own parts but not ours */
 #define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package (GetTopPackage 0x50C8E0), +0xC its name */
+#if COOP
+uint32_t coop_fe_top(uint32_t fe_manager);   /* coop.c: the top package as player 1 sees it (player 2's HUD skipped) */
+#endif
 static int hud_on_top(uint32_t pkg){
     uint32_t fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? rd32(mg + 0xe4u) : 0;
+#if COOP
+    if (mg) top = coop_fe_top(mg);
+#endif
     char a[40], b[40];
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(pkg, b, sizeof b);
     return a[0] && !strcasecmp(a, b);
@@ -2616,7 +2625,9 @@ static uint32_t flag_texture(CPU *c, int i){
 }
 /* each name's image for its flag, made (or looked up) once per HUD: a copy of the package's first image, which is
  * off the screen and not in a group, its turn, pivot and texture corners as a flag needs them */
-static struct { uint32_t hud, like, obj[TAG_N]; uint8_t looked[TAG_N], shown[TAG_N], alpha[TAG_N]; uint32_t tex[TAG_N]; int said; } g_fl;
+typedef struct { uint32_t hud, like, obj[TAG_N]; uint8_t looked[TAG_N], shown[TAG_N], alpha[TAG_N]; uint32_t tex[TAG_N]; int said; } FlagSet;
+static FlagSet g_fls[2], *g_flp = &g_fls[0];
+#define g_fl (*g_flp)
 static uint32_t flag_obj(CPU *c, int k, uint32_t pkg){
     if (g_fl.looked[k]) return g_fl.obj[k];
     g_fl.looked[k] = 1;
@@ -2739,10 +2750,33 @@ static void view_eye(uint32_t cam, float *e, float *f){
 #endif
 }
 static long g_tag_self = -9;       /* photo mode's frame of the names (roam_game_names): the player's own too */
-static uint8_t g_tag_was[NSLOT + 1];   /* by car (g_sl, NSLOT the player's own): its name shown the frame before */
-static void tags_update(CPU *c){
-    uint32_t pl = rd32(G_PLAYER1), hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0;
+static uint8_t g_tag_was_s[2][NSLOT + 1];   /* by car (g_sl, NSLOT the player's own): its name shown the frame before */
+static int g_tag_seat;                       /* the pass: 0 player 1's view and HUD, 1 co-op player 2's */
+#define g_tag_was (g_tag_was_s[g_tag_seat])
+#if COOP
+uint32_t coop_player(void);                  /* coop.c: player 2's Player (0 none) */
+#define G_VIEW2         0x00832ec0u          /* eView 2: co-op player 2's */
+#endif
+static void tags_update_seat(CPU *c);
+/* the names for player 1's view (seat 0) or co-op player 2's (seat 1: its HUD, its view, the screen's lower half) */
+static void tags_update_for(CPU *c, int seat){
+    g_tag_seat = seat; g_tagp = &g_tags[seat]; g_flp = &g_fls[seat];
+    tags_update_seat(c);
+    g_tag_seat = 0; g_tagp = &g_tags[0]; g_flp = &g_fls[0];
+}
+static void tags_update(CPU *c){ tags_update_for(c, 0); }
+static void tags_update_seat(CPU *c){
+    int seat = g_tag_seat;
+    uint32_t pl = rd32(G_PLAYER1), view = G_VIEW1, p1hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0;
+    int halves = 0;                          /* co-op: two views, each name in its view's half (the HUD's size there) */
+#if COOP
+    uint32_t p2 = coop_player();
+    halves = p2 != 0;
+    if (seat){ pl = p2; view = G_VIEW2; }
+#endif
+    uint32_t hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0;
     uint32_t pkg = hud && ok(hud, 0x14) ? rd32(hud + 0x10u) : 0;
+    uint32_t p1pkg = p1hud && ok(p1hud, 0x14) ? rd32(p1hud + 0x10u) : 0;
     if (hud != g_tag.hud){                          /* another HUD: its own objects (the old ones went with it) */
         memset(&g_tag, 0, sizeof g_tag);
         g_tag.hud = hud;
@@ -2752,8 +2786,8 @@ static void tags_update(CPU *c){
     g_flag_new = 0;
 #endif
     if (!hud || !ok(pkg, 0x20) || !g_gmem) return;
-    uint32_t cam = rd32(G_VIEW1 + 0x40u);
-    int on = O.labels && g_in_roam && MR8(G_SHOW_NAMES) && ok(cam, 0x60) && hud_on_top(pkg);
+    uint32_t cam = rd32(view + 0x40u);
+    int on = O.labels && g_in_roam && MR8(G_SHOW_NAMES) && ok(cam, 0x60) && hud_on_top(p1pkg);
     /* the cars a name can show on: in front of the camera, on the screen and
      * within TAG_FADE_M (photo mode, or one who said something: TAG_NEAR_M; a
      * crew's or friend's at any distance), in their order: crews' and
@@ -2764,7 +2798,7 @@ static void tags_update(CPU *c){
     int n = 0;
     Slot self = { 0 };                              /* (k == NSLOT) */
     int photo = rh_frame() - g_tag_self <= 1;
-    int with_self = photo && O.name[0] && ok(player_car(), 0x9e0);
+    int with_self = !seat && photo && O.name[0] && ok(player_car(), 0x9e0);
     float E[3] = { 0 }, F[3] = { 0 };
     if (on) view_eye(cam, E, F);
     if (with_self){ snprintf(self.name, sizeof self.name, "%s", O.name); self.car = player_car(); }
@@ -2783,7 +2817,7 @@ static void tags_update(CPU *c){
         if (ahead < 0.f || !(d2 > 0.f) || !(s->crew || k == NSLOT || d2 < (says ? TAG_NEAR_M * TAG_NEAR_M : lim * lim))) continue;
         uint32_t in = gvec(g_gmem + TAG_SCR, u[0] * 1.7f + p[0], u[1] * 1.7f + p[1], u[2] * 1.7f + p[2]);
         uint32_t out = g_gmem + TAG_SCR + 0x10u, av[2] = { out, in };
-        rh_call(c, FN_VIEW_SCREEN, G_VIEW1, 0, 2, av);
+        rh_call(c, FN_VIEW_SCREEN, view, 0, 2, av);
         float x = MRF32(out), y = MRF32(out + 4u), z = MRF32(out + 8u);
         float w = (float)(int32_t)MR32(G_VIEW_W), h = (float)(int32_t)MR32(G_VIEW_H);
         if (!(z > 0.f) || !(x >= 0.f) || !(x <= w) || !(y >= 0.f) || !(y <= h)) continue;
@@ -2791,7 +2825,9 @@ static void tags_update(CPU *c){
         float key = g_tag_was[k] ? d2 * (0.85f * 0.85f) : d2;
         int j = n++;
         for (; j > 0 && (t[j - 1].tier > tier || (t[j - 1].tier == tier && t[j - 1].key > key)); j--) t[j] = t[j - 1];
-        t[j].k = k; t[j].tier = tier; t[j].was = g_tag_was[k]; t[j].d2 = d2; t[j].key = key; t[j].hx = x / w * 640.f; t[j].hy = y / h * 480.f; t[j].z = z;
+        float hy = y / h * 480.f;
+        if (halves) hy = (seat ? 240.f : 0.f) + hy * 0.5f;    /* (each view draws in its half, full width) */
+        t[j].k = k; t[j].tier = tier; t[j].was = g_tag_was[k]; t[j].d2 = d2; t[j].key = key; t[j].hx = x / w * 640.f; t[j].hy = hy; t[j].z = z;
     }
     /* each in that order where it covers no name placed before it (the boxes
      * in HUD units, as the names are drawn): TAG_N at most */
@@ -2804,6 +2840,7 @@ static void tags_update(CPU *c){
         float sc = 25.f / d;
         if (sc < 0.5f) sc = 0.5f;
         if (sc > 1.f) sc = 1.f;
+        if (halves) sc *= 0.7f;                               /* as the HUD in a half (splitscreen.c) */
         float a = t[q].tier < 2 || photo || d <= TAG_FULL_M ? 1.f : (TAG_FADE_M - d) / (TAG_FADE_M - TAG_FULL_M);
         if (a < 0.06f) continue;
         char tx[TAG_TEXT_MAX];
@@ -2857,6 +2894,7 @@ static void tags_update(CPU *c){
 #endif
     (void)put;                                      /* (the Windows plugin's: no quick chat) */
 #if SAYS
+    if (seat) return;                               /* (co-op's player 2 has no quick chat of its own) */
     /* quick chat: where the names of those who said something lately are (the page's lines go over them), and the
      * player's own line over their car, which has no name: just over its roof (1.2 m up; a friend's name is at 1.7),
      * unless the camera is in or right behind the car */
@@ -2882,7 +2920,7 @@ static void tags_update(CPU *c){
         float x = MRF32(out), y = MRF32(out + 4u), z = MRF32(out + 8u);
         float w = (float)(int32_t)MR32(G_VIEW_W), h = (float)(int32_t)MR32(G_VIEW_H);
         if (ahead > 2.f && z > 0.f && x >= 0.f && x <= w && y >= 0.f && y <= h){
-            mid[nm] = g_s.conf.self_id; mxy[3 * nm] = x / w; mxy[3 * nm + 1] = y / h; mxy[3 * nm + 2] = 1.f; nm++; }
+            mid[nm] = g_s.conf.self_id; mxy[3 * nm] = x / w; mxy[3 * nm + 1] = halves ? y / h * 0.5f : y / h; mxy[3 * nm + 2] = 1.f; nm++; }
     }
     if (nm) roam_plat_say_marks(mid, mxy, nm);
 #endif
@@ -6825,6 +6863,9 @@ static void mp_labels(CPU *c){
         float w = (float)(int32_t)MR32(G_VIEW_W), h = (float)(int32_t)MR32(G_VIEW_H);
         if (!(z > 0.f) || !(x >= 0.f) || !(x <= w) || !(y >= 0.f) || !(y <= h)) continue;
         L[i].sx = x / w * 640.f; L[i].sy = y / h * 480.f; L[i].sz = z;
+#if COOP
+        if (coop_player()) L[i].sy *= 0.5f;          /* co-op: player 1's view is the screen's upper half */
+#endif
         __typeof__(L[0]) e = L[i];                  /* (m <= i: the ones before m are on the screen, sorted) */
         int j = m++;
         for (; j > 0 && L[j - 1].d2 > e.d2; j--) L[j] = L[j - 1];
@@ -6843,6 +6884,9 @@ static void mp_labels(CPU *c){
         float sc = 60.f / rc_sqrtf(L[k].d2 + 1.f);
         if (sc < 0.55f) sc = 0.55f;
         if (sc > 1.f) sc = 1.f;
+#if COOP
+        if (coop_player()) sc *= 0.7f;               /* as the HUD in a half (splitscreen.c) */
+#endif
         uint32_t as[2] = { gvec(g_gmem + TAG_SCR + 0x30u, sc, sc, 1.f), 0 };
         rh_call(c, FN_FE_SCALE, obj, 0, 2, as);
         gcall1(c, FN_FE_SHOW, 0, obj);
@@ -9080,6 +9124,10 @@ void roam_game_frame(CPU *c){
 void roam_game_hud(CPU *c){
     if (!O.on || !g_net_ok) return;
     uint64_t t0 = rh_ns();
+#if COOP
+    /* each Player's HUD step comes here (esi the Player): co-op player 2's places its names in its own half */
+    if (c->esi && c->esi == coop_player()){ tags_update_for(c, 1); g_cost_hud += rh_ns() - t0; return; }
+#endif
     tags_update(c);
     if (DUELS) du_hud(c, roam_plat_now_us());
 #if MPRACES
@@ -9088,6 +9136,24 @@ void roam_game_hud(CPU *c){
     g_cost_hud += rh_ns() - t0;
 }
 
+/* splitscreen.c: an object the names put where they are (its FE data): the co-op HUD mapping leaves it there */
+int roam_game_placed(uint32_t data){
+    if (!data) return 0;
+    for (int s2 = 0; s2 < 2; s2++){
+        for (int k = 0; k < TAG_ALL; k++){
+            if (k == TAG_DUEL) continue;              /* (the outrun's line: the HUD's, mapped with it) */
+            uint32_t o = g_tags[s2].obj[k];
+            if (o && ok(o, 0x30) && MR32(o + 0x2cu) == data) return 1;
+        }
+#if FLAGS
+        for (int k = 0; k < TAG_N; k++){
+            uint32_t o = g_fls[s2].obj[k];
+            if (o && ok(o, 0x30) && MR32(o + 0x2cu) == data) return 1;
+        }
+#endif
+    }
+    return 0;
+}
 /* photo mode (photo.c): whether friends' names can show here, and the names over their cars, and the player's own over
  * theirs, placed for photo mode's camera (its frame of the front end, which draws them alone): the FE objects shown */
 int roam_game_names_here(void){ return O.on && g_net_ok && O.labels && g_in_roam && MR8(G_SHOW_NAMES); }
