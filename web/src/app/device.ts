@@ -36,8 +36,8 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  about 7 us a frame on a busy Ryzen 5900X, a phone's several times that). */
 export function deviceDefaults(): Record<string, string> {
   const kind = deviceKind();
-  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048' };
-  if (kind === 'tablet') return { roam_max_cars: '24' };
+  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off' };
+  if (kind === 'tablet') return { roam_max_cars: '24', coop: 'off' };
   return {};
 }
 

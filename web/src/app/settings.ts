@@ -97,6 +97,7 @@ export const KEYS: readonly KeyDef[] = [
   // game controller
   { key: 'gamepad', env: 'NFSU2_PAD', kind: 'enum', vals: 'on|off|hotplug', scope: 'web', device: true },
   { key: 'rumble', env: 'NFSU2_FF', kind: 'bool', scope: 'web', device: true },
+  { key: 'coop', env: 'NFSU2_COOP', kind: 'bool', scope: 'web', device: true },
   { key: 'gamepad_deadzone', env: 'NFSU2_PAD_DEADZONE', kind: 'num', scope: 'web', device: true },
   { key: 'gamepad_trigger_deadzone', env: 'NFSU2_PAD_TRIGGER_DEADZONE', kind: 'num', scope: 'web', device: true },
   { key: 'gamepad_trigger_click', env: 'NFSU2_PAD_TRIGGER_CLICK', kind: 'num', scope: 'web', device: true },
@@ -453,6 +454,10 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]
 #roam_max_players = 49
 #roam_max_cars = 32
+# Co-op free roam: the pause menu's Add Player 2 (a second player on half of
+# the screen, with a controller or the keyboard's left half).  On computers;
+# off on phones and tablets.  [NFSU2_COOP]
+#coop = on
 # Other players marked on the world map at once (0 to 4096, the nearest; 2048
 # on phones).  [NFSU2_ROAM_MAP_MAX]
 #roam_map_max = 4096

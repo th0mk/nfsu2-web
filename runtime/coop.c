@@ -586,6 +586,9 @@ uint32_t gamepad_local_join_stamp(unsigned seat);
 /* photo.c: the pause menu is being made: our item goes in (free roam's career only) */
 void coop_item(CPU *c, uint32_t menu){
     if (MR32(G_GAMEMODE) != 1u || MR32(G_RACEPARAMS + 0x10u) != 0u) return;
+    /* NFSU2_COOP (settings.ini coop): off on phones and tablets (the page's device defaults: one touch screen) */
+    const char *e = getenv("NFSU2_COOP");
+    if (e && (e[0] == '0' || !strcasecmp(e, "off") || !strcasecmp(e, "no") || !strcasecmp(e, "false"))) return;
     coop_texts(c);
     uint32_t n = ITEM_BYTES, it = call(c, FN_NEW, 0, 0, 1, &n);
     if (!it) return;
