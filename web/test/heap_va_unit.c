@@ -25,7 +25,8 @@
  *   reserve   with the heaps' segments given back, 1.4 MB blocks filling the
  *             window leave the last segment's room (they take the rest of
  *             the room kept, a last resort), counted outside the kept holes;
- *             a 16 MB block may have it
+ *             a 16 MB block may have it; 0x5CE170's texture buffer gets the
+ *             scratch area when the heap has no room
  *   holes     a hole whose big block never comes back is kept ten minutes
  *             only; a block taking part of one of eight holes keeps the other
  *             seven (the oldest went although a slot was free); the pieces of
@@ -64,11 +65,12 @@ static int fails = 0;
 
 /* a Win32 heap call as the import bridge makes it: stdcall arguments at esp */
 #define STK 0x00E0F000u
+static uint32_t g_eip = 0x00401000u;                   /* the caller (its site) */
 static uint32_t call(const char *fn, int n, const uint32_t *a){
     static CPU c;
     c.esp = STK;
     for (int i = n - 1; i >= 0; i--){ c.esp -= 4; MR32(c.esp) = a[i]; }
-    c.eip = 0x00401000u;
+    c.eip = g_eip;
     return heap_api(&c, heap_api_kind(fn));
 }
 #define H(fn, ...) ({ uint32_t _a[] = { __VA_ARGS__ }; call(fn, (int)(sizeof _a / 4), _a); })
@@ -263,6 +265,11 @@ static void reserve(void){
     for (int i = 0; i < 12; i++) crt_free(s[i]);
     while (nbig < NFILL && (g_fill[nbig] = crt(1398016u))) nbig++;
     unsigned left = vrun();
+    g_eip = 0x005ce1e9u;                                        /* 0x5CE170's malloc: the scratch area */
+    uint32_t tb = crt(1398016u), tbig = crt(4u * MB);
+    uint32_t tfree = H("HeapFree", g_h, 0u, tb);
+    g_eip = 0x00401000u;
+    CHK("scratch-texture-buffer", tb == 0x00010000u && tfree == 1u && tbig == 0u && crt(1398016u) == 0u);
     while (nsmall < 64 && (sm[nsmall] = crt(900u << 10))) nsmall++;
     printf("  window filled with %d blocks of 1.4 MB (the longest run left %u MB), then %d blocks of 900 KB\n", nbig, left, nsmall);
     CHK("reserve-last-segment", ok && nbig > 300 && nsmall >= 8);

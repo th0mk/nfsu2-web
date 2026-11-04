@@ -966,6 +966,27 @@ uint32_t gheap_usize(uint32_t p){
     UNLOCK();
     return r == 0xFFFFFFFFu ? 0 : r;
 }
+/* Scratch areas for a buffer the heap cannot give where the game writes into
+ * it unchecked: 0x5CE170 converts a palettized texture into the buffer it
+ * mallocs (0x5CE1E4) and copies that to the texture, and the Lock callers
+ * write at the Lock's pointer at once (com.c lock_scratch).  With 0 they
+ * wrote up to megabytes at guest address 0 and on: below the game's image
+ * (0x400000) nothing lives in the guest's memory, but past 4 MB they reached
+ * the image, and a NULL pointer's fields read texels there, not zeros.  Two
+ * areas below the image, past its first 64 KB: the texture buffer's (a
+ * 512x512 texture with its mips needs 1398016 bytes) and the Locks'. */
+#define SCR_TEMP      0x00010000u
+#define SCR_TEMP_N    0x00170000u
+#define SCR_LOCK      (SCR_TEMP + SCR_TEMP_N)
+#define SCR_LOCK_N    (0x00400000u - SCR_LOCK)
+#define SCR_TEMP_SITE 0x005ce1e9u     /* after 0x5CE170's malloc */
+static uint64_t g_scr_temp;
+uint32_t gheap_scratch(int lock, uint32_t n){
+    static int committed;
+    if (n > (lock ? SCR_LOCK_N : SCR_TEMP_N)) return 0;
+    if (!committed){ committed = 1; mem_commit(SCR_TEMP, 0x00400000u - SCR_TEMP); }
+    return lock ? SCR_LOCK : SCR_TEMP;
+}
 /* The big blocks' holes kept now, newest first (web/test/heap_va_unit.c). */
 int gheap_kept_holes(uint32_t *addr, uint32_t *len, int max){
     LOCK();
@@ -1145,14 +1166,20 @@ uint32_t heap_api(CPU *c, int k){
         int h = (int)ARG(c, 0); uint32_t fl = ARG(c, 1), n = ARG(c, 2);
         if (h <= 0 || h >= MAXHEAP || !g_heap[h].used || g_bump) h = 1;   /* bump: one arena */
         r = g_bump ? bump_alloc(h, n, fl & 8u, site, ra) : tlsf_alloc(h, n, fl & 8u, site, ra);
-        if (!r){ win32_set_last_error(c, 8);
+        if (!r){
             static int sh = 0;
             if (sh++ < 8) fprintf(stderr, "[heap] HeapAlloc(%d, 0x%x, %u) FAILED (caller 0x%08x, site 0x%08x)%s\n",
-                                  h, fl, n, ra, site, (fl & 4u) ? " -- HEAP_GENERATE_EXCEPTIONS" : ""); }
+                                  h, fl, n, ra, site, (fl & 4u) ? " -- HEAP_GENERATE_EXCEPTIONS" : "");
+            if (site == SCR_TEMP_SITE && (r = gheap_scratch(0, n))){       /* 0x5CE170's texture buffer */
+                g_scr_temp++;
+                if (g_scr_temp <= 8 || !(g_scr_temp & 255))
+                    fprintf(stderr, "[heap] the texture's buffer in the scratch area instead (%llu times)\n", (unsigned long long)g_scr_temp);
+            } else win32_set_last_error(c, 8);
+        }
         break; }
     case HK_HeapFree: {
         int h = (int)ARG(c, 0); uint32_t p = ARG(c, 2);
-        if (!p){ r = 1; break; }
+        if (!p || p == SCR_TEMP){ r = 1; break; }              /* (the scratch area: 0x5CE170's free of it) */
         if (h <= 0 || h >= MAXHEAP || g_bump) h = 1;
         r = g_bump ? (uint32_t)bump_free(h, p) : (uint32_t)tlsf_free(c, h, p, ra);
         if (!r) win32_set_last_error(c, 87);
