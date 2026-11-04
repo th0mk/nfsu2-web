@@ -612,7 +612,13 @@ static void tlsf_release(int hi, uint32_t b){
         uint32_t pv = B_PREV(b);
         if (pv && B_MAGIC(pv) == GH_FREE && pv + B_SIZE(pv) == b){
             uint32_t ps = B_SIZE(pv);
-            fl_remove(H, pv, ps); b = pv; size += ps;
+            fl_remove(H, pv, ps);
+            /* its header stays inside the free block before it: it must not
+             * say live, or a second free of the same pointer would be taken
+             * (and the block handed out twice) and HeapSize/HeapValidate
+             * would call it live */
+            B_MAGIC(b) = GH_FREE;
+            b = pv; size += ps;
         } else { g_ev_corrupt++;
             if (g_ev_corrupt <= 8) fprintf(stderr, "[heap] corrupt prev link at 0x%08x: not coalescing\n", b + HDR); }
     }
@@ -669,11 +675,13 @@ static int tlsf_free(CPU *c, int hi_req, uint32_t p, uint32_t ra){
         if (g_check || g_ev_invalid <= 4) check_report(c, "INVALID FREE (not a heap block)", p, 0, 0);
         return 0; }
     uint32_t mg = B_MAGIC(b);
-    if (mg != GH_LIVE){
+    if (mg != GH_LIVE){                         /* refused: the first ones, then one in 256 (the guest's site) */
+        char d[80];
+        snprintf(d, sizeof d, "site 0x%08x, %s heap", c ? site_of(c) : ra, g_heap[hi].name ? g_heap[hi].name : "?");
         if (mg == GH_FREE || mg == GH_QUAR){ g_ev_double++;
-            if (g_check || g_ev_double <= 4) check_report(c, "DOUBLE FREE", p, b, 0); }
+            if (g_check || g_ev_double <= 8 || !(g_ev_double & 255)) check_report(c, "DOUBLE FREE", p, b, d); }
         else { g_ev_invalid++;
-            if (g_check || g_ev_invalid <= 4) check_report(c, "INVALID FREE (bad header)", p, 0, 0); }
+            if (g_check || g_ev_invalid <= 8 || !(g_ev_invalid & 255)) check_report(c, "INVALID FREE (bad header)", p, 0, d); }
         g_heap[hi].st.nbad++;
         return 0;
     }

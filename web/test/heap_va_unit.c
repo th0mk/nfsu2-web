@@ -18,7 +18,10 @@
  *             growth), and holds only what a few long-lived blocks pin
  *   trips     60 trips out of a crowded world and back: no allocation fails,
  *             the address space stays bounded, and a 60 MB run is free at
- *             every trip back */
+ *             every trip back
+ *   dfree     a block freed into the free block before it: a second free of
+ *             it is refused, it is not live for HeapSize/HeapValidate, and no
+ *             block is handed out twice */
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -207,12 +210,36 @@ static void trips(void){
     crt_free(pool1); crt_free(pool2); crt_free(carpool);
 }
 
+/* Two neighbours x, y (and the block after y live): x freed, then y, which
+ * goes into x's free block.  Before, y's header still said live: a second
+ * free of y was taken and y's block was in the free lists twice. */
+enum { NDF = 64 };
+static void dfree(void){
+    uint32_t p[NDF], x = 0, y = 0;
+    for (int i = 0; i < NDF; i++) p[i] = crt(100u);
+    for (int i = 0; i < NDF && !x; i++) for (int j = 0; j < NDF && !x; j++) for (int k = 0; k < NDF && !x; k++)
+        if (p[j] == p[i] + 128u && p[k] == p[j] + 128u){ x = p[i]; y = p[j]; }
+    CHK("dfree-setup", x && y);
+    crt_free(x); crt_free(y);
+    CHK("dfree-not-live", H("HeapSize", g_h, 0u, y) == 0xFFFFFFFFu && H("HeapValidate", g_h, 0u, y) == 0u);
+    CHK("dfree-refused", H("HeapFree", g_h, 0u, y) == 0u);
+    uint32_t q[8]; int overlap = 0;
+    for (int i = 0; i < 8; i++) q[i] = crt(100u);
+    for (int i = 0; i < 8; i++){
+        for (int j = i + 1; j < 8; j++) overlap += q[i] + 128u > q[j] && q[j] + 128u > q[i];
+        for (int k = 0; k < NDF; k++) overlap += p[k] != x && p[k] != y && q[i] + 128u > p[k] && p[k] + 128u > q[i];
+    }
+    CHK("dfree-no-overlap", overlap == 0);
+    for (int i = 0; i < 8; i++) crt_free(q[i]);
+    for (int k = 0; k < NDF; k++) if (p[k] != x && p[k] != y) crt_free(p[k]);
+}
+
 int main(void){
     mem_init();
     mem_commit(0x00E00000u, 0x00010000u);                /* the calls' guest stack */
     heap_init();
     g_h = H("HeapCreate", 0u, 0x1000u, 0u);
-    bestfit(); bighole(); racehole(); segments(); trips();
+    bestfit(); bighole(); racehole(); segments(); trips(); dfree();
     printf("heap_va_unit: %s (%d failed)\n", fails ? "FAILED" : "passed", fails);
     return fails != 0;
 }
