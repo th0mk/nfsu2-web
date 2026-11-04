@@ -29,7 +29,8 @@
  *             only; a block taking part of one of eight holes keeps the other
  *             seven (the oldest went although a slot was free)
  *   check     (NFSU2_HEAPCHECK=1, run with "check") a VirtualAlloc region
- *             released and reserved again reads zero, not the 0xDD poison */
+ *             released and reserved again reads zero, not the 0xDD poison;
+ *             a new segment goes into released space, not into a hole */
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -329,13 +330,37 @@ static void check_zero(void){
     CHK("check-decommit-zero", c == b && nz == 0);
     H("VirtualFree", b, 0u, 0x8000u);
 }
+/* NFSU2_HEAPCHECK=1: a new segment goes into space released a while ago
+ * rather than into a big block's hole that is cleaner.  The window: 4 MB in
+ * 1 MB regions at the bottom, a 20 MB region, the rest reserved; both
+ * released (the 20 MB one a hole), the released marks cleared by an
+ * allocation nothing else had room for, one granule of the 4 MB released
+ * again; then a new heap's first segment (4 MB). */
+static void check_hole(void){
+    const uint32_t base = 0x08000000u;                          /* the window's bottom */
+    uint32_t small[4], ok = 1, rest[64]; int nr = 0;
+    for (int i = 0; i < 4; i++) ok &= (small[i] = H("VirtualAlloc", base + (uint32_t)i * MB, MB, 0x2000u, 4u)) == base + (uint32_t)i * MB;
+    uint32_t hole = H("VirtualAlloc", base + 4u * MB, 20u * MB, 0x2000u, 4u);
+    ok &= hole == base + 4u * MB;
+    for (uint32_t a = base + 24u * MB; a < 0x28000000u && nr < 64; a += 8u * MB) ok &= (rest[nr++] = H("VirtualAlloc", a, 8u * MB, 0x2000u, 4u)) == a;
+    H("VirtualFree", hole, 0u, 0x8000u);
+    for (int i = 0; i < 4; i++) H("VirtualFree", small[i], 0u, 0x8000u);
+    uint32_t g = H("VirtualAlloc", 0u, 0x10000u, 0x2000u, 4u);   /* all released: the marks go */
+    ok &= g >= base && g < base + 4u * MB;
+    H("VirtualFree", g, 0u, 0x8000u);
+    uint32_t h3 = H("HeapCreate", 0u, 0x1000u, 0u), p = H("HeapAlloc", h3, 0u, 100u);
+    CHK("check-hole-setup", ok && h3 && p);
+    CHK("check-hole-kept", p >= base && p < base + 4u * MB);
+    H("HeapFree", h3, 0u, p); H("HeapDestroy", h3);
+    for (int i = 0; i < nr; i++) H("VirtualFree", rest[i], 0u, 0x8000u);
+}
 
 int main(int argc, char **argv){
     mem_init();
     mem_commit(0x00E00000u, 0x00010000u);                /* the calls' guest stack */
     heap_init();
     g_h = H("HeapCreate", 0u, 0x1000u, 0u);
-    if (argc > 1 && !strcmp(argv[1], "check")) check_zero();
+    if (argc > 1 && !strcmp(argv[1], "check")){ check_zero(); check_hole(); }
     else { bestfit(); bighole(); racehole(); segments(); trips(); dfree(); reserve(); holes_expire(); holes_compact(); }
     printf("heap_va_unit: %s (%d failed)\n", fails ? "FAILED" : "passed", fails);
     return fails != 0;

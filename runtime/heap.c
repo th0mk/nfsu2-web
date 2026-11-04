@@ -213,7 +213,10 @@ static void hint_expire(void){
  * (2026-11-04 reports).  So smaller requests go past the big blocks' holes
  * while anything else fits, and a big request takes the shortest run that
  * holds it (best fit: its own hole), the highest of runs as short.  Under
- * HEAPCHECK released granules are skipped until nothing else fits. */
+ * HEAPCHECK released granules are skipped until nothing else fits, but not in
+ * favour of a hole: once the released marks were cleared, a hole was clean and
+ * the regions released since were not, and a new segment went into the
+ * streamer's hole (test runs then stopped where the game would not). */
 static int64_t va_find(uint32_t ng, int top, int allow_dead){
     int dead = !allow_dead && g_check;
     if (ng >= VA_BIG){
@@ -227,9 +230,11 @@ static int64_t va_find(uint32_t ng, int top, int allow_dead){
         if (fit < 0) return -1;
         return top ? fit + (int64_t)(fitlen - ng) : fit;
     }
-    for (int pass = 0; pass < 2; pass++){                   /* past the big blocks' holes, then anywhere */
+    for (int pass = 0; pass < 3; pass++){                   /* past the big blocks' holes (HEAPCHECK: and the released
+                                                               granules, then past the holes only), then anywhere */
+        if (pass == 1 && !dead) continue;
         uint32_t run = 0;
-#define VA_BLOCKED_W(g) (g_va_bits[(g) >> 6] | (dead ? g_va_dead[(g) >> 6] : 0ull) | (pass ? 0ull : g_hintmask[(g) >> 6]))
+#define VA_BLOCKED_W(g) (g_va_bits[(g) >> 6] | (dead && pass == 0 ? g_va_dead[(g) >> 6] : 0ull) | (pass < 2 ? g_hintmask[(g) >> 6] : 0ull))
         if (!top){
             for (uint32_t g = 0; g < VA_NG; g++){
                 uint64_t w = VA_BLOCKED_W(g);
