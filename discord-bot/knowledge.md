@@ -307,7 +307,7 @@ context lists every problem the developer has a report on, with its first thread
   setting avoids it for sure before. With them the log says what holds the memory (`[heap] no room for ...` lines)
   and names anything freed twice (`DOUBLE FREE` lines): escalate such a log.
   Since 4 November (pending release) a computer's browser gives the game 768 MB more of that memory, 1.25 GB in all
-  (Chrome, Edge or Firefox; not Safari, phones or tablets, nor a computer whose browser says it has less than 8 GB):
+  (Chrome or Edge; not Firefox, Safari, phones or tablets, nor a computer whose browser says it has less than 8 GB):
   its log then says `[memory] 2048 MB` and `[heap] window above the runtime`. A computer's log with those lines and
   still these failures: escalate it. `[heap] no window above the runtime` means the browser did not give the 2 GB
   (the `[memory]` line says what it refused), and the game runs with 512 MB as before. A settings.ini line
