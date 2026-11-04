@@ -115,10 +115,14 @@ function strings(list: string[]) { return list.map(s => te.encode(s + '\0')); }
 // A wasm i32 comes into JS signed: a pointer at 2 GB or more (the runtime's heap past the guest heap's window above
 // it, runtime/guest_span.h) would be a negative offset.  Every WASI argument that is a number is an unsigned 32-bit
 // one (pointers, lengths, descriptors, flags), so each import takes them as such (the 64-bit ones are BigInts and
-// keep their sign: a seek's offset).
+// keep their sign: a seek's offset).  Only where the memory is 2 GB or more from its start (the window's try,
+// host/memory.ts): the runtime steps past 2 GB only with the window on (runtime/web/sbrk.c).  Elsewhere the imports
+// are taken as they are: the wrapper's two arrays a call filled WebKit's heap (an iPhone's Quick Race in WebKit:
+// 1.3 GB without them, 6 GB with them, and growing).
 type Fn = (...a: any[]) => any;
 const u32args = (f: Fn): Fn => (...a: any[]) => f(...a.map(x => typeof x === 'number' ? x >>> 0 : x));
 function unsignedAll(o: Record<string, Fn>, keep: string[] = []): Record<string, Fn> {
+  if (memory.buffer.byteLength < 2 ** 31) return o;
   return Object.fromEntries(Object.entries(o).map(([k, f]) => [k, keep.includes(k) ? f : u32args(f)]));
 }
 
