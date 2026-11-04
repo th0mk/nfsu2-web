@@ -158,14 +158,17 @@ static inline void dset(uint32_t a, int v){ uint32_t p = (a - GH_BASE) / GPAGE;
  * the next big one (va_find).  A block placed in a hole takes its part of it;
  * the rest stays kept (a race track's smaller streamer block sits in free
  * roam's hole for the race, and free roam's comes back into the whole of it).
- * A hole is kept HINT_TTL frames at most (its rest as long as the hole):
- * one whose block never comes back would push the smaller blocks into the
- * other free space for good, cutting the runs the next big blocks need. */
+ * A hole is kept HINT_TTL_MS at most (its rest as long as the hole): one
+ * whose block never comes back would push the smaller blocks into the other
+ * free space for good, cutting the runs the next big blocks need.  The list
+ * is in the order the holes were made (a rest has its hole's age), and when
+ * all are kept the oldest goes. */
 #define VA_BIG ((16u << 20) / VA_GRAN)
 #define NHINT 8
-#define HINT_TTL 36000u                 /* frames: 10 minutes at 60 fps, longer than a race */
-static uint32_t now_frame(void);
-static struct { uint32_t g0, ng, made; } g_hint[NHINT];
+#define HINT_TTL_MS 600000u             /* 10 minutes, longer than a race (the game's clock, win32.c) */
+uint64_t host_us(void);
+static uint64_t now_ms(void){ return host_us() / 1000u; }
+static struct { uint32_t g0, ng; uint64_t made; } g_hint[NHINT];
 static uint64_t g_hintmask[VA_NG / 64];
 static void hint_mask(void){
     memset(g_hintmask, 0, sizeof g_hintmask);
@@ -175,31 +178,39 @@ static void hint_mask(void){
 static void hint_compact(void){                           /* the kept ones first, in their order */
     int j = 0;
     for (int i = 0; i < NHINT; i++) if (g_hint[i].ng) g_hint[j++] = g_hint[i];
-    for (; j < NHINT; j++) g_hint[j].g0 = g_hint[j].ng = g_hint[j].made = 0;
+    for (; j < NHINT; j++){ g_hint[j].g0 = g_hint[j].ng = 0; g_hint[j].made = 0; }
 }
-static void hint_put(uint32_t g0, uint32_t ng, uint32_t made){   /* newest first, the oldest goes if all are kept */
+static void hint_put(uint32_t g0, uint32_t ng, uint64_t made){   /* by age, newest first; all kept: the oldest goes */
     hint_compact();
-    memmove(g_hint + 1, g_hint, (NHINT - 1) * sizeof g_hint[0]);
-    g_hint[0].g0 = g0; g_hint[0].ng = ng; g_hint[0].made = made;
+    int n = 0;
+    while (n < NHINT && g_hint[n].ng) n++;
+    if (n == NHINT){
+        if (made < g_hint[NHINT - 1].made) return;       /* older than every kept one */
+        n--;
+    }
+    int i = n;
+    while (i > 0 && g_hint[i - 1].made <= made){ g_hint[i] = g_hint[i - 1]; i--; }
+    g_hint[i].g0 = g0; g_hint[i].ng = ng; g_hint[i].made = made;
 }
-static void hint_add(uint32_t g0, uint32_t ng){ hint_put(g0, ng, now_frame()); hint_mask(); }
+static void hint_add(uint32_t g0, uint32_t ng){ hint_put(g0, ng, now_ms()); hint_mask(); }
 static void hint_drop(uint32_t g0, uint32_t ng){         /* [g0, g0+ng) taken */
-    uint32_t rest[2 * NHINT][3]; int n = 0, cut = 0;
+    struct { uint32_t g0, ng; uint64_t made; } rest[2 * NHINT]; int n = 0, cut = 0;
     for (int i = 0; i < NHINT; i++){
         uint32_t h0 = g_hint[i].g0, h1 = h0 + g_hint[i].ng;
         if (!g_hint[i].ng || h0 >= g0 + ng || g0 >= h1) continue;
         g_hint[i].ng = 0; cut = 1;
-        if (h0 < g0){ rest[n][0] = h0; rest[n][1] = g0 - h0; rest[n][2] = g_hint[i].made; n++; }
-        if (g0 + ng < h1){ rest[n][0] = g0 + ng; rest[n][1] = h1 - (g0 + ng); rest[n][2] = g_hint[i].made; n++; }
+        if (h0 < g0){ rest[n].g0 = h0; rest[n].ng = g0 - h0; rest[n].made = g_hint[i].made; n++; }
+        if (g0 + ng < h1){ rest[n].g0 = g0 + ng; rest[n].ng = h1 - (g0 + ng); rest[n].made = g_hint[i].made; n++; }
     }
     if (!cut) return;
-    for (int i = n - 1; i >= 0; i--) hint_put(rest[i][0], rest[i][1], rest[i][2]);
+    for (int i = 0; i < n; i++) hint_put(rest[i].g0, rest[i].ng, rest[i].made);
     hint_compact();
     hint_mask();
 }
 static void hint_expire(void){
-    uint32_t now = now_frame(); int gone = 0;
-    for (int i = 0; i < NHINT; i++) if (g_hint[i].ng && now - g_hint[i].made > HINT_TTL){ g_hint[i].ng = 0; gone = 1; }
+    uint64_t now = now_ms(); int gone = 0;
+    for (int i = 0; i < NHINT; i++)
+        if (g_hint[i].ng && now > g_hint[i].made && now - g_hint[i].made > HINT_TTL_MS){ g_hint[i].ng = 0; gone = 1; }
     if (gone){ hint_compact(); hint_mask(); }
 }
 /* A run of ng free granules: bottom-up first fit for heap segments, top-down
