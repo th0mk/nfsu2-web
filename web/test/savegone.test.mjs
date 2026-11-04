@@ -1062,3 +1062,11 @@ test('checkSaves: a test file an earlier check left broken does not fail it; one
   assert.deepEqual(c, { ok: true, tries: 1 });
   assert.deepEqual([...fsx.root.kids.keys()].sort(), [SAVE, `${SAVE}~check`]);
 });
+
+test('checkSaves removes only its own leftovers: <save>~check and <save>~check-…, never a name that only starts so', async () => {
+  reset();
+  await put('settings.ini', '# s\n');
+  for (const n of [`${SAVE}~check`, `${SAVE}~check-old1`, `${SAVE}~checkers`]) (await fsx.root.getFileHandle(n, { create: true })).data = enc.encode('x');
+  assert.deepEqual(await SF.checkSaves(SAVE, [1]), { ok: true, tries: 1 });
+  assert.deepEqual([...fsx.root.kids.keys()].sort(), [SAVE, `${SAVE}~checkers`]);
+});

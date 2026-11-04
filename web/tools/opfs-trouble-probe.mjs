@@ -2,8 +2,10 @@
 // the locks a real browser holds: a worker's sync access handle, as the game's I/O worker or another tab has one.  A
 // player's Firefox 159 (Discord 2026-11-04) answered every call in its save folder with "UnknownError: Unknown failure";
 // that state cannot be made through the API, so this checks the parts a browser can show: no healthy folder fails the
-// check (a game's handles on its files included), a lock held for a moment passes once let go and fails while held, a
-// write refused over a held file leaves it, and nothing is left beside the folder.  Serves its own page, no game server.
+// check (a game's handles on its files included), nor a test file an earlier check left that another context holds (the
+// check writes under a new name each try, and removes its own leftovers once they can go, never a name that only starts
+// like theirs), a write refused over a held file leaves it, and nothing is left beside the folder.  Serves its own page,
+// no game server.
 //   node web/tools/opfs-trouble-probe.mjs [firefox|chromium]   (Playwright's browser of that name; Firefox headless is fine)
 import http from 'node:http';
 import path from 'node:path';
@@ -48,16 +50,20 @@ window.run = async () => {
   out.writeOverHeld = await SF.writeFile(S, 'settings.ini', '# the template\\n').then(() => 'written', err);
   out.afterRefusedWrite = await SF.readText(S, 'settings.ini');
   await ask({});
-  // a lock on the check's own file, held throughout, then let go after a moment
+  // a test file an earlier check left (the fixed name before the fresh ones), held by another context: the check writes
+  // beside it under its own name, and leaves it while held; let go, the next check removes it
   await ask({ hold: S + '~check' });
-  const t0 = performance.now();
   const held = await SF.checkSaves(S, [50, 100, 200]);
-  out.heldThroughout = { ok: held.ok, tries: held.tries, step: held.step, error: err(held.error), ms: Math.round(performance.now() - t0) };
-  const later = SF.checkSaves(S);
-  await new Promise(r => setTimeout(r, 800));
+  out.heldLeftover = { ok: held.ok, tries: held.tries, step: held.step, error: err(held.error) };
+  out.leftWhileHeld = await besides();
   await ask({});
-  out.letGo = await later;
+  out.letGo = await SF.checkSaves(S);
   out.leftAfter = await besides();
+  // a fresh-name leftover goes too; a name that only starts like theirs stays
+  for (const n of [S + '~check-old1', S + '~checkers']) { const w = await (await root.getFileHandle(n, { create: true })).createWritable(); await w.write('x'); await w.close(); }
+  out.others = await SF.checkSaves(S);
+  out.leftOthers = await besides();
+  await root.removeEntry(S + '~checkers');
   out.missing = { text: await SF.readText('no-such-folder', 'settings.ini'), exists: await SF.exists(S, 'nothing.txt'), list: (await SF.listFiles('no-such-folder')).length, folders: await besides() };
   for await (const n of root.keys()) await root.removeEntry(n, { recursive: true });
   return out;
@@ -80,11 +86,12 @@ try {
 const checks = [
   ['a healthy folder passes at once', out.healthy.ok && out.healthy.tries === 1],
   ['nothing is left beside the save folder', out.left === 'probe-save' && out.leftAfter === 'probe-save'],
+  ['a held leftover does not fail the check, and stays while held', out.heldLeftover.ok && out.heldLeftover.tries === 1 && out.leftWhileHeld === 'probe-save,probe-save~check'],
+  ['once let go, the next check removes it', out.letGo.ok && out.leftAfter === 'probe-save'],
+  ['its own fresh-name leftovers go, a name that only starts like theirs stays', out.others.ok && out.leftOthers === 'probe-save,probe-save~checkers'],
   ['the game\'s handle on a file of the folder does not fail the check', out.heldSettings.ok && out.heldSettings.tries === 1],
   ['a held file reads', out.readHeld === '# mine\nhorn = train\n'],
   ['a write refused over a held file leaves it', out.writeOverHeld !== 'written' && out.afterRefusedWrite === '# mine\nhorn = train\n'],
-  ['a lock held throughout fails the check at its write, after 4 tries', !out.heldThroughout.ok && out.heldThroughout.tries === 4 && out.heldThroughout.step === 'write'],
-  ['a lock let go after a moment passes at a later try', out.letGo.ok && out.letGo.tries > 1],
   ['what is not there reads as none, and makes no folder', out.missing.text === null && out.missing.exists === false && out.missing.list === 0 && out.missing.folders === 'probe-save'],
 ];
 for (const [what, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${what}`);

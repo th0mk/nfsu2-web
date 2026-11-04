@@ -276,3 +276,16 @@ test('playing without saving copies what the game reads: no screenshots, covers 
     assert.ok(io.notes.some(n => /2 files of the save folder copied in .*, 3 screenshots, covers or big files left out \(3\.0 MB\); nothing is written/.test(n)), io.notes.join('\n'));
   } finally { await io.stop(); }
 });
+
+// Review of 2f61632b, third round: a profile's folder comes whole or not at all (one without its GARAGE.DAT plays as
+// another career).  On 2f44a283 it fails: the profile came without its GARAGE.DAT.
+test('playing without saving: a profile whose GARAGE.DAT does not read, or with a file over the limit, is left out whole; the others come', { timeout: 60_000 }, async () => {
+  const io = await start({ memory: true, readFail: 'GARAGE.DAT', saveFiles: { 'registry.txt': 'd A=1\n',
+    'NFS Underground 2/AAA/AAA': 'aaa', 'NFS Underground 2/AAA/GARAGE.DAT': 'g', 'NFS Underground 2/BBB/BBB': 'bbb',
+    'NFS Underground 2/CCC/CCC': 'ccc', 'NFS Underground 2/CCC/BIG.DAT': 'x'.repeat(3 << 20) } });
+  try {
+    assert.deepEqual([await io.readAll('NFS Underground 2/AAA/AAA'), await io.readAll('NFS Underground 2/CCC/CCC'),
+      await io.readAll('NFS Underground 2/BBB/BBB'), await io.readAll('registry.txt')], [44, 44, 'bbb', 'd A=1\n']);
+    assert.ok(io.notes.some(n => /2 files of the save folder copied in .*, 2 profiles left out whole \(a file of theirs did not read, or was too big\); nothing is written/.test(n)), io.notes.join('\n'));
+  } finally { await io.stop(); }
+});

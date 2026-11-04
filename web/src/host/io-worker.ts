@@ -587,11 +587,16 @@ function moveMem(e: MemDir | MemFile, to: MemDir, name: string) {
 // MEM_CALL_MS, all of them MEM_ALL_MS.  Past either, the game starts with the page's files alone (none of the save
 // folder's: half of them would be a profile without its GARAGE.DAT).  Copied: what the game reads, up to MEM_ALL_MAX;
 // left out: F12's screenshots, the DVD and magazine covers (1 MB each), and a file over MEM_FILE_MAX (a game that cannot
-// keep anything has no use for them, and a phone none for their memory beside the game's own).
+// keep anything has no use for them, and a phone none for their memory beside the game's own).  A profile's folder comes
+// whole or not at all: one of its files that does not read, or that the limits would leave out, leaves the profile out
+// (a profile without its GARAGE.DAT or MPWINS.DAT would play as another career).
 const MEM_CALL_MS = 2000, MEM_ALL_MS = 6000, MEM_FILE_MAX = 2 << 20, MEM_ALL_MAX = 16 << 20;
 const isMemShot = (path: string) => !path.includes('/') && /\.(tga|bmp|png|jpe?g)$/i.test(path);
 const isMemCover = (path: string) => /^NFS Underground 2\/[^/]+ (DVD|Magazine) \d+$/.test(path);
-interface MemCount { files: number; bytes: number; skipped: number; left: number; leftBytes: number; until: number }
+const isMemProfile = (path: string) => /^NFS Underground 2\/[^/]+$/.test(path) && !isMemCover(path);
+interface MemCount { files: number; bytes: number; skipped: number; left: number; leftBytes: number; profiles: number; until: number }
+/** a profile's folder that cannot come whole (memCopy whole) */
+class MemPartial extends Error {}
 /** p, or a TimeoutError once ms passed (p answers whenever it does, unheard) */
 function within<T>(p: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -602,40 +607,48 @@ function within<T>(p: Promise<T>, ms: number): Promise<T> {
 const memCall = <T>(p: Promise<T>, n: MemCount) => within(p, Math.max(0, Math.min(MEM_CALL_MS, n.until - Date.now())));
 const timedOut = (e: unknown) => (e as Error)?.name === 'TimeoutError';
 /** the save folder's files the game reads (rel: dir's path), copied into dir; what did not read is left out, and a
- *  TimeoutError (a call past its time) is thrown: none of it is used then */
-async function memCopy(from: FileSystemDirectoryHandle, dir: MemDir, rel: string, n: MemCount) {
+ *  TimeoutError (a call past its time) is thrown: none of it is used then.  whole: in a profile's folder, where any of
+ *  that throws MemPartial instead (the profile is left out) */
+async function memCopy(from: FileSystemDirectoryHandle, dir: MemDir, rel: string, n: MemCount, whole = false) {
   const it = (from as any).entries() as AsyncIterator<[string, FileSystemHandle]>;
   for (;;) {
     let r: IteratorResult<[string, FileSystemHandle]>;
-    try { r = await memCall(it.next(), n); } catch (e) { if (timedOut(e)) throw e; n.skipped++; return; }
+    try { r = await memCall(it.next(), n); } catch (e) { if (timedOut(e)) throw e; if (whole) throw new MemPartial(); n.skipped++; return; }
     if (r.done) return;
     const [name, h] = r.value, path = rel ? `${rel}/${name}` : name;
     if (h.kind === 'directory') {
       if (isMemCover(path)) { n.left++; continue; }
-      const sub = new MemDir(name, dir); dir.kids.set(name, sub);
-      await memCopy(h as FileSystemDirectoryHandle, sub, path, n);
+      const sub = new MemDir(name, dir);
+      if (!whole && isMemProfile(path)) {
+        const was = { files: n.files, bytes: n.bytes };
+        try { await memCopy(h as FileSystemDirectoryHandle, sub, path, n, true); dir.kids.set(name, sub); }
+        catch (e) { if (!(e instanceof MemPartial)) throw e; Object.assign(n, was); n.profiles++; }
+        continue;
+      }
+      dir.kids.set(name, sub);
+      await memCopy(h as FileSystemDirectoryHandle, sub, path, n, whole);
       continue;
     }
     if (isMemShot(path)) { n.left++; continue; }
     try {
       const f = await memCall((h as FileSystemFileHandle).getFile(), n);
-      if (f.size > MEM_FILE_MAX || n.bytes + f.size > MEM_ALL_MAX) { n.left++; n.leftBytes += f.size; continue; }
+      if (f.size > MEM_FILE_MAX || n.bytes + f.size > MEM_ALL_MAX) { if (whole) throw new MemPartial(); n.left++; n.leftBytes += f.size; continue; }
       const m = new MemFile(name, dir);
       m.data = new Uint8Array(await memCall(f.arrayBuffer(), n)); m.mtime = f.lastModified;
       dir.kids.set(name, m); n.files++; n.bytes += m.data.length;
-    } catch (e) { if (timedOut(e)) throw e; n.skipped++; }
+    } catch (e) { if (timedOut(e) || e instanceof MemPartial) throw e; if (whole) throw new MemPartial(); n.skipped++; }
   }
 }
 /** /save in memory: the save folder's files the game reads, then the page's own (cfg.memFiles) */
 async function memorySaves(opfs: FileSystemDirectoryHandle | null, rootLate = false): Promise<FileSystemDirectoryHandle> {
-  const n: MemCount = { files: 0, bytes: 0, skipped: 0, left: 0, leftBytes: 0, until: Date.now() + MEM_ALL_MS };
+  const n: MemCount = { files: 0, bytes: 0, skipped: 0, left: 0, leftBytes: 0, profiles: 0, until: Date.now() + MEM_ALL_MS };
   let m = new MemDir('', null), late = rootLate;
   try {
     const real = opfs && await memCall(opfs.getDirectoryHandle(cfg.saveDir), n);
     if (real) await memCopy(real, m, '', n);
   } catch (e) {
     // (no save folder: nothing to copy; one that did not answer in time: none of it)
-    if (timedOut(e)) { late = true; m = new MemDir('', null); Object.assign(n, { files: 0, bytes: 0, skipped: 0, left: 0, leftBytes: 0 }); }
+    if (timedOut(e)) { late = true; m = new MemDir('', null); Object.assign(n, { files: 0, bytes: 0, skipped: 0, left: 0, leftBytes: 0, profiles: 0 }); }
   }
   for (const f of cfg.memFiles ?? []) {
     const p = f.path.split('/').filter(Boolean);
@@ -648,7 +661,8 @@ async function memorySaves(opfs: FileSystemDirectoryHandle | null, rootLate = fa
       'so /save is in this game\'s memory with the page\'s files alone; nothing is written to the browser\'s storage'
     : `[save] playing without saving: /save is in this game's memory, ${n.files} files of the save folder copied in ` +
       `(${(n.bytes / 1024).toFixed(0)} KB)${n.skipped ? `, ${n.skipped} that did not read left out` : ''}` +
-      `${n.left ? `, ${n.left} screenshots, covers or big files left out${n.leftBytes ? ` (${(n.leftBytes / 1048576).toFixed(1)} MB)` : ''}` : ''}; ` +
+      `${n.left ? `, ${n.left} screenshots, covers or big files left out${n.leftBytes ? ` (${(n.leftBytes / 1048576).toFixed(1)} MB)` : ''}` : ''}` +
+      `${n.profiles ? `, ${n.profiles} profile${n.profiles > 1 ? 's' : ''} left out whole (a file of theirs did not read, or was too big)` : ''}; ` +
       'nothing is written to the browser\'s storage');
   return m as unknown as FileSystemDirectoryHandle;
 }

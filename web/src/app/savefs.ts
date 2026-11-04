@@ -416,7 +416,8 @@ export async function checkSaves(saveDir: string, waits: number[] = [300, 1000, 
         // (what earlier checks left: gone if it goes; one that does not is left, and this check writes beside it)
         try {
           const old: string[] = [];
-          for await (const k of (r as any).keys() as AsyncIterable<string>) if (k.startsWith(checkPrefix(saveDir))) old.push(k);
+          const pre = checkPrefix(saveDir);
+          for await (const k of (r as any).keys() as AsyncIterable<string>) if (k === pre || k.startsWith(`${pre}-`)) old.push(k);
           for (const k of old) await r.removeEntry(k).catch(() => {});
         } catch { /* not listed: left */ }
         const w = await (await r.getFileHandle(name, { create: true })).createWritable();
