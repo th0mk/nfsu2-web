@@ -525,6 +525,13 @@ async function play() {
 
 /** the sound of a game being started, until its session has it (startFailed closes it) */
 let startAudio: AudioContext | null = null;
+/** why Play failed, in words a player follows: the error itself is in the log ("RangeError: WebAssembly.Memory(): could
+ *  not allocate memory" told players nothing) */
+function startError(e: unknown): Msg {
+  return /could not allocate memory|out of memory/i.test(String(e))
+    ? T('This device doesn\'t have enough free memory for the game. Phones with 4 GB or less often can\'t run it.')
+    : T('The game couldn\'t start. Press Play to try again.');
+}
 /** Play stopped by an error before the game ran (the stage is up from the click on: Play's questions show over it): the
  *  start page back, usable, with what happened */
 function startFailed(e: unknown) {
@@ -533,7 +540,7 @@ function startFailed(e: unknown) {
   if (session) return;
   void startAudio?.close().catch(() => {}); startAudio = null;
   endStage();
-  setPhase('exited', T('Did not start'), T('The game could not start: {error}', { error: String(e) }), 'GAME-START');
+  setPhase('exited', T('Did not start'), startError(e), 'GAME-START');
   $('#log-btn').hidden = $('#report').hidden = false;
   download.resume();
 }
@@ -726,7 +733,7 @@ async function startGame() {
     log.add(`[app] the game could not start: ${e}`);
     void audio?.close().catch(() => {});
     endStage();
-    setPhase('exited', T('Did not start'), T('The game could not start: {error}', { error: String(e) }), 'GAME-START');
+    setPhase('exited', T('Did not start'), startError(e), 'GAME-START');
     $('#log-btn').hidden = $('#report').hidden = false;
     download.resume();
     return;
@@ -990,11 +997,17 @@ function onExit(s: GameSession, code: number) {
   // the phone's graphics driver refused the picture at the first frame (game.ts): another Play ends the same way
   else if (f?.code === 'GPU-ANDROID-DRIVER') setPhase('exited', T('Did not start'), () => t('{browser} cannot show the game with this phone\'s graphics driver. No setting changes that; a system update for the phone may.',
     { browser: t(browserName()) }), f.code);
-  // the graphics: a restart of the browser, then a newer driver (where to send the log is under it)
-  else if (f) setPhase('exited', s.renderer ? T('Stopped') : T('Did not start'), () => t('The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.',
-    { what: t(f.what), browser: t(browserName()) }), f.code);
+  // the graphics: a restart of the browser, then a newer driver (where to send the log is under it); a phone or a tablet
+  // has no driver of its own to update
+  else if (f) setPhase('exited', s.renderer ? T('Stopped') : T('Did not start'), () => touchFirst()
+    ? t('The game was stopped: {what}. Restart {browser}, then press Play.', { what: t(f.what), browser: t(browserName()) })
+    : t('The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.',
+      { what: t(f.what), browser: t(browserName()) }), f.code);
   else {
+    // error code 1 in the first minute: the game's own program file did not load (runtime/mem.c), damaged in the
+    // browser's copy or blocked by the network (HTTP 403): players asked what to do, the code said nothing
     const base = () => code === 0 ? t('The game closed normally after {time}.', { time: mins() }) : code === -1 ? t('The game was stopped after {time}.', { time: mins() })
+      : code === 1 && seconds < 60 ? t('The game\'s files didn\'t load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.')
       : t('The game stopped with error code {code} after {time}.', { code, time: mins() });
     // what is kept: the game's last profile save, never a claim it did not make
     const sv = saved;
@@ -1829,7 +1842,7 @@ async function loadModule() {
     }
     const wait = Math.min(30, 2 ** moduleFails);
     log.add(`[app] the game module did not load (attempt ${moduleFails}): ${e}; next try in ${wait} s`);
-    setCheck(check('module', N('Game module'), 'fail', N('The game did not load ({error}). Trying again in {n} s, or press Retry.'), 'MODULE-LOAD', { error: String(e), n: wait }));
+    setCheck(check('module', N('Game module'), 'fail', N('The game didn\'t load. Trying again in {n} s, or press Retry.'), 'MODULE-LOAD', { n: wait }));
     moduleTimer = setTimeout(() => void loadModule(), wait * 1000);
   }
 }

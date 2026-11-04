@@ -70,12 +70,12 @@ const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 // `en` is the reply (the model translates it for other languages).  Anything less certain gets the forum pointer.
 const FIXES = {
   'page-not-isolated': {
-    when: 'PAGE-NOT-ISOLATED, "Secure, isolated page": "The page is not cross-origin isolated (no SharedArrayBuffer)"',
-    re: /PAGE-NOT-ISOLATED|cross.?origin|isolated/i,
+    when: 'PAGE-NOT-ISOLATED, "Secure, isolated page": "Something in this browser changes the page, most often an extension" (before 4 November: "The page is not cross-origin isolated (no SharedArrayBuffer)")',
+    re: /PAGE-NOT-ISOLATED|cross.?origin|isolated|changes the page/i,
     en: 'Something in your browser changes the page, most often an extension: open nfsu2.xyz in a guest or incognito window, and if it works there, turn your extensions off one by one.',
   },
   'gpu-accel-off': {
-    when: 'GPU-ACCEL-OFF: "Chrome is not using this computer\'s graphics at all"',
+    when: 'GPU-ACCEL-OFF: "isn\'t using this computer\'s graphics card" (or "graphics"), naming Chrome, Edge, Opera or Brave',
     re: /GPU-ACCEL-OFF|acceleration|graphics at all/i,
     en: 'Turn on "Use graphics acceleration when available" in chrome://settings/system, then restart Chrome.',
   },
@@ -85,7 +85,7 @@ const FIXES = {
     en: 'Update Android and Chrome. If that does not help, type chrome://flags/#enable-unsafe-webgpu into Chrome\'s address bar (or open chrome://flags and search "Unsafe WebGPU"), set it to Enabled and tap Relaunch: on some phones, Samsungs among them, the game then runs.',
   },
   'gpu-adapter-win': {
-    when: 'GPU-ADAPTER-WIN: "Chrome could not use this computer\'s graphics. On Windows it needs graphics with DirectX 12"',
+    when: 'GPU-ADAPTER-WIN: "This computer\'s graphics are too old for the game: it needs graphics with DirectX 12 support" (before 4 November: "Chrome couldn\'t use this computer\'s graphics. On Windows it needs DirectX 12")',
     re: /GPU-ADAPTER-WIN(?!-)|DirectX|Direct3D/i,
     en: 'Update the graphics driver (from Intel, AMD or NVIDIA), then quit Chrome completely and start it again; graphics without DirectX 12, such as Intel HD 4000, 4400, 4600 and older, cannot run the game.',
   },

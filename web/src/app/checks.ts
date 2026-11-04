@@ -29,6 +29,8 @@ export const MIN_FIREFOX = 145;
 export const NO_JIT = N('The JavaScript optimizer is off for this site, and the game can\'t run without it. In Chrome: Settings, Privacy and security, JavaScript optimization and security, allow this site (Android\'s Advanced Protection turns it off). In Edge: add this site as an exception to Enhanced security.');
 /** a game module that did not compile for that reason */
 export const noJit = (e: unknown) => /Wasm interpreter|WebAssembly is not defined/i.test(String(e));
+/** a module of one function with SIMD in it (i8x16.splat, i8x16.popcnt): valid only where the game's SIMD compiles */
+const SIMD_PROBE = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11]);
 
 /**
  * A Chromium browser's name (Google Chrome, Microsoft Edge, Brave, Opera; Chromium where it names itself not), its
@@ -51,6 +53,12 @@ export function chromeVersion(): { brand: string; own: number; major: number } |
 export function firefoxVersion(): number | null {
   const m = /Firefox\/(\d+)/.exec(navigator.userAgent);
   return m ? +m[1] : null;
+}
+
+/** a Chromium browser as it calls itself (Chrome, Edge, Opera, Brave): for a setting it names, so Edge's players don't
+ *  look for Chrome */
+function brandName(): string {
+  return (chromeVersion()?.brand ?? 'Chrome').replace(/^(Google|Microsoft) /, '').replace(/^Chromium$/, 'Chrome');
 }
 
 /** what the messages call this browser: Firefox, Chrome (any Chromium browser) or the browser */
@@ -98,7 +106,8 @@ export function checkIsolation(): Check {
       'PAGE-NOT-SECURE', { browser: browserName() });
   }
   if (!crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
-    return check('isolation', label, 'fail', N('The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.'), 'PAGE-NOT-ISOLATED');
+    // on nfsu2.xyz it is almost always an extension that changes the page (a private window shows it)
+    return check('isolation', label, 'fail', N('Something in this browser changes the page, most often an extension, so the game can\'t run. Open the page in a private window: if it works there, turn your extensions off one by one.'), 'PAGE-NOT-ISOLATED');
   }
   // the JavaScript optimizer off for this site (Chrome's site setting, Android's Advanced Protection, Edge's Enhanced
   // security): Chrome then has no WebAssembly at all, or only its interpreter, which can't compile the game (shell.ts)
@@ -110,6 +119,11 @@ export function checkIsolation(): Check {
   catch (e) { return check('isolation', label, 'fail', N('Shared WebAssembly memory is not available: {error}'), 'PAGE-NO-MEMORY', { error: String(e) }); }
   if (typeof (Atomics as { waitAsync?: unknown }).waitAsync !== 'function') {
     return check('isolation', label, 'fail', N('This browser is too old for the game (no Atomics.waitAsync). Update {browser}.'), 'PAGE-NO-WAITASYNC', { browser: browserName() });
+  }
+  // the game is built with SIMD (web/build.sh): a processor without it (before SSE4.1 on a PC, such as a Phenom II) or
+  // an old browser can't compile it, and the module's retries would never pass
+  if (!WebAssembly.validate(SIMD_PROBE)) {
+    return check('isolation', label, 'fail', N('This computer\'s processor is too old for the game, or the browser is out of date. Update {browser}; if that doesn\'t help, the game can\'t run on this computer.'), 'PAGE-NO-SIMD', { browser: browserName() });
   }
   return check('isolation', label, 'ok', N('HTTPS or localhost, cross-origin isolated, threads and shared memory available.'));
 }
@@ -151,6 +165,8 @@ export async function checkGpu(lostBefore = false): Promise<Check & { adapter?: 
     // kBlockedDomainExpirationPeriod); the page asks again until they are back (shell.ts recheckGpu)
     if (lostBefore) {
       const b = browserName();
+      // a phone or a tablet has no graphics driver of its own to update
+      if (android || ios) return fail(N('The graphics stopped during your last game and {browser} hasn\'t given them back yet. Wait a minute or two (the page checks every 10 seconds). If Play stays off, close {browser} completely and open it again.'), 'GPU-ADAPTER-AFTER-LOST', { browser: b });
       return fail(N('The graphics stopped during your last game and {browser} hasn\'t given them back yet. Wait a minute or two (the page checks every 10 seconds). If Play stays off, close every {browser} window and open it again. If it keeps happening, update the graphics driver.'), 'GPU-ADAPTER-AFTER-LOST', { browser: b });
     }
     // Firefox has one list of graphics drivers it leaves out, and on Windows, as Chrome, Direct3D 12 only
@@ -158,11 +174,14 @@ export async function checkGpu(lostBefore = false): Promise<Check & { adapter?: 
     if (chromium) {
       // Chrome 121: Android 12 and newer, on some graphics chips; the unsafe flag lifts its blocklist (Samsung's
       // Xclipse runs the game with it)
-      if (android) return fail(N('Chrome can\'t use this device\'s graphics yet: it needs Android 12 or newer, and not every chip is supported. Update Android and Chrome. If that doesn\'t help, turn on chrome://flags/#enable-unsafe-webgpu (type it into the address bar) and restart Chrome: that works on some phones, such as Samsungs with Xclipse graphics.'), 'GPU-ADAPTER-ANDROID');
-      // graphics acceleration off in Chrome's settings (or graphics it uses for nothing): WebGL draws in software, or not at all
+      // (the step that works first: players stopped reading after "update")
+      if (android) return fail(N('Chrome can\'t use this device\'s graphics yet. On some phones one switch fixes it: 1. In the Chrome app, type chrome://flags/#enable-unsafe-webgpu into the address bar at the top. 2. Set it to Enabled. 3. Tap Relaunch. Still not working? Update Android and Chrome; some phones can\'t run the game.'), 'GPU-ADAPTER-ANDROID');
+      // graphics acceleration off in Chrome's settings (or graphics it uses for nothing): WebGL draws in software, or not at all;
+      // named as the browser calls itself (Edge, Opera), the setting as it reads in each
       const gl = webglRenderer();
       if (gl === null || /SwiftShader|llvmpipe|softpipe|Basic Render/i.test(gl))
-        return fail(N('Chrome isn\'t using this computer\'s graphics. Turn on graphics acceleration in chrome://settings/system and restart Chrome. If it\'s already on, update the graphics driver.'), 'GPU-ACCEL-OFF');
+        return fail(N('{browser} isn\'t using this computer\'s graphics card. Type chrome://settings/system into the address bar, turn on "Use graphics acceleration when available", then close {browser} completely and open it again. If it\'s already on, update the graphics driver.'), 'GPU-ACCEL-OFF',
+          { browser: brandName() });
       // Windows on ARM (Snapdragon): WebGPU behind a flag in Chrome
       if (windows && await architecture() === 'arm')
         return fail(N('On Windows with an ARM chip (such as Snapdragon), Chrome keeps WebGPU off. Turn on chrome://flags/#enable-unsafe-webgpu and restart Chrome.'), 'GPU-ADAPTER-WIN-ARM');
@@ -170,7 +189,8 @@ export async function checkGpu(lostBefore = false): Promise<Check & { adapter?: 
       // chrome://gpu says WebGPU is on even when no Vulkan driver is installed
       if (linux) return fail(N('Chrome couldn\'t use this computer\'s graphics, most likely because the Vulkan driver is missing. Install it (mesa-vulkan-drivers on Debian, Ubuntu and Fedora) and restart Chrome. If chrome://gpu says WebGPU is disabled, also turn on chrome://flags/#enable-unsafe-webgpu.'), 'GPU-ADAPTER-LINUX');
       // and on Windows on Direct3D 12 only: the D3D11 adapters are compatibility mode, blocklisted
-      if (windows) return fail(N('Chrome couldn\'t use this computer\'s graphics. On Windows it needs DirectX 12, which older graphics (such as Intel HD 4000) lack, so the game can\'t run on them. On newer graphics, update the driver and restart Chrome.'), 'GPU-ADAPTER-WIN');
+      // (players took "needs DirectX 12" for a download, and kept trying on graphics that can never run it)
+      if (windows) return fail(N('This computer\'s graphics are too old for the game: it needs graphics with DirectX 12 support, which older ones such as Intel HD 4000, 4400 and 4600 lack. Installing DirectX doesn\'t change that. If this computer has newer graphics, update their driver and restart Chrome.'), 'GPU-ADAPTER-WIN');
     }
     // macOS, ChromeOS, another browser: a crashed graphics process (a restart), or an old system
     const b = browserName();
@@ -187,8 +207,8 @@ export async function checkGpu(lostBefore = false): Promise<Check & { adapter?: 
   if (chromium && ((ad.info as { isFallbackAdapter?: boolean } | undefined)?.isFallbackAdapter || /swiftshader|llvmpipe|lavapipe|softpipe/i.test(info))) {
     return { ...check('gpu', named, 'warn', linux
       ? N('Chrome gave the game its software graphics, which run on the processor, so the game will be very slow. Turn on chrome://flags/#enable-vulkan and chrome://flags/#default-angle-vulkan, then restart Chrome.')
-      : N('Chrome isn\'t using this computer\'s graphics. Turn on graphics acceleration in chrome://settings/system and restart Chrome. If it\'s already on, update the graphics driver.'),
-    'GPU-SOFTWARE', { info }), adapter: info };
+      : N('{browser} isn\'t using this computer\'s graphics card. Type chrome://settings/system into the address bar, turn on "Use graphics acceleration when available", then close {browser} completely and open it again. If it\'s already on, update the graphics driver.'),
+    'GPU-SOFTWARE', { info, browser: brandName() }), adapter: info };
   }
   // no BC (PowerVR, Mali): the renderer unpacks the textures (web/src/gpu/dxt.ts), so it plays.  With ASTC (iPhones,
   // iPads, most phones) the most of them go up as ASTC instead (astc.ts): ~50 MB more, not 200, nothing to say

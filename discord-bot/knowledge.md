@@ -107,7 +107,9 @@ Checked against the guide or the code, and confirmed by players in threads:
   - NordVPN's Threat Protection, antivirus web filters and some school or work networks flag the new `.xyz` domain:
     the page goes Offline and Cloud saves disappear. Turn the filter off or allow `nfsu2.xyz`.
   - Kaspersky (Standard, Plus) flags `nfsu2.xyz` or its main.js as a malicious link or a trojan since 2 November: a
-    false positive, which staff reported to Kaspersky. The start page stays at "Loading the game" in every browser.
+    false positive, which staff reported to Kaspersky. The start page stays at "Loading the game" in every browser;
+    since 701f9358 (3 November, live) it says "Not loading: Your antivirus or network is probably blocking the game"
+    after 15 s.
     Adding `nfsu2.xyz` to Kaspersky's trusted addresses, or turning its web protection off, fixed it for several
     players.
   - "This site can't be reached" / the address can't be found (DNS) on a school, university or work network: setting
