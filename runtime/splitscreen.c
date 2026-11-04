@@ -28,12 +28,8 @@ static int split_racing(void){
     return 0;
 #endif
 }
-/* co-op: the HUDs' size in their halves (NFSU2_COOP_HUD_SCALE, a test knob while the size is picked) */
-static float split_coop_scale(void){
-    static float sc = -1.f;
-    if (sc < 0.f){ const char *e = getenv("NFSU2_COOP_HUD_SCALE"); sc = e ? (float)atof(e) : 0.6f; if (sc < 0.3f || sc > 1.f) sc = 0.6f; }
-    return sc;
-}
+/* co-op: the HUDs' size in their halves (picked from 0.5, 0.6 and 0.7, 2026-11-04) */
+static float split_coop_scale(void){ return 0.7f; }
 /* co-op free roam's two views (coop.c): each player's free-roam HUD mapped into its half */
 static int split_coop_hud(void){
 #ifdef __wasm__

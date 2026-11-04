@@ -177,6 +177,8 @@ static int coop_new_car(CPU *c, uint32_t w, uint32_t rec1, uint32_t *out){
 static void coop_drop(CPU *c){
     if (!coop_pl) return;
     if (MR32(SPLIT_PLAYERS_COUNT) == 2u && MR32(SPLIT_PLAYERS_ORDER + 4u) == coop_pl){
+        void split_coop_map_drop(CPU *c);
+        split_coop_map_drop(c);                 /* player 2's arrow is an object of its HUD, which ends with it */
         call(c, FN_PLAYER_END, coop_pl, 0, 0, 0);
         if (coop_car){ call(c, FN_DEACTIVATE, coop_car, 0, 0, 0); coop_parked = coop_car; coop_parked_world = coop_world; }
         coop_parked_pl = coop_pl;

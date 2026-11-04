@@ -207,6 +207,9 @@ static float hud_shift(float x, float y){
     return 0.f;
 }
 
+/* the edge anchoring's x shift for an element at (x, y) (0: not one of the anchored places); splitscreen.c */
+float ws_hud_shift(float x, float y){ return hud_shift(x, y); }
+
 static uint32_t fbits(float f){ uint32_t u; memcpy(&u, &f, 4); return u; }
 static float    bitsf(uint32_t u){ float f; memcpy(&f, &u, 4); return f; }
 
