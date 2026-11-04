@@ -6,7 +6,11 @@
  * the registry's HornVolume (percent; registry.txt, the game's options),
  * read at startup; none: 100 %.  The slider itself: optslider.c (the menus'
  * UI_Options.fng has the parts for an eighth slider, the pause menu's
- * UI_PauseOptions.fng all but the bar's, which are copies of the seventh's). */
+ * UI_PauseOptions.fng all but the bar's, which are copies of the seventh's).
+ * The horns also follow the game's Master Volume (horn_game_master), as its
+ * own sounds do: the sound manager ([0x82B884] +0x38: the Audio options'
+ * volumes, G_VOLUMES) plays each kind at its slider times Master (0x45C210,
+ * 0x471970: linear, of 0x7FFF). */
 #include "cpu.h"
 #include "horn.h"
 #include "optslider.h"
@@ -22,6 +26,7 @@ const char *language_name(void);
 #define REG_NAME      "HornVolume"
 #define FN_ADD        0x0054f410u   /* thiscall screen (entry, 1): the Options list takes a slider */
 #define FN_ADD_PAUSE  0x0054f800u   /* thiscall screen (entry, 1): the pause menu's */
+#define G_VOLUMES     0x0083aa28u   /* the Audio options' volumes (floats 0 .. 1): +0 Master Volume */
 
 static int g_installed;
 static uint32_t g_pct = 100;                     /* the volume, percent, as the registry has it */
@@ -66,6 +71,14 @@ void hornmenu_install(void){
         horn_set_volume((float)g_pct / 100.f);
         fprintf(stderr, "[horn] volume %u %% (registry %s)\n", g_pct, REG_NAME);
     }
+}
+
+/* the game's Master Volume (horn.h): 1 while its options are not there or
+ * hold no volume */
+float horn_game_master(void){
+    if (!mem_is_committed(G_VOLUMES) || !mem_is_committed(G_VOLUMES + 3u)) return 1.f;
+    float v = MRF32(G_VOLUMES);
+    return v >= 0.f && v <= 1.f ? v : 1.f;
 }
 
 int hornmenu_hook(CPU *c, uint32_t ip){

@@ -21,6 +21,7 @@ static int fake_clock_gettime(clockid_t id, struct timespec *ts){
 #include "gamepad.h"
 int kbd_key_down(unsigned dik){ (void)dik; return 0; }
 int gamepad_read(PadState *s){ (void)s; return 0; }
+float horn_game_master(void){ return 1.f; }          /* the game's Master Volume: full */
 #include "horn.c"
 
 int main(int argc, char **argv){

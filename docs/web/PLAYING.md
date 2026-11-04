@@ -503,7 +503,8 @@ Good to know:
   Each player's horn is also pitched a little differently by their name, so two players with the same horn sound
   apart. It sounds while the game runs, not in the pause menu or on the map. It works in Online and LAN races too.
   How loud the horns are (yours and the others'): the game's Options, Audio, Horn Volume, also in the pause menu's
-  Options, from 10 % to 100 % (the most, and the default). Moving it sounds your horn at the new volume.
+  Options, from 10 % to 100 % (the most, and the default), times the game's Master Volume, as for the game's own
+  sounds (none with Master Volume at 0). Moving it sounds your horn at the new volume.
 - **Quick chat:** say one of your sixteen set phrases to the players near you. There is no typing, so there is nothing
   to read that someone made up, and everyone reads a phrase in their own language. Press 1 to 4 for a group, then 1 to
   4 for its phrase; on a controller, press the right stick in, flick it (up, right, down, left) for a group, then

@@ -74,7 +74,7 @@ const TABLE = [
   ['movies', 'career_movies.txt', 'tapuntil UI_StartCareer.fng satisfied', 'NOMOVIES=0', 400],
   ['options', 'options_display.txt', '[D3D] Reset', '', 400],
   // the Horn Volume slider (runtime/hornmenu.c): Options > Audio, and the pause menu's, whose bar is made of copies
-  ['hornvolume', 'options_horn.txt', '[horn] volume 85 %', '', 400],
+  ['hornvolume', 'options_horn.txt', "[horn] the game's Master Volume at 0 %", '', 400],
   ['hornpause', 'pause_horn.txt', 'parts as SLIDER_BASE_8 SLIDER_KNOB_8 SLIDER_HANDLE_8 SLIDER_BEG_8 SLIDER_END_8', '', 400],
   // Exposure and White Level (runtime/tonemenu.c): Options > Display after Level Of Detail, and the pause menu's
   ['tone', 'options_tone.txt', '[tone] white level 70 %', '', 400],
