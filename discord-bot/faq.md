@@ -4,6 +4,7 @@ The FAQ the bot posts with /faq (faq.mjs). A push changes the posted message wit
 "label:" right under a question names its button (80 characters at most); without one the question is the label.
 A button keeps working while its label stays the same. #channel-name becomes a link to that channel.
 Answers go to each reader in their Discord language (translated once, kept until the answer changes).
+The bot also replies with an answer in #help (help.mjs) when a question there asks exactly that: keep each one whole on its own.
 No small text (-#). Discord takes 40 parts in a message: 6 topics with 19 questions take 39.
 -->
 # Frequently asked questions

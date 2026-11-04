@@ -1,5 +1,6 @@
-// The general channels (text channels named general*): about 2,000 short messages a day, so nothing goes to a model
-// one by one.
+// The general channels (text channels named general*, and #help): about 2,000 short messages a day, so nothing goes to
+// a model one by one.  In #help, help.mjs answers the questions the FAQ covers at once; the rest is as below, but
+// without ANSWERS (the FAQ's are #help's).
 //   - Pointers: a local filter picks messages that may tell of a problem (any language); after 4 quiet minutes, one
 //     cheap call (Haiku) reads them in the chat around them (what they reply to, who answered them, their pictures) and
 //     sorts each author: a problem of their own that nobody is helping with, or anything else (questions, chat,
@@ -216,7 +217,11 @@ const T = {
   it: { thread: 'C’è già una discussione sul forum: {link}. Aggiungi lì {what}, così viene seguito.', forum: 'I problemi vengono seguiti in {forum}: scrivilo lì, con {what}.', log: 'il log (F9, Scarica il log) e cosa stavi facendo', screenshot: 'uno screenshot del messaggio, il tuo dispositivo e il browser', saves: 'cosa è successo, il browser e il dispositivo, e se i salvataggi cloud erano attivi', foot: 'Messaggio automatico', fixFoot: 'Messaggio automatico. Se non basta, scrivilo in {forum}.' },
 };
 
+/** the "Automated message" line in this language (English for one the replies don't have) */
+export const footOf = lang => (T[lang] ?? T.en).foot;
+
 const name = m => m.member?.displayName ?? m.author.displayName ?? m.author.username;
+const HELP = /^help(?![\p{L}\p{N}])/iu;          // #help, #help-español; not #helpers
 const hhmm = ms => new Date(ms).toISOString().slice(11, 16);
 
 export class General {
@@ -256,8 +261,12 @@ export class General {
     fs.renameSync(this.file + '.tmp', this.file);
   }
 
-  /** a text channel named general*: not a thread, not a voice channel's chat */
-  static isGeneral(ch) { return ch?.type === ChannelType.GuildText && /^general/i.test(ch.name ?? ''); }
+  /** a text channel named general*, or #help: not a thread, not a voice channel's chat */
+  static isGeneral(ch) { return ch?.type === ChannelType.GuildText && (/^general/i.test(ch.name ?? '') || HELP.test(ch.name ?? '')); }
+  static isHelp(ch) { return ch?.type === ChannelType.GuildText && HELP.test(ch.name ?? ''); }
+
+  /** someone help.mjs answered: no pointer on top of it for the same messages */
+  skip(id) { this.pending.delete(id); }
 
   /** a message for the staff channel, split between its parts when it is too long for one; a forum staff channel
    *  gets it as a post named `name` */
@@ -272,7 +281,7 @@ export class General {
   }
 
   onMessage(m) {
-    if (!General.isGeneral(m.channel)) return;
+    if (!General.isGeneral(m.channel) || m.channelId === this.staffChannel) return;
     const now = this.now();
     const staff = !m.author.bot && this.isStaff(m.member, m.channel);
     this.remember(m, now, staff);
@@ -400,8 +409,8 @@ export class General {
       if (!p || now - (this.saved.nudged[author] ?? 0) <= USER_COOLDOWN_MS) continue;     // also an id listed twice
       const m = p.msgs.at(-1);
       const own = lines.filter(l => l.author === author), words = own.map(l => l.text).join('\n');
-      // an answer only to the author's own question in their own words (a picture is no question)
-      const answer = ANSWERS[s.answer] && ANSWERS[s.answer].re.test(words) ? s.answer : '';
+      // an answer only to the author's own question in their own words (a picture is no question); #help has the FAQ's
+      const answer = !General.isHelp(channel) && ANSWERS[s.answer] && ANSWERS[s.answer].re.test(words) ? s.answer : '';
       const said = `${s.id} ${name(m)}: ${s.kind}${s.handled ? ', handled' : ''}${s.fix ? `, ${s.fix}` : ''}${s.answer ? `, answer ${s.answer}` : ''} (${s.why})`;
       if ((s.kind !== 'report' && !answer) || s.handled) { console.log(`[general] #${channel.name} ${said}`); continue; }
       if (this.full(m.channelId)) { console.log(`[general] #${channel.name} ${said}: the channel had its pointers this hour`); continue; }
@@ -466,12 +475,12 @@ export class General {
     if (!this.staffChannel || new Date(now).getUTCHours() !== DIGEST_HOUR_UTC || this.saved.digest === day) return;
     // the day is marked done first, so a digest that fails is not tried again every minute; the counts start over
     const st = this.saved.stats, flagged = this.saved.flagged;
-    Object.assign(this.saved, { digest: day, stats: { nudges: 0, fixes: 0, answers: 0, dry: 0, sorted: 0 } });
+    Object.assign(this.saved, { digest: day, stats: { nudges: 0, fixes: 0, answers: 0, faq: 0, dry: 0, sorted: 0 } });
     this.save();
     if (flagged.length < 5) return console.log(`[general] no digest: ${flagged.length} flagged messages`);
     const counts = {};
     for (const f of flagged) for (const k of f.kinds) counts[k] = (counts[k] ?? 0) + 1;
-    const input = `Counts: ${JSON.stringify(counts)}; pointers sent ${st.nudges} (${st.fixes ?? 0} of them a fix, ${st.answers ?? 0} an answer)${this.dryRun ? `, in the dry run would have sent ${st.dry}` : ''}.\n\n` +
+    const input = `Counts: ${JSON.stringify(counts)}; pointers sent ${st.nudges} (${st.fixes ?? 0} of them a fix, ${st.answers ?? 0} an answer)${this.dryRun ? `, in the dry run would have sent ${st.dry}` : ''}; FAQ answers in #help ${st.faq ?? 0}.\n\n` +
       `<threads>\n${this.forumThreads().map(t => t.line).join('\n') || 'none'}\n</threads>\n\n<messages>\n` +
       flagged.slice(-400).map(f => `#${f.channel} ${f.link} ${f.text}${f.files.length ? ` [files: ${f.files.join(', ')}]` : ''}`).join('\n') + '\n</messages>';
     const res = await this.anthropic.messages.create({
