@@ -1199,7 +1199,8 @@ let keySheet: ControlsSheet, helpSheet: ControlsSheet | null = null;
 let siteView: SiteKeysView, helpSiteView: SiteKeysView | null = null;
 function siteDeps() {
   return { set: (k: string, v: string | null) => settings.set(k, v), current: (k: string) => settings.current(k), readOnly: () => !instance.owner,
-    registry: () => readText(SAVE, 'registry.txt'), ps: () => keySheet?.fam === 'ps' };
+    // (only shown: one that does not read, savefs.ts missing, shows no game keys)
+    registry: () => readText(SAVE, 'registry.txt').catch(() => null), ps: () => keySheet?.fam === 'ps' };
 }
 /** our controls' keys as settings.ini has them now (not while a game runs: it keeps the ones it started with), on the
  *  keys' list and in the Site tab */
