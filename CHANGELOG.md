@@ -11,6 +11,15 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
+## 2026-11-05 (b7253a4)
+
+- **Languages:** Czech and Slovak, the game and the start page.
+- **Races:** other players' cars no longer bounce, stand on their tails or flip over.
+- **Ghost mode:** near misses with traffic on Everything give nitrous again.
+- **Menus:** cars in the menus reflect the studio again, not black.
+- **Phone:** the page's menu fits a phone on its side.
+- **Free roam:** an older crew link no longer takes you to an empty room.
+
 ## 2026-11-04 (af448e5)
 
 - **Races:** other players' cars come straight from their games every frame; close ones drive on the game's physics and bump back.
