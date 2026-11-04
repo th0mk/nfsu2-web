@@ -29,7 +29,8 @@
  * garage) takes the damage away.
  * In free roam friends see the player's damage (RC_EXT_DAMAGE in the car record, roam_game.c): the player's dents
  * are published (damage_net_*), and a friend's car gets the dents its player's record has.
- *   NFSU2_DAMAGE=0 turns it off; NFSU2_DAMAGE_LOG=1 logs every impact. */
+ *   Off unless NFSU2_DAMAGE=1 (the start page's Crash damage, off by default); NFSU2_DAMAGE_LOG=1 logs every
+ *   impact. */
 #include "cpu.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
@@ -65,7 +66,7 @@ static int g_on = -1;
 static int on(void){
     if (g_on < 0){
         const char *e = getenv("NFSU2_DAMAGE");
-        g_on = !(e && *e == '0') && dmg_init();
+        g_on = e && *e && *e != '0' && dmg_init();   /* off unless asked for */
     }
     return g_on;
 }
