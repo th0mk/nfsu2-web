@@ -1652,24 +1652,65 @@ static int shared_owner(uint32_t owner){
  * in races (tests/scripts/roam_ownparts.txt: 4 of 4 drawn, then 1, then 0;
  * players' reports: a magazine cover's car without wheels).  So the models go back to their pack as the front end does,
  * whenever HIBERNATING holds some a pack of ours lists: once the pack is idle
- * (0x48D3C0's test: header in, no loads going on), all but those with a
- * copy of their own in the pack (taking them back writes over the pack's
- * entry).  Then each model is in one pack again, and its loads and unloads
- * all count there. */
+ * (0x48D3C0's test: header in, no loads going on).  Then each model is in one
+ * pack again, and its loads and unloads all count there.
+ * A model may have a copy of its own in the pack by then: a car (a friend's,
+ * or the game's own traffic and AI racers, which all have the BRAKES pack's
+ * calipers) loaded it there while the pack came before HIBERNATING in the
+ * streamer's search.  Taking ours back writes over the pack's entry, its data
+ * and its loads; leaving ours in HIBERNATING (as from d09e1439 on) only put
+ * that off to the front end's own take-back, at the next shop or the crib,
+ * which wrote it over just the same: the cars on the pack's copy still had
+ * their loads there, so their unloads (friends' cars go after that take-back)
+ * took the count through zero, freed our copy and wrapped the count round
+ * (65509: every load after that only counts, none loads), and the player's
+ * car came back without the model, at every shop, until a reload (players'
+ * reports since 10-28: brakes, exhaust tips, a spoiler; on the 240SX even in
+ * the garage).  So the pack's copy goes out first the game's own way (0x488D60:
+ * the cars drawing it move to our copy, 0x493650) and its loads are added to
+ * the entry taken back: one copy, every load counted on it.  An entry in
+ * HIBERNATING without data of its own leaves the pack's entry as it was. */
 #define FN_PACK_WAKE    0x0048dc60u   /* cdecl (file): a pack's models back from HIBERNATING (0x57F030 mode 4) */
-#define G_HIBER         0x00830c78u   /* HIBERNATING's models: +0xC how many, +0x78 the list (0x18 bytes: +0 name, +0x14 the data) */
-static uint32_t g_wake_n = 0xffffffffu; static int g_wake_dup;
+#define FN_MODEL_FREE   0x00488d60u   /* thiscall G_STREAMER (pack, entry): a loaded model's data out (0x48D2E0 at no loads) */
+#define G_HIBER         0x00830c78u   /* HIBERNATING's models: +0xC how many, +0x74 their solids (8 bytes: name, solid), +0x78 the list (0x18 bytes: +0 name, +8 size, +0x12 loads, +0x14 the data) */
+static uint32_t g_wake_n = 0xffffffffu; static int g_wake_said;
+/* the solid a pack's table (+0xB8 -> +0x74, 8 bytes a model, in the order of +0xA0) has for its model entry e */
+static uint32_t pack_solid(uint32_t pk, uint32_t e){
+    uint32_t sp = MR32(pk + 0xb8u), idx = (e - MR32(pk + 0xa0u)) / 0x18u, t = ok(sp, 0x80) ? MR32(sp + 0x74u) + 8u * idx : 0;
+    return ok(t, 8) && MR32(t) == MR32(e) ? MR32(t + 4u) : 0;
+}
 static uint32_t pack_model(uint32_t pk, uint32_t name){
     uint32_t tab = MR32(pk + 0xa0u), n = MR32(pk + 0xa4u), lo = 0, hi = n;
     if (!tab || n > 100000u || !ok(tab, n * 0x18u)) return 0;
     while (lo < hi){ uint32_t m = (lo + hi) / 2u; if (MR32(tab + 0x18u * m) < name) lo = m + 1u; else hi = m; }   /* sorted (0x488BC0) */
     return lo < n && MR32(tab + 0x18u * lo) == name ? tab + 0x18u * lo : 0;
 }
+/* a test aid, scripted runs only (NFSU2_ROAM_TEST_WAKE_LATE=N): no take-back for N frames from the packs' load, the
+ * packs ahead of HIBERNATING in the streamer's search meanwhile and every friend's car waiting for the packs (not
+ * only those with their shop parts), as when cars load the player's models into them first in players' games
+ * (tests/scripts/roam_ownparts_dup.txt) */
+static long g_wake_until;
+static int wake_late(CPU *c){
+    if (rh_frame() >= g_wake_until) return 0;
+    for (int i = 0; i < g_npack; i++) if (ok(g_pack[i], 0xc0)) gcall1(c, FN_PACK_FIND, G_STREAMER, g_pack[i] + 8u);
+    return 1;
+}
 static void packs_wake(CPU *c){
     uint32_t n = rd32(G_HIBER + 0xcu), tab = rd32(G_HIBER + 0x78u);
     if (g_npack <= 0 || n == g_wake_n) return;      /* nothing new there */
+    if (wake_late(c)) return;
     g_wake_n = n;
     if (!n || n > 0x100u || !ok(tab, n * 0x18u)) return;
+    {   /* a model hibernated twice with no take-back between (sorted list: side by side): the take-back writes the
+         * second over the first, whose loads are lost.  Not seen; said in the log should it happen */
+        static int said;
+        for (uint32_t j = 1; j < n && said < 4; j++){
+            uint32_t a = tab + 0x18u * (j - 1u), b = tab + 0x18u * j;
+            if (!MR32(b) || MR32(b) != MR32(a)) continue;
+            rlog("[roam] f=%ld HIBERNATING lists model %08x twice (loads %u and %u)\n", rh_frame(), MR32(b), MR16(a + 0x12u), MR16(b + 0x12u));
+            said++;
+        }
+    }
     for (int i = 0; i < g_npack; i++){
         uint32_t pk = g_pack[i];
         if (!ok(pk, 0xc0) || !MR32(pk + 0xa0u)) continue;
@@ -1681,23 +1722,51 @@ static void packs_wake(CPU *c){
         if (!k) continue;
         char nm[64]; cstr(pk + 8u, nm, sizeof nm);
         if (MR8(pk + 0x8au) || !MR32(pk + 0x90u) || (int32_t)MR32(pk + 0xa8u) > 0){ g_wake_n = 0xffffffffu; continue; }  /* busy: next frame */
-        /* a model with a copy of its own in the pack stays in HIBERNATING: for the take-back (which walks
-         * HIBERNATING's list, finds each name in the pack and moves the entry over the pack's) it has a name the
-         * pack does not list, its own again after; the others go back (a pack left whole for one of them kept the
-         * player's spoiler there, and the next shop's take-back lost it) */
+        /* the models with a copy of their own in the pack: the pack's copy out (its loads go onto ours after the
+         * take-back), or, when ours has no data, the pack's entry put back as it was after it.  One we can't do
+         * either for (a copy without its solid where 0x493F20 looks: the cars on it would lose their model) stays
+         * in HIBERNATING under a name the pack does not list for the take-back, its own again after */
+        struct { uint32_t name, ent[6], sol; uint16_t loads; uint8_t keep; } fx[64]; int nf = 0, nfree = 0;
         uint32_t hid[0x100], was[0x100]; int nh = 0;
+        uint32_t hsol = rd32(G_HIBER + 0x74u);
         for (uint32_t j = 0; dup && j < n && nh < 0x100; j++){
-            uint32_t nmj = MR32(tab + 0x18u * j), e = pack_model(pk, nmj);
+            uint32_t nmj = MR32(tab + 0x18u * j), e = pack_model(pk, nmj), h = tab + 0x18u * j;
             if (!e || !MR32(e + 0x14u)) continue;
+            uint32_t d = MR32(e + 0x14u), ps = pack_solid(pk, e), hs = ok(hsol + 8u * j, 8) && MR32(hsol + 8u * j) == nmj ? MR32(hsol + 8u * j + 4u) : 0;
+            int idle = !(MR8(e + 0x11u) & 0x30u) && !(MR8(h + 0x11u) & 0x30u);
+            if (idle && nf < 64 && MR32(h + 0x14u) && hs && ps >= d && ps < d + MR32(e + 8u)){
+                fx[nf].name = nmj; fx[nf].loads = MR16(e + 0x12u); fx[nf].keep = 0; nf++; nfree++;
+                uint32_t a2[2] = { pk, e };
+                rh_call(c, FN_MODEL_FREE, G_STREAMER, 0, 2, a2);
+                continue;
+            }
+            if (idle && nf < 64 && !MR32(h + 0x14u)){
+                fx[nf].name = nmj; fx[nf].keep = 1; fx[nf].sol = ps; memcpy(fx[nf].ent, GPTR(e), 0x18); nf++;
+                continue;
+            }
             uint32_t t = nmj ^ 0x5a5a5a5au;
             while (!t || pack_model(pk, t)) t += 0x9e3779b9u;
             MR32(tab + 0x18u * j) = t; hid[nh] = t; was[nh++] = nmj;
         }
-        if (dup && !g_wake_dup++) rlog("[roam] f=%ld %s: %d of its %d models in HIBERNATING are in it too, left there\n", rh_frame(), nm, dup, k);
-        if (k > dup){
+        if (dup && g_wake_said++ < 40)
+            rlog("[roam] f=%ld %s: %d of its %d models in HIBERNATING have a copy of their own in it: %d of those copies out (their "
+                 "cars on ours), %d kept, %d left in HIBERNATING\n", rh_frame(), nm, dup, k, nfree, nf - nfree, nh);
+        if (k > nh){
             uint32_t file = pk + 8u;
             rh_call(c, FN_PACK_WAKE, 0, 0, 1, &file);
-            rlog("[roam] f=%ld %s: %d model(s) back from HIBERNATING (%u left there)\n", rh_frame(), nm, k - dup, rd32(G_HIBER + 0xcu));
+            rlog("[roam] f=%ld %s: %d model(s) back from HIBERNATING (%u left there)\n", rh_frame(), nm, k - nh, rd32(G_HIBER + 0xcu));
+        }
+        for (int f = 0; f < nf; f++){
+            uint32_t e = pack_model(pk, fx[f].name);
+            if (!e) continue;
+            if (fx[f].keep){
+                memcpy(GPTR(e), fx[f].ent, 0x18);
+                uint32_t sp = MR32(pk + 0xb8u), t = ok(sp, 0x80) ? MR32(sp + 0x74u) + 8u * ((e - MR32(pk + 0xa0u)) / 0x18u) : 0;
+                if (ok(t, 8)){ MR32(t) = fx[f].name; MR32(t + 4u) = fx[f].sol; }
+            } else {
+                uint32_t sum = (uint32_t)MR16(e + 0x12u) + fx[f].loads;
+                MR16(e + 0x12u) = (uint16_t)(sum > 0xfffeu ? 0xfffeu : sum);
+            }
         }
         if (nh){
             uint32_t n2 = rd32(G_HIBER + 0xcu), t2 = rd32(G_HIBER + 0x78u);
@@ -1740,7 +1809,14 @@ static int part_packs(CPU *c){
             load_pack(c, fn, path);
         }
         rlog("[roam] f=%ld friends' shop parts: %d shared packs and %d rim brands' packs loaded\n", rh_frame(), shared, g_npack - shared);
+        const char *scr = rh_opt("NFSU2_INPUT_SCRIPT"), *late = rh_opt("NFSU2_ROAM_TEST_WAKE_LATE");
+        long n = late ? strtol(late, 0, 10) : 0;
+        if (scr && *scr && n > 0){
+            g_wake_until = rh_frame() + n;
+            rlog("[roam] f=%ld TEST: the player's models stay in HIBERNATING until f=%ld\n", rh_frame(), g_wake_until);
+        }
     }
+    wake_late(c);
     int in = 0;
     for (int i = 0; i < g_npack; i++) in += ok(g_pack[i], 0xc0) && !MR8(g_pack[i] + 0x8au) && MR32(g_pack[i] + 0xa0u);
     if (in < g_npack && roam_plat_now_us() - g_packs_t0 < PARTPACK_WAIT_US) return 0;
@@ -1758,7 +1834,7 @@ static int begin_load(CPU *c, int k, const uint8_t *cfg, int len, uint32_t gen){
     if (rc_carcfg_decode(cfg, len, &cc) != RC_OK) return 0;
     int in = part_packs(c), shop = 0;                            /* (the packs start loading with the first friend) */
     for (int i = 0; i < cc.n_parts; i++) shop |= shared_owner(cc.part[i].owner);
-    if (!in && shop) return 0;
+    if (!in && (shop || g_wake_until)) return 0;                /* (NFSU2_ROAM_TEST_WAKE_LATE: every car waits) */
     uint32_t skin = slot_skin(k);
     if (!skin_textures(c, skin)) return 0;
     if (!pool_room(c, s, cc.type_name)) return 0;
@@ -7960,6 +8036,65 @@ static void car_rescue(int64_t host){
 /* walls.c's jump (a car past the career's walls back on the roads it can reach): friends' cars are ghosts until
  * they are clear of it, as after car_rescue */
 void roam_game_jumped(void){ if (g_inited && O.on) ghost_all(); }
+
+/* "mp partswatch on|off" (a test aid): every frame, the front end's and the
+ * loading screens' too, the player's car's models from the shared packs as
+ * the model streamer lists them: each pack on its list (G_STREAMER +0x18, the
+ * order 0x48CED0 searches) that lists one, with the entry's loads (+0x12),
+ * flags (+0x11: 0x10 loading, 0x20 unload waiting), data (+0x14), the solid
+ * its pack's table has for it, and the pack's loads in flight (+0xA8); in the
+ * world also the solid of the car's model.  A line when that changes. */
+#define G_HIBERPACK     0x00830b18u   /* the HIBERNATING pack itself (+8 its name, +0xA0 G_HIBER's list) */
+static struct { int on, n, lines; uint32_t name[64], sig[64]; } g_pw;
+static int shared_pack(uint32_t pk){
+    if (pk == G_HIBERPACK) return 1;
+    char nm[64]; cstr(pk + 8u, nm, sizeof nm);
+    for (char *p = nm; *p; p++) if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 32);
+    if (strstr(nm, "\\WHEELS\\GEOMETRY_")) return 1;
+    for (uint32_t i = 0; i < N_PARTPACKS; i++){ char p[64]; cstr(rd32(G_PARTPACKS + 4u * i), p, sizeof p); if (!strcasecmp(p, nm)) return 1; }
+    return 0;
+}
+static uint32_t listed_shared(uint32_t name){
+    uint32_t head = G_STREAMER + 0x18u; int np = 0;
+    for (uint32_t pk = rd32(head); pk && pk != head && ok(pk, 0xc0) && np < 256; pk = rd32(pk), np++)
+        if (pack_model(pk, name) && shared_pack(pk)) return pk;
+    return 0;
+}
+static void partswatch(const char *when){
+    uint32_t car = player_car(), ri = ok(car, 0x9e0) ? rd32(car + 0x554u) : 0;
+    int have_ri = ok(ri, CRI_MODELS + 0x20u * 0x40u);
+    for (uint32_t i = 0; have_ri && i < 0x40u * 8u && g_pw.n < 64; i++){
+        uint32_t m = rd32(ri + CRI_MODELS + 4u * i), nm = ok(m, 0x10) ? MR32(m + 8u) : 0;
+        int have = !nm;
+        for (int j = 0; !have && j < g_pw.n; j++) have = g_pw.name[j] == nm;
+        if (!have && listed_shared(nm)){ g_pw.name[g_pw.n] = nm; g_pw.sig[g_pw.n++] = 0; }
+    }
+    for (int j = 0; j < g_pw.n && g_pw.lines < 6000; j++){
+        uint32_t nm = g_pw.name[j], head = G_STREAMER + 0x18u; int np = 0, at = 0;
+        char s[600]; s[0] = 0;
+        for (uint32_t pk = rd32(head); pk && pk != head && ok(pk, 0xc0) && np < 256; pk = rd32(pk), np++){
+            uint32_t e = pack_model(pk, nm);
+            if (!e) continue;
+            uint32_t sp = MR32(pk + 0xb8u), idx = (e - MR32(pk + 0xa0u)) / 0x18u, sol = 0;
+            if (ok(sp, 0x80) && ok(MR32(sp + 0x74u) + 8u * idx, 8) && MR32(MR32(sp + 0x74u) + 8u * idx) == nm) sol = MR32(MR32(sp + 0x74u) + 8u * idx + 4u);
+            char pn[48]; cstr(pk + 8u, pn, sizeof pn);
+            if (at < (int)sizeof s - 120)
+                at += snprintf(s + at, sizeof s - (size_t)at, " [%s: loads %u fl %02x data %08x solid %08x inflight %d]", pn, MR16(e + 0x12u),
+                               MR8(e + 0x11u), MR32(e + 0x14u), sol, (int32_t)MR32(pk + 0xa8u));
+        }
+        uint32_t cs = 0xffffffffu;
+        for (uint32_t i = 0; have_ri && i < 0x40u * 8u; i++){
+            uint32_t m = rd32(ri + CRI_MODELS + 4u * i);
+            if (ok(m, 0x10) && MR32(m + 8u) == nm){ cs = MR32(m + 0xcu); break; }
+        }
+        if (cs != 0xffffffffu && at < (int)sizeof s - 40) at += snprintf(s + at, sizeof s - (size_t)at, " car's solid %08x", cs);
+        uint32_t h = 2166136261u;
+        for (const char *p = s; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
+        if (h == g_pw.sig[j]) continue;
+        g_pw.sig[j] = h; g_pw.lines++;
+        rlog("[roam] f=%ld partswatch %s flow %u: %08x%s\n", rh_frame(), when, rd32(G_FLOW), nm, s[0] ? s : " listed nowhere");
+    }
+}
 void roam_game_frame(CPU *c){
     if (!g_inited) init_once(c);
     if (!O.on) return;
@@ -7976,7 +8111,9 @@ void roam_game_frame(CPU *c){
     uint32_t w = world();
     if (w != g_world_seen) world_changed(c, w);
     if (g_npending && (!w || in_roam)) flush_unloads(c);      /* the old world's cars are gone */
+    if (g_pw.on) partswatch("pre");
     if (g_packs_ok) packs_wake(c);                  /* after the game's hibernation (into the world) */
+    if (g_pw.on) partswatch("post");
     /* sync clock */
     float wdt = rd32(G_FLOW) == 6u ? MRF32(G_WORLDDT) : 0.f;
     if (!__builtin_isfinite(wdt) || wdt < 0 || wdt > 1.f) wdt = 0;
@@ -9136,14 +9273,22 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         rlog("[roam] f=%ld mp models: %d of %d shop parts of friends' cars have their models\n", f, have, n);
         return 1;
     }
+    if (!strcasecmp(sub, "partswatch")){
+        g_pw.on = strcasecmp(a1, "off") != 0;
+        rlog("[roam] f=%ld mp partswatch %s (%d models known)\n", f, g_pw.on ? "on" : "off", g_pw.n);
+        return 1;
+    }
     if (!strcasecmp(sub, "solids")){
         /* "mp solids [K]": the player's car's (or slot K's) parts from the
          * shared packs: each one's model in the render info, that model's
          * solid (eModel +0xC: 0x5C5930 draws nothing without one), and each
          * of the streamer's packs that lists the model (G_STREAMER +0x18, in
          * the order 0x48CED0 searches them to load or unload it): its loads
-         * (+0x12) and whether its data is in (+0x14) */
-        int k = a1[0] ? atoi(a1) : -1;
+         * (+0x12) and whether its data is in (+0x14).  "mp solids expect"
+         * (the player's car) also checks it: every part drawn, each model
+         * listed by one pack, no load count wrapped round ("[expect] FAIL") */
+        int expect = !strcasecmp(a1, "expect"), twice = 0, wrapped = 0;
+        int k = a1[0] && !expect ? atoi(a1) : -1;
         uint32_t car = k < 0 ? player_car() : k < NSLOT ? g_sl[k].car : 0, owners = rd32(G_PARTOWNERS);
         uint32_t ride = ok(car, 0x9e0) ? rd32(car + 0x10u) : 0, ri = ok(car, 0x9e0) ? rd32(car + 0x554u) : 0;
         if (!ok(ride, 0x8f0) || !ok(ri, CRI_MODELS + 0x20u * 0x3fu) || !owners){ rlog("[roam] f=%ld mp solids: no car\n", f); return 1; }
@@ -9154,7 +9299,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
             if (!shared_owner(rd32(owners + 4u * MR8(p + 7u)))) continue;
             uint32_t m = rd32(ri + CRI_MODELS + 0x20u * sl), name = ok(m, 0x10) ? MR32(m + 8u) : 0, solid = ok(m, 0x10) ? MR32(m + 0xcu) : 0;
             char nm[24]; cstr(rd32(G_SLOTNAMES + 8u * sl), nm, sizeof nm);
-            char packs[400] = {0}; int at = 0, np = 0;
+            char packs[400] = {0}; int at = 0, np = 0, listed = 0;
             uint32_t head = G_STREAMER + 0x18u;
             for (uint32_t pk = rd32(head); name && pk && pk != head && ok(pk, 0xc0) && np < 256; pk = rd32(pk), np++){
                 uint32_t tab = MR32(pk + 0xa0u), cnt = MR32(pk + 0xa4u);
@@ -9165,13 +9310,33 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
                     char pn[48]; cstr(pk + 8u, pn, sizeof pn);
                     if (at < (int)sizeof packs - 80)
                         at += snprintf(packs + at, sizeof packs - (size_t)at, " [%s: loads %u, %s]", pn, MR16(e + 0x12u), MR32(e + 0x14u) ? "in" : "out");
+                    listed++; wrapped += MR16(e + 0x12u) >= 0x8000u;
                     break;
                 }
             }
-            n++; drawn += solid != 0;
+            n++; drawn += solid != 0; twice += listed > 1;
             rlog("[roam] f=%ld mp solids: %s model %08x %s, solid %s;%s\n", f, nm, name, m ? "yes" : "NO", solid ? "yes" : "NO", packs);
         }
         rlog("[roam] f=%ld mp solids: %d of %d shop parts of %s drawn\n", f, drawn, n, k < 0 ? "the player's car" : "the slot's car");
+        if (expect){
+            /* and the shown friends' cars' models that the shared packs list (shop parts, the calipers of a brake
+             * upgrade): each with a solid (their cars move to ours when packs_wake takes a copy of the pack's out) */
+            int fn = 0, fd = 0;
+            for (int q = 0; q < NSLOT; q++){
+                Slot *s = &g_sl[q];
+                if (s->st != SL_ACTIVE || s->hidden || !ok(s->car, 0x9e0)) continue;
+                uint32_t i2 = rd32(s->car + 0x554u);
+                if (!ok(i2, CRI_MODELS + 0x20u * 0x40u)) continue;
+                for (uint32_t i = 0; i < 0x40u * 8u; i++){
+                    uint32_t m = rd32(i2 + CRI_MODELS + 4u * i), mn = ok(m, 0x10) ? MR32(m + 8u) : 0;
+                    if (!mn || !listed_shared(mn)) continue;
+                    fn++; fd += MR32(m + 0xcu) != 0;
+                }
+            }
+            rlog("[expect] %s f=%ld mp solids: %d of %d shop parts drawn, %d model(s) listed by more than one pack, %d load count(s) "
+                 "wrapped round; friends' cars: %d of %d drawn\n", drawn == n && !twice && !wrapped && fd == fn ? "PASS" : "FAIL", f,
+                 drawn, n, twice, wrapped, fd, fn);
+        }
         return 1;
     }
     if (!strcasecmp(sub, "sounds")){
@@ -9829,6 +9994,9 @@ static int extra_is_free(uint32_t p, uint32_t x, uint32_t xn){
 }
 int roam_game_loader_release(CPU *c){
     if (!g_inited || !O.on) return 1;
+    /* the front end's take-back (0x57F030 mode 4) comes next, and writes HIBERNATING's entries over the packs'
+     * as they are: whatever is still there for a pack of ours goes back the careful way first (packs_wake) */
+    if (g_packs_ok){ g_wake_n = 0xffffffffu; packs_wake(c); }
     uint32_t p = rd32(G_CARS_POOL), x = rd32(G_CARLOADER + 0x6cu), xn = rd32(G_CARLOADER + 0x70u);
     if (!x || !ok(p, 0x40)) return 1;
     uint32_t w = world();

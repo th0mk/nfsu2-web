@@ -1,0 +1,51 @@
+# The player's own car's shop parts (brakes, exhaust tips, spoiler, rims, ...) after a car loaded a copy of one of
+# them into free roam's shared part pack before the player's own came back from HIBERNATING (packs_wake).  Players'
+# reports since 10-28: brakes, exhaust tips or a spoiler gone after any shop or the crib, back after a reload.  In
+# players' games the game's own traffic and AI racers (all with the BRAKES pack's calipers) or friends' cars load
+# them there while the packs come in; here NFSU2_ROAM_TEST_WAKE_LATE holds the first take-back back (the packs ahead
+# of HIBERNATING meanwhile) while the crowd's cars load, so a save whose car has the crowd's caliper (or another
+# part some crowd car has) gets a copy of its own in the pack.  Then Performance Shop visits and the crib, and after
+# each "mp solids expect": every part drawn (the friends' cars' too), each model listed by one pack, no load count
+# wrapped round ("[expect] FAIL" otherwise; before the fix the caliper was gone from the first visit on, its loads
+# at 65509).  Without NFSU2_ROAM_TEST_WAKE_LATE it is the same trip with the take-back on time.
+# "mp partswatch" logs the streamer's listings of the car's models whenever they change.
+#   node web/tools/roam-crowd.mjs --base <server> --n 30 --cars all --room <r>
+#   NFSU2_SAVE_SEED=<a career save whose car has shared-pack parts> node web/tools/run-suite.mjs --base <server>
+#        --script roam_ownparts_dup.txt --marker "quit at guest frame" --net <name> --env NFSU2_ROAM=1
+#        --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<r> --env ROAM_CROWD_CARS=30
+#        --env NFSU2_ROAM_TEST_WAKE_LATE=1800 --env VISITS=2 --timeout-scale 4
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam mp partswatch on
++0    roam smsauto on
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++2400 roam mp solids expect
++0    loop ${VISITS}
++0    log VISIT the Performance Shop
++0    roam shopgo CC_PERF_SHOP
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the shop
++0    waitfe GarageMain.fng 3000
++600  tap ESCAPE
++200  tap LEFT
++30   tap RETURN                      # back to Explore Mode: Yes
++0    waitroam 4000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++600  roam mp solids expect
++0    endloop
++0    log VISIT the crib
++0    roam shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++300  tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitroam 4000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++600  roam mp solids expect
++0    roam mp status
++10   quit
