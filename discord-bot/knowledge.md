@@ -293,6 +293,13 @@ context lists every problem the developer has a report on, with its first thread
 - Back to free roam after a race with other players: endless loading. Two causes are fixed: the crash on the way back
   (`INVALID FREE` and a `TRAP` after the lobby screen, 39f2ca8, 26 October) and the trip stopping after the crib's
   save went to the main menu (db3f8b5, 27 October). A report on a version with both is new: escalate it with the log.
+- Free roam: the player's own car loses its brake calipers, exhaust tips, spoiler or another shop part (rims,
+  mirrors, roof scoop, trunk audio) after entering any shop or the crib, and it stays gone, in the garage too and after
+  a car change, until the page is reloaded. One case was fixed on 30 October (d09e1439); the cause behind the reports
+  since (another car, a player's or the game's own traffic, with the same part) was fixed on 4 November (c1cd2de7).
+  Until that is live, a reload brings the parts back. On a version with it, a report is new: escalate it with the log
+  (its `HIBERNATING` lines). Threads 1565572638766796820 (earlier 1562415335540396032), 1567301375547801650 (a 240SX's
+  spoiler), 1565481947482820609, 1562624102483759234.
 - Sound on a PC that goes silent after the game was paused or its window inactive (`the AudioWorklet stopped
   consuming` in the log, on the live version). On phones, sound that chopped up got a fix on 26 October: a report
   of that after it is new.
