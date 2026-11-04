@@ -926,6 +926,8 @@ static void gmem_init(CPU *c){
         g_sl[k].ride_new = b; g_sl[k].ride_orig = b + RIDE_SZ; g_sl[k].rec = b + 2u * RIDE_SZ;
     }
 }
+/* coop.c: player 2's car's paint slot (one past every slot of ours), its textures made as ours are */
+int roam_game_coop_skin(CPU *c, uint32_t n){ return skin_textures(c, n); }
 static void unload_later(uint32_t h){
     if (!h) return;
     if (g_npending < 3 * NSLOT) g_handles_pending[g_npending++] = h;
