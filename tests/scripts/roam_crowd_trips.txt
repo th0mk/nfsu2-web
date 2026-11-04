@@ -1,0 +1,56 @@
+# The guest heap's address space over trips out of a crowded free roam and back (2026-11-04 reports: error 134
+# after an hour or two among ~35-48 friends' cars, each trip to the crib, a shop, a cover shoot or a race and back;
+# HeapAlloc of 1.4 MB, then of the track streamer's 60000 KB, failing with the 512 MB window not full).  From a
+# career save the bot loads free roam; once the friends' cars are in, TRIPS times: the crib (its marker, Return to
+# Explore Mode), then the next race the career bot would pick (its card, Solo, won at once; the bot for the
+# post-race screens) and back, each followed by the friends' cars loaded again and a status line (with
+# NFSU2_HEAPMAP=1 the heap's map: what holds the address space, its widest free runs, the big blocks).
+# Good: no "[heap] ... no room" line, no trap, trips_end at the end.  NFSU2_ROAM_CARPOOL_KB=128000 adds about
+# 57 MB that stays, as in the live sessions' 390-410 MB.
+#   web (all in WSL): the server --max-peers 1000; roam-crowd --n 40 --cars all --links 48 --bundle --spread 50 for good,
+#   and in a loop roam-crowd --n 16 --first 40 --cars all --links 48 --bundle --spread 30 --seconds 40, then 30 s
+#   without (cars come and go as on a busy server); NFSU2_SAVE_SEED=<a stage-2 career save> run-suite.mjs --script
+#   roam_crowd_trips.txt --marker trips_end --net <name> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan
+#   --env NFSU2_ROAM_ROOM=<r> --env NFSU2_ROAM_MAX_CARS=48 --env ROAM_CROWD_CARS=40 --env TRIPS=12
+#   --env NFSU2_HEAPMAP=1 --env NFSU2_HEAPSTAT=1 --timeout-scale 12
+0     bot on
++0    waitroam 6000
++0    bot off
++0    careerlist
++0    roam smsauto on
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++600  status trips_start
++0    loop ${TRIPS}
++0    log TRIP crib
++0    roam shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++300  tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitroam 4000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++1200 status after_crib
++0    log TRIP race
++0    careergo next                   # the next race the bot would pick
++300  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # Accept: Solo or Multiplayer?
++0    waitfng IG_GenericDialog_MED.fng 600
++60   tap RIGHT
++30   tap RETURN                      # Solo (the right button)
++0    waitexpr i:0x8654a4 != 6 3000   # its loading screen
++0    waitmem 0x008654a4 6 6000
++0    waitfng HUD_SingleRace.fng 6000
++300  status in_race
++0    racewin
++0    bot on                          # the post-race screens, the save
++0    waitroam 30000                  # back in free roam
++0    bot off
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++1200 status after_race
++0    endloop
++60   status trips_end
++10   quit
