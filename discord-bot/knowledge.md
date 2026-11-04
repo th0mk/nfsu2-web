@@ -318,6 +318,16 @@ context lists every problem the developer has a report on, with its first thread
   dead, LT reverse works; the Ultimate 2C works), and a wired pad on a Mac seen as `PS3 GamePad (054c:0268)`. No fix
   yet. Ask for the log and what Controls, Controller shows when the trigger is pressed. Threads
   1567258347940352072, 1566999852288843858.
+- Horns (yours and other players') still sounding with the game's Master Volume at 0: horns had only their own slider,
+  Horn Volume (the game's Options, Audio, also the pause menu's), 10 % to 100 %. Fixed on 4 November (47f8c0c6): horns
+  follow Master Volume as the game's own sounds do, so Master Volume at 0 silences them too; Horn Volume stays 10 % to
+  100 % (the developer's choice when it was made). Until that is live, Horn Volume at 10 % is the quietest. Thread
+  1567278200134836509.
+- Ghost mode Everything: the camera jumped up for a moment as a traffic car, a van most of all, drove through the
+  player's car, as if they had collided. Not a collision: the game's camera lifts itself over any car its eye is in,
+  and the car that passed through went on through the camera behind; nothing else changed (no slow motion, the car's
+  speed kept). Fixed on 4 November (77d744ad): the camera goes through those cars too. Until that is live there is no
+  workaround but Ghost mode Players (traffic solid). Thread 1567227790888017980.
 
 ## Decided
 
@@ -348,7 +358,11 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   (right looks right; straight down is the game's Look Back since 77a2a706; the left stick when the game's controls
   steer or brake with the right one, since c04e9dc0) and turns it in the garage; quick chat,
   with phrases to pick in the start page's Online;
-  ghost mode in F9; Upscaled HUD in the start page's Game, Display, more: Menus, HUD and maps (Upscaled), which since 09e907f1
+  ghost mode in F9 or the start page's Online: Players lets other players' cars pass through, and Everything (since
+  6f7bb374) also the game's traffic and its tuners, in free roam with others: the answer to "ghost mode for traffic"
+  and to disabling or removing the traffic or the tuners (NPCs) in free roam, which stay in the world as in the game
+  but no longer get in the way; Upscaled HUD in the start page's Game, Display, more: Menus, HUD and maps (Upscaled),
+  which since 09e907f1
   also shows JeansBig's Detailed Map: the minimap's, world map's and race menus' maps sharp, with the missing
   shortcuts; photo mode with F12 or the pause menu's
   Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and

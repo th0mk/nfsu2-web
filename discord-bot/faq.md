@@ -95,6 +95,8 @@ label: Play with others
 3. To find your friends: type the same crew name in Friends & crews, **Crews**. You always see each other.
 4. To race: drive to a race's start, press **Enter** and pick **Multiplayer**. The others join your lobby.
 
+Cars in your way? **Ghost mode** (on the start page, Online, or in the **F9** menu): **Players** lets the other players' cars pass through yours, **Everything** also the traffic and the game's tuners in free roam.
+
 ### Is there chat?
 label: Chat
 - **Quick chat:** **1** to **4**, then **1** to **4** sends a phrase to the players near you. Pick your phrases on the start page, Online.
