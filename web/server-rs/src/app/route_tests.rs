@@ -328,6 +328,22 @@ async fn seen_counts_each_browser_once() {
     assert_eq!(kit.app.days.today(nfsu2_util::now_ms()).1, [2, 1, 0, 0]);
 }
 
+// /country: the connection's own country as a trusted proxy (here this machine) names it, lower case, never stored;
+// none without the header or with one that is no country; not kept by any cache
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn country_is_the_connections_own() {
+    let kit = Kit::start(&[], |_| {}).await;
+    for (cc, want) in [(Some("NL"), r#"{"country":"nl"}"#), (Some(" br "), r#"{"country":"br"}"#), (Some("XX"), r#"{"country":null}"#),
+                       (Some("T1"), r#"{"country":null}"#), (Some("Netherlands"), r#"{"country":null}"#), (None, r#"{"country":null}"#)] {
+        let h: Vec<(&str, &str)> = cc.map(|c| ("CF-IPCountry", c)).into_iter().collect();
+        let r = kit.get("/country", &h).await;
+        assert_eq!(r.status, 200, "{cc:?}");
+        assert_eq!(String::from_utf8_lossy(&r.body), want, "{cc:?}");
+        assert_eq!(r.header("content-type"), Some("application/json"));
+        assert!(r.header("cache-control").is_some_and(|c| c.contains("no-store")), "{cc:?}");
+    }
+}
+
 // /seen at a day's first Play: the device and the changed settings go into the day's totals (settings_days.rs); a
 // load, a Play without them (an older page), a bad device or no id tell nothing
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

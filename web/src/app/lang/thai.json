@@ -1312,5 +1312,13 @@
   "Press a key": "กดคีย์",
   "Press D-pad or a stick on the controller. Esc: as it was.": "กดปุ่มทิศทางหรืออนาล็อกบนคอนโทรลเลอร์ Esc: คงไว้ตามเดิม",
   "Esc: as it was.": "Esc: คงไว้ตามเดิม",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "การควบคุมหนึ่งของเกมตั้งไว้ที่ {key} (ตัวเลือก, การควบคุม ในเกม): เกมจะรับคีย์นี้ไป"
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "การควบคุมหนึ่งของเกมตั้งไว้ที่ {key} (ตัวเลือก, การควบคุม ในเกม): เกมจะรับคีย์นี้ไป",
+  "Your flag": "ธงของคุณ",
+  "Shown before your name over your car in free roam.": "แสดงหน้าชื่อของคุณเหนือรถของคุณขณะขับอิสระ",
+  "No flag": "ไม่มีธง",
+  "England": "อังกฤษ",
+  "Scotland": "สกอตแลนด์",
+  "Wales": "เวลส์",
+  "Northern Ireland": "ไอร์แลนด์เหนือ",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "รหัสประเทศ เช่น nl หรือ gb-eng, gb-sct, gb-wls หรือ gb-nir"
 }

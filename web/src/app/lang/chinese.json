@@ -1312,5 +1312,13 @@
   "Press a key": "請按下按鍵",
   "Press D-pad or a stick on the controller. Esc: as it was.": "按下控制器的方向鍵或搖桿。Esc：保持不變。",
   "Esc: as it was.": "Esc：保持不變。",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "遊戲的某項操作已設為 {key}（遊戲內的選項、控制）：此鍵由遊戲接收。"
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "遊戲的某項操作已設為 {key}（遊戲內的選項、控制）：此鍵由遊戲接收。",
+  "Your flag": "你的旗幟",
+  "Shown before your name over your car in free roam.": "在自由漫遊中顯示在你車子上方的名稱前。",
+  "No flag": "不顯示旗幟",
+  "England": "英格蘭",
+  "Scotland": "蘇格蘭",
+  "Wales": "威爾斯",
+  "Northern Ireland": "北愛爾蘭",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "國家代碼，例如 nl，或 gb-eng、gb-sct、gb-wls、gb-nir"
 }

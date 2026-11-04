@@ -1393,5 +1393,13 @@
   "Press a key": "Tryk på en tast",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Tryk på D-pad eller en stick på controlleren. Esc: som før.",
   "Esc: as it was.": "Esc: som før.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "En af spillets kommandoer ligger på {key} (Indstillinger, Kommandoer i spillet): spillet får den."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "En af spillets kommandoer ligger på {key} (Indstillinger, Kommandoer i spillet): spillet får den.",
+  "Your flag": "Dit flag",
+  "Shown before your name over your car in free roam.": "Vises foran dit navn over din bil i udforsknings-mode.",
+  "No flag": "Intet flag",
+  "England": "England",
+  "Scotland": "Skotland",
+  "Wales": "Wales",
+  "Northern Ireland": "Nordirland",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "en landekode som nl, eller gb-eng, gb-sct, gb-wls eller gb-nir"
 }

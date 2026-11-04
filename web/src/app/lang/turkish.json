@@ -1321,5 +1321,13 @@
   "Press a key": "Bir tuşa bas",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Oyun kolunda yön tuşlarına ya da bir çubuğa bas. Esc: olduğu gibi kalır.",
   "Esc: as it was.": "Esc: olduğu gibi kalır.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "Oyunun kontrollerinden biri {key} tuşunda (oyunun kontrol ayarlarında): tuşu oyun alır."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "Oyunun kontrollerinden biri {key} tuşunda (oyunun kontrol ayarlarında): tuşu oyun alır.",
+  "Your flag": "Bayrağın",
+  "Shown before your name over your car in free roam.": "Serbest sürüşte arabanın üstünde adının önünde gösterilir.",
+  "No flag": "Bayrak yok",
+  "England": "İngiltere",
+  "Scotland": "İskoçya",
+  "Wales": "Galler",
+  "Northern Ireland": "Kuzey İrlanda",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "nl gibi bir ülke kodu ya da gb-eng, gb-sct, gb-wls veya gb-nir"
 }

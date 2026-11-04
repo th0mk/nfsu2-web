@@ -1447,5 +1447,13 @@
   "Press a key": "Naciśnij klawisz",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Naciśnij krzyżak lub gałkę na kontrolerze. Esc: bez zmian.",
   "Esc: as it was.": "Esc: bez zmian.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "Klawisz {key} ma przypisaną akcję gry (w jej ustawieniach sterowania): przejmie go gra."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "Klawisz {key} ma przypisaną akcję gry (w jej ustawieniach sterowania): przejmie go gra.",
+  "Your flag": "Twoja flaga",
+  "Shown before your name over your car in free roam.": "Widoczna przed twoją nazwą nad twoim samochodem na przejażdżce.",
+  "No flag": "Bez flagi",
+  "England": "Anglia",
+  "Scotland": "Szkocja",
+  "Wales": "Walia",
+  "Northern Ireland": "Irlandia Północna",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "kod kraju, np. nl, albo gb-eng, gb-sct, gb-wls lub gb-nir"
 }

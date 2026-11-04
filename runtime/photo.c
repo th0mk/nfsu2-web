@@ -149,7 +149,7 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 #define OB_TYPE        0x18u         /*   its type (5 a group), */
 #define OB_FLAGS       0x1cu         /*   its flags (bit 1 hidden, 0x400000 changed: the renderer looks again), */
 #define OB_CHILD       0x64u         /*   a group's first */
-#define NAMES_MAX      64
+#define NAMES_MAX      128           /* the names over friends' cars and their flags (roam_game_names) */
 #define HIDDEN_MAX     4096
 #define FN_VOLUMES     0x00469050u
 #define G_SOUND        0x0082b884u

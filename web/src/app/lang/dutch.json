@@ -1393,5 +1393,13 @@
   "Press a key": "Druk op een toets",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Druk op de D-pad of een stick van de controller. Esc: blijft zoals het was.",
   "Esc: as it was.": "Esc: blijft zoals het was.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "Een spelbesturing staat op {key} (in het spel: Opties, Besturing): het spel krijgt hem."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "Een spelbesturing staat op {key} (in het spel: Opties, Besturing): het spel krijgt hem.",
+  "Your flag": "Je vlag",
+  "Shown before your name over your car in free roam.": "Te zien voor je naam boven je wagen in Verkennen.",
+  "No flag": "Geen vlag",
+  "England": "Engeland",
+  "Scotland": "Schotland",
+  "Wales": "Wales",
+  "Northern Ireland": "Noord-Ierland",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "een landcode zoals nl, of gb-eng, gb-sct, gb-wls of gb-nir"
 }

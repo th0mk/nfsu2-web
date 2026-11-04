@@ -109,6 +109,12 @@
 #else
 #define MPRACES         1
 #endif
+/* flags before the names over friends' cars (flag_*): not in the Windows plugin */
+#ifdef ROAM_HOST_WIN
+#define FLAGS           0
+#else
+#define FLAGS           1
+#endif
 #define G_FLOW          0x008654a4u   /* GameFlowManager state: 3 front end, 6 in the world */
 #define G_GAMEMODE      0x00850078u   /* 1 career, 0x200 LAN */
 #define G_WORLD         0x00890080u   /* World*: +0x10 cars, +0x14/+0x18 AI range, +0x1C cars[] */
@@ -388,6 +394,7 @@ static struct {
                                                  player's pick: fewer once the frames are slow with more (cars_cut) */
     int cut_us;                               /* ...a frame this long or more is slow (NFSU2_ROAM_CUT_MS; 0: never cut) */
     char name[RC_NAME_MAX + 1], room[64];
+    int flag;                                 /* NFSU2_ROAM_FLAG: the flag before our name (flags.bin's, -1 none: flag_*) */
     char crew[RC_CREW_MAX][100]; int ncrew;   /* NFSU2_ROAM_CREW: the crews' names, in the player's order (crews_parse; the
                                                  page's 24 characters are up to 96 bytes of UTF-8) */
     uint32_t crew_rgb[RC_CREW_MAX + 1];       /* ...and their colours (NFSU2_ROAM_CREW_RGB, the player's picks; else CREW_RGB);
@@ -429,6 +436,8 @@ typedef struct {
     int      st;
     int      peer; uint32_t peer_id;          /* session table index and id */
     char     name[RC_NAME_MAX + 1];
+    char     flagcode[RC_FLAG_MAX + 1];       /* the flag before the name, as the peer's HELLO has it ("" none) */
+    int      flag;                            /* ...flags.bin's (-1 none: flag_find) */
     uint32_t car, world;                      /* the slot's car in this world */
     int      created;                         /* one of our own cars (k >= NOPP) */
     int      unindexed;                       /* ...past World::IndexCars' 22: record kind KIND_OUT */
@@ -799,10 +808,17 @@ static uint32_t bhash(const char *s){ uint32_t h = 0xffffffffu; for (; *s; s++) 
 #ifndef ROAM_HOST_WIN
 static int8_t g_skin_ok[NSLOT + SKIN_GAME];   /* paint slot n: 1 its textures are there, -1 they could not be made */
 #endif
+#if FLAGS
+static uint32_t flag_texinfo(uint32_t h);
+#endif
 uint32_t roam_game_texture(uint32_t h){
     if (!(g_texbits[(h & 0x1fffu) >> 3] & (1u << (h & 7u)))) return 0;
     for (int i = 0; i < g_ntex; i++) if (g_tex[i].hash == h) return g_tex[i].ti;
+#if FLAGS
+    return flag_texinfo(h);                         /* the flags before the names */
+#else
     return 0;
+#endif
 }
 static int skin_textures(CPU *c, uint32_t n){
     if (n <= SKIN_GAME) return 1;
@@ -2366,6 +2382,197 @@ static int hud_on_top(uint32_t pkg){
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(pkg, b, sizeof b);
     return a[0] && !strcasecmp(a, b);
 }
+/* ---- flags before the names ------------------------------------------------------------------- */
+/* The flag a player picked (settings.ini roam_flag, the page's Your flag; its code on the wire: roam_core.c's HELLO to
+ * each peer, core 13) before their name over their car.  The flags are runtime/flags.bin (web/tools/mkflags.mjs:
+ * flag-icons' at 48x36, in runs), each made a texture of our own when a name first needs it (64x64 and its mipmaps,
+ * the corners rounded), handed out by the port's override of GetTextureInfo as the paint slots' are
+ * (roam_game_texture): a copy of the HUD's plain white texture's TextureInfo (32-bit, with the HUD's alpha blending),
+ * its size, pixels and name our own, the D3D texture made by the game (0x5CE170).  Each name has an image of its own
+ * for it, a copy of the HUD package's first image (fe_clone), with that texture: as tall as the name's capitals, 4:3,
+ * a gap from the name, the two centred over the car together, faded and scaled with the name.  Not in the Windows
+ * plugin (no page to pick one).  Made once and kept: 22 KB a flag. */
+#define FN_FE_SETTEX    0x0050c990u   /* cdecl (image, texture hash): +0x24 (0x50C980 reads it), changed (+0x1C |= 0x400000) */
+#if FLAGS
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc23-extensions"
+static const uint8_t g_flags_bin[] = {
+#embed "flags.bin"
+};
+#pragma clang diagnostic pop
+#define FLAG_N_MAX      300           /* flags.bin's at most (254 now) */
+#define FLAG_TEX        64u           /* a flag's texture: FLAG_TEX square (it shows 4:3), and its mipmaps down to 8 */
+#define FLAG_MIPS       4u
+#define FLAG_TEX_BYTES  (4u * (64u * 64u + 32u * 32u + 16u * 16u + 8u * 8u))
+#define FLAG_TEMPLATE   0xe2a5c626u   /* the HUD's plain white (16x16, 32-bit; HUD_SingleRace's bar and fade): our flags' kind */
+#define FLAG_CAP        10.5f         /* the names' capitals, HUD units at scale 1 (20 pixels of 900): the flag's height */
+#define FLAG_GAP        2.f           /* from the flag to the name (HUD units at scale 1; the first letter adds its own room):
+                                         0.3 of the capitals, as the picked look */
+#define FLAG_DY         0.f           /* the flag's middle below the name's (HUD units at scale 1): the capitals' middle */
+#define FLAG_ROUND      0.12f         /* its corners' radius, of its height */
+#define FLAG_NEW_MAX    2             /* textures made a frame at most */
+static uint32_t g_flag_ti[FLAG_N_MAX], g_flag_hash[FLAG_N_MAX]; static int8_t g_flag_bad[FLAG_N_MAX];
+static struct { uint32_t hash, ti; } g_flagmade[FLAG_N_MAX]; static int g_nflagmade, g_flag_new, g_flag_said;
+static uint32_t flags_n(void){
+    if (sizeof g_flags_bin < 8 || memcmp(g_flags_bin, "FLG1", 4)) return 0;
+    uint32_t n = g_flags_bin[4] | (uint32_t)g_flags_bin[5] << 8;
+    return n <= FLAG_N_MAX && 8u + 16u * n <= sizeof g_flags_bin ? n : 0;
+}
+static const char *flag_code(int i){ return (const char *)g_flags_bin + 8 + 16 * i; }
+/* a flag by its code (flags.bin's are in order), -1 for none or one it does not have */
+static int flag_find(const char *code){
+    if (!code || !code[0]) return -1;
+    uint32_t lo = 0, hi = flags_n();
+    while (lo < hi){
+        uint32_t m = (lo + hi) / 2;
+        int r = strncmp(flag_code((int)m), code, 8);
+        if (!r) return (int)m;
+        if (r < 0) lo = m + 1; else hi = m;
+    }
+    return -1;
+}
+/* flag i's pixels (W x H, red, green, blue) from its runs; 0 when they are not as they should be */
+static int flag_rgb(int i, uint8_t *rgb, int cap){
+    const uint8_t *e = g_flags_bin + 8 + 16 * i;
+    uint32_t off = e[8] | (uint32_t)e[9] << 8 | (uint32_t)e[10] << 16 | (uint32_t)e[11] << 24;
+    uint32_t len = e[12] | (uint32_t)e[13] << 8 | (uint32_t)e[14] << 16 | (uint32_t)e[15] << 24;
+    int n = 3 * g_flags_bin[6] * g_flags_bin[7], at = 0;
+    if (n > cap || off > sizeof g_flags_bin || len > sizeof g_flags_bin - off) return 0;
+    for (const uint8_t *p = g_flags_bin + off, *end = p + len; p < end;){
+        int h = *p++, k = h < 128 ? h + 1 : h - 126;
+        if (at + 3 * k > n || p + (h < 128 ? 3 * k : 3) > end) return 0;
+        for (int j = 0; j < k; j++, at += 3){ rgb[at] = p[0]; rgb[at + 1] = p[1]; rgb[at + 2] = p[2]; if (h < 128) p += 3; }
+        if (h >= 128) p += 3;
+    }
+    return at == n;
+}
+/* how much of texel (x, y) of a FLAG_TEX square the flag covers: all of it but past its rounded corners (4x4 points
+ * a texel; the corners round on the screen, where the square shows 4:3) */
+static uint8_t flag_cover(uint32_t x, uint32_t y){
+    const float rx = FLAG_ROUND * 0.75f, ry = FLAG_ROUND;
+    int in = 0;
+    for (int v = 0; v < 4; v++) for (int u = 0; u < 4; u++){
+        float px = ((float)x + (u + 0.5f) / 4.f) / (float)FLAG_TEX, py = ((float)y + (v + 0.5f) / 4.f) / (float)FLAG_TEX;
+        float cx = px < rx ? rx : px > 1.f - rx ? 1.f - rx : px, cy = py < ry ? ry : py > 1.f - ry ? 1.f - ry : py;
+        float dx = (px - cx) / rx, dy = (py - cy) / ry;
+        in += dx * dx + dy * dy <= 1.f;
+    }
+    return (uint8_t)(in * 255 / 16);
+}
+/* flag i's texture's pixels (blue, green, red, alpha, as D3DFMT_A8R8G8B8 lies in memory): the flag stretched to the
+ * square (bilinear), then each mipmap the average of the level before; 0 when flags.bin's are not as they should be */
+static int flag_pixels(int i, uint8_t *out){
+    uint8_t rgb[3 * 64 * 64];
+    int W = g_flags_bin[6], H = g_flags_bin[7];
+    if (W < 2 || H < 2 || !flag_rgb(i, rgb, (int)sizeof rgb)) return 0;
+    for (uint32_t y = 0; y < FLAG_TEX; y++) for (uint32_t x = 0; x < FLAG_TEX; x++){
+        float sx = ((float)x + 0.5f) * (float)W / (float)FLAG_TEX - 0.5f, sy = ((float)y + 0.5f) * (float)H / (float)FLAG_TEX - 0.5f;
+        if (sx < 0.f) sx = 0.f;
+        if (sy < 0.f) sy = 0.f;
+        int x0 = (int)sx, y0 = (int)sy, x1 = x0 + 1 < W ? x0 + 1 : x0, y1 = y0 + 1 < H ? y0 + 1 : y0;
+        float fx = sx - (float)x0, fy = sy - (float)y0;
+        uint8_t *o = out + 4u * (y * FLAG_TEX + x);
+        for (int k = 0; k < 3; k++){
+            float a = rgb[3 * (y0 * W + x0) + k] * (1.f - fx) + rgb[3 * (y0 * W + x1) + k] * fx;
+            float b = rgb[3 * (y1 * W + x0) + k] * (1.f - fx) + rgb[3 * (y1 * W + x1) + k] * fx;
+            o[2 - k] = (uint8_t)(a * (1.f - fy) + b * fy + 0.5f);
+        }
+        o[3] = flag_cover(x, y);
+    }
+    uint8_t *src = out;
+    for (uint32_t s = FLAG_TEX / 2u, m = 1; m < FLAG_MIPS; s /= 2u, m++){
+        uint8_t *dst = src + 4u * (2u * s) * (2u * s);
+        for (uint32_t y = 0; y < s; y++) for (uint32_t x = 0; x < s; x++) for (int k = 0; k < 4; k++){
+            const uint8_t *a = src + 4u * ((2u * y) * 2u * s + 2u * x) + k, *b = a + 4u * 2u * s;
+            dst[4u * (y * s + x) + (uint32_t)k] = (uint8_t)((a[0] + a[4] + b[0] + b[4] + 2) / 4);
+        }
+        src = dst;
+    }
+    return 1;
+}
+/* flag i's texture's hash, the texture made now if it has none yet; 0 when there is none (yet) */
+static uint32_t flag_texture(CPU *c, int i){
+    if (i < 0 || i >= FLAG_N_MAX || g_flag_bad[i]) return 0;
+    if (g_flag_ti[i]) return g_flag_hash[i];
+    if (g_flag_new >= FLAG_NEW_MAX) return 0;                            /* the next frame */
+    g_flag_new++;
+    uint32_t a[3] = { FLAG_TEMPLATE, 0, 0 }, src = rh_call(c, FN_TEXINFO, 0, 0, 3, a);
+    if (!ok(src, TI_SZ) || !ok(rd32(src), PLAT_SZ) || MR8(src + 0x4au) != 0x20u){
+        if (!g_flag_said++) rlog("[roam] f=%ld flags: no texture %08x to make theirs like (%08x): no flags now\n", rh_frame(), FLAG_TEMPLATE, src);
+        return 0;
+    }
+    uint32_t sz = TI_SZ + PLAT_SZ + FLAG_TEX_BYTES + 64u, ti = rh_call(c, FN_MALLOC, 0, 0, 1, &sz), pl = ti + TI_SZ;
+    if (!ti){ g_flag_bad[i] = 1; rlog("[roam] f=%ld flag %s: no memory for it\n", rh_frame(), flag_code(i)); return 0; }
+    uint32_t pix = (pl + PLAT_SZ + 63u) & ~63u;
+    if (!flag_pixels(i, GPTR(pix))){ g_flag_bad[i] = 1; rlog("[roam] f=%ld flag %s: flags.bin is broken\n", rh_frame(), flag_code(i)); return 0; }
+    memcpy(GPTR(ti), GPTR(src), TI_SZ); memcpy(GPTR(pl), GPTR(rd32(src)), PLAT_SZ);
+    MR32(pl) = 0; MR32(pl + 4u) = 0; MR32(pl + 0x18u) = 0;
+    char nm[24]; snprintf(nm, sizeof nm, "ROAM_FLAG_%s", flag_code(i));
+    MR32(ti) = pl; MR32(ti + 0x24u) = bhash(nm); MR32(ti + 0x70u) = pix;
+    for (uint32_t q = 0; q < 0x18u; q++) MR8(ti + 8u + q) = q < 0x17u && q < strlen(nm) ? (uint8_t)nm[q] : 0;   /* its name */
+    MR32(ti + 0x40u) = 4u * FLAG_TEX * FLAG_TEX; MR16(ti + 0x44u) = (uint16_t)FLAG_TEX; MR16(ti + 0x46u) = (uint16_t)FLAG_TEX;
+    MR8(ti + 0x48u) = 6; MR8(ti + 0x49u) = 6; MR8(ti + 0x4eu) = (uint8_t)FLAG_MIPS;                    /* log2 of its sides, its levels */
+    if (MR32(ti + 0x6cu) == src) MR32(ti + 0x6cu) = ti;
+    gcall0(c, FN_TEX_CREATE, ti);
+    if (!rd32(pl + 0x18u)){ g_flag_bad[i] = 1; rlog("[roam] f=%ld flag %s: the game made no texture\n", rh_frame(), flag_code(i)); return 0; }
+    uint32_t h = MR32(ti + 0x24u);
+    g_flag_ti[i] = ti; g_flag_hash[i] = h;
+    g_flagmade[g_nflagmade].hash = h; g_flagmade[g_nflagmade].ti = ti; g_nflagmade++;
+    g_texbits[(h & 0x1fffu) >> 3] |= (uint8_t)(1u << (h & 7u));
+    rlog("[roam] f=%ld flag %s: a texture of our own (%d now)\n", rh_frame(), flag_code(i), g_nflagmade);
+    return h;
+}
+/* each name's image for its flag, made (or looked up) once per HUD: a copy of the package's first image, which is
+ * off the screen and not in a group, its turn, pivot and texture corners as a flag needs them */
+static struct { uint32_t hud, like, obj[TAG_N]; uint8_t looked[TAG_N], shown[TAG_N], alpha[TAG_N]; uint32_t tex[TAG_N]; int said; } g_fl;
+static uint32_t flag_obj(CPU *c, int k, uint32_t pkg){
+    if (g_fl.looked[k]) return g_fl.obj[k];
+    g_fl.looked[k] = 1;
+    if (!g_fl.like){
+        uint32_t pk = gcall1(c, FN_FE_PACKAGE, 0, pkg);
+        for (uint32_t it = ok(pk, 0x54) ? rd32(pk + 0x4cu) : 0, n = 0; it && n < FE_WALK && !g_fl.like; it = rd32(it + 4u), n++)
+            if (ok(it, 0x5c) && rd32(it + 0x18u) == 1u && rd32(it + 0x30u) >= 0x54u && ok(rd32(it + 0x2cu), 0x54)) g_fl.like = it;
+        if (!g_fl.like){ if (!g_fl.said++) rlog("[roam] f=%ld flags: the HUD has no image to copy: no flags\n", rh_frame()); return 0; }
+    }
+    char nm[24]; snprintf(nm, sizeof nm, "ROAM_FLAG_%d", k + 1);
+    uint32_t o = fe_clone(c, pkg, g_fl.like, nm), d = o ? rd32(o + 0x2cu) : 0;
+    if (!o || !ok(d, 0x54) || rd32(o + 0x30u) < 0x54u){ if (!g_fl.said++) rlog("[roam] f=%ld flags: no copy of the HUD's image: no flags\n", rh_frame()); return 0; }
+    /* its drawing data: colour (+0), pivot (+0x10), place (+0x1C), turn (+0x28, a quaternion), size (+0x38), the
+     * texture's corners (+0x44 top left, +0x4C bottom right) */
+    for (uint32_t q = 0x10u; q < 0x1cu; q += 4u) MRF32(d + q) = 0.f;
+    MRF32(d + 0x28u) = 0.f; MRF32(d + 0x2cu) = 0.f; MRF32(d + 0x30u) = 0.f; MRF32(d + 0x34u) = 1.f;
+    MRF32(d + 0x44u) = 0.f; MRF32(d + 0x48u) = 0.f; MRF32(d + 0x4cu) = 1.f; MRF32(d + 0x50u) = 1.f;
+    MR32(o + 0x1cu) |= 0x400000u;
+    gcall1(c, FN_FE_HIDE, 0, o);
+    g_fl.obj[k] = o;
+    return o;
+}
+static void flag_hide(CPU *c, int k){
+    if (g_fl.shown[k] && g_fl.obj[k]) gcall1(c, FN_FE_HIDE, 0, g_fl.obj[k]);
+    g_fl.shown[k] = 0;
+}
+/* name k's flag: flag fi (-1: none) at x, y (HUD units from the top left), its middle, at scale sc, strength alpha
+ * (0..255), depth z */
+static void flag_show(CPU *c, int k, uint32_t pkg, int fi, float x, float y, float sc, uint8_t alpha, float z){
+    uint32_t h = fi >= 0 ? flag_texture(c, fi) : 0, o = h ? flag_obj(c, k, pkg) : 0;
+    if (!o){ flag_hide(c, k); return; }
+    if (g_fl.tex[k] != h){ uint32_t a[2] = { o, h }; rh_call(c, FN_FE_SETTEX, 0, 0, 2, a); g_fl.tex[k] = h; }
+    if (g_fl.alpha[k] != alpha || !g_fl.shown[k]){ fe_colour_set(c, o, 0xff, 0xff, 0xff, alpha); g_fl.alpha[k] = alpha; }
+    uint32_t ap[2] = { gvec(g_gmem + TAG_SCR + 0x20u, x - 320.f, y - 240.f, z), 0 };
+    rh_call(c, FN_FE_POS, o, 0, 2, ap);
+    uint32_t as[2] = { gvec(g_gmem + TAG_SCR + 0x30u, FLAG_CAP * 4.f / 3.f * sc, FLAG_CAP * sc, 1.f), 0 };
+    rh_call(c, FN_FE_SCALE, o, 0, 2, as);
+    if (!g_fl.shown[k]) gcall1(c, FN_FE_SHOW, 0, o);
+    g_fl.shown[k] = 1;
+}
+/* the GetTextureInfo override's look at our flags (roam_game_texture, past its quick no) */
+static uint32_t flag_texinfo(uint32_t h){
+    for (int i = 0; i < g_nflagmade; i++) if (g_flagmade[i].hash == h) return g_flagmade[i].ti;
+    return 0;
+}
+#else
+static int flag_find(const char *code){ (void)code; return -1; }
+#endif
 /* Quick chat (the rest after the race lobbies, say_*): players say one of the page's set phrases
  * (web/src/app/phrases.ts), a number on the wire, so each player reads it in their own language and nobody types
  * anything.  Any number goes through: the page knows which it has (a newer page's it does not show).  The page
@@ -2448,6 +2655,10 @@ static void tags_update(CPU *c){
         memset(&g_tag, 0, sizeof g_tag);
         g_tag.hud = hud;
     }
+#if FLAGS
+    if (hud != g_fl.hud){ memset(&g_fl, 0, sizeof g_fl); g_fl.hud = hud; }
+    g_flag_new = 0;
+#endif
     if (!hud || !ok(pkg, 0x20) || !g_gmem) return;
     uint32_t cam = rd32(G_VIEW1 + 0x40u);
     int on = O.labels && g_in_roam && MR8(G_SHOW_NAMES) && ok(cam, 0x60) && hud_on_top(pkg);
@@ -2507,7 +2718,14 @@ static void tags_update(CPU *c){
         if (s->crew && d >= TAG_NEAR_M) tag_far(tx, sizeof tx, s->name, s->paused, d);
         else snprintf(tx, sizeof tx, s->paused ? "%s (paused)" : "%s", s->name);
         rh_hud_marker(&hx, &hy);
-        float hw = tag_width(tx) * sc * 0.5f, hh = TAG_H * sc * 0.5f;
+        /* the flag (its texture there: else none, not a gap) and its gap left of the name, the two centred on hx */
+        float fw = 0.f;
+#if FLAGS
+        int fi = t[q].k == NSLOT ? O.flag : s->flagcode[0] ? s->flag : -1;
+        if (fi >= 0 && !flag_texture(c, fi)) fi = -1;
+        if (fi >= 0) fw = (FLAG_CAP * 4.f / 3.f + FLAG_GAP) * sc;
+#endif
+        float tw = tag_width(tx) * sc, hw = (tw + fw) * 0.5f, hh = TAG_H * sc * 0.5f;
         float b[4] = { hx - hw, hy - hh - (t[q].tier == 1 ? TAG_SAY_H * (sc < 0.7f ? 0.7f : sc) : 0.f), hx + hw, hy + hh };
         float g = t[q].was ? 0.f : TAG_GAP;
         int hit = 0;
@@ -2519,10 +2737,22 @@ static void tags_update(CPU *c){
         put[np++] = q;
         g_tag_was[t[q].k] = 1;
         uint32_t obj = tag_obj(c, i, pkg);
+#if FLAGS
+        if (!obj) flag_hide(c, i);
+#endif
         if (!obj) continue;
-        tag_text_rgba(c, i, obj, tx, s->crew ? O.crew_rgb[s->crew - 1] : 0, (uint8_t)(a >= 1.f ? 255 : (int)(a * 32.f) * 8));
+        uint8_t alpha = (uint8_t)(a >= 1.f ? 255 : (int)(a * 32.f) * 8);
+        tag_text_rgba(c, i, obj, tx, s->crew ? O.crew_rgb[s->crew - 1] : 0, alpha);
         /* (a crew's in front of the other names: a crew-mate far behind a crowd still reads) */
-        uint32_t ap[2] = { gvec(g_gmem + TAG_SCR + 0x20u, hx - 320.f, hy - 240.f, s->crew ? t[q].z * 0.95f : t[q].z), 0 };
+        float z = s->crew ? t[q].z * 0.95f : t[q].z;
+#if FLAGS
+        if (fi >= 0) flag_show(c, i, pkg, fi, hx - hw + FLAG_CAP * 2.f / 3.f * sc, hy + FLAG_DY * sc, sc, alpha, z);
+        else flag_hide(c, i);
+#endif
+        /* the name: centred on hx, or after its flag, from its left (its width only a guess) */
+        uint32_t just = fw > 0.f ? 4u : 5u;
+        if ((MR32(obj + 0x6cu) & 0xfu) != just){ MR32(obj + 0x6cu) = (MR32(obj + 0x6cu) & ~0xfu) | just; MR32(obj + 0x1cu) |= 0x400002u; }
+        uint32_t ap[2] = { gvec(g_gmem + TAG_SCR + 0x20u, (fw > 0.f ? hx - hw + fw : hx) - 320.f, hy - 240.f, z), 0 };
         rh_call(c, FN_FE_POS, obj, 0, 2, ap);
         uint32_t as[2] = { gvec(g_gmem + TAG_SCR + 0x30u, sc, sc, 1.f), 0 };
         rh_call(c, FN_FE_SCALE, obj, 0, 2, as);
@@ -2530,6 +2760,9 @@ static void tags_update(CPU *c){
         g_tag.shown[i] = 1;
     }
     for (int i = np; i < TAG_N; i++) tag_hide(c, i);
+#if FLAGS
+    for (int i = np; i < TAG_N; i++) flag_hide(c, i);
+#endif
     (void)put;                                      /* (the Windows plugin's: no quick chat) */
 #if SAYS
     /* quick chat: where the names of those who said something lately are (the page's lines go over them), and the
@@ -3066,7 +3299,6 @@ static void ai_map_open(CPU *c, uint32_t map, uint32_t pkg, uint32_t w){
 #define WMF_KIND0       0x20u         /* our rows' kinds: Players, Players' races (the game's are 0 .. 13) */
 #define FN_WM_ROWLOOK   0x00496920u   /* thiscall row (crossed): the tick or the cross, the icon and the text dimmed or not */
 #define FN_FE_TEX       0x0050c980u   /* cdecl (image) -> its texture's hash */
-#define FN_FE_SETTEX    0x0050c990u   /* cdecl (image, texture hash) */
 #define WMF_RACES_RGB   0xffc832u     /* Players' races' icon: the lobbies' labels' gold (MP_RGB_LOBBY) */
 #define MEET_RGB        0x78ff50u     /* car meets' labels, icons and legend row (meet_*) */
 #define WMF_AWAY        1.0e5f        /* a hidden marker's place: off every map */
@@ -3527,7 +3759,7 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
 }
 
 /* ---- per-frame --------------------------------------------------------------------------------- */
-typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; int visible, paused; float dist; uint32_t cfg_gen;
+typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; char flag[RC_FLAG_MAX + 1]; int visible, paused; float dist; uint32_t cfg_gen;
                  int roams;            /* its status: in free roam, or paused there (shown or not) */
                  float rank;           /* the slots' order (assign): the nearest of the distances SOON_S and LOOK_S
                                           on, both cars at their speeds, and from our view point VIEW_M ahead (as
@@ -7556,6 +7788,13 @@ static void init_once(CPU *c){
     cf.self_id = roam_plat_random(); cf.port = (uint16_t)port; cf.room = rc_room_hash(O.room);
     crews_parse(opt("NFSU2_ROAM_CREW"), &cf);
     snprintf(cf.name, sizeof cf.name, "%s", O.name[0] ? O.name : "Player");
+    /* our flag (the page's list; one this module does not have: none) */
+    const char *fl = opt("NFSU2_ROAM_FLAG");
+    char flc[RC_FLAG_MAX + 1] = "";
+    for (int i = 0; fl && fl[i] && i < RC_FLAG_MAX; i++) flc[i] = (char)(fl[i] >= 'A' && fl[i] <= 'Z' ? fl[i] + 32 : fl[i]);
+    O.flag = fl && strlen(fl) <= RC_FLAG_MAX ? flag_find(flc) : -1;
+    if (O.flag >= 0) snprintf(cf.flag, sizeof cf.flag, "%s", flc);
+    else if (fl && *fl) rlog("[roam] NFSU2_ROAM_FLAG=%s is no flag this game has: none\n", fl);
 #ifdef ROAM_HOST_WIN
     cf.platform = RC_PLAT_WIN;                             /* HELLO byte 18: the Windows plugin */
 #else
@@ -7839,6 +8078,7 @@ static void assign(CPU *c, int64_t host){
         int was = s->st;
         s->peer = v->idx; s->peer_id = v->id; s->unseen_since = 0; s->near_since = 0; s->idle_since = 0; s->soft = 0; s->crew = v->crew;
         snprintf(s->name, sizeof s->name, "%s", v->name);
+        memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode);
         if (reuse){
             s->st = SL_ACTIVE; s->cfg_gen = v->cfg_gen; s->hidden = 1; g_acquires++; g_reuses++;
             set_name(s);
@@ -8245,7 +8485,7 @@ void roam_game_frame(CPU *c){
             rc_peer *p = &g_s.peer[i];
             if (p->state != RC_PS_EST) continue;
             PeerView *v = &g_pv[g_npv++];
-            v->idx = i; v->id = p->id; snprintf(v->name, sizeof v->name, "%s", p->name);
+            v->idx = i; v->id = p->id; snprintf(v->name, sizeof v->name, "%s", p->name); memcpy(v->flag, p->flag, sizeof v->flag);
             /* shown while it is in free roam and its snapshots keep coming,
              * or while it is paused there: a paused game (pause menu, or a
              * window in the background: lifecycle.c parks the game, no
@@ -8340,6 +8580,7 @@ void roam_game_frame(CPU *c){
             PeerView *v = 0;
             for (int i = 0; i < g_npv; i++) if (g_pv[i].idx == s->peer && g_pv[i].id == s->peer_id) v = &g_pv[i];
             if (!v) continue;
+            if (strcmp(s->flagcode, v->flag)){ memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode); }
             /* a second first: a hitch in the friend's game (streaming) is a pause too */
             if (!v->paused) s->paused_since = 0;
             else if (!s->paused_since) s->paused_since = host;
@@ -8489,6 +8730,9 @@ int roam_game_names(CPU *c, uint32_t *obj, int max){
     tags_update(c);
     int n = 0;
     for (int i = 0; i < TAG_N && n < max; i++) if (g_tag.shown[i] && g_tag.obj[i]) obj[n++] = g_tag.obj[i];
+#if FLAGS
+    for (int i = 0; i < TAG_N && n < max; i++) if (g_fl.shown[i] && g_fl.obj[i]) obj[n++] = g_fl.obj[i];   /* (and their flags) */
+#endif
     return n;
 }
 

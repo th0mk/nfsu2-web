@@ -21,13 +21,14 @@
 #include <stddef.h>
 
 #define RC_PROTO_VER     1          /* header byte 4; a different value is ignored */
-#define RC_CORE_VER      12        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
+#define RC_CORE_VER      13        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
                                        4: state extensions, RC_HF_STATEX; 5: race lobbies, RC_HF_LOBBY; 6: quick chat,
                                        RC_HF_SAY; 7: crews, RC_HF_CREW; 8: crews from the hub, RC_HF_HUBCREW;
                                        9: a HELLO to one peer names only that peer, roam_core.c fill_hello;
                                        10: lists of up to RC_MAX_PEERS (48), and its HELLO to the hub ends in the links
                                        it wants, rc_config.links; 11: in an outrun, after the links, the id of its
-                                       other player, rc_set_duel; 12: drift battles, RC_HF_DRIFT) */
+                                       other player, rc_set_duel; 12: drift battles, RC_HF_DRIFT; 13: to a peer, after
+                                       the outrun's player, the player's flag, rc_config.flag) */
 #define RC_MAGIC0        0x4E       /* "N2FR" */
 #define RC_MAGIC1        0x32
 #define RC_MAGIC2        0x46
@@ -247,6 +248,7 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
  * with us anywhere on the map, and a short crew name is easy to find from it */
 #define RC_HF_CREW       0x0200
 #define RC_CREW_MAX      4
+#define RC_FLAG_MAX      6          /* a flag's code: "nl", "gb-eng" (lower case letters and '-') */
 /* header flags (HELLO, core 8 and up): this player reads the crew marks of
  * the hub's PEERS (RC_HF_CREW above); a hub sends them to no other */
 #define RC_HF_HUBCREW    0x0400
@@ -382,7 +384,9 @@ typedef struct {
                  uint32_t room; char name[RC_NAME_MAX + 1]; uint8_t n_seen; uint32_t seen[RC_MAX_PEERS];
                  uint8_t n_crews; uint32_t crews[RC_CREW_MAX];             /* crews: with RC_HF_CREW only */
                  uint8_t links;            /* after the crews (their count too, 0 or not): the links we want, 0: not said (core 10, to the hub) */
-                 uint32_t duel; } hello;   /* after the links (the byte too, 0 or not): our outrun's other player, 0: none (core 11, to the hub) */
+                 uint32_t duel;            /* after the links (the byte too, 0 or not): our outrun's other player, 0: none (core 11, to the hub) */
+                 char flag[RC_FLAG_MAX + 1]; } hello;   /* after the duel (the links and the duel too, 0 or not): our flag, "" none
+                                                           (core 13, to a peer: roam_game.c flags_*) */
         struct { uint8_t n; struct { uint32_t ip; uint16_t port; uint32_t id; } e[RC_MAX_PEERS];
                  uint8_t n_mine; uint32_t mine[RC_CREW_MAX]; uint8_t crew[RC_MAX_PEERS]; } peers;   /* the crew marks: with RC_HF_CREW only */
         struct { uint8_t status, epoch; uint16_t cfg_rev; uint8_t n, clock; rc_state s[RC_SNAP_STATES]; } snap;
@@ -526,6 +530,7 @@ typedef struct {
     uint32_t crews[RC_CREW_MAX];   /* rc_room_hash(crew name), each its own, in the player's order (n_crews of them) */
     int      n_crews;
     char     name[RC_NAME_MAX + 1];
+    char     flag[RC_FLAG_MAX + 1];  /* the flag before our name ("" none): HELLO, to the peers */
     uint8_t  platform;
     int      discovery;            /* beacon through io.broadcast every 2 s */
     int      test_mode;            /* only 127/8 peers are accepted */
@@ -568,6 +573,7 @@ typedef struct {
     int64_t  cfg_answer_us;        /* our record goes to it again (asked for, or at its join) from then on */
     int64_t  hub_listed_us;        /* the hub's list named it last (0: never) */
     char     name[RC_NAME_MAX + 1];
+    char     flag[RC_FLAG_MAX + 1];  /* the flag before its name, as its last HELLO had it ("" none, or a core before 13) */
     uint8_t  platform, status;
     uint16_t core_ver;             /* its HELLO's (0 until one came): below 2 it reads lists of RC_PEERS_V1 at most */
     uint8_t  duels;                /* its HELLO says it takes outrun challenges (RC_HF_DUELS) */

@@ -1315,5 +1315,13 @@
   "Press a key": "Nyomj meg egy billentyűt",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Nyomj meg egy iránygombot, vagy nyomd be az egyik analóg kart. Esc: marad a régi.",
   "Esc: as it was.": "Esc: marad a régi.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "{key}: a játék egyik vezérlése ezen van (Beállítások > Irányítás a játékban), a játék kapja meg."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "{key}: a játék egyik vezérlése ezen van (Beállítások > Irányítás a játékban), a játék kapja meg.",
+  "Your flag": "A zászlód",
+  "Shown before your name over your car in free roam.": "A neved előtt látszik az autód fölött Felfedező módban.",
+  "No flag": "Nincs zászló",
+  "England": "Anglia",
+  "Scotland": "Skócia",
+  "Wales": "Wales",
+  "Northern Ireland": "Észak-Írország",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "országkód, például nl, vagy gb-eng, gb-sct, gb-wls vagy gb-nir"
 }

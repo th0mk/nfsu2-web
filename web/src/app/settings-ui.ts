@@ -17,6 +17,7 @@ import { roomHash } from './players';
 import { checkRoom, inviteLink } from './invite';
 import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
+import { flagCode, flagName, flagsByName, type FlagCode } from './flags';
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
 import { SITE_KEYS } from './sitekeys';
 
@@ -33,7 +34,10 @@ type Control =
   | { t: 'crews'; placeholder: string }
   /** quick chat's sixteen (phrases.ts): under "Choose phrases", four columns of a name and four phrases, each a
    *  drop-down list */
-  | { t: 'phrases' };
+  | { t: 'phrases' }
+  /** the flag before the name (flags.ts): a drop-down list of none, the country this connection comes from (the
+   *  server's /country), then every flag by its name in the page's language */
+  | { t: 'flag' };
 
 /** link: the words of help that link to a page (a mod's, say), opened in a new tab; several for help that names several */
 interface Link { text: string; href: string }
@@ -57,6 +61,7 @@ const GROUPS: Group[] = [
   { title: N('Online'), more: N('More online settings'), own: true, items: [
     { key: 'roam', label: N('Free roam with others'), help: N('See other players\' cars in career free roam, and they see yours.'), c: { t: 'switch' } },
     { key: 'roam_name', label: N('Your name'), help: N('Shown over your car and in the Online menu: 3 to 15 letters, digits, - or _.'), c: { t: 'text', placeholder: N('profile name') } },
+    { key: 'roam_flag', label: N('Your flag'), help: N('Shown before your name over your car in free roam.'), c: { t: 'flag' } },
     { key: 'horn', label: N('Your horn'), help: N('With other players. Its key and button: Controls, Site.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
@@ -315,6 +320,7 @@ function shown(it: Item, v: string): string {
   if (c.t === 'switch') return v === 'on' ? t('on') : t('off');
   if (c.t === 'seg' || c.t === 'select') { const o = c.opts.find(([x]) => x.toLowerCase() === v.toLowerCase()); return o ? optLabel(it, o[0], o[1]) : v; }
   if (c.t === 'phrases') return phrasesOf(v).map(p => t(PHRASES[p].text)).join(', ');
+  if (c.t === 'flag') { const f = flagCode(v); return f ? flagName(f) : t('No flag'); }
   if (v === '') return t('empty');
   return c.t === 'num' && c.unit ? `${v} ${c.unit}` : v;
 }
@@ -337,9 +343,9 @@ export function putKey(text: string, key: string, value: string | null): { text:
   return { text: next, removed };
 }
 
-/** What "Reset all settings" keeps: the name the other players know you by, your crews, and the language (this
+/** What "Reset all settings" keeps: the name and flag the other players know you by, your crews, and the language (this
  *  page's too). */
-const RESET_KEEPS = ['roam_name', 'roam_crew', 'roam_crew_colours', 'language'];
+const RESET_KEEPS = ['roam_name', 'roam_flag', 'roam_crew', 'roam_crew_colours', 'language'];
 
 /** "Reset all settings": the template, with the kept settings as the file has them (by their own key, also where
  *  the file sets the variable by its name, if the key reads the value the same).  One the file does not set, or
@@ -399,6 +405,8 @@ export class SettingsPanel {
   private crewCounts = new Map<number, number>();   // how many are in free roam in each crew, by hash (setCrewCounts)
   private crewDraft = '';                  // the crew name being typed, kept across re-renders
   private phrasesOpen = false;             // Your phrases' Choose phrases open, kept across re-renders
+  private country: FlagCode | '' = '';     // the country this connection comes from (/country), first in Your flag's list
+  private countryAsked = false;
   /** root: the big panel, every tab of it (index.html #settings); online: its Online tab (#online) */
   constructor(private root: HTMLElement, private deps: SettingsDeps, private online: HTMLElement) {
     root.querySelector<HTMLButtonElement>('#settings-text-save')!.onclick = () => void this.saveRaw();
@@ -562,6 +570,18 @@ export class SettingsPanel {
   }
 
   /** One row again, after its key changed (the rest of the panel, and the focus, stay where they are). */
+  /** the country this connection comes from (the server's /country: Cloudflare's guess, for this page only), then
+   *  first in Your flag's list; nothing from a server without it */
+  private async askCountry() {
+    try {
+      const r = await fetch('/country', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+      const c = r.ok ? flagCode(String((await r.json() as { country?: unknown }).country ?? '')) : '';
+      if (!c) return;
+      this.country = c;
+      if (this.find('.set[data-key="roam_flag"]')) this.rerow('roam_flag');
+    } catch { /* none */ }
+  }
+
   private rerow(key: string) {
     const old = this.find<HTMLElement>(`.set[data-key="${key}"]`);
     const it = ITEMS.get(key);
@@ -666,6 +686,22 @@ export class SettingsPanel {
         sel.before(b);                                   // the play button on the list's left
       }
       described = sel;
+    } else if (c.t === 'flag') {
+      const sel = document.createElement('select'); sel.id = id;
+      const code = flagCode(cur);
+      let picked = false;
+      const add = (v: string, label: string) => {
+        const o = document.createElement('option'); o.value = v; o.textContent = label;
+        if (!picked && v === code) { o.selected = true; picked = true; }
+        sel.append(o);
+      };
+      add('', t('No flag'));
+      if (this.country) add(this.country, flagName(this.country));
+      for (const f of flagsByName()) add(f.code, f.name);
+      sel.onchange = () => void this.put(it.key, sel.value || null);
+      ctl.append(sel);
+      described = sel;
+      if (!this.countryAsked) { this.countryAsked = true; void this.askCountry(); }
     } else if (c.t === 'crews') {
       row.classList.add('set-list');
       described = crewControl({ list: crewsOf(cur, this.current('roam_crew_colours')), id, labelId: label.id, placeholder: c.placeholder, counts: this.crewCounts,

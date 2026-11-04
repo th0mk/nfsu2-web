@@ -1447,5 +1447,13 @@
   "Press a key": "Натисніть клавішу",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Натисніть хрестовину або стік на геймпаді. Esc: без змін.",
   "Esc: as it was.": "Esc: без змін.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "На {key} призначено одну з дій гри (у її налаштуваннях керування): клавішу отримає гра."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "На {key} призначено одну з дій гри (у її налаштуваннях керування): клавішу отримає гра.",
+  "Your flag": "Ваш прапор",
+  "Shown before your name over your car in free roam.": "Відображається перед вашим іменем над вашою машиною у вільній їзді.",
+  "No flag": "Без прапора",
+  "England": "Англія",
+  "Scotland": "Шотландія",
+  "Wales": "Уельс",
+  "Northern Ireland": "Північна Ірландія",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "код країни, наприклад nl, або gb-eng, gb-sct, gb-wls чи gb-nir"
 }

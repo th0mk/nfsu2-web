@@ -1393,5 +1393,13 @@
   "Press a key": "Tryck på en tangent",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Tryck på styrkorset eller en styrspak på handkontrollen. Esc: som förut.",
   "Esc: as it was.": "Esc: som förut.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "En av spelets kontroller ligger på {key} (i spelets Alternativ, Kontroller): spelet får tangenten."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "En av spelets kontroller ligger på {key} (i spelets Alternativ, Kontroller): spelet får tangenten.",
+  "Your flag": "Din flagga",
+  "Shown before your name over your car in free roam.": "Visas före ditt namn ovanför din bil i läget Utforska.",
+  "No flag": "Ingen flagga",
+  "England": "England",
+  "Scotland": "Skottland",
+  "Wales": "Wales",
+  "Northern Ireland": "Nordirland",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "en landskod som nl, eller gb-eng, gb-sct, gb-wls eller gb-nir"
 }

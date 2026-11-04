@@ -1312,5 +1312,13 @@
   "Press a key": "키를 누르세요",
   "Press D-pad or a stick on the controller. Esc: as it was.": "컨트롤러의 방향 패드나 스틱을 누르세요. Esc: 그대로 두기.",
   "Esc: as it was.": "Esc: 그대로 두기.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "게임 조작 하나가 {key} 키에 지정돼 있어요(게임의 옵션, 컨트롤): 이 키는 게임이 받아요."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "게임 조작 하나가 {key} 키에 지정돼 있어요(게임의 옵션, 컨트롤): 이 키는 게임이 받아요.",
+  "Your flag": "내 국기",
+  "Shown before your name over your car in free roam.": "자유 주행에서 내 차 위의 이름 앞에 표시돼요.",
+  "No flag": "국기 없음",
+  "England": "잉글랜드",
+  "Scotland": "스코틀랜드",
+  "Wales": "웨일스",
+  "Northern Ireland": "북아일랜드",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "nl 같은 국가 코드, 또는 gb-eng, gb-sct, gb-wls, gb-nir"
 }

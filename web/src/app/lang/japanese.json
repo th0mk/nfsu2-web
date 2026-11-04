@@ -1312,5 +1312,13 @@
   "Press a key": "キーを押してください",
   "Press D-pad or a stick on the controller. Esc: as it was.": "コントローラーの十字キーかスティックを押してください。Esc: 元のまま。",
   "Esc: as it was.": "Esc: 元のまま。",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "ゲームの操作のひとつが{key}に割り当てられています（ゲームのオプション、コントロール）: ゲーム側が受け取ります。"
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "ゲームの操作のひとつが{key}に割り当てられています（ゲームのオプション、コントロール）: ゲーム側が受け取ります。",
+  "Your flag": "あなたの国旗",
+  "Shown before your name over your car in free roam.": "フリーロームであなたの車の上の名前の前に表示されます。",
+  "No flag": "国旗なし",
+  "England": "イングランド",
+  "Scotland": "スコットランド",
+  "Wales": "ウェールズ",
+  "Northern Ireland": "北アイルランド",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "nl などの国コード、または gb-eng、gb-sct、gb-wls、gb-nir"
 }

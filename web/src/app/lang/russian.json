@@ -1447,5 +1447,13 @@
   "Press a key": "Нажмите клавишу",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Нажмите крестовину или стик на геймпаде. Esc: без изменений.",
   "Esc: as it was.": "Esc: без изменений.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "На {key} назначено одно из действий игры (в её настройках управления): клавишу получит игра."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "На {key} назначено одно из действий игры (в её настройках управления): клавишу получит игра.",
+  "Your flag": "Ваш флаг",
+  "Shown before your name over your car in free roam.": "Показывается перед вашим именем над вашей машиной в свободной езде.",
+  "No flag": "Без флага",
+  "England": "Англия",
+  "Scotland": "Шотландия",
+  "Wales": "Уэльс",
+  "Northern Ireland": "Северная Ирландия",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "код страны, например nl, или gb-eng, gb-sct, gb-wls или gb-nir"
 }

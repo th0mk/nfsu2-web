@@ -18,16 +18,17 @@ import { blockedName } from './names.mjs';
 import { onlineName } from './claim';
 import { crewsOk, rgbsOk } from './crews';
 import { groupsOk, phrasesOk } from './phrases';
+import { flagCode } from './flags';
 import { fill, LANGUAGES, N, type Vars } from './i18n';
 export { LANGUAGES };
 
-/** bundle.m's K_* kinds, and the browser's own crews (a list of names: crews.ts) and blocked players (names: a list of
- *  players' names).  ic: K_IC, "value ; comment" (the free-roam keys).  room: K_ROOM, text that does not read as a slur
- *  (names.mjs, as a player's name).  key: one of our controls' key, the browser's name of it (KeyboardEvent.code:
- *  sitekeys.ts), or off. */
+/** bundle.m's K_* kinds, and the browser's own crews (a list of names: crews.ts), blocked players (names: a list of
+ *  players' names) and flag (one of flags.ts's codes).  ic: K_IC, "value ; comment" (the free-roam keys).  room:
+ *  K_ROOM, text that does not read as a slur (names.mjs, as a player's name).  key: one of our controls' key, the
+ *  browser's name of it (KeyboardEvent.code: sitekeys.ts), or off. */
 export type Kind = 'raw' | 'bool' | 'boolInv' | 'enum' | 'num' | 'id' | 'token' | 'int' | 'name' | 'peers'
   | 'path' | 'text' | 'room' | 'wxh' | 'fixes' | 'ifname' | 'ipv4' | 'mac' | 'host' | 'parts' | 'dump' | 'crews' | 'rgbs'
-  | 'phrases' | 'sayGroups' | 'names' | 'key';
+  | 'phrases' | 'sayGroups' | 'names' | 'key' | 'flag';
 
 export interface KeyDef {
   key: string;
@@ -111,6 +112,8 @@ export const KEYS: readonly KeyDef[] = [
   // free-roam multiplayer (the runtime checks the values too)
   { key: 'roam', env: 'NFSU2_ROAM', kind: 'bool', ic: true, scope: 'web' },
   { key: 'roam_name', env: 'NFSU2_ROAM_NAME', kind: 'name', ic: true, scope: 'web' },
+  // the flag before the name (flags.ts; runtime/roam_game.c flag_*): the page has the list, so not in bundle.m's table
+  { key: 'roam_flag', env: 'NFSU2_ROAM_FLAG', kind: 'flag', ic: true, scope: 'web' },
   { key: 'roam_port', env: 'NFSU2_ROAM_PORT', kind: 'int', vals: '1024..65535', ic: true, scope: 'mac' },
   { key: 'roam_peers', env: 'NFSU2_ROAM_PEERS', kind: 'peers', ic: true, scope: 'mac' },
   { key: 'roam_discovery', env: 'NFSU2_ROAM_DISCOVERY', kind: 'bool', ic: true, scope: 'web' },
@@ -446,6 +449,12 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # starts a comment.  [NFSU2_ROAM_NAME]
 #roam_name =
 
+# Your flag, before your name over your car in free roam: a country's code
+# (ISO 3166-1, e.g. nl, br, us; xk for Kosovo) or gb-eng, gb-sct, gb-wls,
+# gb-nir for England, Scotland, Wales and Northern Ireland.  Empty = none.
+# [NFSU2_ROAM_FLAG]
+#roam_flag =
+
 # Your horn (key_horn and button_horn: N and the left stick click), in free roam and in
 # Online and LAN races; the other players hear the one you pick: dual (two
 # tones), single (one higher tone), truck (an air horn), train (five
@@ -664,6 +673,7 @@ function valueOk(kind: Kind, v: string): boolean {
     case 'phrases': return phrasesOk(v);
     case 'sayGroups': return groupsOk(v);
     case 'key': return v === 'off' || KEY_NAME.test(v);
+    case 'flag': return flagCode(v) !== '';
     default: return true;
   }
 }
@@ -685,6 +695,7 @@ const KIND_TEXT: Partial<Record<Kind, string>> = {
   phrases: N('16 quick chat phrase numbers, separated by commas'),
   sayGroups: N('4 of hi, reply, thanks, nice, drive, meet, race, react, help, separated by commas'),
   key: N('a key by the browser\'s name for it (KeyX, Digit5, F6, Numpad7) or off'),
+  flag: N('a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir'),
 };
 
 /** strtod() consuming the whole string (decimal, exponent, hex, inf/nan, leading blanks as C does).
@@ -807,6 +818,7 @@ export function checkSetting(key: string, val: string): Checked | Refused | null
     default:
       if (!valueOk(kind, val)) return refuse(N('"{value}" is not {kind}'), val, { kind: KIND_TEXT[kind]! });
       if (kind === 'dump' && (truthy(val) || falsy(val))) out = truthy(val) ? 'on' : 'off';
+      if (kind === 'flag') out = flagCode(val);
       break;
   }
   return { ok: true, env, value: out };

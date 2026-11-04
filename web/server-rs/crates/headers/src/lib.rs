@@ -606,7 +606,7 @@ pub fn client_ip(q: &impl Req, trust: &ProxyTrust, header: &str) -> String {
 /// The client's country as a trusted proxy names it: Cloudflare's CF-IPCountry (its proxy and cloudflared set it from
 /// the client's address and replace what a client sent), two letters of ISO 3166-1, upper case.  None from a peer that
 /// is not trusted, and for "XX" (no country known) and "T1" (Tor).  Only the server's counts read it (nfsu2-lan
-/// paths.rs), never a rule.
+/// paths.rs) and /country, which tells the browser its own (the start page's Your flag list), never a rule.
 pub fn client_country(q: &impl Req, trust: &ProxyTrust) -> Option<[u8; 2]> {
     if !trust.trusts(q.peer()) {
         return None;

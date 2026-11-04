@@ -1420,5 +1420,13 @@
   "Press a key": "Appuyez sur une touche",
   "Press D-pad or a stick on the controller. Esc: as it was.": "Appuyez sur la croix directionnelle ou un stick de la manette. Esc : comme avant.",
   "Esc: as it was.": "Esc : comme avant.",
-  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "Une commande du jeu est sur {key} (ses Options, Commandes) : le jeu a la priorité."
+  "One of the game's controls is on {key} (its Options, Controls): the game gets it.": "Une commande du jeu est sur {key} (ses Options, Commandes) : le jeu a la priorité.",
+  "Your flag": "Votre drapeau",
+  "Shown before your name over your car in free roam.": "Affiché devant votre nom au-dessus de votre voiture en mode Exploration.",
+  "No flag": "Aucun drapeau",
+  "England": "Angleterre",
+  "Scotland": "Écosse",
+  "Wales": "Pays de Galles",
+  "Northern Ireland": "Irlande du Nord",
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "un code de pays comme nl, ou gb-eng, gb-sct, gb-wls ou gb-nir"
 }
