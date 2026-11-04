@@ -25,6 +25,9 @@ export interface ProcessOptions {
   onRemoved?: (path: string) => void;
   /** a file the game wrote as the browser deleted the save folder could not be kept (path relative to /save) */
   onLost?: (path: string) => void;
+  /** a file of the save overlay the browser would not open or make, the folder still there (the first of a game: its
+   *  error, as "Name: message"); its saves may not be kept */
+  onSaveTrouble?: (error: string) => void;
 }
 
 export interface GameProcess {
@@ -99,6 +102,7 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     if (e.data.t === 'saved') o.onSaved?.(e.data.path);
     else if (e.data.t === 'removed') o.onRemoved?.(e.data.path);
     else if (e.data.t === 'lost') o.onLost?.(e.data.path);
+    else if (e.data.t === 'save-trouble') o.onSaveTrouble?.(e.data.error);
     else if (e.data.t === 'log') o.onNote?.(e.data.s);
     else if (e.data.t === 'save-gone')
       void Promise.resolve().then(() => o.onSaveGone?.()).catch(err => o.onNote?.(`[app] the saves could not be put back: ${err}`))

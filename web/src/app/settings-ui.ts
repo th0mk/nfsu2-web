@@ -10,7 +10,7 @@
 // line, so a screen reader and the keyboard get them as they are.
 
 import { checkSetting, DEFAULTS, keyDef, resolveEnv, settingsPut, TEMPLATE, type Resolved } from './settings';
-import { readText, writeFile } from './savefs';
+import { readText, UNREADABLE, writeFile } from './savefs';
 import { playHorn, stopHorn } from './horn-preview';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
 import { roomHash } from './players';
@@ -413,8 +413,11 @@ export class SettingsPanel {
     root.querySelector<HTMLButtonElement>('#settings-reset-all')!.onclick = () => void this.resetAll();
   }
 
+  /** settings.ini as read last; one that did not read (savefs.ts missing) leaves the copy before, and the panel read-only
+   *  until it reads (unread): a change made on the template's copy would be written over the player's file */
   async load(): Promise<string | null> {
-    this.text = await readText(this.deps.saveDir, 'settings.ini');
+    try { this.text = await readText(this.deps.saveDir, 'settings.ini'); this.unread = null; }
+    catch (e) { this.unread = e; }
     this.resolve(this.text);
     return this.text;
   }
@@ -448,14 +451,20 @@ export class SettingsPanel {
     return this.deps.defaults?.[key] ?? DEFAULTS.get(key) ?? '';
   }
 
-  private ro() { return !!this.deps.readOnly?.(); }
+  /** why settings.ini did not read last (load), else null */
+  private unread: unknown = null;
+  /** settings.ini did not read last (load): the panel is read-only until it is read again (refresh) */
+  get unreadable() { return this.unread !== null; }
+  private ro() { return !!this.deps.readOnly?.() || this.unread !== null; }
+  /** what the panel says while it is read-only */
+  private roText() { return this.unread !== null ? t(UNREADABLE, { error: String(this.unread) }) : t(READ_ONLY); }
 
   /** key's line, and also's (a row's second key: COMPANION) in the same write */
   /** Your name written (a claim made under it: claim-ui.ts) */
   async putName(name: string) { await this.put('roam_name', name); }
 
   private async put(key: string, value: string | null, also: [string, string | null][] = []) {
-    if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }
+    if (this.ro()) { this.deps.say?.(this.roText()); return; }
     let next = this.text ?? TEMPLATE, removed = 0;
     for (const [k, v] of [[key, value] as [string, string | null], ...also]) { const r = putKey(next, k, v); next = r.text; removed += r.removed; }
     await writeFile(this.deps.saveDir, 'settings.ini', next);
@@ -479,10 +488,10 @@ export class SettingsPanel {
     if (!this.fileOnly) return;                  // not read yet (the page's language came first): load() draws it
     const ro = this.ro();
     this.root.toggleAttribute('data-readonly', ro);
-    this.root.querySelector('#settings-note')!.textContent = t(ro ? READ_ONLY : NOTE);
+    this.root.querySelector('#settings-note')!.textContent = ro ? this.roText() : t(NOTE);
     this.online.toggleAttribute('data-readonly', ro);
     const note = this.online.querySelector<HTMLElement>('#online-note')!;
-    note.textContent = ro ? t(READ_ONLY) : ''; note.hidden = !ro;
+    note.textContent = ro ? this.roText() : ''; note.hidden = !ro;
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.set')?.dataset.key;
     this.root.querySelector('#settings-body')!.replaceChildren(...GROUPS.filter(g => !g.own && !g.at).map(g => this.group(g)));
     for (const g of GROUPS.filter(g => g.at)) this.root.querySelector(`#${g.at}`)?.replaceChildren(this.group(g));
@@ -871,7 +880,7 @@ export class SettingsPanel {
   private async saveRaw() {
     const ta = this.root.querySelector<HTMLTextAreaElement>('#settings-text')!;
     const msg = this.root.querySelector('#settings-text-msg')!;
-    if (this.ro()) { msg.textContent = t(READ_ONLY); return; }
+    if (this.ro()) { msg.textContent = this.roText(); return; }
     const next = ta.value.endsWith('\n') ? ta.value : ta.value + '\n';
     const r = resolveEnv(next, this.deps.environment, {});
     const bad = r.notes.filter(n => /ignored$|only the page sets it$/.test(n) && !/is set in the environment|already set/.test(n));
@@ -881,18 +890,18 @@ export class SettingsPanel {
 
   /** "Reset all settings", once the player said yes */
   private async resetAll() {
-    if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }
+    if (this.ro()) { this.deps.say?.(this.roText()); return; }
     if (this.deps.confirm && !await this.deps.confirm(t('Reset all settings?'),
       t('Every setting here goes back to its default, and other settings.ini lines are removed. Your name, crews, language and in-game options stay.'),
       t('Reset'), true)) return;
-    if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }       // another tab took the saves meanwhile
+    if (this.ro()) { this.deps.say?.(this.roText()); return; }       // another tab took the saves meanwhile
     await this.write(resetAll(this.text));
     this.deps.say?.(() => t('Settings are back to their defaults. Applies the next time you press Play.'));
   }
 
   /** a line of "Other settings in this file" back to its default; a keyboard's focus goes on to the next one */
   private async resetLine(phys: number, key: string, btn: HTMLButtonElement) {
-    if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }
+    if (this.ro()) { this.deps.say?.(this.roText()); return; }
     const at = [...this.root.querySelectorAll('#settings-other .text-btn')].indexOf(btn), focused = document.activeElement === btn;
     await this.write(resetLine(this.text ?? TEMPLATE, phys));
     if (focused) {

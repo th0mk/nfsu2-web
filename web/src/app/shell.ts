@@ -40,7 +40,7 @@ import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
 import type { NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
 import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
-import { exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, settleStaged, writeFile } from './savefs';
+import { checkSaves, exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, settleStaged, UNREADABLE, writeFile, type SavesCheck } from './savefs';
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, PlayersPanel, queueText, roomHash, roomLine, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
@@ -286,6 +286,8 @@ function updatePlay() {
 }
 
 // ------------------------------------------------------------- settings --
+/** settings.ini read (the template written where there is none); throws where it did not read, and then writes nothing
+ *  (savefs.ts missing: Firefox's "UnknownError" was taken for no file, and the template went over the player's) */
 async function loadSettings(): Promise<string | null> {
   let text = await readText(SAVE, 'settings.ini');
   if (text === null && instance.owner) {
@@ -299,6 +301,16 @@ async function loadSettings(): Promise<string | null> {
   settingsText = text;
   // who plays on this server, asked again with this file's room and crews (the first question went without them)
   players?.now();
+  return text;
+}
+/** settings.ini changed by edit, on top of the file as it is now (the template where there is none), and kept as the
+ *  page's copy: never on top of the page's copy alone, which is null where the file did not read.  Throws where it did not
+ *  read or write (nothing written then). */
+async function editSettings(edit: (text: string) => string): Promise<string> {
+  const text = edit(await readText(SAVE, 'settings.ini') ?? TEMPLATE);
+  await writeFile(SAVE, 'settings.ini', text);
+  settingsText = text;
+  void settings.refresh();
   return text;
 }
 /** this device's own defaults (a phone's: device.ts), below settings.ini and the page address */
@@ -370,13 +382,11 @@ async function askRoam(): Promise<boolean> {
   const answer = confirmBox(t('Free roam with others?'), body, t('Turn on'), false, '', t('Not now'));
   $<HTMLButtonElement>('#confirm-ok').focus();
   const on = await answer;
-  let text = putKey(settingsText ?? TEMPLATE, 'roam', on ? 'on' : 'off').text;
   const typed = field?.value.trim() ?? name;
-  if (on && typed !== name) text = putKey(text, 'roam_name', typed || null).text;
-  // (not written, the browser's storage full: this game plays as answered, and the next Play asks again)
-  await writeFile(SAVE, 'settings.ini', text).catch(e => log.add(`[app] free roam with others: the answer was not written (${e})`));
-  settingsText = text;
-  void settings.refresh();
+  const edit = (s: string) => { const r = putKey(s, 'roam', on ? 'on' : 'off').text; return on && typed !== name ? putKey(r, 'roam_name', typed || null).text : r; };
+  // (not written, the browser's storage full or not answering: this game plays as answered, and the next Play asks again)
+  try { await editSettings(edit); }
+  catch (e) { log.add(`[app] free roam with others: the answer was not written (${e})`); settingsText = edit(settingsText ?? TEMPLATE); }
   log.add(`[app] free roam with others: ${on ? 'on' : 'off'} (asked at the first Play${c?.full === true ? ', the server full' : ''})${on && typed !== name ? `, name ${typed || '(the profile\'s)'}` : ''}`);
   return true;
 }
@@ -537,6 +547,7 @@ function startError(e: unknown): Msg {
 /** Play stopped by an error before the game ran (the stage is up from the click on: Play's questions show over it): the
  *  start page back, usable, with what happened */
 function startFailed(e: unknown) {
+  if (e instanceof SavesBroken) { savesBroken(e.check); return; }
   // (String(e): its name and message in every browser; Firefox's stack has neither)
   log.add(`[app] the game could not start: ${String(e)}${e instanceof Error && e.stack ? `\n${e.stack}` : ''}`);
   if (session) return;
@@ -547,17 +558,43 @@ function startFailed(e: unknown) {
   download.resume();
 }
 
+/** Play stopped before anything else: the save folder does not answer (savefs.ts checkSaves) */
+class SavesBroken extends Error {
+  constructor(readonly check: SavesCheck) { super(String(check.error)); }
+}
+const RESTART_PLAY = N('Restart the browser and press Play again.');
+const CLOUD_WAY = N('If it still fails, your cloud saves have your progress up to their last sync: remove this site\'s data in the browser\'s settings, reload, and enter your passphrase under Cloud saves.');
+const ALONE_WAY = N('If it still fails, don\'t remove this site\'s data: your saves are only in this browser. Ask for help on Discord.');
+/**
+ * The game not started, as its saves could neither be listed nor kept: what the browser answered, and what to do (a
+ * restart of the browser first; then, with cloud saves, the site's data removed and the passphrase entered again;
+ * without, the data left as it is: removing it deletes the saves).  Nothing of the saves was written or removed.
+ */
+function savesBroken(c: SavesCheck) {
+  const error = String(c.error);
+  log.add(`[app] problem SAVES-UNREADABLE: the save folder does not answer (${c.step}: ${error}; ${c.tries} tries): the game did not start, nothing written`);
+  setPhase('exited', T('Did not start'), () => `${t(UNREADABLE, { error })} ${t(RESTART_PLAY)} ${t(vault.linked() ? CLOUD_WAY : ALONE_WAY)}`, 'SAVES-UNREADABLE');
+  $('#log-btn').hidden = $('#report').hidden = false;
+}
+
 async function startGame() {
-  // settings.ini as it is now (another tab or the raw editor may have changed it,
-  // and the Mac app reads it at every launch); a short read, well inside the click's
-  // user activation, which full screen needs (after the free-roam question, its
-  // button's click is the activation).  Beside it the server's version once more
-  // (a deploy since the page last asked): no game starts on a version it replaced.
-  const [, rev, counts] = await Promise.all([
-    Promise.race([loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`)), new Promise(r => setTimeout(r, 1000))]),
+  // The save folder answers (savefs.ts checkSaves; asked again for a few seconds where it does not), before anything
+  // reads or writes it: a game on one that does not would list no profile and keep no save.  Then settings.ini as it
+  // is now (another tab or the raw editor may have changed it, and the Mac app reads it at every launch); a short read,
+  // well inside the click's user activation, which full screen needs (after the free-roam question, its button's click
+  // is the activation).  Beside it the server's version once more (a deploy since the page last asked): no game starts
+  // on a version it replaced.
+  const [folder, rev, counts] = await Promise.all([
+    checkSaves(SAVE).then(async c => {
+      if (c.ok) await Promise.race([loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`)), new Promise(r => setTimeout(r, 1000))]);
+      return c;
+    }),
     offline || testPage() ? null : serverRev(1000),
     offline || testPage() ? null : players?.fresh(1000) ?? null,
   ]);
+  if (!folder.ok) throw new SavesBroken(folder);
+  if (folder.tries > 1) log.add(`[app] the save folder answered after ${folder.tries} tries`);
+  if (settings.unreadable) void settings.refresh();         // (read-only since the page's start: it reads now)
   if (rev && rev !== loaded!.info.rev && rev !== tried) {
     newer = rev; updated = false;
     // before a game ran here nothing is lost; after one, the offer with its word on the log first (the next Play reloads)
@@ -672,7 +709,7 @@ async function startGame() {
     else { await writeFile(SAVE, reg, registryDefaults); log.add(`[app] first launch, registry seeded with the built-in defaults (/save/${reg})`); }
   } else if (isPhone()) {
     // a phone that started before the phone graphics (phonegraphics.ts): once
-    const text = await readText(SAVE, reg);        // null: not read (it is there), left as it is for the next start
+    const text = await readText(SAVE, reg).catch(() => null);   // null: not read (it is there), left as it is for the next start
     const up = text === null ? null : phoneUpgrade(text, registryDefaults);
     if (text === null) log.add(`[app] phone graphics: /save/${reg} could not be read, left as it is`);
     else if (up) {
@@ -725,7 +762,7 @@ async function startGame() {
     session = await GameSession.start({
       module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle,
       friend: friendMsg,
-      netBack, netQueue, onSaved, onSaveGone: saveGone, onRemoved, onLost,
+      netBack, netQueue, onSaved, onSaveGone: saveGone, onRemoved, onLost, onSaveTrouble,
       netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved, netRaces, netRename,
       netBlock: net && r.env.NFSU2_ROAM === '1' ? blockList(r.env.NFSU2_ROAM_BLOCK ?? '') : undefined,
       artifacts: q.get('artifacts') ?? undefined, dumpScale: q.get('dumpscale') ? +q.get('dumpscale')! : undefined,
@@ -1066,6 +1103,14 @@ async function saveGone(): Promise<void> {
 function onLost(path: string) {
   log.add('[app] a save the game wrote as the browser deleted the save folder was not kept: asked to save again');
   if (session && path.startsWith(PROFILES_DIR + '/')) toast(t('Your last save may not have been kept: the browser deleted this site\'s data as it was written. Save again in the game.'), 15000, true);
+}
+
+/** the browser would not open or make a file of the save folder, which is still there (io-worker.ts saveTrouble): this
+ *  game's saves may not be kept, said over the game once (Firefox 159, Discord 2026-11-04: an hour of play whose new files
+ *  all failed, said only in the log) */
+function onSaveTrouble(error: string) {
+  log.add(`[app] the browser would not open a file of the save folder (${error}): said over the game`);
+  if (session || starting) toast(`${t(UNREADABLE, { error })} ${t(RESTART_PLAY)}`, 15000, true);
 }
 
 /** the game deleted a file of the save folder: a profile's (its own Delete), which no refill brings back then */
@@ -1488,11 +1533,11 @@ async function menuCrews(list: Crew[], focus: (root: HTMLElement) => Element | n
   drawPopCrews(focus);
   void askPopCounts(1500);
   $('#menu [data-act="crews"]').textContent = crewsLabel();
-  let text = putKey(settingsText ?? TEMPLATE, 'roam_crew', list.length ? crewsValue(list.map(c => c.name)) : null).text;
-  text = putKey(text, 'roam_crew_colours', list.length ? rgbsValue(list) : null).text;
-  try { await writeFile(SAVE, 'settings.ini', text); settingsText = text; void settings.refresh(); }
-  catch (e) { log.add(`[app] settings.ini not written: ${e}`); }
-  log.add(`[app] crews: ${list.length ? list.map(c => `${c.name} (${c.rgb})`).join(', ') : 'none'} (the page menu)`);
+  try {
+    await editSettings(s => putKey(putKey(s, 'roam_crew', list.length ? crewsValue(list.map(c => c.name)) : null).text,
+      'roam_crew_colours', list.length ? rgbsValue(list) : null).text);
+  } catch (e) { log.add(`[app] settings.ini not written: ${e}`); }
+  log.add(`[app] crews:${list.length ? list.map(c => `${c.name} (${c.rgb})`).join(', ') : 'none'} (the page menu)`);
 }
 
 /** The menu's Friends popup (free roam, with friends), over the menu: the friends in free roam, a Join for each one in
@@ -1556,9 +1601,10 @@ function inviteLive(): boolean {
   return !!session && roamCrews !== null;
 }
 
-/** Join inv here (this tab owns the saves): settings.ini, then the running game where it can. */
+/** Join inv here (this tab owns the saves): settings.ini, then the running game where it can.  Throws where settings.ini
+ *  did not read or write (nothing joined, nothing written: joinHere says so). */
 async function applyInvite(inv: Invite): Promise<Joined> {
-  const was = await readText(SAVE, 'settings.ini').catch(() => null) ?? settingsText ?? TEMPLATE;
+  const was = await readText(SAVE, 'settings.ini') ?? settingsText ?? TEMPLATE;
   const now = inviteNow(was), d = inviteDiff(inv, now);
   if (d.full) return 'full';
   if (inviteNone(d)) return 'none';
@@ -1589,6 +1635,12 @@ async function applyInvite(inv: Invite): Promise<Joined> {
     ` (${live ? 'the game takes it now' : 'from the next Play'})`);
   return live ? 'live' : 'next';
 }
+/** applyInvite, and what it did said to the player (a settings.ini that did not read or write: that, nothing joined);
+ *  null: not joined */
+async function joinHere(inv: Invite): Promise<Joined | null> {
+  try { const how = await applyInvite(inv); tell(joinedText(how)); return how; }
+  catch (e) { log.add(`[app] invite link: not joined, settings.ini did not read or write (${e})`); tell(t(UNREADABLE, { error: String(e) })); return null; }
+}
 
 /** Join inv in the tab that owns the saves; null: no answer within 3 s (no such tab, or a page of before). */
 function relayInvite(inv: Invite): Promise<Joined | null> {
@@ -1610,9 +1662,8 @@ function hearInvites() {
     if (typeof m.inv?.room === 'string') inv.room = m.inv.room;
     if (typeof m.inv?.crew === 'string') inv.crew = m.inv.crew;
     if ((!inv.room && !inv.crew) || !checkInvite(inv).ok) return;
-    const how = await applyInvite(inv);
-    ch.postMessage({ t: 'joined', id: m.id, how });
-    tell(joinedText(how));
+    const how = await joinHere(inv);
+    if (how) ch.postMessage({ t: 'joined', id: m.id, how });
   };
 }
 
@@ -1650,11 +1701,11 @@ async function offerInvite(inv: Invite) {
   const yes = await confirmBox(title, body, t('Join'), false, '', t('Not now'));
   if (session && !$<HTMLDialogElement>('#menu').open) { $('#stage').classList.remove('cursor'); $('#stage').querySelector('canvas')?.focus(); }
   if (!yes) { log.add('[app] invite link: not now'); return; }
-  if (instance.owner) { tell(joinedText(await applyInvite(inv))); return; }
+  if (instance.owner) { await joinHere(inv); return; }
   const how = await relayInvite(inv);
   if (how) { tell(how === 'full' || how === 'none' ? joinedText(how) : `${t('Joined in the other tab.')} ${t(how === 'live' ? JOINED_NOW : JOINED_NEXT)}`); return; }
   tell(t('The other tab did not answer. Close it: this tab joins when it takes over.'));
-  void instance.whenOwner.then(async () => { await loadSettings().catch(() => null); tell(joinedText(await applyInvite(inv))); });
+  void instance.whenOwner.then(async () => { await loadSettings().catch(() => null); await joinHere(inv); });
 }
 /** the invite in the page's address, if any, taken out of it (a reload does not ask again), and offered */
 function takeInvite() {
@@ -1726,8 +1777,8 @@ async function menuAction(act: string) {
       session.net.solid(roamCollide);
       m.querySelector<HTMLButtonElement>('[data-act="solid"]')!.textContent = ghostLabel();
       // and in settings.ini for the next game, as Online, Ghost mode would
-      const text = putKey(settingsText ?? TEMPLATE, 'roam_collide', roamCollide).text;
-      try { await writeFile(SAVE, 'settings.ini', text); settingsText = text; void settings.refresh(); }
+      const to = roamCollide;
+      try { await editSettings(s => putKey(s, 'roam_collide', to).text); }
       catch (e) { log.add(`[app] settings.ini not written: ${e}`); }
       log.add(`[app] roam_collide = ${roamCollide} (the page menu)`);
       break;
@@ -2076,7 +2127,7 @@ export async function boot() {
   download = new Predownload(s => saves.showData(s), logLine, () => language(), () => packs());
   saves = new SavesPanel($('#saves'), $('#game-data'), {
     saveDir: SAVE, busy: () => !!session || starting || !instance.owner, confirm: confirmBox,
-    onRestored: () => { void loadSettings(); void settings.refresh(); }, download, onChanged: () => vault.changedSaves(),
+    onRestored: () => { void loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`)); void settings.refresh(); }, download, onChanged: () => vault.changedSaves(),
   });
   // keyphrase saves (on a server that keeps them): synced by the tab that owns the saves, once its settings are loaded
   // the claimed names: asked with the keyphrase's token (claim.ts); the line under Your name (claim-ui.ts)
@@ -2092,7 +2143,7 @@ export async function boot() {
   vault = new VaultPanel($('#vault'), {
     saveDir: SAVE, owner: () => instance.owner, playing: () => !!session || savesLocked, busy: () => !!session || starting || !instance.owner,
     confirm: confirmBox, choose: (title, body, ok, cancel, danger, cancelDanger) => choiceBox(title, body, ok, cancel, danger, '', cancelDanger),
-    onRestored: () => { void loadSettings(); void settings.refresh(); void saves.refresh(); }, log: logLine,
+    onRestored: () => { void loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`)); void settings.refresh(); void saves.refresh(); }, log: logLine,
     // another passphrase here (or none): the line under Your name asks again with it, and the friends
     onLink: () => { void nameRow.ask(); void friendsPanel.refresh(true); },
   });
@@ -2230,7 +2281,9 @@ export async function boot() {
       if (!await settleStaged(SAVE)) log.add('[app] a restore that stopped halfway could not be undone yet: tried again before the next restore');
       await vault.settleKept();
     }).catch(e => log.add(`[app] a restore that stopped halfway could not be undone: ${e}`));
-    await loadSettings(); evaluate(); void settings.refresh(); void saves.refresh(); vault.ownerNow(); syncPicker(); });
+    // (one that did not read is left as it is, and Play says why the game cannot start: checkSaves)
+    await loadSettings().catch(e => log.add(`[app] settings.ini could not be read: ${e}; left as it is`));
+    evaluate(); void settings.refresh(); void saves.refresh(); vault.ownerNow(); syncPicker(); });
   // invite links: the one this page was opened with, one pasted into its address later, one another tab took for it
   hearInvites();
   takeInvite();

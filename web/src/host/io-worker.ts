@@ -439,7 +439,15 @@ async function saveEntry(rel: string): Promise<{ parent: FileSystemDirectoryHand
 // of the game's start: shell.ts saveGone), and holds every /save call until the page answers ('save-ready'),
 // SAVE_WAIT_MS at most: under the stall watchdog's 15 s (runtime/watchdog.c), as the game's thread waits for it like
 // for any slow disk.  The call that found it then runs again: the game's save lands on what came back.
+//
+// A folder still there whose file does not open is no deleted folder: Firefox 159 on a Mac (Discord 2026-11-04) could
+// not open any file new to its storage from a second into a game ("NotFoundError: Entry not found" on a file it had just
+// made; the next open of it "NoModificationAllowedError": the failed open kept its lock), and the game played on for an
+// hour while its new files failed; the next day every call there failed.  Asking again does not help there (the same
+// answer, on the same entry: Firefox gives a folder made again the entry it had), so the page is told once
+// ('save-trouble'), and says over the game that its saves may not be kept.
 const troubleSaid = new Set<string>();
+let troubleTold = false;
 /** true: the save folder was gone and is made again (the caller tries once more) */
 async function saveTrouble(what: string, err: unknown, again = false): Promise<boolean> {
   const name = (err as Error)?.name ?? 'Error';
@@ -447,6 +455,7 @@ async function saveTrouble(what: string, err: unknown, again = false): Promise<b
   // folder itself is looked at: gone, it is made again
   if (!again && await saveGone()) { await recover(); return true; }
   if (!troubleSaid.has(name)) { troubleSaid.add(name); note(`[save] ${what}: ${name}: ${(err as Error)?.message ?? err}`); }
+  if (!troubleTold) { troubleTold = true; (self as unknown as Worker).postMessage({ t: 'save-trouble', error: `${name}: ${(err as Error)?.message ?? err}` }); }
   return false;
 }
 /** whether this worker's save folder is gone (keys() of a folder deleted under its handle answers NotFoundError, in

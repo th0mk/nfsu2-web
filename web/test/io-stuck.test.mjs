@@ -40,7 +40,11 @@ class Sync {
 }
 class FFile {
   constructor(name) { this.kind = 'file'; this.name = name; this.data = new Uint8Array(0); }
-  createSyncAccessHandle() { return W.hangOpen && /\\.BIN\\./.test(this.name) ? new Promise(() => {}) : Promise.resolve(new Sync(this)); }
+  createSyncAccessHandle() {
+    // saveFail: a file of that name will not open, its folder still there (Firefox 159's "Entry not found", 2026-11-04)
+    if (W.saveFail && new RegExp(W.saveFail).test(this.name)) return Promise.reject(new DOMException('Entry not found', 'NotFoundError'));
+    return W.hangOpen && /\\.BIN\\./.test(this.name) ? new Promise(() => {}) : Promise.resolve(new Sync(this));
+  }
   async getFile() { const d = this.data; return { size: d.length, arrayBuffer: async () => d.slice().buffer }; }
 }
 class FDir {
@@ -68,9 +72,9 @@ async function start(opts) {
   const memory = new WebAssembly.Memory({ initial: 4, maximum: 4, shared: true });
   const ctlBuf = new SharedArrayBuffer(CTL_INTS * 4), rpc = new SharedArrayBuffer(RPC_SLOT * MAX_THREADS);
   const w = new Worker(world + bundle, { eval: true, workerData: opts });
-  const notes = [];
+  const notes = [], msgs = [];
   const ready = new Promise((ok, no) => w.on('message', m => {
-    if (m.t === 'log') notes.push(m.s);
+    if (m.t === 'log') notes.push(m.s); else msgs.push(m);
     if (m.t === 'io-ready') ok();
     if (m.t === 'io-error') no(new Error(m.msg));
   }));
@@ -98,7 +102,13 @@ async function start(opts) {
     assert.equal(await call(OP.FdPread, fd, 4096, 1, pos, 4200), 0);
     return new Uint8Array(memory.buffer).slice(65536, 65536 + dv.getUint32(4200, true));
   }
-  return { w, notes, ctl, open, pread, stop: () => w.terminate() };
+  /** a file of /save opened (fd 4) with oflags, for writing: the WASI result, and the fd */
+  async function openSave(p, oflags) {
+    new Uint8Array(memory.buffer).set(new TextEncoder().encode(p), 1024);
+    const r = await call(OP.PathOpen, 4, 0, 1024, p.length, oflags, 0x40, 0, 0, 2048);
+    return { r, fd: dv.getUint32(2048, true) };
+  }
+  return { w, notes, msgs, ctl, open, openSave, call, pread, stop: () => w.terminate() };
 }
 const expect = (pos, n) => Uint8Array.from({ length: n }, (_, k) => ((pos + k) * 7 + ((pos + k) >> 11)) & 255);
 
@@ -130,5 +140,22 @@ test('a read that never comes back: written in the log after 20 s, with its file
     assert.ok(line, `no [io] line in 40 s:\n${io.notes.join('\n')}`);
     assert.match(line, /^\[io\] fd_pread of \/data\/CARS\/A\.BIN unanswered for 2\d s; waiting: CARS\/A\.BIN#0: the server for 2\d s/);
     assert.ok(Atomics.load(io.ctl, CTL_IO_BEAT) - beat0 > 100, 'the I/O worker\'s loop did not beat while the read waited');
+  } finally { await io.stop(); }
+});
+
+test('a file of the save folder that will not open, the folder still there (Firefox 159, 2026-11-04): refused, said once in the log and once to the page, no recovery', { timeout: 60_000 }, async () => {
+  const io = await start({ saveFail: '^registry\\.txt\\.tmp$' });
+  try {
+    // the runtime's registry writes it 29 times at a game's start (win32_ext.c reg_save): every one refused, at once
+    const t0 = performance.now();
+    for (let i = 0; i < 5; i++) assert.equal((await io.openSave('registry.txt.tmp', 1 | 8)).r, 2 /* E.ACCES */);
+    assert.ok(performance.now() - t0 < 2000, 'the refused opens waited');
+    assert.deepEqual(io.notes.filter(n => n.startsWith('[save]')), ['[save] a file of the save folder could not be opened: NotFoundError: Entry not found']);
+    assert.deepEqual(io.msgs.filter(m => m.t === 'save-trouble' || m.t === 'save-gone'), [{ t: 'save-trouble', error: 'NotFoundError: Entry not found' }]);
+    // the folder's other files still open, and their saves still tell the page
+    const { r, fd } = await io.openSave('settings.txt', 1 | 8);
+    assert.equal(r, 0);
+    assert.equal(await io.call(1 /* FdClose */, fd), 0);
+    assert.equal(io.msgs.filter(m => m.t === 'save-trouble').length, 1);
   } finally { await io.stop(); }
 });

@@ -386,7 +386,8 @@ export class VaultPanel {
     let was: string | null = null;
     try { was = localStorage.getItem(k); } catch { /* storage off */ }
     if (s.link) { if (was !== markOf(s.link.phrase)) this.keep(s.link.phrase); return; }
-    if ((await listProfiles(this.d.saveDir)).length) return;
+    // (a save folder that does not answer, savefs.ts missing: as one with profiles, nothing offered over them)
+    if ((await listProfiles(this.d.saveDir).catch(() => null))?.length !== 0) return;
     const ask = was === null, phrase = await keptPhrase(ask), p = phrase ? readPhrase(phrase) : null;
     if (!p || 'bad' in p) {
       if (ask) { mark('asked'); this.d.log(`[app] keyphrase: the browser gave ${phrase ? 'no passphrase' : 'none'} when asked: only taken without a question from now on`); }
@@ -736,7 +737,7 @@ export class VaultPanel {
     p.textContent = text;
     for (const t of backupItems(r, true)) { const li = document.createElement('li'); li.textContent = t; ul.append(li); }
     body.append(p, ul);
-    if (!await this.d.confirm(title, body, ok, danger ?? (await listFiles(this.d.saveDir)).some(f => keeps(f.path)))) { this.msg(''); return false; }
+    if (!await this.d.confirm(title, body, ok, danger ?? (await listFiles(this.d.saveDir).catch(() => null))?.some(f => keeps(f.path)) ?? true)) { this.msg(''); return false; }
     if (this.d.busy()) { this.msg(() => t(QUIT_FIRST), true); return false; }
     let copy: Awaited<ReturnType<VaultPanel['replacedCopy']>>;
     try { copy = await this.replacedCopy(); }

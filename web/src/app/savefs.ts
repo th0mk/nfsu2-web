@@ -35,32 +35,45 @@ async function dirOf(base: FileSystemDirectoryHandle, path: string[], create: bo
   return d;
 }
 
-/** The text of a file in the save dir, or null if it does not exist. */
+/**
+ * Whether an error says the file or folder is not there (NotFoundError, in every browser).  Any other error is a
+ * storage that did not answer, never "not there": Firefox 159 on a Mac answered every call in the save folder with
+ * "UnknownError: Unknown failure" (Discord 2026-11-04), and the page took its settings.ini for missing and wrote the
+ * template over it (the write failed too, that time).  So reads say null or false only for this, and throw otherwise.
+ */
+export const missing = (e: unknown) => (e as { name?: string } | null)?.name === 'NotFoundError';
+/** what the page says where the save folder does not answer (Play, Saves, Settings, an invite's Join) */
+export const UNREADABLE = N('This browser can\'t read or write your saves right now ({error}).');
+
+/** The text of a file in the save dir, or null if it (or the save dir) is not there.  Throws when it may be there but
+ *  did not read (missing). */
 export async function readText(saveDir: string, path: string): Promise<string | null> {
+  const p = parts(path);
   try {
-    const p = parts(path);
-    const d = await dirOf(await saveRoot(saveDir), p.slice(0, -1), false);
+    const d = await dirOf(await saveRoot(saveDir, false), p.slice(0, -1), false);
     return await (await (await d.getFileHandle(p[p.length - 1])).getFile()).text();
-  } catch { return null; }
+  } catch (e) { if (missing(e)) return null; throw e; }
 }
 
+/** Whether a file is at path (a folder there is none); throws when the storage did not say (missing). */
 export async function exists(saveDir: string, path: string): Promise<boolean> {
+  const p = parts(path);
   try {
-    const p = parts(path);
-    const d = await dirOf(await saveRoot(saveDir), p.slice(0, -1), false);
+    const d = await dirOf(await saveRoot(saveDir, false), p.slice(0, -1), false);
     await d.getFileHandle(p[p.length - 1]);
     return true;
-  } catch { return false; }
+  } catch (e) { if (missing(e) || (e as DOMException)?.name === 'TypeMismatchError') return false; throw e; }
 }
 
 /** Write a whole file (creating its folders).  A file it made, whose write then failed (the browser's storage full),
- *  goes again: an empty profile left behind would be sent to the cloud as one. */
+ *  goes again: an empty profile left behind would be sent to the cloud as one.  Only a file it knows it made: one the
+ *  storage would not say about (missing) may be the player's, and stays. */
 export async function writeFile(saveDir: string, path: string, data: string | Uint8Array | Blob): Promise<void> {
   const p = parts(path);
   if (!p.length) throw new Error('empty path');
   const d = await dirOf(await saveRoot(saveDir), p.slice(0, -1), true), name = p[p.length - 1];
   let had = true;
-  try { await d.getFileHandle(name); } catch { had = false; }
+  try { await d.getFileHandle(name); } catch (e) { if (missing(e)) had = false; }
   await writeInto(d, name, data, had);
 }
 async function writeInto(d: FileSystemDirectoryHandle, name: string, data: string | Uint8Array | Blob, had: boolean) {
@@ -76,7 +89,7 @@ export async function writeIfAbsent(saveDir: string, path: string, data: string 
   const d = await dirOf(await saveRoot(saveDir), p.slice(0, -1), true), name = p[p.length - 1];
   const sized = async () => (await (await d.getFileHandle(name)).getFile()).size;
   let had = true;
-  try { if (await sized() > 0) return false; } catch { had = false; }
+  try { if (await sized() > 0) return false; } catch (e) { if (!missing(e)) throw e; had = false; }
   await d.getFileHandle(name, { create: true });
   if (await sized() > 0) return false;
   await writeInto(d, name, data, had);
@@ -213,23 +226,35 @@ export async function writeTogether(saveDir: string, files: { path: string; data
 
 export interface Entry { path: string; size: number; mtime: number }
 
-/** Every file under the save dir, depth first, sorted by path. */
+/**
+ * Every file under the save dir, depth first, sorted by path ([] with no save dir yet).  A file or folder gone while it
+ * lists is left out; any other error throws (missing): a list with files left out would be a backup, a cloud version or
+ * a "no profile here" that lacks them.  (Before 2026-11-04 any error ended the list where it was, quietly.)
+ */
 export async function listFiles(saveDir: string): Promise<Entry[]> {
-  const out: Entry[] = [];
-  async function walk(d: FileSystemDirectoryHandle, rel: string) {
-    for await (const [name, h] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) {
-      const r = rel ? rel + '/' + name : name;
-      if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, r);
-      else if (!isStaged(name)) { const f = await (h as FileSystemFileHandle).getFile(); out.push({ path: r, size: f.size, mtime: f.lastModified }); }
-    }
+  async function walk(d: FileSystemDirectoryHandle, rel: string): Promise<Entry[]> {
+    const out: Entry[] = [];
+    try {
+      for await (const [name, h] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) {
+        const r = rel ? rel + '/' + name : name;
+        if (h.kind === 'directory') out.push(...await walk(h as FileSystemDirectoryHandle, r));
+        else if (!isStaged(name)) {
+          let f: File;
+          try { f = await (h as FileSystemFileHandle).getFile(); } catch (e) { if (missing(e)) continue; throw e; }
+          out.push({ path: r, size: f.size, mtime: f.lastModified });
+        }
+      }
+    } catch (e) { if (missing(e)) return []; throw e; }     // (this folder gone meanwhile: none of it is here)
+    return out;
   }
-  try { await walk(await saveRoot(saveDir, false), ''); } catch { /* no save dir yet */ }
-  return out.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  let top: FileSystemDirectoryHandle;
+  try { top = await saveRoot(saveDir, false); } catch (e) { if (missing(e)) return []; throw e; }
+  return (await walk(top, '')).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 }
 
 export async function readBytes(saveDir: string, path: string): Promise<Uint8Array> {
   const p = parts(path);
-  const d = await dirOf(await saveRoot(saveDir), p.slice(0, -1), false);
+  const d = await dirOf(await saveRoot(saveDir, false), p.slice(0, -1), false);
   return new Uint8Array(await (await (await d.getFileHandle(p[p.length - 1])).getFile()).arrayBuffer());
 }
 
@@ -290,6 +315,44 @@ export async function readBeside(name: string): Promise<string | null> {
 export async function writeBeside(name: string, text: string): Promise<void> {
   const w = await (await (await root()).getFileHandle(name, { create: true })).createWritable();
   await w.write(text); await w.close();
+}
+
+/** what checkSaves found: after how many tries, and (not ok) the step and the error of the last one */
+export interface SavesCheck { ok: boolean; tries: number; step?: 'list' | 'read' | 'write'; error?: unknown }
+/** the file checkSaves writes and removes beside the save folder (in none: no listing, backup or cloud save sees it) */
+const checkFile = (saveDir: string) => `${saveDir}~check`;
+
+/**
+ * Whether the save folder answers as one that works, before a game starts on it: listed whole (each file's size),
+ * settings.ini and registry.txt read, and a small file written and removed beside it.  One that does not is asked again
+ * after each of waits, every handle fresh from navigator.storage (a lock another tab or a closing game still holds, a
+ * browser busy for a moment); ok after any try.  Not there is no failure (a new player's folder), nor a full disk on the
+ * write (QuotaExceededError: the game's own saves say that).  Nothing of the save folder is written or removed.
+ * Firefox 159 on a Mac (Discord 2026-11-04) answered "UnknownError: Unknown failure" to every call there, after a
+ * Firefox restart too: Play stopped with that bare error.  The day before, in the game that ran last, every file new to
+ * its storage could not be opened ("NotFoundError: Entry not found"), so none of that game's new files was written.
+ */
+export async function checkSaves(saveDir: string, waits: number[] = [300, 1000, 2500],
+    sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))): Promise<SavesCheck> {
+  for (let i = 0; ; i++) {
+    let step: SavesCheck['step'] = 'list';
+    try {
+      await listFiles(saveDir);
+      step = 'read';
+      for (const f of ['settings.ini', 'registry.txt']) await readText(saveDir, f);
+      step = 'write';
+      try {
+        const r = await root(), name = checkFile(saveDir);
+        const w = await (await r.getFileHandle(name, { create: true })).createWritable();
+        await w.write('ok'); await w.close();
+        await r.removeEntry(name).catch(() => {});
+      } catch (e) { if ((e as DOMException)?.name !== 'QuotaExceededError') throw e; }
+      return { ok: true, tries: i + 1 };
+    } catch (error) {
+      if (i >= waits.length) return { ok: false, tries: i + 1, step, error };
+    }
+    await sleep(waits[i]);
+  }
 }
 
 /** Remove the whole save dir (test runs: &fresh). */

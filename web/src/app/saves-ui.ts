@@ -8,7 +8,7 @@
 // deleted.  The game data is never part of a backup and never written back:
 // it stays on the server.
 
-import { cacheBytes, clearCache, filesOf, pruneSaveDir, UndoPending, writeTogether, type BesideFile, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, writeFile, type Profile } from './savefs';
+import { cacheBytes, clearCache, filesOf, pruneSaveDir, UndoPending, writeTogether, type BesideFile, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, UNREADABLE, writeFile, type Entry, type Profile } from './savefs';
 import { AUTOSAVE_SEEN, coverOf, fixedName, GIVE_MAX, isGivenName, isProfileFile, isProfileName, mendedBefore, modCars, profileInside, renameProfile, sameCareer, sealed, withName, type RenameFiles } from './profile';
 import { listZip, unzip, zip, ZipError, type ZipEntry } from './zip';
 import { downloadBlob, stamp } from './logs';
@@ -551,7 +551,11 @@ export class SavesPanel {
 
   /** Show the profiles, the screenshots and the downloaded game data as they are now. */
   async refresh() {
-    const files = await listFiles(this.deps.saveDir);
+    let files: Entry[];
+    // a save folder that does not answer (savefs.ts missing): said, and what is shown stays (never "no profiles")
+    try { files = await listFiles(this.deps.saveDir); }
+    catch (e) { this.msg(() => t(UNREADABLE, { error: String(e) }), UNREADABLE); return; }
+    if (this.said.saves === UNREADABLE) this.msg('');
     this.profiles = await listProfiles(this.deps.saveDir, files);
     this.shots.show(files.filter(f => isScreenshot(f.path)));
     const busy = this.deps.busy();

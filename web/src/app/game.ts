@@ -66,6 +66,8 @@ export interface SessionOptions {
   onRemoved?(path: string): void;
   /** a save the game wrote as the browser deleted the save folder was not kept (process.ts onLost) */
   onLost?(path: string): void;
+  /** the browser would not open or make a file of the save folder (process.ts onSaveTrouble) */
+  onSaveTrouble?(error: string): void;
   /** tests: where frame dumps go, and their scale */
   artifacts?: string; dumpScale?: number;
   toggleFullscreen(): void;
@@ -107,6 +109,7 @@ export class GameSession {
       onSaveGone: o.onSaveGone,
       onRemoved: o.onRemoved,
       onLost: o.onLost,
+      onSaveTrouble: o.onSaveTrouble,
       onNote: o.log,
     });
     s.exited = s.proc.exited.then(code => { s.exitCode = code; s.detach(); return code; });
