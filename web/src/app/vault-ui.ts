@@ -795,7 +795,11 @@ export class VaultPanel {
   private async stop() {
     const s = this.sync;
     if (!s?.link) return;
-    if (!await this.d.confirm(t('Stop syncing here?'), t('Your saves stay here and in the cloud. To sync again, you need the passphrase.'), t('Stop syncing'))) return;
+    // (the claimed name stays the passphrase's: without it here, this browser plays with digits)
+    const name = this.claimed;
+    if (!await this.d.confirm(t('Stop syncing here?'), name
+      ? t('Your saves stay here and in the cloud. To sync again or play as {name}, you need the passphrase.', { name })
+      : t('Your saves stay here and in the cloud. To sync again, you need the passphrase.'), t('Stop syncing'))) return;
     const phrase = s.link.phrase;
     await s.forget().catch(() => {});
     // the keyphrase stays in the box, to keep or to load again (the job's end showed the box empty)
@@ -808,7 +812,11 @@ export class VaultPanel {
   private async remove() {
     const s = this.sync;
     if (!s?.link) return;
-    if (!await this.d.confirm(t('Delete your cloud saves?'), t('They are deleted from the server now, with the earlier copy. This browser keeps its saves; other browsers stop syncing.'),
+    // (the server frees the passphrase's claimed name with it: vault.rs release_names)
+    const name = this.claimed;
+    if (!await this.d.confirm(t('Delete your cloud saves?'), name
+      ? t('They are deleted from the server now, with the earlier copy, and {name} is no longer yours: anyone can claim it. This browser keeps its saves; other browsers stop syncing.', { name })
+      : t('They are deleted from the server now, with the earlier copy. This browser keeps its saves; other browsers stop syncing.'),
       t('Delete'), true)) return;
     try {
       await s.remove();

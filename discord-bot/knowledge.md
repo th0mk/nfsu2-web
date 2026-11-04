@@ -242,6 +242,13 @@ Checked against the guide or the code, and confirmed by players in threads:
   syncs with, so another name. Before f2f3e79 (live 2 November) the page also said so right after the player's own
   claim: reload. Claimed with this browser's passphrase and still given digits on the live version: escalate with
   the log. Never judge whose name it is.
+- One name a passphrase, and since the "one name" update (the line "You play as X, your claimed name" under Your
+  name) the game always plays as the passphrase's claimed name, whatever Your name says. Before it, a player who
+  typed another name after claiming played under that other name, which nobody held: others adding it by name or
+  by bumpers got "X has no claimed name, so can't add friends yet", while the player's own requests worked (their
+  friends see the claimed name). Saves, Cloud saves shows "This passphrase also holds your claim on X": that is the
+  name others can add. To play as the typed name: Change name (once a week; "You can change it on <date>" says when).
+  Changing moves the friends along (the start page or the Online menu, whichever comes first).
 - Races only with friends, career races too: everyone sets the same uncommon Room (start page, Online) before Play;
   lobbies stay within the room. It is not private. Alone in free roam often means a Room left set: clear it.
 - A career without other players: start page, Online, Free roam with others off, then Play. The page menu's "Stop

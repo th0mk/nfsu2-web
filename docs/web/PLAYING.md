@@ -401,8 +401,9 @@ that room.
   - The server keeps the copy of an earlier day too: "Go back to ..." brings it back when a day went wrong.
   - Your passphrase can also claim your name (**Online, Your name**: no one else plays under it; see "Your name is
     yours" under Online), so in another browser your name comes back with your saves.
-  - Stop syncing leaves the saves where they are, and the passphrase in the box; Delete from cloud deletes them on the
-    server (your browsers keep theirs), and frees the name it claimed. A passphrase nobody used for two years is
+  - Stop syncing leaves the saves where they are, and the passphrase in the box (your claimed name stays the
+    passphrase's: without it, this browser plays it with digits); Delete from cloud deletes them on the server (your
+    browsers keep theirs), and frees the name it claimed for anyone to claim. A passphrase nobody used for two years is
     deleted from the server. A browser
     whose passphrase the server no longer has keeps it and sends nothing; Sync now looks again and offers to send its
     saves there.
@@ -815,8 +816,11 @@ Good to know:
   or another player's. **Claim** there claims it with your passphrase (the one of your cloud saves), after a check from
   Cloudflare that a person, not a script, claims it (usually it passes by itself). Without a passphrase, Claim makes
   one and turns cloud saves on, then shows it to keep: it is the only way to play under the name again, in another
-  browser or after this browser's data is cleared, and the only way back to your saves. With a passphrase, Play
-  claims a free name by itself; Cloudflare's check shows only when it wants a click.
+  browser or after this browser's data is cleared, and the only way back to your saves. With a passphrase that has
+  no name yet, Play claims a free name by itself; Cloudflare's check shows only when it wants a click.
+  - One name: once your passphrase holds a name, you always play as it, whatever Your name says. Another name you
+    type there is played only after **Change name**, and the line under Your name says which name you play as. With
+    the box empty, you play as your claimed name too.
   - While it is yours nobody else plays under it: in the Online menu and in free roam they get your name with four
     digits added (`Alex` becomes `Alex4821`; a name longer than 11 characters loses its end to them), the same
     digits each time for their browser. If someone was online under it before you came, the lobby gives it back to
@@ -824,10 +828,11 @@ Good to know:
   - It stays yours as long as your passphrase does: until you delete your cloud saves, or they go unused for two
     years. In another browser, load your passphrase under Cloud saves and the name is yours there too.
   - One name a passphrase. **Change name** (type another name) changes it once a week; the old name stays yours for
-    14 more days, and your EA Messenger friends move to the new one (their lists show it).
+    14 more days, and your friends move to the new one (their lists show it).
   - `NAME`, the game's default profile name, and `Player` can't be claimed: Play asks once for a name of your own,
     and until you pick one you play as `NAME` with your four digits. A name another player claimed: Play asks once
-    for another, and you play as it with your digits until then. Neither applies offline or with the network off.
+    for another, and you play as it with your digits until then. Neither applies offline or with the network off, nor
+    with a claimed name of your own (you play as that one).
   - A name that reads as a slur can't be claimed (the rules below).
   - Without a claim your name is anyone's: whoever is online under it first keeps it (the others get digits), and
     EA Messenger keeps no lists for it: your friends, blocked players and requests last until you leave Online.
