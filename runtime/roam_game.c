@@ -8415,14 +8415,13 @@ static void car_rescue(int64_t host){
              g_lp_ok ? "where it last was" : "the new career's start (no good place this time in free roam)");
 }
 /* ---- co-op free roam online: player 2's endpoint (g_c2) ------------------------------------------------------- */
-/* The links: what each HELLO asks the hub for.  Without co-op player 1's are the cars shown (O.max_cars); with it a
- * quarter of them (2 to 16) are player 2's and the rest player 1's, so a co-op page has as many links, cars and
+/* The links: what each HELLO asks the hub for.  Without co-op player 1's are the cars shown (O.max_cars); with it
+ * half of them are player 2's and the rest player 1's, so a co-op page has as many links, cars and
  * snapshots to send and take as a player alone (the server's budget per connection holds; coop-online.md section 3).
  * When the two drive together their lists overlap and fewer cars are shown than links.  With the lock held */
 static void c2_links_set(void){
-    int cars = O.max_cars, k = cars / 4;
+    int cars = O.max_cars, k = cars / 2;             /* half each (the owner's pick, 2026-11-04) */
     if (k < 2) k = 2;
-    if (k > 16) k = 16;
     if (!g_c2.on || cars < 4){ rc_set_links(&g_s, cars); g_c2.links = cars; if (g_c2.on) rc_set_links(&g_c2.s, cars); return; }
     rc_set_links(&g_s, cars - k);
     rc_set_links(&g_c2.s, k);

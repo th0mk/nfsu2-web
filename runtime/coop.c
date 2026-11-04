@@ -460,11 +460,11 @@ void sub_005eb040(CPU *c){
     sub_005eb040_orig(c);
 }
 
-/* the garage car player 2 takes unless it picks: the first that player 1 is not driving, else player 1's */
+/* the garage car player 2 takes unless it picks (and the car dialog's first): player 1's own, else the first */
 static uint32_t coop_default_car(void){
     uint32_t g[10], mine = garage_find(CARS0, MR32(0x00863480u));
     int n = coop_garage(g);
-    for (int i = 0; i < n; i++) if (g[i] != mine) return g[i];
+    for (int i = 0; i < n; i++) if (g[i] == mine) return g[i];
     return n ? g[0] : 0;
 }
 void coop_join(int dev){ coop_dev = dev; coop_want = 1; if (!coop_car_rec) coop_car_rec = coop_default_car(); }
