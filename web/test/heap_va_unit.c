@@ -24,8 +24,8 @@
  *             block is handed out twice
  *   reserve   with the heaps' segments given back, 1.4 MB blocks filling the
  *             window leave room for new segments: as many 900 KB blocks fit
- *             after them as had fitted before
- *   holes     a hole whose big block never comes back is kept HINT_TTL frames
+ *             after them as had fitted before; a 16 MB block may have it
+ *   holes    a hole whose big block never comes back is kept HINT_TTL frames
  *             only; a block taking part of one of eight holes keeps the other
  *             seven (the oldest went although a slot was free)
  *   check     (NFSU2_HEAPCHECK=1, run with "check") a VirtualAlloc region
@@ -255,6 +255,9 @@ static void reserve(void){
     for (int i = 0; i < 12; i++) ok &= (s[i] = crt(900u << 10)) != 0;
     for (int i = 0; i < 12; i++) crt_free(s[i]);
     while (nbig < NFILL && (g_fill[nbig] = crt(1398016u))) nbig++;
+    uint32_t streamer = crt(16u * MB - 32u);                   /* a big block may have that room (16 MB) */
+    CHK("reserve-big-not-held", streamer != 0);
+    crt_free(streamer);
     while (nsmall < 64 && (sm[nsmall] = crt(900u << 10))) nsmall++;
     printf("  window filled with %d blocks of 1.4 MB, then %d blocks of 900 KB\n", nbig, nsmall);
     CHK("reserve-small-after-big", ok && nbig > 300 && nsmall >= 12);

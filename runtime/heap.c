@@ -272,7 +272,10 @@ static uint32_t va_take(uint32_t g0, uint32_t ng, int kind, int heap, uint32_t p
  * 4 MB run for a new segment: random runs under pressure had several times as
  * many small allocations failing as when the heaps kept their segments, and a
  * failed small allocation (a list node, a string) is far likelier to bring the
- * game down than a failed texture buffer. */
+ * game down than a failed texture buffer.  Not the big blocks (VA_BIG and up):
+ * the track streamer's and the pools' are one of a kind, come back into their
+ * own holes, and the game stops at once without them (in a test run the
+ * streamer's block was refused its own hole: the room was that hole). */
 #define SEG_G    (SEG_MIN / VA_GRAN)
 #define SEG_KEEP 4u
 static uint32_t va_seg_room(uint32_t x0, uint32_t xn){   /* segments the free runs hold, [x0, x0+xn) taken */
@@ -308,7 +311,7 @@ static uint32_t va_alloc(uint32_t bytes, int top, int kind, int heap, uint32_t p
     hint_expire();
     int64_t g0 = va_find(ng, top, 0);
     if (g0 < 0 && g_check){ memset(g_va_dead, 0, sizeof g_va_dead); g0 = va_find(ng, top, 1); }
-    if (g0 >= 0 && kind != VK_SEG && va_seg_room((uint32_t)g0, ng) < SEG_KEEP) g0 = va_find_keep(ng);
+    if (g0 >= 0 && kind != VK_SEG && ng < VA_BIG && va_seg_room((uint32_t)g0, ng) < SEG_KEEP) g0 = va_find_keep(ng);
     if (g0 < 0) return 0;
     hint_drop((uint32_t)g0, ng);
     return va_take((uint32_t)g0, ng, kind, heap, prot);
