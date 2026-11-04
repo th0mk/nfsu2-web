@@ -1636,6 +1636,25 @@ extern "C" void dmg_marker_post(void) {
     g_swapModel = nullptr;
 }
 
+// The car loader (0x63AED0), right before it asks the car's TEXTURES.BIN for the textures its parts use: the
+// engine's own, <CAR>_ENGINE, joins them. The game never shows the engine (its part is off under the hood), so it
+// never loads that texture, and the engine a lost hood leaves in sight was drawn with the default texture: black.
+constexpr size_t kUsedTexList = 0x08, kUsedTexCount = 0x230;   // u32 hashes, and how many
+constexpr int kUsedTexMax = (0x11C - 0x08) / 4;                // 69, the list's room
+extern "C" void dmg_car_textures(uint32_t used, uint32_t nameAddr) {
+    if (!dmg_committed(used, kUsedTexCount + 4) || !dmg_committed(nameAddr, 32)) return;
+    char name[64];
+    snprintf(name, sizeof name, "%.40s_ENGINE", (const char*)G(nameAddr));
+    const uint32_t hash = HashName(name);
+    uint32_t* list = &At<uint32_t>(G(used), kUsedTexList);
+    int& count = At<int>(G(used), kUsedTexCount);
+    if (count < 0 || count >= kUsedTexMax) return;
+    for (int i = 0; i < count; i++)
+        if (list[i] == hash) return;
+    list[count++] = hash;
+    if (g_settings.logHits) Log("car textures: %s added (%d in all)", name, count);
+}
+
 // The main loop, once a frame: the texture pack (scratches, cracked lenses), given once to the game's
 // LoadChunks; it is permanent (the game keeps pointers into it).
 extern "C" void dmg_main_loop(void) {

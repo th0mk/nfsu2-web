@@ -16,6 +16,9 @@
  *     plates (calls redirected)                    that tip or plate swapped in) and at the next
  *                                                  instruction (the original put back)
  *   UpdateCameraMovers call 0x581493 (main loop) the main-loop hook (roam.c): the texture pack
+ *   (none: not in the .asi)                      HOOK_SITE in the car loader (0x63AFEF): the engine's
+ *                                                  texture, <CAR>_ENGINE, loaded with the car's others, so the
+ *                                                  engine a lost hood shows is not black (on Windows too)
  *
  * Only what is seen: dents, folds, loose and lost parts, scratches, broken lights
  * and the game's own window cracks.  Not ported (yet): the engine and suspension
@@ -45,6 +48,7 @@ void dmg_body_draw(uint32_t model, uint32_t l2w);
 void dmg_marker_pre(int slot, uint32_t model, uint32_t l2w);
 void dmg_marker_post(void);
 void dmg_main_loop(void);
+void dmg_car_textures(uint32_t used, uint32_t name);
 
 #define APPLY_IMPULSE   0x005a0b00u
 #define VT_APPLY_IMPULSE 0x50u        /* its vtable slot */
@@ -105,6 +109,9 @@ int damage_hook(CPU *c, uint32_t ip){
         return 1;
     case HOOK_SITE(0x00625a27):   /* a plate's draw */
         if (on()){ g_c = c; dmg_marker_pre(33, MR32(c->esp), MR32(c->esp + 4u)); }
+        return 1;
+    case HOOK_SITE(0x0063afef):   /* a car's textures, before the loader asks for them: ebx the list, ebp the car's name */
+        if (on()){ g_c = c; dmg_car_textures(c->ebx, c->ebp); }
         return 1;
     case HOOK_SITE(0x00624c57):   /* back from those draws */
     case HOOK_SITE(0x00625a2c):
