@@ -21,6 +21,12 @@ viewer's own car and the drawn one (near: within --near m, default 50; far):
   head    the drawn heading against the owner's (degrees): p95
   pops    frames whose drawn move differs from the frame before's (scaled by the viewer's world steps) by over
           0.5 m / 2 m, a minute of near (far) time: the visible snaps
+  lagged  where the viewer draws the car against where the owner had it the pair's lag earlier (the along error's
+          median, in time): a car drawn a steady time in the past (free roam's ghosts) is right there; median, p95 (m)
+  wob     the wobble: each frame's drawn move against the frame before's, scaled by the viewer's world steps (the
+          pops' measure, every frame): p95 and root mean square (cm).  A car's own acceleration is a few cm of it (at
+          45 fps 50 m/s^2 in a bend: 2.4 cm); the rest is the drawing.  (Not against the owner's trace: its frames are
+          stamped by the wall clock, its moves by its world steps, and that noise was 40-90 cm)
 Per instance: its race clock against the host's (WorldTimer - host WorldTimer at the same instant, each smoothed over
 +-0.15 s for the frame pacer's steps: mean, p95 of the size, p95 of its change over 0.5 s; jumps: frames where the
 race clock moved over 50 ms off the wall clock at once), and its frames whose world step was over 5 % off the real
@@ -249,7 +255,8 @@ def main(argv):
 
     pooled = {True: {'e': [], 'al': [], 'alms': [], 'ac': [], 'hd': [], 'p05': 0, 'p2': 0, 'dur': 0.0},
               False: {'e': [], 'al': [], 'alms': [], 'ac': [], 'hd': [], 'p05': 0, 'p2': 0, 'dur': 0.0}}
-    hdr = (f'owner->viewer  part  n      err med/p95/max (m)     along mean (ms) sd   across p95  head p95   pops/min >0.5 >2')
+    hdr = (f'owner->viewer  part  n      err med/p95/max (m)     along mean (ms) sd   across p95  head p95   pops/min >0.5 >2'
+           f'   lagged med/p95   wob p95/rms cm')
     print(hdr)
     for a in names:
         tra = trs[a]
@@ -317,8 +324,36 @@ def main(argv):
                         dev = math.sqrt(sum(((p2[i] - p1[i]) - (p1[i] - p0[i]) * k) ** 2 for i in range(3)))
                         if dev > 0.5: P['p05'] += 1
                         if dev > 2.0: P['p2'] += 1
+            # the second pass: against the owner a steady lag earlier (each part's mean along lag)
+            lag = {nr: (pct(part[nr]['alms'], .5) / 1000.0 if part[nr]['alms'] else 0.0) for nr in (True, False)}
+            for nr in (True, False):
+                part[nr]['lg'] = []; part[nr]['wb'] = []
+            hist = []
+            for r in rows:
+                c = r['cars'][j] if j < len(r['cars']) else None
+                if not c or c['local']:
+                    hist = []; continue
+                me = next((x for x in r['cars'] if x and x['local']), None)
+                near = me is not None and math.dist(me['p'], c['p']) <= near_m
+                L = lag[near]
+                s = at(tra, ts, r['T'] + L)
+                hist.append((r['T'], c['p'], r['wdt'], s[0] if s else None))
+                if len(hist) > 3:
+                    hist.pop(0)
+                if not s or not s[1] or math.hypot(s[1][0], s[1][1]) < MIN_V:
+                    continue
+                P = part[near]
+                P['lg'].append(math.dist(c['p'], s[0]))
+                if len(hist) == 3 and all(x[3] for x in hist):
+                    (t0, p0, w0, q0), (t1, p1, w1, q1), (t2, p2, w2, q2) = hist
+                    if t1 > t0 and t2 > t1 and t2 - t0 < 0.2 and w1 and w2 and w1 > 0 and w2 > 0:
+                        k = w2 / w1
+                        dv = [(p2[i] - p1[i]) - (p1[i] - p0[i]) * k for i in range(3)]
+                        P['wb'].append(100.0 * math.sqrt(sum(x * x for x in dv)))
             for nr in (True, False):
                 P, Q = part[nr], pooled[nr]
+                Q.setdefault('lg', []); Q.setdefault('wb', [])
+                Q['lg'] += P['lg']; Q['wb'] += P['wb']
                 for key in ('e', 'al', 'alms', 'ac', 'hd'):
                     Q[key] += P[key]
                 for key in ('p05', 'p2', 'dur'):
@@ -329,11 +364,14 @@ def main(argv):
                 rec = {'owner': a, 'viewer': b, 'near': nr, 'n': len(P['e']), 'err_med': pct(P['e'], .5), 'err_p95': pct(P['e'], .95),
                        'err_max': max(P['e']), 'along_mean': mean(P['al']), 'along_mean_ms': mean(P['alms']), 'along_sd': sd(P['al']),
                        'across_p95': pct(P['ac'], .95), 'head_p95': pct(P['hd'], .95) if P['hd'] else None,
-                       'pops05_min': P['p05'] / mins if mins == mins else None, 'pops2_min': P['p2'] / mins if mins == mins else None}
+                       'pops05_min': P['p05'] / mins if mins == mins else None, 'pops2_min': P['p2'] / mins if mins == mins else None,
+                       'lag_ms': lag[nr] * 1000.0, 'lagged_med': pct(P['lg'], .5), 'lagged_p95': pct(P['lg'], .95),
+                       'wob_p95': pct(P['wb'], .95), 'wob_rms': math.sqrt(mean([x * x for x in P['wb']])) if P['wb'] else float('nan')}
                 out['pairs'].append(rec)
                 print(f'{a}->{b:6s}  {"near" if nr else "far ":4s}  {len(P["e"]):5d}  {pct(P["e"], .5):6.2f} {pct(P["e"], .95):6.2f} {max(P["e"]):7.2f}'
                       f'   {mean(P["al"]):+6.2f} ({mean(P["alms"]):+5.0f}) {sd(P["al"]):5.2f}   {pct(P["ac"], .95):6.2f}'
-                      f'   {pct(P["hd"], .95) if P["hd"] else float("nan"):6.2f}   {rec["pops05_min"] or 0:6.1f} {rec["pops2_min"] or 0:5.1f}')
+                      f'   {pct(P["hd"], .95) if P["hd"] else float("nan"):6.2f}   {rec["pops05_min"] or 0:6.1f} {rec["pops2_min"] or 0:5.1f}'
+                      f'   {rec["lagged_med"]:5.2f} {rec["lagged_p95"]:5.2f}   {rec["wob_p95"]:5.1f} {rec["wob_rms"]:5.1f}')
     for nr in (True, False):
         Q = pooled[nr]
         if not Q['e']:
@@ -342,11 +380,41 @@ def main(argv):
         rec = {'n': len(Q['e']), 'err_med': pct(Q['e'], .5), 'err_p95': pct(Q['e'], .95), 'err_max': max(Q['e']),
                'along_mean': mean(Q['al']), 'along_mean_ms': mean(Q['alms']), 'along_sd': sd(Q['al']),
                'across_p95': pct(Q['ac'], .95), 'head_p95': pct(Q['hd'], .95) if Q['hd'] else None,
-               'pops05_min': Q['p05'] / mins if mins == mins else None, 'pops2_min': Q['p2'] / mins if mins == mins else None}
+               'pops05_min': Q['p05'] / mins if mins == mins else None, 'pops2_min': Q['p2'] / mins if mins == mins else None,
+               'lagged_med': pct(Q.get('lg', []), .5), 'lagged_p95': pct(Q.get('lg', []), .95),
+               'wob_p95': pct(Q.get('wb', []), .95), 'wob_rms': math.sqrt(mean([x * x for x in Q['wb']])) if Q.get('wb') else float('nan')}
         out['pooled']['near' if nr else 'far'] = rec
         print(f'ALL      {"near" if nr else "far ":4s}  {rec["n"]:5d}  {rec["err_med"]:6.2f} {rec["err_p95"]:6.2f} {rec["err_max"]:7.2f}'
               f'   {rec["along_mean"]:+6.2f} ({rec["along_mean_ms"]:+5.0f}) {rec["along_sd"]:5.2f}   {rec["across_p95"]:6.2f}'
-              f'   {rec["head_p95"] if rec["head_p95"] is not None else float("nan"):6.2f}   {rec["pops05_min"] or 0:6.1f} {rec["pops2_min"] or 0:5.1f}')
+              f'   {rec["head_p95"] if rec["head_p95"] is not None else float("nan"):6.2f}   {rec["pops05_min"] or 0:6.1f} {rec["pops2_min"] or 0:5.1f}'
+              f'   {rec["lagged_med"]:5.2f} {rec["lagged_p95"]:5.2f}   {rec["wob_p95"]:5.1f} {rec["wob_rms"]:5.1f}')
+    # the reference: each instance's own car through the same measures (its own driving: crashes, swerves)
+    own = {'wb': [], 'p05': 0, 'p2': 0, 'dur': 0.0}
+    for k in names:
+        hist = []
+        for r in data[k]:
+            me = next((x for x in r['cars'] if x and x['local']), None)
+            if not me or (me['v'] is not None and abs(me['v']) < MIN_V):
+                hist = []; continue
+            hist.append((r['T'], me['p'], r['wdt']))
+            if len(hist) > 3:
+                hist.pop(0)
+            if len(hist) == 3:
+                (t0, p0, w0), (t1, p1, w1), (t2, p2, w2) = hist
+                if t1 > t0 and t2 > t1 and t2 - t0 < 0.2 and w1 and w2 and w1 > 0 and w2 > 0:
+                    own['dur'] += t2 - t1
+                    k2 = w2 / w1
+                    dev = math.sqrt(sum(((p2[i] - p1[i]) - (p1[i] - p0[i]) * k2) ** 2 for i in range(3)))
+                    own['wb'].append(100.0 * dev)
+                    if dev > 0.5: own['p05'] += 1
+                    if dev > 2.0: own['p2'] += 1
+    if own['wb']:
+        mins = own['dur'] / 60.0
+        rec = {'pops05_min': own['p05'] / mins, 'pops2_min': own['p2'] / mins, 'wob_p95': pct(own['wb'], .95),
+               'wob_rms': math.sqrt(mean([x * x for x in own['wb']]))}
+        out['pooled']['own'] = rec
+        print(f'OWN      cars  {len(own["wb"]):5d}   (each game\'s own car: the real motion)'
+              f'{"":56s}{rec["pops05_min"]:6.1f} {rec["pops2_min"]:5.1f}{"":19s}{rec["wob_p95"]:5.1f} {rec["wob_rms"]:5.1f}')
     if jout:
         with open(jout, 'w') as f:
             json.dump(out, f, indent=1)

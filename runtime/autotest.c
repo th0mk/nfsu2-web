@@ -81,7 +81,8 @@
  *                              which takes every career command)
  *     status [label]           print a [status] line now (memory trend points)
  *     stall SECONDS            test-only: block the guest thread (GIL held) to
- *                              exercise the stall watchdog (watchdog.c)
+ *                              exercise the stall watchdog (watchdog.c); a
+ *                              fraction (0.08) is a long frame
  *     loop N                   repeat the lines up to the matching "endloop"
  *     endloop                  N times (loops may nest; N=0 means forever)
  *     trace EVERY NAME=EXPR... log the expressions every EVERY frames (one
@@ -403,7 +404,7 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "endloop")) e.cmd = C_ENDLOOP;
         else if (!strcasecmp(cmd, "status")){ e.cmd = C_STATUS; snprintf(e.text, sizeof e.text, "%s", a1); }
-        else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = atol(a1); }
+        else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = (long)(atof(a1) * 1000.0 + 0.5); }
         else if (!strcasecmp(cmd, "waitmem")){ e.cmd = C_WAITMEM;
             e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0)); e.val = (uint32_t)strtoul(a2, 0, 0);
             e.n = a3[0] ? atol(a3) : 0; }
@@ -913,8 +914,8 @@ static int fire(CPU *c, Ev *e, double tms){
         status_line(now_ms(), tms, lb);
         break; }
     case C_STALL:
-        fprintf(stderr, "[autotest] f=%ld stall %ld s (test-only)\n", g_frame, e->n);
-        sleep((unsigned)(e->n > 0 ? e->n : 1));
+        if (e->n >= 1000) fprintf(stderr, "[autotest] f=%ld stall %.3f s (test-only)\n", g_frame, e->n / 1000.0);
+        usleep((useconds_t)(e->n > 0 ? e->n : 1000) * 1000u);   /* (ms: a fraction of a second is a long frame) */
         break;
     case C_CAREER:
         if (!career_cmd(c, e->text, &g_wait_start)) return 0;
