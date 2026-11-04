@@ -85,6 +85,23 @@ Checked against the guide or the code, and confirmed by players in threads:
   closes: it only shows the cause); then, in a normal window, turn the extensions off one by one.
 - Saves gone after closing the browser: the browser deletes site data when it closes (Chrome: `chrome://settings/content/siteData`,
   allow nfsu2.xyz to save data). Lost saves do not come back; Saves, Download backup, and cloud saves keep a copy.
+- `SAVES-UNREADABLE` ("Play without saving?" and "This browser can't read or write your saves right now (…)", on a page
+  that has it; before it, "Did not start" with `GAME-START` and `UnknownError: Unknown failure`, the log's `settings.ini
+  not read again: UnknownError`): the browser's own storage for nfsu2.xyz answers errors, so the game can neither list
+  the profiles nor keep a save; the page writes nothing. Seen in Firefox 159 on a Mac (thread 1567493118897430539),
+  still there after a Firefox restart; the game before had `[save] a file of the save folder could not be opened:
+  NotFoundError: Entry not found`. Play without saving starts the game anyway, nothing from it kept (the log: `[save]
+  playing without saving`). To fix it: restart the computer, and check the disk has free space (Firefox gives a full
+  disk the same error). Still there, the page's message says which way. Only where it says the progress "comes back as
+  it was at" a time (cloud saves whose last sync went through): first copy or download the passphrase (Cloud saves: the
+  eye shows and copies it, the arrow downloads it; Firefox and Safari keep it only in the site's data, so it goes with
+  it; Chrome and Edge may also have it in their passwords), then remove the site's data (Firefox: Settings, Privacy &
+  Security, Cookies and Site Data, Manage Data, nfsu2.xyz, Remove), reload, and enter the passphrase under Cloud saves.
+  Screenshots, covers, this device's settings (graphics, sound, controls), the Put back copy and the downloaded game
+  data go with the data, and anything played after that time. Where it says "don't remove
+  this site's data" (no cloud saves, or a last sync that did not go through): never suggest removing it; escalate with
+  the log. The same words over a running game: the browser refused a file the game saves to, so a save may not have
+  been kept; quit, restart the browser, and check the profile's last save on the start page.
 - Lost the cloud saves passphrase: since the release after 04a5c3f, Chrome and Edge offer to keep it with the browser's
   passwords (user name "Cloud saves"), which survive cleared site data. Look in the browser's password manager under
   nfsu2.xyz; a browser with no saves offers them back as the page opens, and the Cloud saves box fills it in for Load.
