@@ -1982,12 +1982,16 @@ void sub_00489ba0(CPU *restrict c){
  * waited behind the unloaded world's, 100 MB and more of them at once, and
  * the guest heap's 512 MB ran out (2026-11-04 reports: HeapAlloc of 1398016,
  * 0x5CE170's buffer for a 512x512 palettized texture with mips, failing).  So
- * the list goes at up to TEXREL_A_FRAME a frame: the game's own release, run
- * again as often as that takes; as the game does with three or fewer, at the
- * same point of its frame (the renderer keeps a texture a frame still draws).
- * NFSU2_TEST_TEXREL_GAME=1 (test runs): the game's three. */
+ * the list goes for up to TEXREL_MS of release work a frame (at least the
+ * game's three, at most TEXREL_A_FRAME): the game's own release, run again
+ * as often as that takes; as the game does with three or fewer, at the same
+ * point of its frame (the renderer keeps a texture a frame still draws).  A
+ * count alone made the unload hitch: 256 512x512 textures are ~24 ms of
+ * giving their Lock buffers back.  NFSU2_TEST_TEXREL_GAME=1 (test runs): the
+ * game's three. */
 #define TEXREL_LIST     0x008763b0u
 #define TEXREL_A_FRAME  256
+#define TEXREL_MS       2.0
 void sub_005ce4c0_orig(CPU *c);
 void sub_005ce4c0(CPU *c){
     static int game = -1;
@@ -1995,9 +1999,10 @@ void sub_005ce4c0(CPU *c){
                    game = s && *s && e && *e == '1'; }
     if (game){ sub_005ce4c0_orig(c); return; }
     uint32_t ret = MR32(c->esp);
+    double t0 = ms_now();
     for (int n = 3; ; n += 3){
         sub_005ce4c0_orig(c);                              /* up to three, and its ret */
-        if (n >= TEXREL_A_FRAME || MR32(TEXREL_LIST) == TEXREL_LIST || MR8(0x0087079cu)) break;
+        if (n >= TEXREL_A_FRAME || MR32(TEXREL_LIST) == TEXREL_LIST || MR8(0x0087079cu) || ms_now() - t0 >= TEXREL_MS) break;
         c->esp -= 4u; MR32(c->esp) = ret;                  /* as if called again */
     }
 }
