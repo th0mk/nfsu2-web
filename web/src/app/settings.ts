@@ -122,8 +122,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_crew', env: 'NFSU2_ROAM_CREW', kind: 'crews', ic: true, scope: 'web' },
   // and each one's colour, in the same order (crews.ts): bundle.m's K_RGBS
   { key: 'roam_crew_colours', env: 'NFSU2_ROAM_CREW_RGB', kind: 'rgbs', ic: true, scope: 'web' },
-  { key: 'roam_max_players', env: 'NFSU2_ROAM_MAX_PLAYERS', kind: 'int', vals: '2..49', ic: true, scope: 'web' },
-  { key: 'roam_max_cars', env: 'NFSU2_ROAM_MAX_CARS', kind: 'int', vals: '0..48', ic: true, scope: 'web', device: true },
+  { key: 'roam_max_players', env: 'NFSU2_ROAM_MAX_PLAYERS', kind: 'int', vals: '2..65', ic: true, scope: 'web' },
+  { key: 'roam_max_cars', env: 'NFSU2_ROAM_MAX_CARS', kind: 'int', vals: '0..64', ic: true, scope: 'web', device: true },
   // on, off (Ghost mode for players' cars), none (for traffic and tuners too); a module before none took it for on
   { key: 'roam_collide', env: 'NFSU2_ROAM_COLLIDE', kind: 'enum', vals: 'on|off|none', ic: true, scope: 'web' },
   // quick chat's fixed phrases (web/src/app/quickchat.ts, runtime/roam_game.c say_*): the page has the picker, so not in
@@ -509,12 +509,12 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # the players near you (its free-roam hub).  [NFSU2_ROAM_DISCOVERY]
 #roam_discovery = on
 # Largest group: you and the players you exchange cars with at once (2 to
-# 49; the server picks the nearest), and other players' cars shown at once
-# (0 to 48, the nearest; the page offers 16, 24, 32, 40 or 48: 32 on
+# 65; the server picks the nearest), and other players' cars shown at once
+# (0 to 64, the nearest; the page offers 16, 24, 32, 48 or 64: 32 on
 # computers, 16 on phones, 24 on tablets): the server sends you as many
 # players' cars as that.
 # [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]
-#roam_max_players = 49
+#roam_max_players = 65
 #roam_max_cars = 32
 # Other players marked on the world map at once (0 to 4096, the nearest; 2048
 # on phones).  [NFSU2_ROAM_MAP_MAX]

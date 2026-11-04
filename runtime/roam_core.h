@@ -21,14 +21,15 @@
 #include <stddef.h>
 
 #define RC_PROTO_VER     1          /* header byte 4; a different value is ignored */
-#define RC_CORE_VER      13        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
+#define RC_CORE_VER      14        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
                                        4: state extensions, RC_HF_STATEX; 5: race lobbies, RC_HF_LOBBY; 6: quick chat,
                                        RC_HF_SAY; 7: crews, RC_HF_CREW; 8: crews from the hub, RC_HF_HUBCREW;
                                        9: a HELLO to one peer names only that peer, roam_core.c fill_hello;
-                                       10: lists of up to RC_MAX_PEERS (48), and its HELLO to the hub ends in the links
+                                       10: lists of up to 48 (RC_PEERS_V13), and its HELLO to the hub ends in the links
                                        it wants, rc_config.links; 11: in an outrun, after the links, the id of its
                                        other player, rc_set_duel; 12: drift battles, RC_HF_DRIFT; 13: to a peer, after
-                                       the outrun's player, the player's flag, rc_config.flag) */
+                                       the outrun's player, the player's flag, rc_config.flag; 14: lists of up to
+                                       RC_MAX_PEERS (64)) */
 #define RC_MAGIC0        0x4E       /* "N2FR" */
 #define RC_MAGIC1        0x32
 #define RC_MAGIC2        0x46
@@ -38,11 +39,12 @@
 #define RC_HDR           16
 #define RC_CRC           4
 #define RC_NAME_MAX      24
-#define RC_MAX_PLAYERS   49         /* the mesh: this machine + 48 peers */
+#define RC_MAX_PLAYERS   65         /* the mesh: this machine + 64 peers */
 #define RC_MAX_PEERS     (RC_MAX_PLAYERS - 1)
 #define RC_PEERS_V1      7          /* the most a core of version 1 reads in a HELLO's ids or a PEERS list */
 #define RC_PEERS_V9      32         /* ...a core of versions 2 to 9 */
-#define RC_TABLE         96         /* known addresses (configured, gossiped, heard): the peers and those going or coming */
+#define RC_PEERS_V13     48         /* ...a core of versions 10 to 13 */
+#define RC_TABLE         128        /* known addresses (configured, gossiped, heard): the peers and those going or coming */
 #define RC_SNAP_STATES   3          /* states per SNAP (newest first): loss redundancy */
 #define RC_STATE_BYTES   52
 #define RC_STATEX_BYTES  30         /* a state's extension (RC_HF_STATEX), its length byte included, at most */
