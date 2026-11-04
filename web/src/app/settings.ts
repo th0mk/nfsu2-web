@@ -210,10 +210,10 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 
 # The game's language: english, french, german, italian, spanish, dutch,
 # swedish, danish, korean, chinese, japanese, russian, thai, portuguese
-# (Brazil's), polish, turkish, hungarian or ukrainian.  French, German,
+# (Brazil's), polish, turkish, hungarian, ukrainian or bulgarian.  French, German,
 # Italian, Spanish, Japanese and Russian come with their dubbed voices and
 # movies where the server has the language packs; Russian, Portuguese,
-# Polish, Turkish, Hungarian and Ukrainian take their text from them too.
+# Polish, Turkish, Hungarian, Ukrainian and Bulgarian take their text from them too.
 # [NFSU2_LANGUAGE]
 #language = english
 
@@ -667,7 +667,7 @@ export function peersBad(v: string): string | null {
     const pm = /^:(\d+)/.exec(rest);
     if (pm) { got = rest.length > pm[0].length ? 6 : 5; pt = scanU32(pm[1]); }
     if ((got !== 4 && got !== 5) || [m[1], m[2], m[3], m[4]].some(x => scanU32(x) > 255) || pt === 0 || pt > 65535 ||
-        (got === 4 && t.includes(':'))) return t;
+      (got === 4 && t.includes(':'))) return t;
   }
   return null;
 }
@@ -809,7 +809,7 @@ export interface Resolved {
  * (device.ts: a phone's), below the file and the environment.
  */
 export function resolveEnv(text: string | null, environment: Record<string, string>, host: Record<string, string>,
-                           device: Record<string, string> = {}): Resolved {
+  device: Record<string, string> = {}): Resolved {
   const env: Record<string, string> = { ...environment };
   const source: Record<string, Source> = {};
   for (const k of Object.keys(env)) source[k] = 'environment';

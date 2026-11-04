@@ -231,10 +231,10 @@ that room.
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
-  Thai, Portuguese (Brazil), Polish, Turkish, Hungarian or Ukrainian, for the menus and all the game's text. Where the
+  Thai, Portuguese (Brazil), Polish, Turkish, Hungarian, Ukrainian or Bulgarian, for the menus and all the game's text. Where the
   server has the language packs, French, German, Italian, Spanish, Japanese and Russian also play with
   their dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish,
-  Turkish, Hungarian and Ukrainian with their text at all. Without the packs those six play in English, and the other
+  Turkish, Hungarian, Ukrainian and Bulgarian with their text at all. Without the packs those six play in English, and the other
   languages with English voices and movies. Your browser fetches only your language's files: the dubbed voices are
   about 50 MB (Russian 94 MB), and the dubbed movies are smaller than the English ones they replace. Hungarian's
   text writes ő and ű as õ and û, as its translation does: the game's fonts have no ő or ű. The start page follows the
