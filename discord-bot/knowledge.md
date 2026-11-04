@@ -299,9 +299,11 @@ context lists every problem the developer has a report on, with its first thread
   shops, cover shoots and special events, races): the log has `[heap] HeapAlloc(...) FAILED` lines before the `TRAP`
   (in tlsf_alloc < gbuf_alloc while friends' cars load, or in sub_00401aa0 on a race's loading screen). The game's
   512 MB of memory runs short on the way back into a crowded free roam: its freed memory came back in pieces too
-  small for its next big load (better since d28b0b03, there only once the live version has that commit), and the
-  friends' cars' textures that come in then can fill it anyway. Not fixed yet; no setting avoids it for sure. With
-  d28b0b03 the log also says what holds the memory (`[heap] no room for ...` lines): escalate such a log.
+  small for its next big load (better since d28b0b03), and the textures the game had let go waited to be released
+  while the friends' cars' new ones came in (since 8ddeacb8 they go at once: the peak on a trip back about 80 MB
+  lower in tests). Since 8ddad1c9 a block freed twice no longer damages the game's memory. All only once the live
+  version has those commits; no setting avoids it for sure before. With them the log says what holds the memory
+  (`[heap] no room for ...` lines) and names anything freed twice (`DOUBLE FREE` lines): escalate such a log.
 - Free roam: the world's loading screen, or roads missing, while driving among many players (seconds on a PC, half a
   minute on a phone; once it never ended). Cause found on 29 October: the game loads no part of the city while it
   loads a player's car, and with players coming and going their cars load one after another, so the city waited for
