@@ -2171,6 +2171,11 @@ export async function boot() {
   photo = new PhotoMode($('#stage'), { shoot: () => screenshot(true), screenshot: () => void screenshot(), log: logLine });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { void checkNewer(); vault.shown(); } });
   setInterval(() => { if (document.visibilityState === 'visible') void checkNewer(); }, NEWER_EVERY_MS);
+  // iPhone and iPad: Safari plays a page's Web Audio as "ambient", muted by Silent mode, and players took that for a
+  // game without sound (3 and 4 November).  A game's sound is playback, as a video's is: it plays in Silent mode, and
+  // other apps' music pauses while it plays.  Safari 17 and newer; elsewhere there is no audioSession
+  const audioSession = (navigator as { audioSession?: { type: string } }).audioSession;
+  if (audioSession) try { audioSession.type = 'playback'; } catch (e) { log.add(`[app] audio session: ${e}`); }
 
   setCheck(checkBrowser());
   setCheck(checkIsolation());

@@ -204,6 +204,8 @@ Checked against the guide or the code, and confirmed by players in threads:
   nothing lower.
 - No sound at all on an iPhone, while the log's sound is fine: Silent mode is on, and Safari plays no page sound in
   it. Turn it off (the switch on the side; on newer iPhones the Action button or Control Center). Posters confirmed it.
+  Since 4 November (pending release) the page plays its sound in Silent mode too (Safari's audio session "playback",
+  as a video plays; other apps' music pauses while the game plays): then a reload of the page is the answer.
 - "Error code 1" seconds after Play: the game's program file did not load, and the log says why. `HTTP 403` for it:
   a network or filter blocks it (another network, or allow nfsu2.xyz). `no PE signature`: the browser's copy is
   damaged: start page, Other, Delete game data, reload (Ctrl+F5), Play; saves stay (a poster confirmed it).
