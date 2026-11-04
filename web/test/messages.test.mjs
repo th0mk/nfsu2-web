@@ -4,7 +4,8 @@
 //   drives in free roam, held until they do; "I Write back" under it; I answers the newest, else a friend to pick
 //   (1-9, in free roam first), Enter sends {op:"msg"}, Esc closes; the server's answer puts the player's own on the
 //   log ("To Bo", a note when it waits) or says why not; no answer in 10 s: not sent; I never in a text field, with a
-//   modifier or while not driving; T stays the game's (its Career Status, issue #52)
+//   modifier or while not driving; T stays the game's (its Career Status, issue #52), and I too while the player has
+//   one of the game's controls on it (the game's status "keys")
 // - the conversations: kept in this browser per claimed name, the friends' unread until shown
 // - the start page's conversation (ChatDialog): the messages kept, Send, what became of it, why one did not go
 // The module is bundled from web/src with esbuild into a blank page.
@@ -144,6 +145,17 @@ test('in the game: I with nothing to answer picks a friend; Esc; never in a fiel
   await p.focus('#game');
   await p.keyboard.press('Control+KeyI');
   assert.equal(await card(p), null);
+  // one of the game's controls on I (the game's status "keys", bit 0: runtime/dinput_kbd.c page_keys): the game's
+  await p.evaluate(() => { const w = /** @type {any} */ (window); w.keys = 1; w.gameI = 0;
+    w.msgs.start({ status: { read: () => new Map([['keys', w.keys]]) } }, true);
+    document.getElementById('game').addEventListener('keydown', e => { if (e.code === 'KeyI' && !e.defaultPrevented) w.gameI++; }); });
+  await p.keyboard.press('KeyI');
+  assert.equal(await card(p), null, 'I opens nothing');
+  assert.equal(await p.evaluate(() => /** @type {any} */ (window).gameI), 1, 'I goes to the game');
+  await p.evaluate(() => { /** @type {any} */ (window).keys = 2; });           // (F's bit: I is ours again)
+  await p.keyboard.press('KeyI');
+  assert.match(await card(p) ?? '', /^Message a friend/);
+  await p.keyboard.press('Escape');
   // a message the link could not take; one the server never answered
   await server(p, { op: 'mail', from: 'Bo_', body: 'yo', at: 3 });
   await p.keyboard.press('KeyI');

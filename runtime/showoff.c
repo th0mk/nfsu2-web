@@ -189,7 +189,9 @@ static int shoot_on(void){
     return !strncasecmp(a, "UI_Showcase", 11);
 }
 
-/* O presses since the last frame (a tap between frames counts) */
+/* O presses since the last frame (a tap between frames counts); none while the player has one of the game's controls
+ * on O (dinput_kbd.c dikbd_ours; dinput_pad.c leaves D-pad down to the game the same way) */
+int dikbd_ours(unsigned dik, const char *what);
 static int o_presses(void){
     uint32_t head = kbd_ev_head();
     if (!S.kinit){ S.kinit = 1; S.kseq = head; return 0; }
@@ -198,7 +200,7 @@ static int o_presses(void){
         KbdEv e;
         int r = kbd_ev_get(S.kseq, &e);
         if (r == 0) break;
-        if (r > 0 && e.dik == DIK_O){ if (e.down && !S.ostate) n++; S.ostate = e.down; }
+        if (r > 0 && e.dik == DIK_O){ if (e.down && !S.ostate && dikbd_ours(DIK_O, "the show-off")) n++; S.ostate = e.down; }
     }
     return n;
 }

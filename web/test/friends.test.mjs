@@ -3,7 +3,8 @@
 // - the line over the game: nothing until the server says what touching that player may lead to, then "Add Bo as a
 //   friend" (F, a click on the line, or the page menu's button), "Bo wants to be friends: accept", the request sent,
 //   friends, or why not (no claimed name here or there); gone when the cars part, the name over the car and the
-//   claimed name being one player; F only while the line offers something, never in a text field
+//   claimed name being one player; F only while the line offers something, never in a text field, nor while the
+//   player has one of the game's controls on F (the game's status "keys": the line still takes a click)
 // - the room's name to the server once there are friends, and again when the room changes
 // - where the friends play, asked every minute while there are some: a notice when one comes into free roam (none for
 //   one just met here); the page menu's Friends popup: the ones in free roam with a Join (none in the player's own
@@ -114,6 +115,23 @@ test('the other player asked first: accept on the line, by a click', async () =>
   // a request while the cars do not touch: answered on the start page
   await server(p, { op: 'asks', name: 'Eve' });
   assert.deepEqual(await toasts(p), ['Eve wants to be friends: answer under Friends on the start page']);
+  await p.close();
+});
+
+test('one of the game\'s controls on F (the game\'s status "keys"): F is the game\'s, the line still adds', async () => {
+  const p = await page();
+  // F's bit in the status (runtime/dinput_kbd.c page_keys: bit 1)
+  await p.evaluate(() => { const w = /** @type {any} */ (window); w.keys = 2;
+    w.prompt.start({ viewRect: () => ({ x: 0, y: 0, w: 640, h: 480 }), status: { read: () => new Map([['keys', w.keys]]) } }, true); });
+  await raf(p);
+  await bump(p, 'Bo', 1);
+  await server(p, { op: 'can', name: 'Bo_', st: 'new' });
+  assert.deepEqual(await line(p), { text: 'Add Bo_ as a friend', offer: true }, 'no F on the line');
+  await sent(p);
+  await p.keyboard.press('KeyF');
+  assert.deepEqual(await sent(p), [], 'F is the game\'s');
+  await p.click('.friend-prompt');
+  assert.deepEqual(await sent(p), [{ op: 'add', name: 'Bo_' }], 'a click on the line still asks');
   await p.close();
 });
 

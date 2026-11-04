@@ -9,6 +9,8 @@
 //   click or the touch button, and 1-4, Esc and the right stick stay the game's
 // - the right stick on the game's steering or a pedal (the game's "rstick"): its click is the game's, the keys still
 //   open the picker
+// - one of the game's controls on a key of 1-4 or on the stick's click (the game's "keys", its "rstick" 2): that key
+//   or the click is the game's, the others still open the picker
 // - a race between players (the game's "netrace") with free roam off: the picker, and the phrase goes to the race
 // - quick chat off: no picker anywhere
 // - the countdown (the special phrase, in the default sixteen's last place): its stopwatch in the picker, 5 to 1 and
@@ -142,6 +144,38 @@ test('a right stick the game\'s controls read (the game\'s "rstick"): its click 
   await p.clock.runFor(200);
   assert.equal(await click(p), true, 'the stick the look\'s again: the click opens the picker');
   assert.equal(await open(p), 5);
+  await p.close();
+});
+
+test('one of the game\'s controls on 1 or on the stick\'s click (the game\'s "keys", "rstick" 2): those are the game\'s', async () => {
+  const p = await page();
+  await game(p, true, true, 2);
+  // 1 and Numpad 3 have a control of the game's (runtime/dinput_kbd.c PAGE_KEYS: 1 is bit 2, Numpad 3 bit 8)
+  await p.evaluate(() => { /** @type {any} */ (window).st.keys = (1 << 2) | (1 << 8); });
+  await p.clock.runFor(200);                                     // (the status is read again)
+  assert.equal(await key(p, 'Digit1'), true, 'the game gets 1');
+  assert.equal(await open(p), -1, 'no picker');
+  assert.deepEqual(await keys(p), ['Digit1']);
+  await key(p, 'Numpad3');
+  assert.equal(await open(p), -1, 'nor by Numpad 3');
+  await key(p, 'Digit2');
+  assert.equal(await open(p), 1, '2 still opens its group');
+  await key(p, 'Digit1');
+  assert.equal(await open(p), 1, 'and 1 picks nothing in it');
+  assert.deepEqual(await said(p), []);
+  await key(p, 'Numpad1');
+  assert.deepEqual(await said(p), [[4, false]], 'Numpad 1 does');
+  // the stick's click with a control of the game's other than its Hydraulic Bounce on it (dinput_pad.c ours_from)
+  await p.evaluate(() => { /** @type {any} */ (window).st.rstick = 2; });
+  await p.clock.runFor(200);
+  assert.equal(await click(p), false, 'the click goes to the game');
+  assert.equal(await open(p), -1);
+  await p.evaluate(() => { const w = /** @type {any} */ (window); w.st.rstick = 0; w.st.keys = 0; });
+  await p.clock.runFor(200);
+  assert.equal(await click(p), true, 'ours again');
+  await key(p, 'Escape');
+  await key(p, 'Digit1');
+  assert.equal(await open(p), 0, '1 too');
   await p.close();
 });
 

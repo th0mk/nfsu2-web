@@ -101,6 +101,8 @@ typedef struct {
     int16_t  ofs_of[256];        /* FMT_RAW: data offset of each key, -1 = not in the format */
     int16_t  act_of[256];        /* FMT_ACTIONS: action index of each key, -1 = unmapped */
     uint32_t app_of[256];        /* FMT_ACTIONS: uAppData */
+    uint32_t def_of[256];        /* FMT_ACTIONS: the action the map's semantics give the key (its default), 0xFFFFFFFF none */
+    uint32_t af;                 /* FMT_ACTIONS: the action format (the actions' names) */
     uint32_t nact;
     uint32_t bufsize;
     int      acquired;
@@ -121,6 +123,11 @@ static KDev *kdev(uint32_t self){
     return d;
 }
 void dikbd_created(uint32_t self){ kdev(self); }
+/* lightkey.c: the action (its uAppData) a key has in the action map the keyboard reads now, 0xFFFFFFFF none */
+uint32_t dikbd_key_action(unsigned dik){
+    for (int i = 0; i < g_nkd && dik < 256u; i++) if (g_kd[i].fmt == FMT_ACTIONS && g_kd[i].act_of[dik] >= 0) return g_kd[i].app_of[dik];
+    return 0xFFFFFFFFu;
+}
 
 static int lg(void){ return kbd_log() || getenv("DIMAP"); }
 
@@ -285,14 +292,87 @@ static uint32_t build_map(KDev *d, uint32_t af, uint32_t flags){
     (void)d;
     return DI_OK;
 }
+/* ---- our keys ----------------------------------------------------------------
+ * The keys the runtime and the page add on top of the game's: X drift mode (drift.c), O the show-off (showoff.c), N
+ * the horn (horn.c), and the page's I (Message a friend: web/src/app/messages.ts), F (Add friend: friends.ts), 1 to 4
+ * and Numpad 1 to 4 (quick chat: quickchat.ts).  None is one of the game's in its driving map (0x7fcac0; Numpad 1 to 4
+ * are its debug camera's, which the game never reads), but a player can put any of the game's controls on any key
+ * (Options > Controls > Keyboard Configuration).  Then ours leave that key to the game, for as long as the action map
+ * the keyboard reads has it so: the key's action there is not its default (the action the map's semantics give it).
+ * Each says so once in the log ("[keys] X is bound to Shift Up in the game: drift mode stays off it").  The page's
+ * controls hear it through the status "keys" (status_web.c's block): a bit for each of PAGE_KEYS, in its order, set
+ * while the game has that key. */
+#define NO_ACT 0xFFFFFFFFu
+__attribute__((weak)) int host_status_slot(const char *name){ (void)name; return -1; }
+__attribute__((weak)) void host_status_set_n(const int *slot, const double *value, int n){ (void)slot; (void)value; (void)n; }
+static const KDev *g_mapped;     /* the device last given an action map: what the keyboard reads now */
+static uint32_t rebound(const KDev *d, unsigned dik){
+    return dik < 256u && d->act_of[dik] >= 0 && d->app_of[dik] != d->def_of[dik] ? d->app_of[dik] : NO_ACT;
+}
+/* an action's name in the device's action format ("Shift Up") */
+static const char *act_name(const KDev *d, uint32_t app){
+    static char nm[48];
+    AF f;
+    snprintf(nm, sizeof nm, "action 0x%02x", app);
+    if (!read_af(d->af, &f)) return nm;
+    for (uint32_t k = 0; k < f.nact; k++){
+        uint32_t a = f.rg + k * f.asz, s = 0;
+        if (!mem_is_committed(a + 39)) break;
+        if (MR32(a) != app || !(s = MR32(a + 12)) || !mem_is_committed(s)) continue;
+        int i = 0;
+        for (; i + 1 < (int)sizeof nm && mem_is_committed(s + (uint32_t)i) && MR8(s + (uint32_t)i) >= 0x20; i++) nm[i] = (char)MR8(s + (uint32_t)i);
+        if (i) nm[i] = 0;
+        break;
+    }
+    return nm;
+}
+static void said_once(unsigned dik, uint32_t app, const char *name, const char *what){
+    static struct { uint16_t dik; uint32_t app; } said[32];
+    static int n;
+    for (int i = 0; i < n; i++) if (said[i].dik == dik && said[i].app == app) return;
+    if (n < 32){ said[n].dik = (uint16_t)dik; said[n].app = app; n++; }
+    fprintf(stderr, "[keys] %s is bound to %s in the game: %s stays off it\n", dik_name(dik) ? dik_name(dik) : "a key", name, what);
+}
+/* drift.c, showoff.c, horn.c: whether our control `what` takes the key dik now (1), or leaves it to the game (0) */
+int dikbd_ours(unsigned dik, const char *what){
+    const KDev *d = g_mapped;
+    uint32_t app = d && d->fmt == FMT_ACTIONS ? rebound(d, dik) : NO_ACT;
+    if (app == NO_ACT) return 1;
+    said_once(dik, app, act_name(d, app), what);
+    return 0;
+}
+/* the page's controls with their keys: the status "keys" has a bit for each, in this order (web/src/app/gamekeys.ts) */
+static const struct { uint8_t dik; const char *what; } PAGE_KEYS[] = {
+    { 0x17, "Message a friend" }, { 0x21, "Add friend" },
+    { 0x02, "quick chat" }, { 0x03, "quick chat" }, { 0x04, "quick chat" }, { 0x05, "quick chat" },     /* 1 to 4 */
+    { 0x4F, "quick chat" }, { 0x50, "quick chat" }, { 0x51, "quick chat" }, { 0x4B, "quick chat" },     /* Numpad 1 to 4 */
+};
+static void page_keys(const KDev *d){
+    static int slot = -2;
+    static double last = -1;
+    uint32_t bits = 0;
+    g_mapped = d;
+    for (unsigned i = 0; i < sizeof PAGE_KEYS / sizeof PAGE_KEYS[0]; i++){
+        uint32_t app = rebound(d, PAGE_KEYS[i].dik);
+        if (app == NO_ACT) continue;
+        bits |= 1u << i;
+        said_once(PAGE_KEYS[i].dik, app, act_name(d, app), PAGE_KEYS[i].what);
+    }
+    if (slot == -2) slot = host_status_slot("keys");
+    if (slot >= 0 && (double)bits != last){ double v = bits; last = v; host_status_set_n(&slot, &v, 1); }
+}
+
 static uint32_t set_map(KDev *d, uint32_t af, uint32_t flags){
     AF f;
     if (!read_af(af, &f)) return DIERR_INVALIDPARAM;
-    for (int k = 0; k < 256; k++){ d->act_of[k] = -1; d->app_of[k] = 0; }
+    for (int k = 0; k < 256; k++){ d->act_of[k] = -1; d->app_of[k] = 0; d->def_of[k] = 0xFFFFFFFFu; }
+    d->af = af;
     int n = 0;
     for (uint32_t k = 0; k < f.nact; k++){
         uint32_t a = f.rg + k * f.asz;
         if (!mem_is_committed(a + 39)) break;
+        unsigned sk = sem_key(MR32(a + 4));                       /* (default_map: the first action asking for a key) */
+        if (sk && d->def_of[sk] == 0xFFFFFFFFu) d->def_of[sk] = MR32(a);
         if (MR32(a + 36) == DIAH_UNMAPPED || !is_kbd_guid(a + 16)){
             if (lg() && sem_key(MR32(a + 4)))
                 fprintf(stderr, "[dikbd]   action %u (app 0x%x, key 0x%02x) unmapped: dwHow 0x%x dwObjID 0x%x guid %08x\n",
@@ -311,6 +391,7 @@ static uint32_t set_map(KDev *d, uint32_t af, uint32_t flags){
     d->datasize = MR32(af + 8) ? MR32(af + 8) : 4u * f.nact;
     if (MR32(af + 40)) d->bufsize = MR32(af + 40);
     d->cursor = kbd_ev_head();
+    page_keys(d);
     if (flags & DIDSAM_FORCESAVE) save_user_map(&f);
     if (lg()) fprintf(stderr, "[dikbd] SetActionMap %s: %u actions, %d keys mapped%s\n",
                       f.guid, f.nact, n, (flags & DIDSAM_FORCESAVE) ? ", saved" : "");

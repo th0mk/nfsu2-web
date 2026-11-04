@@ -72,10 +72,15 @@
 #define TBL       2048
 #define TONES     5
 
+/* N and the stick's click leave the horn when the player put one of the game's controls on them (dinput_kbd.c
+ * dikbd_ours, dinput_pad.c pad_ls_ours); a click the game has nothing on honks with hydraulics too */
+__attribute__((weak)) int dikbd_ours(unsigned dik, const char *what){ (void)dik; (void)what; return 1; }
+__attribute__((weak)) int pad_ls_ours(void){ return 1; }
 int horn_held(int stick){
-    if (kbd_key_down(DIK_N)) return 1;
+    if (kbd_key_down(DIK_N) && dikbd_ours(DIK_N, "the horn")) return 1;
     PadState s;
-    return stick && gamepad_read(&s) && (s.buttons & 1u << PAD_LS);
+    int ls = pad_ls_ours();
+    return (ls == 2 || (ls == 1 && stick)) && gamepad_read(&s) && (s.buttons & 1u << PAD_LS);
 }
 
 /* ---- the kinds ------------------------------------------------------------------ */

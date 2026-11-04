@@ -229,7 +229,9 @@ static struct {
     uint8_t kept[SETUP_SZ];           /* ... and the setup the ride had */
 } D;
 
-/* X presses since the last frame, from the keyboard's events (a tap between frames counts) */
+/* X presses since the last frame, from the keyboard's events (a tap between frames counts); none while the player has
+ * one of the game's controls on X (dinput_kbd.c dikbd_ours) */
+int dikbd_ours(unsigned dik, const char *what);
 static int x_presses(void){
     uint32_t head = kbd_ev_head();
     if (!D.kinit){ D.kinit = 1; D.kseq = head; return 0; }
@@ -238,7 +240,7 @@ static int x_presses(void){
         KbdEv e;
         int r = kbd_ev_get(D.kseq, &e);
         if (r == 0) break;
-        if (r > 0 && e.dik == DIK_X && e.down) n++;
+        if (r > 0 && e.dik == DIK_X && e.down && dikbd_ours(DIK_X, "drift mode")) n++;
     }
     return n;
 }

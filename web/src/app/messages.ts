@@ -13,6 +13,7 @@
 //                {"op":"mail","from","body","at"} and the list's "mail" bring the friends' (friends.rs).
 //   start page   friends.ts FriendsPanel: Message on each friend, the unread ones counted on it; ChatDialog.
 import type { GameSession } from './game';
+import { gameHas, KEY_MESSAGE } from './gamekeys';
 import { t } from './i18n';
 import { touchFirst } from './device';
 
@@ -279,7 +280,8 @@ export class FriendMessages {
     if (!this.on || !this.session || e.metaKey || e.ctrlKey || e.altKey || e.code !== MSG_KEY) return;
     const el = e.target as HTMLElement | null;
     if (el?.closest?.('input, textarea, select, dialog[open]') || document.querySelector('dialog[open]')) return;
-    if (this.mode || !this.deps.driving()) return;
+    // (a control of the game's the player put on I: the game's alone, gamekeys.ts)
+    if (this.mode || !this.deps.driving() || gameHas(this.session, KEY_MESSAGE)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (e.repeat) return;
     const n = this.newest;

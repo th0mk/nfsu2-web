@@ -15,6 +15,7 @@
 // - FriendsApi: /friends, asked with the keyphrase's token (claim.ts NameClaims does the same for /names).
 import type { GameSession } from './game';
 import { touchFirst } from './device';
+import { gameHas, KEY_FRIEND } from './gamekeys';
 import { t } from './i18n';
 import { pageDialog } from './padnav';
 import { onlineName } from './claim';
@@ -365,7 +366,8 @@ export class FriendPrompt {
   private key(e: KeyboardEvent) {
     if (e.code !== 'KeyF' || e.metaKey || e.ctrlKey || e.altKey || !this.actionable()) return;
     const el = e.target as HTMLElement | null;
-    if (el?.closest?.('input, textarea, select') || pageDialog()) return;
+    // (a control of the game's the player put on F: the game's alone, gamekeys.ts; a click on the line still adds)
+    if (el?.closest?.('input, textarea, select') || pageDialog() || gameHas(this.session, KEY_FRIEND)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (!e.repeat) this.act();
   }
@@ -388,7 +390,7 @@ export class FriendPrompt {
     const w = this.who, b = this.root;
     if (!w || w.st === 'wait') { b.hidden = true; return; }
     const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };
-    const offer = this.actionable(), key = offer && !touchFirst() ? [kbd('F')] : [];
+    const offer = this.actionable(), key = offer && !touchFirst() && !gameHas(this.session, KEY_FRIEND) ? [kbd('F')] : [];
     const text = (s: string) => Object.assign(document.createElement('span'), { textContent: s });
     const line = (s: string) => b.replaceChildren(personIcon(offer ? PERSON_PLUS : PERSON), ...key, text(s));
     switch (w.st) {
