@@ -199,8 +199,10 @@ Checked against the guide or the code, and confirmed by players in threads:
 - Touch Nitro or the thumb stick do nothing while Gas and steering work: they act as the controller's buttons, so
   start page, Controls, More controller settings, Controller must be On or Hotplug, not Off. A poster confirmed it.
 - Steam Deck or Steam Controller: buttons act as arrow keys, Enter and Esc and no pad shows in Controls, Controller:
-  Steam Input is in its keyboard mode; add Chrome to Steam as a non-Steam game with a gamepad layout and start it
-  through Steam (confirmed). The game crawls on a Steam Deck with sound playing: Chrome draws WebGPU on SwiftShader
+  the controller is in its mouse-and-keyboard mode. In Chrome or Edge on a computer, where Controls, Controller has
+  Connect a Steam Controller: press it and pick the controller in the browser's list, once (the 2026 controller
+  through its dongle confirmed). Otherwise (Firefox, Safari, no such button): add the browser to Steam as a
+  non-Steam game with a gamepad layout and start it through Steam (confirmed). The game crawls on a Steam Deck with sound playing: Chrome draws WebGPU on SwiftShader
   (`chrome://gpu`: Vulkan Disabled); a player fixed it by starting Chrome with
   `--enable-features=Vulkan --use-angle=vulkan` (2026-11-01).
 - A pad that Windows sees but Controls, Controller does not: close Steam, DS4Windows and other pad software, press a
