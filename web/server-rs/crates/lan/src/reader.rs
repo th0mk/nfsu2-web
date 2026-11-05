@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::time::Instant;
 
-use crate::compact::KIND_COMPACT;
+use crate::compact::{F_STAMPED, KIND_COMPACT};
 use crate::conn::{Conn, Out};
 use crate::text::parse_json;
 use crate::{AttachCtx, Cut, KIND_BUNDLE, LanSwitch, Peer, mix};
@@ -209,8 +209,27 @@ impl LanSwitch {
             self.stats.bundles_in.inc();
             self.stats.msg(mix::IN_BUNDLE);
             self.stats.entry_in(mix::FRAMING, 4);
-            // each entry as a frame of its own; a broken entry, or one over the budgets, ends the bundle
             let mut at = 4;
+            // a stamp of the switch's echoed (LanSwitch::probe): its 8 bytes, then how long the page held it (µs, at
+            // most 10 s); its round trip timed as a pong's, less that wait
+            if data[1] & F_STAMPED != 0 {
+                if n < 16 {
+                    self.stats.limited.inc();
+                    return;
+                }
+                self.stats.entry_in(mix::FRAMING, 12);
+                let held = (be32(&data, 12) as f64 / 1000.0).min(10_000.0);
+                match peer.probe.lock().pong(&data[4..12], mono_ms() - held, &peer.share) {
+                    Some(true) => peer.alive.store(true, Relaxed),
+                    Some(false) => {}
+                    None => {
+                        self.flood(peer);
+                    }
+                }
+                self.stats.echoes.inc();
+                at = 16;
+            }
+            // each entry as a frame of its own; a broken entry, or one over the budgets, ends the bundle
             while at + 4 <= n {
                 let k = data[at] as usize;
                 let len = u16::from_be_bytes([data[at + 2], data[at + 3]]) as usize;

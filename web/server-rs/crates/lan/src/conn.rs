@@ -156,6 +156,10 @@ pub(crate) struct Conn {
     pub(crate) msgs_in: AtomicU64,
     pub(crate) msgs_out: AtomicU64,
     pub(crate) lan_sent: AtomicU64,
+    /// its page echoes a compact bundle's stamp (its hello's "echo":1: `LanSwitch::probe`), and one is wanted: the next
+    /// compact bundle its writer makes carries it
+    pub(crate) echo: AtomicBool,
+    pub(crate) stamp: AtomicBool,
 }
 
 impl Conn {
@@ -185,6 +189,8 @@ impl Conn {
             msgs_in: AtomicU64::new(0),
             msgs_out: AtomicU64::new(0),
             lan_sent: AtomicU64::new(0),
+            echo: AtomicBool::new(false),
+            stamp: AtomicBool::new(false),
         }
     }
 
@@ -394,12 +400,22 @@ async fn write_loop<W: AsyncWrite + Unpin>(sw: Arc<LanSwitch>, conn: Arc<Conn>, 
             }
             let m = conn.compact.load(Relaxed);
             let (mode, others) = (m & !OTHERS, m & OTHERS != 0);
+            // a round trip timed by this batch's first compact bundle (LanSwitch::probe): its probe's ping now, as
+            // the bundle goes out behind what was queued before it
+            let stamp = (mode != PLAIN
+                && conn.stamp.load(Relaxed)
+                && items.iter().any(|it| matches!(it, Out::Dgram { .. }))
+                && conn.stamp.swap(false, Relaxed))
+            .then(|| conn.peer.lock().clone())
+            .flatten()
+            .map(|p| p.probe.lock().ping(nfsu2_util::mono_ms()));
             let c = (mode != PLAIN).then(|| Compact {
                 own: conn.vip.load(Relaxed),
                 refs: (mode >= DELTAS).then_some(&mut refs),
                 fp: (mode == FPRED).then_some(&mut fp),
                 others: others && mode >= DELTAS,
                 body: &mut body,
+                stamp,
             });
             let e = encode(&sw.stats, &items, &mut buf, &mut close_sent, c);
             if !buf.is_empty() {
@@ -475,6 +491,8 @@ pub(crate) struct Compact<'a> {
     /// every other datagram as what changed too (`OTHERS`)
     others: bool,
     body: &'a mut Vec<u8>,
+    /// a probe's ping for the first bundle's header (compact.rs `F_STAMPED`)
+    stamp: Option<[u8; 8]>,
 }
 
 /// the items into `buf` in order, the datagrams as bundles (compact ones for a page that takes them) where the first
@@ -611,9 +629,13 @@ fn bundle(stats: &Stats, items: &[Out], buf: &mut Vec<u8>) -> u64 {
 /// the datagrams as compact bundles (compact.rs) of BUNDLE_OUT at most, a datagram alone in one too (its 16-byte
 /// header costs more than a bundle's 4 and an entry's 5)
 fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_>) -> u64 {
-    let Compact { own, mut refs, mut fp, others, body } = c;
+    let Compact { own, mut refs, mut fp, others, body, stamp } = c;
     body.clear();
     body.extend_from_slice(&[compact::KIND_COMPACT, 0, 0, 0]);
+    if let Some(s) = stamp {
+        body[1] = compact::F_STAMPED;
+        body.extend_from_slice(&s);
+    }
     let (mut n, mut msgs) = (0, 0);
     let (now, mut moved) = (now_us(), [0u8; compact::TIMED_MAX]);
     for it in items {
@@ -627,6 +649,8 @@ fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_
         if n > 0 && body.len() > BUNDLE_OUT {
             compact_out(stats, buf, &body[..at]);
             msgs += 1;
+            // (a stamp went with the first: what follows the header now is the next entry)
+            body[1] = 0;
             body.drain(4..at);
             n = 0;
         }

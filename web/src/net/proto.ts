@@ -29,6 +29,10 @@ export const NET_KIND_FLYING = 20;            // TX ring only, never sent: the p
 export const NET_KIND_COOP = 22;              // TX ring only, never sent: co-op's player 2 online ({"name"}; "{}": its endpoint ended)
 export const NET_KIND_BUNDLE = 32;            // page and switch only (nfsu2-lan): several frames in one message
 export const NET_BUNDLE_MAX = 32 << 10;       // bytes in one bundle the page sends at most (the switch takes 64 KB)
+// a bundle's byte 1 either way: a stamp of the switch's (8 bytes) follows its header, on a compact bundle to a page
+// whose hello said echo: 1; the page's next bundle echoes it, with how long the page held it (u32 µs) after it
+// (nfsu2-lan compact.rs F_STAMPED, LanSwitch::probe): the round trip a WebSocket ping and its pong timed before
+export const NET_BUNDLE_STAMPED = 0x01;
 export const NET_KIND_COMPACT = 33;           // switch to page only (nfsu2-lan compact.rs): a bundle without what the page puts back
 export const NET_BROADCAST = 0xffffffff;
 export const NET_ROAM_HUB = 0x0a4d00fd;       // 10.77.0.253: the server's free-roam hub (web/server-rs/crates/roam)
@@ -240,12 +244,13 @@ export function fpredTake(st: FpredState, src: number, e: Uint8Array): Uint8Arra
  *  (a free-roam datagram past its type) by source and type, for a page that takes deltas, and `fp` its friends' last
  *  car states, for one that takes them by their fields (both kept for its connection).  A broken entry ends it.
  *  `others` the last other datagrams (from their ports on) by source and kind, for one that takes those as deltas too.
+ *  A stamp after the header (NET_BUNDLE_STAMPED) is left out: the page reads it on its own.
  *  Returns how many came as deltas (those by their fields too). */
 export function unpackCompact(u: Uint8Array, own: number, take: (f: ArrayBuffer) => void, refs?: Map<number, Uint8Array>,
   fp?: FpredState, others?: Map<number, Uint8Array>): number {
   const dv = new DataView(u.buffer, u.byteOffset, u.byteLength);
   let deltas = 0;
-  for (let at = 4; at + 5 <= u.length;) {
+  for (let at = u[1] & NET_BUNDLE_STAMPED ? 12 : 4; at + 5 <= u.length;) {
     if (u[at] === C_FPRED) {
       const src = dv.getUint16(at + 1), end = at + 4 + u[at + 3];
       if (end > u.length || !fp) return deltas;

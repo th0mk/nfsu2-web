@@ -197,6 +197,7 @@ pub async fn run(o: Options, cores: usize) {
         // LAN play's clock, 4 ms; NFSU2_LAN_MS another (0: none, each datagram at once), for measurements
         lan_ms: env_num("NFSU2_LAN_MS", d.lan_ms),
         fpred: env_num("NFSU2_FPRED", 1) != 0,
+        probe_echo: env_num("NFSU2_PROBE_ECHO", 1) != 0,
         send_buffer_os: lan_sndbuf,
         ..d
     };

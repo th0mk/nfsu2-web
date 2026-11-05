@@ -435,6 +435,9 @@ pub struct LanOptions {
     pub lan_ms: u64,
     /// friends' car states by their fields to a page whose hello asks for them (fpred.rs); false: as byte deltas still
     pub fpred: bool,
+    /// a page driving in free roam whose hello said "echo":1 has its round trip timed by a compact bundle's stamp that
+    /// its next bundle echoes (`probe`), not by a WebSocket ping and its pong; false: pings for all
+    pub probe_echo: bool,
     /// SO_SNDBUF for /lan connections (NFSU2_LAN_SNDBUF; 0: the kernel's own, which Linux grows to megabytes)
     pub send_buffer_os: usize,
     /// the largest WebSocket message a client may send (the server's `limits::WS_MAX_PAYLOAD`, the ws library's
@@ -482,6 +485,7 @@ impl Default for LanOptions {
             away_ms: 500,
             lan_ms: 4,
             fpred: true,
+            probe_echo: true,
             send_buffer_os: 0,
             max_payload: 64 << 10,
         }
@@ -687,6 +691,8 @@ pub(crate) struct Stats {
     shed: Counter,
     /// free roam's snapshots left out for a receiver behind on its path (lag.rs)
     thinned: Counter,
+    /// stamps the pages echoed: round trips timed without a ping (`LanSwitch::probe`)
+    echoes: Counter,
     /// LAN broadcasts not sent to a page with LAN play open: no socket there on their port (`Peer::takes_udp`), and
     /// their bytes
     bcast_skipped: Counter,
@@ -1561,6 +1567,7 @@ impl LanSwitch {
             ("refused", &s.refused),
             ("shed", &s.shed),
             ("thinned", &s.thinned),
+            ("echoes", &s.echoes),
             ("bcastSkipped", &s.bcast_skipped),
             ("bcastSkippedBytes", &s.bcast_skipped_bytes),
             ("bundlesIn", &s.bundles_in),
@@ -1654,7 +1661,11 @@ impl LanSwitch {
     /// follow them, lag.rs, and a player who is not driving gets one in 16 of those anyway, away.rs), and each ping and
     /// its pong were two of the messages cloudflared carries for every page, the 4,500 on the LAN or Online screens or
     /// in the menus too, and the 3,700 in free roam not driving (nfsu2.xyz 2026-10-31).  The keepalive's pings still go
-    /// to all.
+    /// to all.  A page that said "echo":1 in its hello gets a stamp in the header of its next compact bundle instead
+    /// (`LanOptions::probe_echo`), which its own next bundle echoes with how long the page held it (reader.rs): its
+    /// bundles go 20 a second each way while it drives, so the ping and the pong were two messages more for nothing
+    /// (about 3 % of them all, nfsu2.xyz 2026-11-05).  The stamp waits in line behind what was queued before it, as
+    /// the ping did; the page's own wait is taken off.
     #[doc(hidden)]
     pub fn probe(&self) {
         let now = nfsu2_util::mono_ms();
@@ -1663,6 +1674,11 @@ impl LanSwitch {
             let at = p.roam_at.load(Relaxed);
             let drives = at > 0 && now - (at as f64) < PROBE_ROAM_MS && !p.away.load(Relaxed);
             if !drives && (round + u64::from(p.vip)) % PROBE_OTHERS != 0 {
+                continue;
+            }
+            // a page that echoes: its next compact bundle stamped instead (conn.rs `write_loop`), and a ping only when
+            // the last second sent it none to stamp (its friends away, say)
+            if drives && p.conn.echo.load(Relaxed) && !p.conn.stamp.swap(true, Relaxed) {
                 continue;
             }
             let data = p.probe.lock().ping(now);
@@ -1712,6 +1728,7 @@ impl LanSwitch {
                 lan: p.lan(),
                 open: p.open(),
                 buffered: p.conn.out.buffered(),
+                rtt: p.probe.lock().rtt(),
             })
             .collect()
     }
@@ -1784,6 +1801,8 @@ pub struct PeerView {
     pub open: bool,
     /// bytes queued to it and not yet taken by the kernel (its `OutQueue::buffered`)
     pub buffered: usize,
+    /// its last round trip (ms; lag.rs), None before the first
+    pub rtt: Option<f64>,
 }
 
 /// A player on the switch, or one who left in the last `GONE_MS`, as the operator's `who` sees it.
