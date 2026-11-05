@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const entry = `export * from './web/src/app/invite.ts'; export { roomHash } from './web/src/app/players.ts';`;
+const entry = `export * from './web/src/app/invite.ts'; export { roomHash } from './web/src/app/players.ts';
+  export { settingsPut, resolveEnv, TEMPLATE } from './web/src/app/settings.ts';`;
 const js = (await esbuild.build({ stdin: { contents: entry, resolveDir: ROOT, loader: 'ts' }, bundle: true, format: 'esm', write: false, platform: 'neutral' })).outputFiles[0].text;
 const I = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 const O = 'https://nfsu2.xyz';
@@ -74,4 +75,24 @@ test('one room however it is typed: the hash\'s rules', () => {
   assert.ok(I.sameName('Blue Room', 'BLUE ROOM'));
   assert.ok(!I.sameName('Blue', 'Red'));
   assert.ok(I.sameName('', '  '), 'no room is no room');
+});
+
+test('a friend\'s room name with line breaks joins as one name, one line of settings.ini (2026-11-05 security audit)', () => {
+  // a friend's page names its room itself: one with line breaks would have set lines of its own under the Room
+  const room = 'Night\nroam_block = x\r\nroam_collide = none\rNFSU2_ROAM=1';
+  const inv = I.tidyInvite({ room });
+  assert.equal(inv.room, 'Night roam_block = x roam_collide = none NFSU2_ROAM=1');
+  assert.deepEqual(I.tidyInvite({ room: '' }), { room: '' }, 'the room of everyone stays');
+  assert.deepEqual(I.tidyInvite({ crew: ' Night\tOwls ' }), { crew: 'Night Owls' });
+  const mine = I.settingsPut(I.TEMPLATE, 'roam_block', 'Harasser');
+  for (const value of [room, inv.room]) {
+    const ini = I.settingsPut(mine, 'roam_room', value);
+    assert.equal(ini.split('\n').length, mine.split('\n').length, 'the Room line replaced, no line added');
+    const env = I.resolveEnv(ini, {}, {}).env;
+    assert.equal(env.NFSU2_ROAM_BLOCK, 'Harasser', 'the block list as the player had it');
+    assert.equal(env.NFSU2_ROAM_COLLIDE, undefined);
+    assert.notEqual(env.NFSU2_ROAM, '1');
+  }
+  for (const c of ['\u0000', '\u000b', '\u001f', '\u007f', '\u0085', '\u2028', '\u2029'])
+    assert.equal(I.settingsPut(I.TEMPLATE, 'roam_room', `a${c}b`).split('\n').length, I.TEMPLATE.split('\n').length);
 });

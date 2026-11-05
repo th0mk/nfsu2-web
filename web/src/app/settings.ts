@@ -1020,12 +1020,16 @@ export function changedSettings(r: Resolved, device: Record<string, string> = {}
  * bundle.m settings_put: set one key, keeping every other line.  The first
  * line that sets or comments out the key is replaced, else the line is
  * appended.  value === null puts the template's commented-out default back
- * ("reset to default").
+ * ("reset to default").  A value is one line: its control characters (a line
+ * break above all, which would add lines of its own) become blanks, as a value
+ * from someone else, a friend's room name, may have them (the 2026-11-05
+ * security audit).
  */
 export function settingsPut(text: string | null, key: string, value: string | null): string {
   const lines = (text ?? TEMPLATE).split('\n');
   const d = keyDef(key);
-  const nl = value === null ? `#${d?.key ?? key} = ${DEFAULTS.get(d?.key ?? key) ?? ''}`.replace(/ = $/, ' =') : `${key} = ${value}`;
+  const one = value?.replace(/[\u0000-\u0008\u000a-\u001f\u007f\u0085\u2028\u2029]/g, ' ');
+  const nl = one == null ? `#${d?.key ?? key} = ${DEFAULTS.get(d?.key ?? key) ?? ''}`.replace(/ = $/, ' =') : `${key} = ${one}`;
   let done = false;
   for (let i = 0; i < lines.length && !done; i++) {
     let t = lines[i].trim();

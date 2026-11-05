@@ -46,7 +46,7 @@ import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-u
 import { askCrews, PlayersPanel, queueText, roomHash, roomLine, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
 import { panelTabs } from './tabs';
 import { CREW_MAX, crewList, crewsOf, crewsValue, freeColour, rgbsValue, rgbWords, type Crew } from './crews';
-import { checkInvite, inviteLink, readInvite, sameName, type Invite } from './invite';
+import { checkInvite, inviteLink, readInvite, sameName, tidyInvite, type Invite } from './invite';
 import { privacy, SCRUB_NOTE } from './privacy';
 import { oneWriter, SavesPanel, snapshotFile, snapshotSaves, type FileIn } from './saves-ui';
 import { zip } from './zip';
@@ -1649,8 +1649,15 @@ function drawPopFriends() {
 /** a Join in the menu's Friends: that friend's room, at once, and back to the game */
 async function joinFriend(room: string) {
   for (const id of ['#friends-pop', '#menu']) { const d = $<HTMLDialogElement>(id); if (d.open) d.close(); }
+  // (the friend's page named the room: checked as a link's room is)
+  const inv = tidyInvite({ room }), ok = checkInvite(inv);
+  if (!ok.ok) {
+    log.add(`[app] the menu's Friends: not joining a friend's room: ${ok.why}`);
+    tell(t('This invite link cannot be used: {why}.', { why: tvars(ok.why, ok.v).replace(/[.。]$/, '') }));
+    return;
+  }
   log.add('[app] the menu\'s Friends: joining a friend\'s room');
-  tell(joinedText(await applyInvite({ room })));
+  tell(joinedText(await applyInvite(inv)));
 }
 
 // --------------------------------------------------------- invite links --
@@ -1691,8 +1698,10 @@ function inviteLive(): boolean {
 }
 
 /** Join inv here (this tab owns the saves): settings.ini, then the running game where it can.  Throws where settings.ini
- *  did not read or write (nothing joined, nothing written: joinHere says so). */
-async function applyInvite(inv: Invite): Promise<Joined> {
+ *  did not read or write (nothing joined, nothing written: joinHere says so).  The names as checkInvite read them
+ *  (tidyInvite), whichever way they came. */
+async function applyInvite(given: Invite): Promise<Joined> {
+  const inv = tidyInvite(given);
   const was = await readText(SAVE, 'settings.ini') ?? settingsText ?? TEMPLATE;
   const now = inviteNow(was), d = inviteDiff(inv, now);
   if (d.full) return 'full';
@@ -1761,8 +1770,10 @@ function hearInvites() {
   };
 }
 
-/** An invite link opened (the page's address, or a new one pasted while it is open): the question, then the join. */
-async function offerInvite(inv: Invite) {
+/** An invite link opened (the page's address, or a new one pasted while it is open), or a friend's room on the start
+ *  page: the question, then the join. */
+async function offerInvite(given: Invite) {
+  const inv = tidyInvite(given);
   // once this tab knows whether it owns the saves, has read them, and shows no other question
   await Promise.race([instance.whenOwner, new Promise(r => setTimeout(r, 500))]);
   if (instance.owner && settingsText === null) await loadSettings().catch(() => null);

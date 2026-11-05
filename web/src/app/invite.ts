@@ -90,5 +90,14 @@ export function checkInvite(inv: Invite): InviteCheck {
   return { ok: true };
 }
 
+/** inv with its names as a link's are read (tidyName): what every Join checks and keeps, whoever sent the names (a
+ *  friend's room comes from the friend's own page, a line break and all; the 2026-11-05 security audit) */
+export function tidyInvite(inv: Invite): Invite {
+  const out: Invite = {};
+  if (inv.room !== undefined) out.room = tidyName(inv.room);
+  if (inv.crew !== undefined) out.crew = tidyName(inv.crew);
+  return out;
+}
+
 /** whether two names are one room or one crew (the hash's rules: capitals, blanks and invisible characters do not count) */
 export const sameName = (a: string, b: string) => roomHash(a) === roomHash(b);

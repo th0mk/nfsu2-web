@@ -146,7 +146,9 @@ impl Friends {
             return;
         }
         match op {
-            (Some("room"), _) => self.roam.room_name(vip, name),
+            // (as a page tidies a typed room, so no line break ever reaches a friend's settings.ini by its Join: the
+            // 2026-11-05 security audit)
+            (Some("room"), _) => self.roam.room_name(vip, nfsu2_lan::clean_name(&name)),
             (Some("flying"), _) => self.roam.flew(vip, m.get("s").and_then(Value::as_f64).unwrap_or(0.0)),
             (Some("friend"), Some("list")) => self.send_list(vip, owner, group).await,
             (Some("friend"), Some("can")) => {
