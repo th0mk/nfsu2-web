@@ -9,11 +9,8 @@
 //   - A reply that pings them.  The same answer to a person once a day, 5 answers a person a day, 60 an hour in a
 //     channel.  Someone answered a moment ago (FOLLOW_MS) who says it didn't help or asks on may get another part of
 //     the same answer, never what they had (overlap), at most twice a day.
-//   - 👍 and 👎 on each answer, for the staff: the daily digest counts them (votes()) and lists the answers with a 👎;
-//     every counted answer also goes to state/help-votes.jsonl.
 import fs from 'node:fs';
 import path from 'node:path';
-import { Routes } from 'discord.js';
 import { linked } from './faq.mjs';
 import { footOf, General } from './general.mjs';
 import { overlap } from './investigate.mjs';
@@ -33,10 +30,6 @@ const REPEAT = 0.5;                              // a reply with this much of a 
 // made from a screenshot's message instead ("won't start on Firefox… check about:support") 0.12
 const FROM_ANSWER = 0.3;
 const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
-const VOTES = { '👍': 'up', '👎': 'down' };      // the bot's reactions on each answer, in this order
-const COUNT_AFTER_MS = 6 * 3600_000;             // an answer's votes are counted at the first digest this long after it
-const KEEP_POSTED_MS = 3 * DAY_MS;               // an answer whose votes could not be read is dropped after this long
-const SHOW_DOWN = 10;                            // the answers with a 👎 the digest lists, the most 👎 first
 
 const name = m => m.member?.displayName ?? m.author.displayName ?? m.author.username;
 const hhmm = ms => new Date(ms).toISOString().slice(11, 16);
@@ -122,9 +115,8 @@ export class Help {
     this.busy = new Set();                       // authors whose question is with the model now
     this.staffAt = new Map();                    // author id -> ms staff last answered them
     this.sent = [];                              // { at, ch } of the answers, for the hourly cap
-    this.saved = { answered: {}, posted: [] };   // answered: author id -> [[ms, answer id]] of the last day;
-                                                 // posted: the answers whose votes are not counted yet
-    try { Object.assign(this.saved, JSON.parse(fs.readFileSync(this.file, 'utf8'))); } catch { /* first start */ }
+    this.saved = { answered: {} };               // answered: author id -> [[ms, answer id, line]] of the last day
+    try { this.saved.answered = JSON.parse(fs.readFileSync(this.file, 'utf8')).answered ?? {}; } catch { /* first start */ }
   }
 
   save() {
@@ -133,13 +125,12 @@ export class Help {
       answered[id] = list.filter(([at]) => now - at < DAY_MS);
       if (!answered[id].length) delete answered[id];
     }
-    this.saved.posted = (this.saved.posted ?? []).filter(x => now - x.at < KEEP_POSTED_MS);
     fs.writeFileSync(this.file + '.tmp', JSON.stringify(this.saved));
     fs.renameSync(this.file + '.tmp', this.file);
   }
 
   onMessage(m) {
-    if (!General.isHelp(m.channel) || m.author.bot || m.channelId === this.general?.staffChannel) return;
+    if (!General.isHelp(m.channel) || m.author.bot) return;
     const now = this.now();
     if (this.isStaff(m.member, m.channel)) {     // staff answering someone: theirs from here
       for (const id of [m.mentions?.repliedUser?.id, ...(m.mentions?.users?.keys() ?? [])].filter(Boolean)) {
@@ -227,57 +218,14 @@ export class Help {
     this.saved.answered[author] = [...today, [this.now(), x.id, line]];
     this.sent.push({ at: this.now(), ch: m.channelId });
     this.general.skip(author);                   // no forum pointer on top of the answer
-    const stats = this.general.saved.stats;
     if (this.dryRun) {
-      stats.dry++;
       console.log(`[help] dry run: would answer ${said} (${lang}): ${y}`);
     } else {
       const sent = await m.reply({ content, allowedMentions: { parse: [], repliedUser: true } })
         .catch(e => { console.error(`[help] reply to ${m.id}: ${e.message}`); return null; });
       if (!sent) return;
-      stats.faq = (stats.faq ?? 0) + 1;
       console.log(`[help] answered ${said} (${lang}): ${y}`);
-      this.saved.posted.push({ at: this.now(), id: sent.id, ch: m.channelId, guild: m.guildId, faq: x.id, lang,
-        asked: p.msgs.map(q => q.content ?? '').join(' ').replace(/\s+/g, ' ').trim().slice(0, 200), line: y });
-      for (const e of Object.keys(VOTES)) {        // one after the other: 👍 first
-        const err = await sent.react(e).then(() => null, er => er);
-        if (err) { console.error(`[help] reaction on ${sent.id}: ${err.message}`); break; }
-      }
     }
     this.save();
-  }
-
-  /** for the daily digest: the votes on the answers posted COUNT_AFTER_MS ago or earlier and not counted yet (the
-   *  bot's own reactions left out): the totals and the answers with a 👎.  Each counted answer also goes to
-   *  help-votes.jsonl.  '' when none was counted */
-  async votes() {
-    const now = this.now(), due = this.saved.posted.filter(x => now - x.at >= COUNT_AFTER_MS);
-    if (!due.length) return '';
-    const rows = [], done = new Set();
-    for (const x of due) {                       // one at a time: discord.js waits out the rate limits
-      const msg = await this.client.rest.get(Routes.channelMessage(x.ch, x.id)).catch(e => e.status === 404 ? 'gone' : null);
-      if (!msg) continue;                        // not read: tried again at the next digest
-      done.add(x.id);
-      if (msg === 'gone') continue;              // the answer was deleted
-      const n = { up: 0, down: 0 };
-      for (const r of msg.reactions ?? []) {
-        const k = VOTES[(r.emoji?.name ?? '').replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '')];   // 👍🏽 counts as 👍
-        if (k) n[k] += r.count - (r.me ? 1 : 0);
-      }
-      rows.push({ ...x, ...n });
-    }
-    this.saved.posted = this.saved.posted.filter(x => !done.has(x.id));
-    this.save();
-    const link = r => `https://discord.com/channels/${r.guild}/${r.ch}/${r.id}`;
-    if (rows.length) fs.appendFileSync(path.join(this.state, 'help-votes.jsonl'), rows.map(r => JSON.stringify({
-      at: new Date(r.at).toISOString(), faq: r.faq, lang: r.lang, up: r.up, down: r.down, asked: r.asked, line: r.line, link: link(r),
-    }) + '\n').join(''));
-    console.log(`[help] votes counted on ${rows.length} answer(s)${due.length > done.size ? `, ${due.length - done.size} not read` : ''}`);
-    if (!rows.length) return '';
-    const sum = k => rows.reduce((a, r) => a + r[k], 0);
-    const down = rows.filter(r => r.down > 0).sort((a, b) => b.down - a.down || a.up - b.up);
-    return [`**#help answers** (${rows.length} since <t:${Math.floor(rows[0].at / 1000)}:f>): 👍 ${sum('up')} · 👎 ${sum('down')}`,
-      ...down.slice(0, SHOW_DOWN).map(r => `👎 ${r.down} 👍 ${r.up} · ${r.faq} · ${link(r)} · "${r.asked.slice(0, 100)}"`),
-      ...(down.length > SHOW_DOWN ? [`${down.length - SHOW_DOWN} more with a 👎 in state/help-votes.jsonl`] : [])].join('\n');
   }
 }

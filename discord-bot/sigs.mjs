@@ -81,9 +81,9 @@ export function samePlace(a, b) {
 }
 
 /** the tops of a thread's logs that are the crash or freeze its look says the thread is about (the verdict's `crash`,
- *  one of the tops as the context listed them): those a report keeps.  "" = not about a crash: none.  A log can hold
- *  another game's crash the post never mentions, and a later log another bug: neither is the report's.  Without a
- *  verdict's word (undefined), every top */
+ *  one of the tops as the context listed them): what other threads are matched against (st.crash).  "" = not about a
+ *  crash: none.  A log can hold another game's crash the post never mentions, and a later log another bug: neither is
+ *  the thread's.  Without a verdict's word (undefined), every top */
 export function crashOf(crash, tops) {
   if (typeof crash !== 'string') return [...tops];
   const c = crash.trim();
@@ -92,6 +92,3 @@ export function crashOf(crash, tops) {
   return tops.filter(t => t === c || samePlace(t, named));
 }
 
-/** the tops whose functions a report's title names: what a thread joined before the bot kept each thread's crash
- *  (st.crash) gives its report.  Its tops then were those of every log in it, later ones and other games' too */
-export const namedIn = (tops, title) => (tops ?? []).filter(t => fnsOf(t).some(f => (title ?? '').includes(f)));
