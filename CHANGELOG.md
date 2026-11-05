@@ -11,7 +11,7 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-05 (28d4d87)
+## 2026-11-05 (f3047bc)
 
 - **Vinyls:** Art Factory 28 to 34, Sha_Do's designs that only the Japanese release had, on every car after Art Factory 27 (ported to the PC by the underground2.net team).
 - **Languages:** Czech, Slovak and Greek, the game and the start page.
@@ -20,10 +20,28 @@ not guessed.
 - **Free roam:** at a busy car meet the cars around you stay shown, and on a slow connection they show up sooner.
 - **Free roam:** the cars of the players nearest you stay shown instead of coming and going, and friends' cars load faster.
 - **Photo mode:** the panel in tabs: Camera, Picture, Scene and Controls. The camera can glide, turn by itself, keep its height and play through up to 8 points for clips. Shutter blurs what moves, Fisheye bends the picture, and pictures can be up to 4 times as big. Scene picks which cars show (yours, friends, crews, players, traffic, racers), their headlights, and dry or rain.
+- **Free roam:** with others is on from the start, without the question at the first Play.
+- **Free roam:** Players' cars shown starts on Auto on a computer: 32, then 48 or 64 while the game has frames to spare.
+- **Free roam:** O (D-pad down held) opens the hood, then the trunk, then the doors, one at a time.
+- **Free roam:** F10 hides the HUD and the names over cars; Controls, Site has it and a Free look row to turn stick looking off.
+- **Free roam:** the Bank shows only for a while after it changes.
+- **Horns:** six more: Dixie, an old car, a broken horn, The Car (1977) and a sputtering one, and every horn as loud as the next.
+- **Quick chat:** I need NOS! and ten film quotes in a new Quotes category.
+- **Options:** Show Player Names in Gameplay hides the names over other players' cars.
+- **Settings:** Music in drag and drift races, off as in the original.
+- **Friends:** add your Discord username in Friends & crews; only friends see it and can copy it.
+- **Saves:** screenshots first, the newest one big; profiles can be deleted, and the time you have played shows.
+- **Screenshots:** Delete all.
+- **Menus, HUD and maps:** Map only, the Detailed Map without the Upscaled HUD.
+- **Your flag:** Quebec.
+- **Bans:** a ban shows its number, name and date; someone on a banned player's network or VPN can still play, only not race.
+- **Firefox:** the game's extra memory on a computer, as in the other browsers.
 - **Races:** other players' cars no longer bounce, stand on their tails or flip over.
 - **Ghost mode:** near misses with traffic on Everything give nitrous again.
 - **Menus:** the cars' paint and chrome reflect the studio's walls and lights, as on the PC, instead of black.
 - **Names:** with a claimed name you always play as it, whatever Your name says, so friends find you by it.
+- **Free roam:** an error 134 crash with country flags shown after a shop or race is fixed.
+- **Quick chat:** on a controller, saying a phrase no longer switches the headlights or turns the view.
 
 ## 2026-11-04 (af448e5)
 
