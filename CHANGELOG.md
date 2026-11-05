@@ -11,12 +11,14 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-05 (b7253a4)
+## 2026-11-05 (6e5767e)
 
-- **Languages:** Czech and Slovak, the game and the start page.
+- **Languages:** Czech, Slovak and Greek, the game and the start page.
+- **Photo mode:** the panel in tabs: Camera, Picture, Scene and Controls. The camera can glide, turn by itself, keep its height and play through up to 8 points for clips. Shutter blurs what moves, Fisheye bends the picture, and pictures can be up to 4 times as big. Scene picks which cars show (yours, friends, crews, players, traffic, racers), their headlights, and dry or rain.
 - **Races:** other players' cars no longer bounce, stand on their tails or flip over.
 - **Ghost mode:** near misses with traffic on Everything give nitrous again.
 - **Menus:** the cars' paint and chrome reflect the studio's walls and lights, as on the PC, instead of black.
+- **Names:** with a claimed name you always play as it, whatever Your name says, so friends find you by it.
 
 ## 2026-11-04 (af448e5)
 
