@@ -67,6 +67,7 @@ static void reset(void){
     g_radio = (Radio){ .lent = NO_TAGS_LENT };
     memset(&g_music, 0, sizeof g_music);
     memset(&g_song, 0, sizeof g_song);
+    memset(&g_heard, 0, sizeof g_heard);
     memset(&g_page, 0, sizeof g_page);
     memset(&g, 0, sizeof g);
     memset(&pg, 0, sizeof pg);
@@ -656,6 +657,90 @@ TEST(mixer_at_22050__track_lasts_half_as_many_steps){
     expect_folder_song(1);
     steps(40);
     expect_folder_song(2);
+}
+
+/* The song playing, for the page's scrobbles (song_heard_*): told only while the page listens. */
+static void page_listens(void){ g_page.listen = 1; }
+static void game_song_has_tags(unsigned index){
+    strcpy((char *)g_mem + NAMES + 0x100u, "Riders on the Storm");
+    strcpy((char *)g_mem + NAMES + 0x200u, "Snoop Dogg");
+    strcpy((char *)g_mem + NAMES + 0x300u, "Need for Speed Underground 2");
+    MR32(TABLE + 16u * index) = NAMES + 0x100u;
+    MR32(TABLE + 16u * index + 4u) = NAMES + 0x200u;
+    MR32(TABLE + 16u * index + 8u) = NAMES + 0x300u;
+}
+static int heard_ms_near(uint32_t ms){ return g_page.song_ms + 50u >= ms && g_page.song_ms <= ms + 50u; }
+static int song_text_is(const char *artist, const char *title, const char *album){
+    return !strcmp(g_page.song_text[0], artist) && !strcmp(g_page.song_text[1], title) && !strcmp(g_page.song_text[2], album);
+}
+
+TEST(page_not_listening__no_song_told){
+    in_main_menu();
+    game_song_starts(3);
+    seconds(2);
+    expect(g_page.song_seq == 0 && g_page.song_ms == 0, "nothing told");
+}
+TEST(radio_off__game_song_told_with_its_tags_and_time_heard){
+    page_listens();
+    game_song_has_tags(3);
+    in_main_menu();
+    game_song_starts(3);
+    seconds(10);
+    expect(g_page.song_seq == 2 && g_page.song_kind == RADIO_SONG_GAME, "one game's song told");
+    expect(song_text_is("Snoop Dogg", "Riders on the Storm", "Need for Speed Underground 2"), "artist, title and album of its entry");
+    expect(heard_ms_near(10000u), "10 s heard");
+    expect(g_page.song_end == 0, "not at its end");
+}
+TEST(radio_off__paused_song_is_not_heard){
+    page_listens();
+    in_race();
+    game_song_starts(20);
+    seconds(5);
+    game_pauses();
+    seconds(5);
+    game_resumes();
+    seconds(5);
+    expect(heard_ms_near(10000u), "10 of the 15 s heard");
+}
+TEST(radio_off__song_played_to_its_end){
+    page_listens();
+    in_main_menu();
+    game_song_starts(3);
+    seconds(3);
+    g.song_ends = 1;
+    steps(1);
+    expect(g_page.song_end == g_page.song_seq && g_page.song_seq == 2, "this song ended");
+    expect(heard_ms_near(3000u), "3 s heard, nothing for the end");
+}
+TEST(radio_off__next_song_key__new_song_told_not_ended){
+    page_listens();
+    in_main_menu();
+    game_song_starts(3);
+    seconds(3);
+    next_song_key();
+    steps(SETTLED);
+    expect(g_page.song_seq == 4 && g_page.song_kind == RADIO_SONG_GAME && g_page.song_end == 0, "a second song told, the first not at its end");
+    expect(g_page.song_ms < 1000u, "the time counts from 0 again");
+}
+TEST(radio_on__folder_track_told_with_the_pages_tags){
+    page_listens();
+    folder_song_lasts(2 * STEPS_PER_SECOND);
+    folder_song_plays_in_main_menu();
+    expect(g_page.song_kind == RADIO_SONG_FOLDER && song_text_is("artist", "folder song 1", "album"), "the folder's track told");
+    uint32_t first = g_page.song_seq;
+    seconds(1);
+    expect(g_page.song_ms > 1000u && g_page.song_ms <= 1300u, "a second heard, and the steps since it began");
+    seconds(2);
+    expect(g_page.song_end == first, "the track played to its end");
+    expect(g_page.song_seq > first && song_text_is("artist", "folder song 2", "album"), "the next track told");
+}
+TEST(radio_on__no_track_fits__no_song_told){
+    page_listens();
+    page_offers(DRIVING_ONLY);
+    radio_switched_on();
+    to_menus(3);
+    expect(g_page.song_kind == RADIO_SONG_NONE && g_page.song_seq > 0, "silence told as no song");
+    expect(g_page.song_ms == 0, "nothing heard");
 }
 
 int main(void){

@@ -46,6 +46,9 @@ services:
       # Cloudflare Turnstile's keys for claiming a name (none: no check)
       NFSU2_TURNSTILE_SITE: ${NFSU2_TURNSTILE_SITE:-}
       NFSU2_TURNSTILE_SECRET: ${NFSU2_TURNSTILE_SECRET:-}
+      # a Last.fm API account's key and shared secret (last.fm/api/account/create) for scrobbling the songs (none: off)
+      NFSU2_LASTFM_KEY: ${NFSU2_LASTFM_KEY:-}
+      NFSU2_LASTFM_SECRET: ${NFSU2_LASTFM_SECRET:-}
     volumes:
       - ${NFSU2_DATA:-./game}:/game:ro
       - ${NFSU2_MODULE:-./module}:/module:ro

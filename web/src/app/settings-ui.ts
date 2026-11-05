@@ -409,6 +409,8 @@ export interface SettingsDeps {
   /** a value saved that its row's own line explains, with no "applies the next time you press Play" (Your name: another
    *  name than the passphrase's claimed one, which Play does not use: claim-ui.ts) */
   quietSave?(key: string, value: string | null): boolean;
+  /** a row of another part of the page that goes after this key's row (the Last.fm row after the songs': lastfm-ui.ts) */
+  rowAfter?(key: string): HTMLElement | null;
 }
 
 export class SettingsPanel {
@@ -545,7 +547,7 @@ export class SettingsPanel {
       box.setAttribute('role', 'group'); box.setAttribute('aria-labelledby', h.id);
       box.append(h);
     }
-    box.append(...g.items.filter(i => !i.more).map(i => this.row(i)));
+    box.append(...g.items.filter(i => !i.more).flatMap(i => { const after = this.deps.rowAfter?.(i.key); return after ? [this.row(i), after] : [this.row(i)]; }));
     const more = g.items.filter(i => i.more);
     if (more.length) {
       const d = document.createElement('details'); d.className = 'more';

@@ -13,6 +13,7 @@ const DIST = 'dist', DEV = 'dist-dev';
 const opts = {
   entryPoints: {
     'main': 'src/main.ts',
+    'lastfm': 'src/lastfm-callback.ts',
     'host/game-worker': 'src/host/game-worker.ts',
     'host/io-worker': 'src/host/io-worker.ts',
     'host/predownload-worker': 'src/host/predownload-worker.ts',

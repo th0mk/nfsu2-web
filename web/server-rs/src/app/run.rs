@@ -246,6 +246,7 @@ pub async fn run(o: Options, cores: usize) {
         lan_sndbuf,
         compress_threads,
     ));
+    log::line(if app.lastfm.is_some() { "[lastfm] scrobbles on" } else { "[lastfm] scrobbles off (no NFSU2_LASTFM_KEY and NFSU2_LASTFM_SECRET)" });
     // the pages' friend messages (friends.rs)
     if let Some(f) = &app.friends {
         f.attach();
@@ -421,6 +422,9 @@ pub async fn run(o: Options, cores: usize) {
                 }
                 if let Some(f) = &app.friends {
                     f.prune();
+                }
+                if let Some(l) = &app.lastfm {
+                    l.prune();
                 }
                 // the claimed names: the ended ones go, names.json written when anything changed
                 if let Some(n) = &app.names {
