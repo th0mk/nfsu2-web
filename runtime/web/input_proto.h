@@ -90,6 +90,7 @@ enum {
                              it, dik = where it starts, vk = the whole length (1..32), ch[3], a and b (little-endian)
                              its next 11 bytes (roam_web.c roam_plat_name_piece); flags INAME_SEAT2: co-op player 2's
                              name in free roam instead (roam_plat_name2) */
+    IEV_GHOST_TRAFFIC = 18,   /* ghost traffic in career races (roam_game.c roam_game_race_ghost_traffic): a = 1 on, 0 off */
 };
 #define INAME_SEAT2 1u            /* IEV_NAME's flags: player 2's (co-op) */
 enum {                    /* event flags */

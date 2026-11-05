@@ -139,6 +139,9 @@ export interface InputSubsystem extends Subsystem {
   sms?(id: number): boolean;
   /** photo mode (runtime/photo.c, photo.ts): what (its PH_* number) and its values; false: it cannot reach the game */
   photo?(what: number, a?: number, b?: number): boolean;
+  /** ghost traffic in career races, switched in the page menu (runtime/roam_game.c roam_game_race_ghost_traffic); false: it
+   *  cannot reach the game */
+  ghostTraffic?(on: boolean): boolean;
   /** a new name for free roam and Online mode, now (the operator took the old one away), or (seat2) for co-op's player 2
    *  in free roam; false: it cannot reach the game */
   name?(name: string, seat2?: boolean): boolean;

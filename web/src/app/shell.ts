@@ -130,6 +130,7 @@ let hudWide = true;                      // the running game's HUD is edge-ancho
 /** Ghost mode as roam_collide has it: on (Ghost mode off), off (Players), none (Everything) */
 type Collide = 'on' | 'off' | 'none';
 let roamCollide: Collide | null = null;  // the running game's free roam's Ghost mode: as it started, then as the menu changed it (null: no free roam)
+let raceGhostTraffic = false;            // the running game's ghost traffic in career races: as it started, then as the menu changed it
 let roamCrews: Crew[] | null = null;     // the running game's crews: as it started, then as the menu changed them (null: no free roam)
 let roamRoom: string | null = null;      // the running game's room: as it started, then as an invite link changed it ('': none; null: no free roam)
 let crewDraft = '';                      // the crew name being typed in the menu
@@ -739,6 +740,7 @@ async function startGame() {
   netNameNow = netName ?? ''; coopName = null; coopChecked = '';
   hudWide = !/^(43|4:3)$/i.test(r.env.NFSU2_HUD?.trim() ?? '');
   roamCollide = net && r.env.NFSU2_ROAM === '1' ? collideOf(r.env.NFSU2_ROAM_COLLIDE) : null;
+  raceGhostTraffic = r.env.NFSU2_RACE_GHOST_TRAFFIC === '1';     // (settings.ts writes a bool as 1 or 0)
   roamCrews = net && r.env.NFSU2_ROAM === '1' ? crewsOf(r.env.NFSU2_ROAM_CREW ?? '', r.env.NFSU2_ROAM_CREW_RGB ?? '') : null;
   roamRoom = net && r.env.NFSU2_ROAM === '1' ? r.env.NFSU2_ROAM_ROOM ?? '' : null;
   crewDraft = ''; popCounts = new Map();
@@ -1530,6 +1532,9 @@ function openMenu() {
   const solid = m.querySelector<HTMLButtonElement>('[data-act="solid"]')!;
   solid.hidden = roamCollide === null || !session?.net?.solid;
   solid.textContent = ghostLabel();
+  const gt = m.querySelector<HTMLButtonElement>('[data-act="ghost-traffic"]')!;
+  gt.hidden = !session?.input?.ghostTraffic;
+  gt.textContent = ghostTrafficLabel();
   const crews = m.querySelector<HTMLButtonElement>('[data-act="crews"]')!;
   crews.hidden = roamCrews === null || !session?.net?.crews;
   crews.textContent = crewsLabel();
@@ -1553,6 +1558,7 @@ function openMenu() {
 /** the menu's frame-rate counter and Ghost mode buttons, with what they are at now */
 const fpsLabel = (mode: string) => t('Frame-rate counter: {mode}', { mode: t(mode === 'on' ? N('on') : mode === 'detailed' ? N('detailed') : N('off')) });
 const ghostLabel = () => roamCollide === 'none' ? t('Ghost mode: everything') : roamCollide === 'off' ? t('Ghost mode: players') : t('Ghost mode: off');
+const ghostTrafficLabel = () => t('Ghost in career: {mode}', { mode: t(raceGhostTraffic ? N('on') : N('off')) });
 /** roam_collide's value from its variable (a test's page address may give 1 or 0; none set: on, the default) */
 const collideOf = (v: string | undefined): Collide => { const c = checkSetting('roam_collide', v ?? ''); return c?.ok ? c.value as Collide : 'on'; };
 const crewsLabel = () => roamCrews?.length ? t('Crews: {n}', { n: roamCrews.length }) : t('Crews: none');
@@ -1864,6 +1870,17 @@ async function menuAction(act: string) {
       try { await editSettings(s => putKey(s, 'roam_collide', to).text); }
       catch (e) { log.add(`[app] settings.ini not written: ${e}`); }
       log.add(`[app] roam_collide = ${roamCollide} (the page menu)`);
+      break;
+    }
+    case 'ghost-traffic': {
+      if (!session?.input?.ghostTraffic?.(!raceGhostTraffic)) break;
+      raceGhostTraffic = !raceGhostTraffic;
+      m.querySelector<HTMLButtonElement>('[data-act="ghost-traffic"]')!.textContent = ghostTrafficLabel();
+      // and in settings.ini for the next game, as Online, Ghost traffic in career races would
+      const to = raceGhostTraffic ? 'on' : 'off';
+      try { await editSettings(s => putKey(s, 'race_ghost_traffic', to).text); }
+      catch (e) { log.add(`[app] settings.ini not written: ${e}`); }
+      log.add(`[app] race_ghost_traffic = ${to} (the page menu)`);
       break;
     }
     case 'crews': openCrews(); break;

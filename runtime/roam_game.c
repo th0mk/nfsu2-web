@@ -10856,8 +10856,74 @@ static uint32_t g_cp_n_get(void){
     return 0;
 #endif
 }
+/* Ghost traffic in career races (NFSU2_RACE_GHOST_TRAFFIC, the page's race_ghost_traffic; off by default): while a
+ * career race runs, the game's traffic (driver 4) passes through the player's car (and player 2's in co-op) as Ghost
+ * mode Everything lets it through in free roam: the contact let go without the game's resolve, the pair counted full
+ * for the step.  Online or not, for traffic is in this game only.  The race's AI racers stay solid, and so do
+ * LAN races (the game mode's 0x200) and Quick Race, which are no career race.  The page's menu (F9) switches it while
+ * the game runs (IEV_GHOST_TRAFFIC, from the input thread: roam_game_race_ghost_traffic); switched off, a traffic car
+ * passing through the player's car now stays a ghost until the two are apart (g_rt: let through in the last
+ * RT_APART_NS: the clock, as frames and world steps differ by frame rate and g_step counts only online), so nobody is shoved out of a van they were inside */
+static int g_rgt = -1;                             /* -1: not read yet; 0 off, 1 on */
+static int race_ghost_traffic(void){
+    int on = __atomic_load_n(&g_rgt, __ATOMIC_RELAXED);
+    if (on < 0){
+        on = env_int("NFSU2_RACE_GHOST_TRAFFIC", 0, 0, 1);
+        int was = -1;
+        if (!__atomic_compare_exchange_n(&g_rgt, &was, on, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) return was;
+        if (on) rlog("[roam] ghost traffic in career races: on (NFSU2_RACE_GHOST_TRAFFIC)\n");
+    }
+    return on;
+}
+void roam_game_race_ghost_traffic(int on){         /* input_web.c (the page's menu), the input thread */
+    __atomic_store_n(&g_rgt, on ? 1 : 0, __ATOMIC_RELAXED);
+    fprintf(stderr, "[roam] ghost traffic in career races: %s (the page menu)\n", on ? "on" : "off");
+}
+#define RT_N            8
+#define RT_APART_NS     100000000ull  /* 100 ms without a contact: apart */
+static struct { uint32_t car[RT_N]; uint64_t at_ns[RT_N]; int at; uint32_t n, race; } g_rt;   /* traffic let through lately (a
+                                                   ring), and when; contacts let through in the career race `race` */
+static int race_traffic_now(void){
+    return rd32(G_FLOW) == 6u && rd32(G_CAREER_RACE) && !(rd32(G_GAMEMODE) & 0x200u) && world() && player_car();
+}
+/* a traffic car let through lately (still inside the player's car) */
+static int rt_recent(uint32_t car, uint64_t now){
+    for (int j = 0; j < RT_N; j++) if (g_rt.car[j] == car && now - g_rt.at_ns[j] <= RT_APART_NS) return j;
+    return -1;
+}
+static int race_traffic_pair(uint32_t contact){
+    if (!ok(contact, CONTACT_PAIR + 4u)) return 0;
+    uint32_t a = body_car(MR32(contact + 0xcu)), b = a ? body_car(MR32(contact + 0x10u)) : 0;
+    if (!b) return 0;
+    int ta = MR32(a + 0x24u) == DRIVER_TRAFFIC, tb = MR32(b + 0x24u) == DRIVER_TRAFFIC;
+    if (ta == tb) return 0;                                         /* two traffic cars, or none */
+    uint32_t ours = ta ? b : a, theirs = ta ? a : b;
+    int mine = ours == player_car();
+#if COOP
+    mine |= g_c2.on && g_c2.car && ours == g_c2.car;
+#endif
+    if (!mine) return 0;
+    uint64_t now = rh_ns();
+    int i = rt_recent(theirs, now);
+    if (i < 0 && !race_ghost_traffic()) return 0;                   /* off: solid, once clear */
+    if (i < 0){ i = g_rt.at; g_rt.at = (g_rt.at + 1) % RT_N; g_rt.car[i] = theirs; }
+    g_rt.at_ns[i] = now;
+    uint32_t pr = MR32(contact + CONTACT_PAIR);
+    int32_t most = (int32_t)MR32(G_PAIR_PASSES);
+    if (ok(pr, 0x244) && most > 0 && (int32_t)MR32(pr + 0x240u) < most - 1) MR32(pr + 0x240u) = (uint32_t)(most - 1);
+    uint32_t race = rd32(G_CAREER_RACE);
+    if (race != g_rt.race){ g_rt.race = race; g_rt.n = 0; }
+    if (g_rt.n++ == 0){
+        char tn[20] = "";
+        traffic_car(theirs, tn, sizeof tn);
+        rlog("[roam] f=%ld ghost traffic in a career race: a traffic car, %s passes through %s\n", rh_frame(), tn,
+             ours != player_car() ? "player 2's car" : "my car");
+    }
+    return 1;
+}
 /* roam.c, before roam_game_contact: 1 = the pair is let go (not resolved) */
 int roam_game_ghost_pair(uint32_t contact){
+    if (race_traffic_now()) return race_traffic_pair(contact);
 #if COOP
     if (g_c2.on && g_c2.car && c2_pair(contact)) return 1;
 #endif
@@ -10897,7 +10963,9 @@ static int gp_through(uint32_t car){
  * for the call, as inactive; friends' cars are never in that list. */
 #define CAM_NEAR_M      4.f           /* a car let through this near the eye counts in g_gc_n (mp traffic) */
 void roam_game_camera_cars(CPU *c, void (*orig)(CPU *)){
-    uint32_t w = O.ghost_all && roaming() ? world() : 0, n = w ? MR32(w + 0x10u) : 0, hid[WORLD_INDEX];
+    int rt = race_traffic_now(), rt_on = rt && race_ghost_traffic();   /* a career race: its traffic let through */
+    uint64_t now = rt ? rh_ns() : 0;
+    uint32_t w = rt || (O.ghost_all && roaming()) ? world() : 0, n = w ? MR32(w + 0x10u) : 0, hid[WORLD_INDEX];
     uint8_t was[WORLD_INDEX];
     int nh = 0, near = 0;
     float e[3] = { 0.f, 0.f, 0.f };
@@ -10905,7 +10973,8 @@ void roam_game_camera_cars(CPU *c, void (*orig)(CPU *)){
     if (ok(eye, 12)) rd3(eye, e);
     for (uint32_t i = 0; i < n && i < WORLD_INDEX; i++){
         uint32_t car = MR32(w + 0x1cu + 4u * i);
-        if (!ok(car, 0x9e0) || !MR8(car + CAR_ACTIVE) || car == player_car() || !gp_through(car)) continue;
+        if (!ok(car, 0x9e0) || !MR8(car + CAR_ACTIVE) || car == player_car() ||
+            !(rt ? MR32(car + 0x24u) == DRIVER_TRAFFIC && (rt_on || rt_recent(car, now) >= 0) : gp_through(car))) continue;
         float dx = MRF32(car + 0x60u) - e[0], dy = MRF32(car + 0x64u) - e[1], dz = MRF32(car + 0x68u) - e[2];
         near |= dx * dx + dy * dy + dz * dz < CAM_NEAR_M * CAM_NEAR_M;
         hid[nh] = car; was[nh++] = MR8(car + CAR_ACTIVE);
