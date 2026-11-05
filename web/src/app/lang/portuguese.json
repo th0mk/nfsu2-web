@@ -1606,5 +1606,61 @@
   "Next race lobby at a start, then a new one (in free roam)": "Próximo lobby de corrida em uma largada, depois um novo (no Modo Livre)",
   "Your race lobby: only your friends and crew can see and join it": "Seu lobby de corrida: só seus amigos e sua equipe podem vê-lo e entrar nele",
   "Invite to a race": "Convidar para uma corrida",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Convidar amigos para seu lobby de corrida, aceitar o convite de um amigo, sair de uma corrida em que você entrou de longe"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Convidar amigos para seu lobby de corrida, aceitar o convite de um amigo, sair de uma corrida em que você entrou de longe",
+  "All-rounder": "Pau pra toda obra",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Vença um circuito, um sprint, uma arrancada, um drift, um Street X e uma corrida URL.",
+  "Both ways": "Ida e volta",
+  "Win on the same track in both directions.": "Vença na mesma pista nos dois sentidos.",
+  "Tourist": "Turista",
+  "Collector": "Colecionador",
+  "Loyal": "Fiel",
+  "Photo finish": "Por um triz",
+  "Win a race by less than a tenth of a second.": "Vença uma corrida por menos de um décimo de segundo.",
+  "Sideways": "De ladinho",
+  "Speed demon": "Pé de chumbo",
+  "Road trip": "Pé na estrada",
+  "Bragging rights": "Contar vantagem",
+  "Achievement unlocked": "Conquista desbloqueada",
+  "{n} of {total} achievements": "{n} de {total} conquistas",
+  "Achievements": "Conquistas",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Conquistadas nas corridas que você termina, assim que os resultados aparecem. Elas ficam guardadas com seus jogos salvos.",
+  "Winner": "Vencedor",
+  "Win {n} races.": {
+    "one": "Vença uma corrida.",
+    "many": "Vença {n} corridas.",
+    "other": "Vença {n} corridas."
+  },
+  "Winning streak": "Sequência de vitórias",
+  "Win {n} races in a row.": {
+    "one": "Vença {n} corrida seguida.",
+    "many": "Vença {n} corridas seguidas.",
+    "other": "Vença {n} corridas seguidas."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Faça {n} ponto em um drift.",
+    "many": "Faça {n} pontos em um drift.",
+    "other": "Faça {n} pontos em um drift."
+  },
+  "Reach {n} km/h in a race.": "Chegue a {n} km/h em uma corrida.",
+  "Race {n} km in all.": "Percorra {n} km em corridas no total.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Termine corridas em {n} pista (cada sentido conta).",
+    "many": "Termine corridas em {n} pistas diferentes (cada sentido conta).",
+    "other": "Termine corridas em {n} pistas diferentes (cada sentido conta)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Vença com {n} carro.",
+    "many": "Vença com {n} carros diferentes.",
+    "other": "Vença com {n} carros diferentes."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Vença {n} corrida com o mesmo carro.",
+    "many": "Vença {n} corridas com o mesmo carro.",
+    "other": "Vença {n} corridas com o mesmo carro."
+  },
+  "Win {n} races against other players.": {
+    "one": "Vença uma corrida contra outros jogadores.",
+    "many": "Vença {n} corridas contra outros jogadores.",
+    "other": "Vença {n} corridas contra outros jogadores."
+  }
 }

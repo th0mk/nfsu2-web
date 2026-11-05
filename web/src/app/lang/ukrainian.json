@@ -1635,5 +1635,68 @@
   "Next race lobby at a start, then a new one (in free roam)": "Наступне лобі гонки на старті, потім нове (у вільній їзді)",
   "Your race lobby: only your friends and crew can see and join it": "Ваше лобі гонки: бачити його й приєднуватися можуть лише ваші друзі й команда",
   "Invite to a race": "Запросити в гонку",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Запросити друзів у своє лобі гонки, прийняти запрошення друга, вийти з гонки, до якої ви приєдналися здалеку"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Запросити друзів у своє лобі гонки, прийняти запрошення друга, вийти з гонки, до якої ви приєдналися здалеку",
+  "All-rounder": "Універсал",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Виграйте кільце, спринт, драг-рейсинг, дріфтинг, стріт-X і гонку Професійної ліги.",
+  "Both ways": "Туди й назад",
+  "Win on the same track in both directions.": "Виграйте на одній трасі в обох напрямках.",
+  "Tourist": "Турист",
+  "Collector": "Колекціонер",
+  "Loyal": "Вірний",
+  "Photo finish": "Фотофініш",
+  "Win a race by less than a tenth of a second.": "Виграйте гонку з перевагою менш ніж десята частка секунди.",
+  "Sideways": "Боком",
+  "Speed demon": "Демон швидкості",
+  "Road trip": "Далека дорога",
+  "Bragging rights": "Є чим похизуватися",
+  "Achievement unlocked": "Досягнення отримано",
+  "{n} of {total} achievements": "Досягнень: {n} з {total}",
+  "Achievements": "Досягнення",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Їх здобувають у гонках, які ви завершуєте, щойно з'являються результати. Вони зберігаються разом із вашими збереженнями.",
+  "Winner": "Переможець",
+  "Win {n} races.": {
+    "one": "Виграйте {n} гонку.",
+    "few": "Виграйте {n} гонки.",
+    "many": "Виграйте {n} гонок.",
+    "other": "Виграйте {n} гонки."
+  },
+  "Winning streak": "Серія перемог",
+  "Win {n} races in a row.": {
+    "one": "Виграйте {n} гонку поспіль.",
+    "few": "Виграйте {n} гонки поспіль.",
+    "many": "Виграйте {n} гонок поспіль.",
+    "other": "Виграйте {n} гонки поспіль."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Наберіть {n} очко за один дріфтинг.",
+    "few": "Наберіть {n} очки за один дріфтинг.",
+    "many": "Наберіть {n} очок за один дріфтинг.",
+    "other": "Наберіть {n} очка за один дріфтинг."
+  },
+  "Reach {n} km/h in a race.": "Розженіться до {n} км/год у гонці.",
+  "Race {n} km in all.": "Проїдьте в гонках загалом {n} км.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Завершіть гонки на {n} різній трасі (кожен напрямок рахується окремо).",
+    "few": "Завершіть гонки на {n} різних трасах (кожен напрямок рахується окремо).",
+    "many": "Завершіть гонки на {n} різних трасах (кожен напрямок рахується окремо).",
+    "other": "Завершіть гонки на {n} різних трасах (кожен напрямок рахується окремо)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Виграйте на {n} різній машині.",
+    "few": "Виграйте на {n} різних машинах.",
+    "many": "Виграйте на {n} різних машинах.",
+    "other": "Виграйте на {n} різних машинах."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Виграйте {n} гонку на одній машині.",
+    "few": "Виграйте {n} гонки на одній машині.",
+    "many": "Виграйте {n} гонок на одній машині.",
+    "other": "Виграйте {n} гонки на одній машині."
+  },
+  "Win {n} races against other players.": {
+    "one": "Виграйте {n} гонку проти інших гравців.",
+    "few": "Виграйте {n} гонки проти інших гравців.",
+    "many": "Виграйте {n} гонок проти інших гравців.",
+    "other": "Виграйте {n} гонки проти інших гравців."
+  }
 }

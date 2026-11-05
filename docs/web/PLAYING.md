@@ -279,8 +279,8 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 
 ## 4. Settings
 
-The start page's big panel has six tabs: **Saves**, **Online**, **Friends & crews**, **Game**, **Mods** and
-**Controls**. Online, the crews, Game, Mods and the Controller part of Controls hold this browser's `settings.ini`,
+The start page's big panel has seven tabs: **Saves**, **Achievements**, **Online**, **Friends & crews**, **Game**,
+**Mods** and **Controls**. Online, the crews, Game, Mods and the Controller part of Controls hold this browser's `settings.ini`,
 the same file and keys as the Mac app; Game ends with the game data on this device, the file as text and Reset all
 settings. Each change is saved at once and applies the next time you press Play. Under Play, **Playing now** shows how
 many play on this server now: in total, in free roam, and in the game's Online mode (its races and lobbies); with a
@@ -504,6 +504,16 @@ Room set, the Room row says how many are in that room.
   so before it starts when the browser has less room.
 - **Game data on this device:** "Delete game data" frees the space it takes on this device. Your saves stay; the game
   loads the data from the server again when it needs it.
+- **Achievements:** the Achievements tab lists 12, earned in the races you finish (any race with a results screen:
+  the career, Quick Race, races with other players; not an outrun, nor a race left with Quit). Most have levels, each
+  one more to reach: wins (1, 10, 50, 100, 250), a win streak (3, 5, 10), a drift's points (50,000 to 500,000), top
+  speed (250, 300, 350 km/h), the way driven in all (100 to 5,000 km), tracks finished, each direction counting (10,
+  25, 50), cars won with (5, 10, 20), wins with one car (10, 25, 50) and wins against other players (1, 10, 50); a win
+  of every race type, the same track won both ways and a win by less than a tenth of a second have one. Each shows the
+  level reached and how far the next is (the last one: the day you reached it); a new level is a message over the
+  game. They are kept with your saves (`achievements.json` in the save folder), so a backup and the cloud saves carry
+  them, and nothing about them goes to the server. They count from the first race after this update: races raced
+  before are not in them.
 
 ## 6. Free roam with other players
 

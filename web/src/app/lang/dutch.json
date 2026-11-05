@@ -1577,5 +1577,54 @@
   "Next race lobby at a start, then a new one (in free roam)": "Volgende racelobby bij een start, daarna een nieuwe (in Verkennen)",
   "Your race lobby: only your friends and crew can see and join it": "Je racelobby: alleen je vrienden en crew kunnen hem zien en meedoen",
   "Invite to a race": "Uitnodigen voor een race",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Vrienden uitnodigen voor je racelobby, een uitnodiging van een vriend aannemen, een race verlaten waar je op afstand aan meedoet"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Vrienden uitnodigen voor je racelobby, een uitnodiging van een vriend aannemen, een race verlaten waar je op afstand aan meedoet",
+  "All-rounder": "Allrounder",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Win een circuitrace, een sprintrace, een dragrace, een driftrace, een Street X-race en een URL-race.",
+  "Both ways": "Heen en terug",
+  "Win on the same track in both directions.": "Win op hetzelfde parcours in beide richtingen.",
+  "Tourist": "Toerist",
+  "Collector": "Verzamelaar",
+  "Loyal": "Trouw",
+  "Photo finish": "Fotofinish",
+  "Win a race by less than a tenth of a second.": "Win een race met minder dan een tiende seconde voorsprong.",
+  "Sideways": "Dwarsligger",
+  "Speed demon": "Snelheidsduivel",
+  "Road trip": "Roadtrip",
+  "Bragging rights": "Opscheppen mag",
+  "Achievement unlocked": "Prestatie ontgrendeld",
+  "{n} of {total} achievements": "{n} van {total} prestaties",
+  "Achievements": "Prestaties",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Verdiend in de races die je uitrijdt, zodra de uitslag verschijnt. Ze worden bewaard bij je opgeslagen spellen.",
+  "Winner": "Winnaar",
+  "Win {n} races.": {
+    "one": "Win een race.",
+    "other": "Win {n} races."
+  },
+  "Winning streak": "Zegereeks",
+  "Win {n} races in a row.": {
+    "one": "Win {n} race op rij.",
+    "other": "Win {n} races op rij."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Scoor {n} punt in één drift.",
+    "other": "Scoor {n} punten in één drift."
+  },
+  "Reach {n} km/h in a race.": "Haal {n} km/u in een race.",
+  "Race {n} km in all.": "Race in totaal {n} km.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Rijd races uit op {n} parcours (elke richting telt).",
+    "other": "Rijd races uit op {n} verschillende parcoursen (elke richting telt)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Win met {n} wagen.",
+    "other": "Win met {n} verschillende wagens."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Win {n} race met dezelfde wagen.",
+    "other": "Win {n} races met dezelfde wagen."
+  },
+  "Win {n} races against other players.": {
+    "one": "Win een race tegen andere spelers.",
+    "other": "Win {n} races tegen andere spelers."
+  }
 }

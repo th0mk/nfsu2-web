@@ -1517,5 +1517,54 @@
   "Next race lobby at a start, then a new one (in free roam)": "Επόμενη αίθουσα αγώνα σε μια αφετηρία και μετά νέα αίθουσα (στην ελεύθερη οδήγηση)",
   "Your race lobby: only your friends and crew can see and join it": "Η αίθουσα αγώνα σου: μόνο οι φίλοι σου και η ομάδα σου μπορούν να τη δουν και να μπουν",
   "Invite to a race": "Πρόσκληση σε αγώνα",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Πρόσκληση φίλων στην αίθουσα αγώνα σου, αποδοχή πρόσκλησης φίλου, αποχώρηση από αγώνα στον οποίο μπήκες από μακριά"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Πρόσκληση φίλων στην αίθουσα αγώνα σου, αποδοχή πρόσκλησης φίλου, αποχώρηση από αγώνα στον οποίο μπήκες από μακριά",
+  "All-rounder": "Παντός καιρού",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Κέρδισε έναν αγώνα πίστας, ένα σπριντ, ένα ντραγκ, ένα ντριφτ, ένα Street X και έναν αγώνα URL.",
+  "Both ways": "Πήγαινε-έλα",
+  "Win on the same track in both directions.": "Κέρδισε στην ίδια πίστα και προς τις δύο κατευθύνσεις.",
+  "Tourist": "Τουρίστας",
+  "Collector": "Συλλέκτης",
+  "Loyal": "Πιστός",
+  "Photo finish": "Φωτοφίνις",
+  "Win a race by less than a tenth of a second.": "Κέρδισε έναν αγώνα με διαφορά μικρότερη από ένα δέκατο του δευτερολέπτου.",
+  "Sideways": "Στο πλάι",
+  "Speed demon": "Δαίμονας της ταχύτητας",
+  "Road trip": "Μεγάλο ταξίδι",
+  "Bragging rights": "Για να καυχιέσαι",
+  "Achievement unlocked": "Το επίτευγμα ξεκλειδώθηκε",
+  "{n} of {total} achievements": "{n} από {total} επιτεύγματα",
+  "Achievements": "Επιτεύγματα",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Τα κερδίζεις στους αγώνες που τερματίζεις, μόλις εμφανιστούν τα αποτελέσματά τους. Φυλάσσονται μαζί με τις αποθηκεύσεις σου.",
+  "Winner": "Νικητής",
+  "Win {n} races.": {
+    "one": "Κέρδισε έναν αγώνα.",
+    "other": "Κέρδισε {n} αγώνες."
+  },
+  "Winning streak": "Σερί νικών",
+  "Win {n} races in a row.": {
+    "one": "Κέρδισε {n} αγώνα στη σειρά.",
+    "other": "Κέρδισε {n} αγώνες στη σειρά."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Μάζεψε {n} πόντο σε ένα ντριφτ.",
+    "other": "Μάζεψε {n} πόντους σε ένα ντριφτ."
+  },
+  "Reach {n} km/h in a race.": "Φτάσε τα {n} χλμ/ώρα σε έναν αγώνα.",
+  "Race {n} km in all.": "Οδήγησε συνολικά {n} χλμ. σε αγώνες.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Τερμάτισε σε αγώνες σε {n} πίστα (κάθε κατεύθυνση μετράει χωριστά).",
+    "other": "Τερμάτισε σε αγώνες σε {n} διαφορετικές πίστες (κάθε κατεύθυνση μετράει χωριστά)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Κέρδισε με {n} αυτοκίνητο.",
+    "other": "Κέρδισε με {n} διαφορετικά αυτοκίνητα."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Κέρδισε {n} αγώνα με το ίδιο αυτοκίνητο.",
+    "other": "Κέρδισε {n} αγώνες με το ίδιο αυτοκίνητο."
+  },
+  "Win {n} races against other players.": {
+    "one": "Κέρδισε έναν αγώνα απέναντι σε άλλους παίκτες.",
+    "other": "Κέρδισε {n} αγώνες απέναντι σε άλλους παίκτες."
+  }
 }

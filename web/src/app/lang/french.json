@@ -1606,5 +1606,61 @@
   "Next race lobby at a start, then a new one (in free roam)": "Salon de course suivant à un départ, puis un nouveau (en mode Exploration)",
   "Your race lobby: only your friends and crew can see and join it": "Votre salon de course : seuls vos amis et votre équipe peuvent le voir et le rejoindre",
   "Invite to a race": "Inviter à une course",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Inviter des amis dans votre salon de course, accepter l'invitation d'un ami, quitter une course rejointe à distance"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Inviter des amis dans votre salon de course, accepter l'invitation d'un ami, quitter une course rejointe à distance",
+  "All-rounder": "Touche-à-tout",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Gagnez un circuit, un sprint, un drag, un drift, un Street X et une course CCU.",
+  "Both ways": "Aller-retour",
+  "Win on the same track in both directions.": "Gagnez sur le même parcours dans les deux sens.",
+  "Tourist": "Touriste",
+  "Collector": "Collectionneur",
+  "Loyal": "Fidèle",
+  "Photo finish": "Photo-finish",
+  "Win a race by less than a tenth of a second.": "Gagnez une course avec moins d'un dixième de seconde d'avance.",
+  "Sideways": "En travers",
+  "Speed demon": "Fou de vitesse",
+  "Road trip": "Road trip",
+  "Bragging rights": "De quoi frimer",
+  "Achievement unlocked": "Succès débloqué",
+  "{n} of {total} achievements": "{n} succès sur {total}",
+  "Achievements": "Succès",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Obtenus dans les courses que vous terminez, dès que leurs résultats s'affichent. Ils sont conservés avec vos sauvegardes.",
+  "Winner": "Vainqueur",
+  "Win {n} races.": {
+    "one": "Gagnez une course.",
+    "many": "Gagnez {n} de courses.",
+    "other": "Gagnez {n} courses."
+  },
+  "Winning streak": "Série de victoires",
+  "Win {n} races in a row.": {
+    "one": "Gagnez {n} course d'affilée.",
+    "many": "Gagnez {n} de courses d'affilée.",
+    "other": "Gagnez {n} courses d'affilée."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Marquez {n} point dans un drift.",
+    "many": "Marquez {n} de points dans un drift.",
+    "other": "Marquez {n} points dans un drift."
+  },
+  "Reach {n} km/h in a race.": "Atteignez {n} km/h en course.",
+  "Race {n} km in all.": "Parcourez {n} km en course au total.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Terminez des courses sur {n} parcours différent (chaque sens compte).",
+    "many": "Terminez des courses sur {n} de parcours différents (chaque sens compte).",
+    "other": "Terminez des courses sur {n} parcours différents (chaque sens compte)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Gagnez avec {n} voiture différente.",
+    "many": "Gagnez avec {n} de voitures différentes.",
+    "other": "Gagnez avec {n} voitures différentes."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Gagnez {n} course avec la même voiture.",
+    "many": "Gagnez {n} de courses avec la même voiture.",
+    "other": "Gagnez {n} courses avec la même voiture."
+  },
+  "Win {n} races against other players.": {
+    "one": "Gagnez une course contre d'autres joueurs.",
+    "many": "Gagnez {n} de courses contre d'autres joueurs.",
+    "other": "Gagnez {n} courses contre d'autres joueurs."
+  }
 }

@@ -1502,5 +1502,54 @@
   "Next race lobby at a start, then a new one (in free roam)": "Bir başlangıç noktasında sonraki yarış lobisi, ardından yeni bir tane (serbest sürüşte)",
   "Your race lobby: only your friends and crew can see and join it": "Yarış lobin: yalnızca arkadaşların ve ekibin görüp katılabilir",
   "Invite to a race": "Yarışa davet et",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Arkadaşlarını yarış lobine davet et, bir arkadaşının davetini kabul et, uzaktan katıldığın bir yarıştan ayrıl"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Arkadaşlarını yarış lobine davet et, bir arkadaşının davetini kabul et, uzaktan katıldığın bir yarıştan ayrıl",
+  "All-rounder": "Her işin ehli",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Bir pist, bir sprint, bir drag, bir drift, bir Street X ve bir URL yarışı kazan.",
+  "Both ways": "Gidiş dönüş",
+  "Win on the same track in both directions.": "Aynı parkurda iki yönde de kazan.",
+  "Tourist": "Turist",
+  "Collector": "Koleksiyoncu",
+  "Loyal": "Sadık",
+  "Photo finish": "Foto finiş",
+  "Win a race by less than a tenth of a second.": "Bir yarışı saniyenin onda birinden az farkla kazan.",
+  "Sideways": "Yan yan",
+  "Speed demon": "Hız canavarı",
+  "Road trip": "Uzun yol",
+  "Bragging rights": "Hava atma hakkı",
+  "Achievement unlocked": "Başarım açıldı",
+  "{n} of {total} achievements": "{n}/{total} başarım",
+  "Achievements": "Başarımlar",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Bitirdiğin yarışlarda, sonuçları göründüğünde kazanılır. Kayıtlarınla birlikte saklanır.",
+  "Winner": "Kazanan",
+  "Win {n} races.": {
+    "one": "Bir yarış kazan.",
+    "other": "{n} yarış kazan."
+  },
+  "Winning streak": "Galibiyet serisi",
+  "Win {n} races in a row.": {
+    "one": "Üst üste {n} yarış kazan.",
+    "other": "Üst üste {n} yarış kazan."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Bir driftte {n} puan topla.",
+    "other": "Bir driftte {n} puan topla."
+  },
+  "Reach {n} km/h in a race.": "Bir yarışta {n} km/sa hıza ulaş.",
+  "Race {n} km in all.": "Yarışlarda toplam {n} km kat et.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "{n} farklı parkurda yarış bitir (her yön ayrı sayılır).",
+    "other": "{n} farklı parkurda yarış bitir (her yön ayrı sayılır)."
+  },
+  "Win with {n} different cars.": {
+    "one": "{n} farklı arabayla kazan.",
+    "other": "{n} farklı arabayla kazan."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Aynı arabayla {n} yarış kazan.",
+    "other": "Aynı arabayla {n} yarış kazan."
+  },
+  "Win {n} races against other players.": {
+    "one": "Diğer oyunculara karşı bir yarış kazan.",
+    "other": "Diğer oyunculara karşı {n} yarış kazan."
+  }
 }

@@ -1413,3 +1413,60 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .fmbot:hover .fmbot-go { color: #fff; }
 /* /lastfm.html, the Last.fm popup's page, when the browser keeps the window open (lastfm-callback.ts) */
 .lastfm-closed { margin: 24px; }
+
+/* Achievements (achievements.ts): each a row of its name, what it asks and its date (or how far) */
+.ach-count { margin: 16px 0 8px; font-variant-numeric: tabular-nums; }
+.ach-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ach { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; padding: 12px; border-radius: 8px;
+  background: var(--field); color: var(--muted); }
+.ach strong { color: var(--text); font-weight: 600; }
+.ach > span:not(.ach-state) { grid-column: 1; font-size: 14px; line-height: 20px; }
+.ach-state { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ach.got { box-shadow: inset 3px 0 0 var(--lime); }
+.ach.got strong, .ach.got .ach-state { color: var(--lime); }
+/* an achievement's levels: each one's need, the ones reached filled, the next outlined; the bar to the next */
+.ach-bar { grid-column: 1 / -1; width: 100%; height: 6px; margin-top: 8px; border: 0; border-radius: 3px; overflow: hidden;
+  appearance: none; background: var(--line); }
+.ach-bar::-webkit-progress-bar { background: var(--line); }
+.ach-bar::-webkit-progress-value { background: var(--lime); border-radius: 3px; }
+.ach-bar::-moz-progress-bar { background: var(--lime); border-radius: 3px; }
+.ach-levels { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 10px 0 0; padding: 0; }
+.ach-levels li { min-width: 40px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; text-align: center;
+  font-size: 13px; line-height: 18px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.ach-levels li.next { border-color: var(--lime); color: var(--text); }
+.ach-levels li.reached { background: var(--lime); border-color: var(--lime); color: var(--bg); font-weight: 600; }
+
+/* a level reached, over the game (achievements.ts): a card at the top that comes in with a glow and a light passing
+ * over it, its level popping in among the others */
+.ach-pop {
+  position: absolute; z-index: 6; top: 7%; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px;
+  min-width: 320px; max-width: min(560px, calc(100% - 32px)); padding: 16px 24px 16px 18px; overflow: hidden; pointer-events: none;
+  border: 1px solid var(--lime); border-radius: 12px; background: linear-gradient(135deg, rgba(23, 23, 23, 0.94), rgba(38, 38, 38, 0.94));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 28px var(--lime-glow), 0 12px 32px rgba(0, 0, 0, 0.6); color: var(--text);
+}
+.ach-pop > svg { flex: none; width: 48px; height: 48px; fill: none; stroke: var(--lime); stroke-width: 1.6; stroke-linecap: round;
+  stroke-linejoin: round; filter: drop-shadow(0 0 6px var(--lime-glow)); }
+.ach-pop-body { display: grid; gap: 2px; min-width: 0; }
+.ach-pop-label { color: var(--lime); font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.ach-pop-name { font-size: 24px; line-height: 30px; font-style: italic; font-weight: 700; }
+.ach-pop-what { color: var(--muted); font-size: 14px; line-height: 20px; }
+.ach-pop .ach-levels { margin-top: 6px; }
+.ach-pop::after {                                      /* the light passing over it */
+  content: ""; position: absolute; inset: 0; transform: translateX(-120%);
+  background: linear-gradient(105deg, transparent 35%, rgba(200, 240, 136, 0.28) 50%, transparent 65%);
+}
+.ach-pop.in { animation: ach-in 520ms cubic-bezier(0.2, 0.9, 0.25, 1.15) both, ach-glow 1600ms ease-in-out 520ms 2; }
+.ach-pop.in::after { animation: ach-shine 1100ms ease-out 380ms both; }
+.ach-pop.in > svg { animation: ach-trophy 700ms cubic-bezier(0.2, 0.9, 0.25, 1.3) 120ms both; }
+.ach-pop.in .ach-levels li.new { animation: ach-level 600ms cubic-bezier(0.2, 0.9, 0.25, 1.5) 700ms both; }
+.ach-pop.out { animation: ach-out 320ms ease-in both; }
+@keyframes ach-in { from { opacity: 0; transform: translate(-50%, -24px) scale(0.92); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes ach-out { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -12px); } }
+@keyframes ach-shine { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+@keyframes ach-glow { 50% { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 44px var(--lime-glow), 0 12px 32px rgba(0, 0, 0, 0.6); } }
+@keyframes ach-trophy { from { opacity: 0; transform: scale(0.4) rotate(-18deg); } to { opacity: 1; transform: none; } }
+@keyframes ach-level { 0% { transform: scale(0.6); background: var(--text); } 60% { transform: scale(1.18); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .ach-pop.in, .ach-pop.out, .ach-pop.in > svg, .ach-pop.in .ach-levels li.new { animation-duration: 1ms; animation-delay: 0ms; }
+  .ach-pop.in::after { animation: none; }
+}

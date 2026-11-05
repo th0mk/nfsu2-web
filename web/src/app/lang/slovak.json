@@ -1635,5 +1635,68 @@
   "Next race lobby at a start, then a new one (in free roam)": "Ďalšie závodné loby na štarte, potom nové (vo voľnej jazde)",
   "Your race lobby: only your friends and crew can see and join it": "Tvoje závodné loby: vidieť ho a pridať sa doň môžu len tvoji priatelia a partia",
   "Invite to a race": "Pozvať do závodu",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvať priateľov do svojho závodného loby, prijať pozvánku priateľa, opustiť závod, ku ktorému si sa pridal na diaľku"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvať priateľov do svojho závodného loby, prijať pozvánku priateľa, opustiť závod, ku ktorému si sa pridal na diaľku",
+  "All-rounder": "Všestranný",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Vyhraj okruh, šprint, drag, drift, Street X a závod URL.",
+  "Both ways": "Tam aj späť",
+  "Win on the same track in both directions.": "Vyhraj na tej istej trati v oboch smeroch.",
+  "Tourist": "Turista",
+  "Collector": "Zberateľ",
+  "Loyal": "Verný",
+  "Photo finish": "Fotofiniš",
+  "Win a race by less than a tenth of a second.": "Vyhraj závod o menej ako desatinu sekundy.",
+  "Sideways": "Bokom",
+  "Speed demon": "Démon rýchlosti",
+  "Road trip": "Na cestách",
+  "Bragging rights": "Je sa čím chváliť",
+  "Achievement unlocked": "Úspech odomknutý",
+  "{n} of {total} achievements": "{n} z {total} úspechov",
+  "Achievements": "Úspechy",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Získavaš ich v závodoch, ktoré dokončíš, hneď ako sa zobrazia ich výsledky. Ukladajú sa spolu s tvojimi uloženiami.",
+  "Winner": "Víťaz",
+  "Win {n} races.": {
+    "one": "Vyhraj závod.",
+    "few": "Vyhraj {n} závody.",
+    "many": "Vyhraj {n} závodu.",
+    "other": "Vyhraj {n} závodov."
+  },
+  "Winning streak": "Víťazná séria",
+  "Win {n} races in a row.": {
+    "one": "Vyhraj {n} závod za sebou.",
+    "few": "Vyhraj {n} závody za sebou.",
+    "many": "Vyhraj {n} závodu za sebou.",
+    "other": "Vyhraj {n} závodov za sebou."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Získaj {n} bod v jednom drifte.",
+    "few": "Získaj {n} body v jednom drifte.",
+    "many": "Získaj {n} bodu v jednom drifte.",
+    "other": "Získaj {n} bodov v jednom drifte."
+  },
+  "Reach {n} km/h in a race.": "Dosiahni v závode {n} km/h.",
+  "Race {n} km in all.": "Najazdi v závodoch spolu {n} km.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Dokonči závody na {n} trati (každý smer sa počíta zvlášť).",
+    "few": "Dokonči závody na {n} rôznych tratiach (každý smer sa počíta zvlášť).",
+    "many": "Dokonči závody na {n} rôznych tratiach (každý smer sa počíta zvlášť).",
+    "other": "Dokonči závody na {n} rôznych tratiach (každý smer sa počíta zvlášť)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Vyhraj s {n} autom.",
+    "few": "Vyhraj s {n} rôznymi autami.",
+    "many": "Vyhraj s {n} rôznymi autami.",
+    "other": "Vyhraj s {n} rôznymi autami."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Vyhraj {n} závod s tým istým autom.",
+    "few": "Vyhraj {n} závody s tým istým autom.",
+    "many": "Vyhraj {n} závodu s tým istým autom.",
+    "other": "Vyhraj {n} závodov s tým istým autom."
+  },
+  "Win {n} races against other players.": {
+    "one": "Vyhraj závod proti iným hráčom.",
+    "few": "Vyhraj {n} závody proti iným hráčom.",
+    "many": "Vyhraj {n} závodu proti iným hráčom.",
+    "other": "Vyhraj {n} závodov proti iným hráčom."
+  }
 }

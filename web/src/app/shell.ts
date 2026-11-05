@@ -37,6 +37,7 @@ import { PauseHint } from './pausehint';
 import { TitleMark } from './titlemark';
 import { DriftPanel } from './drift';
 import { PhotoMode, photoMark } from './photo';
+import { Achievements, FILE as ACHIEVEMENTS_FILE } from './achievements';
 import type { PadPage } from '../input/gamepad';
 import type { NetBanCase, NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
 import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, uiPack, type Resolved } from './settings';
@@ -792,6 +793,7 @@ async function startGame() {
   titleMark.start(session);
   driftPanel.start(session);
   photo.start(session);
+  achievements.start(session);
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
   friendMessages.start(session, net && r.env.NFSU2_ROAM === '1');
   // (the races' between players free roam on or not; free roam's only with it on: the career's free roam alone keeps
@@ -981,6 +983,7 @@ let pauseHint: PauseHint;               // the line to the page's menu under the
 let titleMark: TitleMark;               // the site's address under the title screen's copyright (titlemark.ts)
 let driftPanel: DriftPanel;             // free roam's drift mode: its score under the game's Bank panel, a note at F2 (drift.ts)
 let photo: PhotoMode;                   // photo mode: F12 in the world, its panel and its keys (photo.ts)
+let achievements: Achievements;         // the races' achievements, in the Achievements tab (achievements.ts)
 
 function endStage() {
   touch.stop();
@@ -989,6 +992,7 @@ function endStage() {
   titleMark.stop();
   driftPanel.stop();
   photo.stop();
+  achievements.stop();
   quickChat.stop();
   friendPrompt.stop();
   friendMessages.stop();
@@ -2358,6 +2362,13 @@ export async function boot() {
   titleMark = new TitleMark($('#stage'));
   driftPanel = new DriftPanel($('#stage'), { toast, wide: () => hudWide, log: logLine });
   photo = new PhotoMode($('#stage'), { shoot: () => screenshot(true), screenshot: () => void screenshot(), log: logLine });
+  achievements = new Achievements($('#achievements'), {
+    read: () => readText(SAVE, ACHIEVEMENTS_FILE), write: text => writeFile(SAVE, ACHIEVEMENTS_FILE, text),
+    pop: $('#ach-pop'), log: logLine,
+  });
+  void achievements.load();
+  // (again when the tab opens: a restore or the cloud saves may have brought another device's)
+  $('#settings').querySelector('[role=tab][data-tab=achievements]')?.addEventListener('click', () => void achievements.load());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { void checkNewer(); vault.shown(); } });
   setInterval(() => { if (document.visibilityState === 'visible') void checkNewer(); }, NEWER_EVERY_MS);
   // iPhone and iPad: Safari plays a page's Web Audio as "ambient", muted by Silent mode, and players took that for a
