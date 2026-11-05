@@ -239,6 +239,21 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 
   These keys stay as they are (Options, Controls does not change them). Many laptop and cheap keyboards cannot see
   every key two players hold at once: a key can drop out for a moment. Gaming keyboards can.
+- **A second player in your career's free roam:** pause in free roam and pick Add Player 2. Player 2 presses START on
+  a controller, or picks Keyboard to drive on the keyboard's left half (the Space player's keys above; player 1 keeps
+  the arrows). Then pick the car player 2 drives from your garage (Next car, Drive); both of you may drive the same
+  car. The city loads once and player 2 starts behind you, the screen split in two, each half with its own HUD and
+  map. Remove Player 2 in the pause menu lets them go.
+  - Player 2 is a guest: nothing of theirs is saved. Only player 1 starts races, shops and story events; the money,
+    messages, GPS and world map are player 1's.
+  - A career race asks first: Together (player 2 races as one more rival; only player 1's place counts for the
+    career, and the race ends when both are home) or Alone (player 2 waits and is back beside you after it).
+  - Outruns between the two of you: drive close together for a few seconds, then either one presses Engage. They
+    win nothing and cost nothing.
+  - Online, other players see player 2 under your name and " 2". Player 2 takes half of Online, Players' cars shown.
+  - Drift mode (X) is off while player 2 is in.
+  - On computers only (not on phones and tablets; `coop = off` in settings.ini turns it off). Two views take a faster
+    computer.
 - **Rumble:** a controller that can rumble in Chrome (Xbox, DualSense and others) shakes when you crash, scrape a
   wall or land hard. Controls, Controller, Rumble turns it off. Firefox has no rumble.
 - **Sound** starts with the Play click. If the browser still keeps it off, a note says so, and a click on the game or
