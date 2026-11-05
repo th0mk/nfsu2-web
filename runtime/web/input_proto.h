@@ -90,6 +90,9 @@ enum {
                              it, dik = where it starts, vk = the whole length (1..32), ch[3], a and b (little-endian)
                              its next 11 bytes (roam_web.c roam_plat_name_piece); flags INAME_SEAT2: co-op player 2's
                              name in free roam instead (roam_plat_name2) */
+    IEV_LOBBY = 16,       /* free roam's race lobby (roam_web.c roam_plat_lobby_input): dik = what (roam_plat.h ROAM_LB_*);
+                             ROAM_LB_JOIN (an invite's Join): a = the lobby's host's id, b = the lobby's id, its race's
+                             hash in vk, flags, ch[0], ch[1] (little-endian) */
 };
 #define INAME_SEAT2 1u            /* IEV_NAME's flags: player 2's (co-op) */
 enum {                    /* event flags */

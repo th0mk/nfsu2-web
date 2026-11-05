@@ -142,7 +142,7 @@ use nfsu2_util::cpu::{Busy, QuotaBusy, WorkersBusy};
 use nfsu2_util::{FrameCtx, Host, SwitchSend};
 use tokio::sync::oneshot;
 
-pub use hub::{Hub, Whereabouts};
+pub use hub::{Hosted, Hub, Whereabouts};
 pub use wire::{decode_roam, encode_peers, encode_peers_crews};
 
 /// 10.77.0.253, runtime/web/net_proto.h NET_ROAM_HUB
@@ -315,6 +315,7 @@ enum Cmd {
     Flew(u32, f64),
     Linked(u32, String, oneshot::Sender<Option<(u32, Option<Arc<str>>)>>),
     Where(Vec<Arc<str>>, oneshot::Sender<Vec<Option<hub::Whereabouts>>>),
+    Hosted(u32, oneshot::Sender<Option<hub::Hosted>>),
     Stop,
 }
 
@@ -454,6 +455,13 @@ impl RoamHub {
         let _ = self.tx.send(Cmd::Where(owners, tx));
         rx
     }
+
+    /// the race lobby browser `vip`'s player hosts, open now: `Hub::hosted`
+    pub fn hosted(&self, vip: u32) -> oneshot::Receiver<Option<hub::Hosted>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.tx.send(Cmd::Hosted(vip, tx));
+        rx
+    }
 }
 
 /// a panic in the hub (a bug) leaves the hub's thread running: the panic hook has printed it, the next frame or
@@ -548,6 +556,9 @@ fn run(
             }),
             Cmd::Where(owners, tx) => guard(|| {
                 let _ = tx.send(hub.whereabouts(&owners));
+            }),
+            Cmd::Hosted(vip, tx) => guard(|| {
+                let _ = tx.send(hub.hosted(vip));
             }),
             Cmd::Stop => {
                 // no more ticks, so no more lists: the switch's send goes too (it holds the switch, which holds

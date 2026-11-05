@@ -34,7 +34,8 @@ const NONE: u32 = u32::MAX;
 const SLOTS_MAX: usize = wire::MAPD_PARKED as usize;
 
 /// a race lobby a player hosts (roam_core.h RC_MSG_LOBBY, an advert to the hub): its id, the race, where it starts,
-/// its players (n, the host first), the most it takes and its state
+/// its players (n, the host first), the most it takes and its state, and whether it takes its host's friends and
+/// crew-mates only (wire::LOBBY_PRIVATE)
 #[derive(Clone, Copy, Debug)]
 struct HubLobby {
     id: u32,
@@ -45,6 +46,20 @@ struct HubLobby {
     max: u8,
     state: u8,
     ids: [u32; wire::LOBBY_PLAYERS],
+    private: bool,
+}
+
+/// The race lobby a browser's player hosts, as its last advert to the hub had it (`Hub::hosted`), for an invite to a
+/// friend (the server's friends.rs): its host's id and its own, the race (its hash), its players and the most it
+/// takes, and the room it is in (rc_room_hash; 0: the room of everyone)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Hosted {
+    pub host: u32,
+    pub lobby: u32,
+    pub race: u32,
+    pub n: u8,
+    pub max: u8,
+    pub room: u32,
 }
 
 /// MAPD: the page moves each player's marker on from where the hub last said, at its velocity; the hub says it again
@@ -236,7 +251,9 @@ const LOBBY_NEAR_MAX: usize = 24;
 const LOBBY_JOIN_MS: f64 = 6000.0;
 /// a lobby's host, and each player it lists, are this near its start, or the advert is no reason for a link: the host
 /// game drops a player of its lobby who is farther (roam_game.c MP_STAY_M + 10 m), and leaves the lobby itself past
-/// MP_STAY_M (40 m)
+/// MP_STAY_M (40 m).  A player it lists farther off is linked all the same when its own last ask to join (its JOIN's
+/// copy to the hub) was for this lobby: a friend the host invited joins from wherever it is, and its game and the
+/// host's keep it in the lobby there (roam_game.c, a friend from afar)
 const LOBBY_STAY_M: f64 = 50.0;
 /// a player's race reports logged: one a race (its lobby), and none sooner than this after its last
 const REPORT_GAP_MS: f64 = 20000.0;
@@ -732,6 +749,25 @@ fn friend_ids(owner: Option<&Arc<str>>, friends: Option<&Vec<Arc<str>>>, seat2: 
     ids.sort_unstable();
     ids.dedup();
     ids
+}
+
+/// whether players p and q are friends: their owners' friendship (`friend_id`) is in both players' `friend_ids` (each
+/// one's friends list names the other)
+fn friends_both(p: &Player, q: &Player) -> bool {
+    match (&p.owner, &q.owner) {
+        (Some(a), Some(b)) if a != b => {
+            let id = friend_id(a, b);
+            p.friend_ids.binary_search(&id).is_ok() && q.friend_ids.binary_search(&id).is_ok()
+        }
+        _ => false,
+    }
+}
+
+/// whether players p and q are friends (`friends_both`) or crew-mates (of one room, a crew of both): the players a
+/// lobby for its host's friends and crew-mates takes (`HubLobby::private`), as the host's game has them (roam_game.c
+/// mp_mate, from the hub's marks)
+fn mates(p: &Player, q: &Player) -> bool {
+    friends_both(p, q) || (p.room == q.room && crews_of(q).any(|c| p.crews.contains(&c)))
 }
 
 /// Where a friend is (`Hub::whereabouts`): in free roam, in this room (rc_room_hash; 0: the room of everyone), whose
@@ -1461,9 +1497,9 @@ impl Hub {
             // (a browser's maps are its first player's: a second one's questions go unanswered, `Player::seat2`)
             Msg::MapReq { req, max, base, flags } if sender == p.id && !p.seat2 => ask = Some((req, max, base, flags)),
             Msg::NearReq { req, max, base, radius } if sender == p.id && !p.seat2 => ask_near = Some((req, max, base, radius)),
-            Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids } if sender == p.id => {
+            Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids, private } if sender == p.id => {
                 match op {
-                    wire::LOBBY_ADVERT => p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids }, now)),
+                    wire::LOBBY_ADVERT => p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids, private }, now)),
                     wire::LOBBY_CLOSE if p.lobby.is_some_and(|(l, _)| l.id == lobby) => p.lobby = None,
                     wire::LOBBY_JOIN => p.join = Some((lobby, now)),
                     _ => {}
@@ -1995,7 +2031,9 @@ impl Hub {
     }
 
     /// With the world map's answer, to a player that takes race lobbies: the open lobbies of its room (any player's,
-    /// its own too, an advert younger than LOBBY_STALE_MS), nearest first, LOBBIES_MAX at most, in one datagram
+    /// its own too, an advert younger than LOBBY_STALE_MS), nearest first, LOBBIES_MAX at most, in one datagram.  A
+    /// lobby for its host's friends and crew-mates only (`HubLobby::private`) only to them, to the players it lists
+    /// and to its host.
     fn lobbies(&mut self, slot: u32, req: u16, now: f64) {
         let Some(p) = self.player(slot) else { return };
         if !p.lobbies || p.impostor {
@@ -2010,6 +2048,9 @@ impl Hub {
                 continue;
             }
             if self.apart_from(slot, q, p, o) {
+                continue;
+            }
+            if l.private && q != slot && !l.ids[..(l.n as usize).min(wire::LOBBY_PLAYERS)].contains(&p.id) && !mates(p, o) {
                 continue;
             }
             let d = distance(&at, &[l.x as f64, l.y as f64, at[2]]);
@@ -2101,6 +2142,19 @@ impl Hub {
                 });
                 (q.canon == canon && !q.impostor && q.vip != vip && near).then(|| (q.vip, q.owner.clone()))
             })
+        })
+    }
+
+    /// The race lobby the player of browser `vip` hosts (`Hosted`; its first player's, not a co-op second one's), when
+    /// its last advert came within LOBBY_STALE_MS and says it is open (it takes players now, full or not): an invite
+    /// to a friend (the server's friends.rs) names it, and the friend's game joins it from wherever it is
+    pub fn hosted(&self, vip: u32) -> Option<Hosted> {
+        let now = (self.now)();
+        let mine = self.per_vip.get(&vip)?;
+        mine.iter().filter_map(|&s| self.player(s)).filter(|p| p.vip == vip && !p.seat2 && !p.impostor).find_map(|p| {
+            let (l, t) = p.lobby?;
+            let open = now - t <= LOBBY_STALE_MS && l.state == 0 && l.n >= 1 && l.ids[0] == p.id;
+            open.then_some(Hosted { host: p.id, lobby: l.id, race: l.race, n: l.n, max: l.max, room: p.room })
         })
     }
 
@@ -2510,14 +2564,7 @@ impl Hub {
                         | match slots.get(l.slot as usize) {
                             Some(Some(q)) => {
                                 let crews = mine.iter().enumerate().fold(0u8, |m, (c, h)| m | (q.crews.contains(h) as u8) << c);
-                                let friend = befriended
-                                    && match (&p.owner, &q.owner) {
-                                        (Some(a), Some(b)) if a != b => {
-                                            let id = friend_id(a, b);
-                                            p.friend_ids.binary_search(&id).is_ok() && q.friend_ids.binary_search(&id).is_ok()
-                                        }
-                                        _ => false,
-                                    };
+                                let friend = befriended && friends_both(p, q);
                                 crews | if friend { wire::MARK_FRIEND } else { 0 }
                             }
                             _ => 0,
@@ -2837,7 +2884,11 @@ fn duel_pairs(slots: &[Option<Player>], list: &[u32], s: &mut Scratch) {
 ///
 /// Only for a lobby whose start is where its host is, and for the players it lists who are there too (LOBBY_STAY_M):
 /// an advert says what it likes, and one placed at a crowd, or listing the ids of players anywhere in the room, had
-/// the hub link its sender with all of them first (the third security audit, 2026-10-23).
+/// the hub link its sender with all of them first (the third security audit, 2026-10-23).  A player it lists who is
+/// not there is linked when its own last ask to join was for this lobby (its JOIN's copy to the hub, of any age): both
+/// ends asked for that link, the host by listing it and the player by asking, and a friend the host invited joins
+/// from wherever it is.  A lobby for its host's friends and crew-mates only (`HubLobby::private`) takes only those of
+/// the players near its start (`mates`): nobody else may join it.
 fn lobby_pairs(slots: &[Option<Player>], list: &[u32], now: f64, s: &mut Scratch) {
     let Scratch { pos, lpairs, lids, ljoin, lnear, lmembers, vips, .. } = s;
     lpairs.clear();
@@ -2864,8 +2915,10 @@ fn lobby_pairs(slots: &[Option<Player>], list: &[u32], now: f64, s: &mut Scratch
                 }
             }
         }
+        // (a player it lists far off: when that player's own last JOIN was for this lobby)
+        let asked = |j: u32| player(slots, list[j as usize]).and_then(|o| o.join).is_some_and(|(id, _)| id == l.id);
         for id in &l.ids[1..(l.n as usize).clamp(1, wire::LOBBY_PLAYERS)] {
-            if let Some(&j) = lids.get(id).filter(|&&j| j != i as u32 && there(j as usize)) {
+            if let Some(&j) = lids.get(id).filter(|&&j| j != i as u32 && (there(j as usize) || asked(j))) {
                 lpairs.push((i as u32, j));
                 lmembers.push((i as u32, j));
             }
@@ -2876,6 +2929,10 @@ fn lobby_pairs(slots: &[Option<Player>], list: &[u32], now: f64, s: &mut Scratch
             // in free roam or paused there (RC_ST_ROAM, RC_ST_PAUSED), as the map's; not of the host's own browser (no
             // link: `one_browser`)
             if j == i || one_browser(vips, i, j) || !player(slots, q).is_some_and(|o| matches!(o.status, 2 | 5)) {
+                continue;
+            }
+            // (a lobby for the host's friends and crew-mates: them alone)
+            if l.private && !matches!((player(slots, slot), player(slots, q)), (Some(h), Some(o)) if mates(h, o)) {
                 continue;
             }
             let d = (pos[j][0] - x).powi(2) + (pos[j][1] - y).powi(2);

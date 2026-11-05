@@ -1,0 +1,19 @@
+# Several lobbies at one start (roam_game.c mp_here, the lobby card's pages), host side, with mprace_pick_b.txt: A opens
+# a lobby at MP_RACE's multiplayer-only spot; B comes to the same start, pages past A's lobby to "open a new lobby" (mp
+# next: the page's E) and opens its own beside it.  A then hears of B's lobby at that start: two lobbies at one start.
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mprace_pick_a.txt --b Bob:mprace_pick_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPRINT_3
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++60   roam mp lobby
++0    roam mp waitlobby 0 12000               # (hosting: another's heard of) B's beside ours
++120  roam mp lobby
++0    log LOBBY DONE
++600  quit
