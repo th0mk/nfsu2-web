@@ -201,7 +201,9 @@ export class Encoder {
     return m;
   }
 
-  /** (re)create the typed views when the wasm memory grew */
+  /** (re)create the typed views when the wasm memory grew.  The queue's writes take a subarray of just their bytes,
+   *  never u8 with an offset: Firefox's WebGPU refuses a view of 2 GB or more (a computer's memory with the guest
+   *  heap's window, host/memory.ts) */
   views(): void {
     const b = this.memory.buffer as unknown as SharedArrayBuffer;
     if (b === this.sab) return;
@@ -242,7 +244,7 @@ export class Encoder {
           } break;
         case Op.TexFree: if (this.watchTex.has(a0)) this.log(`[watch] tex ${a0} free`); this.texFree(a0); break;
         case Op.PoolGrow: this.poolGrow(a0); break;
-        case Op.PoolWrite: if (this.pool && a0 + a1 <= this.pool.size) this.queue.writeBuffer(this.pool, a0, this.u8, data, a1); break;
+        case Op.PoolWrite: if (this.pool && a0 + a1 <= this.pool.size) this.queue.writeBuffer(this.pool, a0, this.u8.subarray(data, data + a1)); break;
         case Op.ShaderVs: case Op.ShaderPs: {
           const text = new TextDecoder().decode(this.u8.slice(data, data + Math.max(0, a1 - 1)));
           const mod = this.module(`${op === Op.ShaderVs ? 'vs' : 'ps'}_${a0}`, text);
@@ -368,7 +370,7 @@ export class Encoder {
       this.queue.writeTexture(dst, unpackDxt(t.fmt, this.u8, data, pitch, lw, lh, this.unpackBuf), { bytesPerRow: lw * 4, rowsPerImage: lh }, [lw, lh, 1]);
       return;
     }
-    this.queue.writeTexture(dst, this.u8, { offset: data, bytesPerRow: pitch, rowsPerImage: rows }, [w, h, 1]);
+    this.queue.writeTexture(dst, this.u8.subarray(data, data + pitch * rows), { bytesPerRow: pitch, rowsPerImage: rows }, [w, h, 1]);
   }
 
   private poolGrow(size: number): void {
@@ -658,9 +660,9 @@ export class Encoder {
 
     // arenas: one writeBuffer each, in the queue before this frame's submit
     const SV = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, UV = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
-    if (vn) { this.tvBuf = this.grow(this.tvBuf, vn * P.TVERT_BYTES, 'tvert', SV); this.queue.writeBuffer(this.tvBuf, 0, this.u8, u32[fw + F.tv], vn * P.TVERT_BYTES); }
-    if (rvn) { const n = (rvn + 3) & ~3; this.rawBuf = this.grow(this.rawBuf, n, 'raw', SV); this.queue.writeBuffer(this.rawBuf, 0, this.u8, u32[fw + F.raw], n); }
-    if (kn) { const n = (kn + 3) & ~3; this.kBuf = this.grow(this.kBuf, n + KWIN_SIZE, 'vsconst', UV); this.queue.writeBuffer(this.kBuf, 0, this.u8, u32[fw + F.k], n); }
+    if (vn) { this.tvBuf = this.grow(this.tvBuf, vn * P.TVERT_BYTES, 'tvert', SV); this.queue.writeBuffer(this.tvBuf, 0, this.u8.subarray(u32[fw + F.tv], u32[fw + F.tv] + vn * P.TVERT_BYTES)); }
+    if (rvn) { const n = (rvn + 3) & ~3; this.rawBuf = this.grow(this.rawBuf, n, 'raw', SV); this.queue.writeBuffer(this.rawBuf, 0, this.u8.subarray(u32[fw + F.raw], u32[fw + F.raw] + n)); }
+    if (kn) { const n = (kn + 3) & ~3; this.kBuf = this.grow(this.kBuf, n + KWIN_SIZE, 'vsconst', UV); this.queue.writeBuffer(this.kBuf, 0, this.u8.subarray(u32[fw + F.k], u32[fw + F.k] + n)); }
     this.pBuf = this.grow(this.pBuf, (dn + 1) * PSLOT, 'pspar', UV);
     if (this.pStage.length < (dn + 1) * (PSLOT / 4)) this.pStage = new Float32Array((dn + 64) * (PSLOT / 4));
     const ps = this.pStage;

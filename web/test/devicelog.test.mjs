@@ -96,7 +96,7 @@ test("free roam's world map: 2048 other players on a phone, the file's 4096 on t
   assert.equal(on(mac, 0, 1512, 982, false), undefined);                           // a Mac
 });
 
-test("the guest heap's window: computers only, not Safari or Firefox, not under 8 GB where the browser says", () => {
+test("the guest heap's window: computers only, not Safari, not under 8 GB where the browser says", () => {
   const chromeWin = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36';
   const firefox = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0';
   const safariMac = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15';
@@ -104,7 +104,7 @@ test("the guest heap's window: computers only, not Safari or Firefox, not under 
   const android = 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36';
   assert.equal(heapWindow('pc', chromeWin, 8), true);
   assert.equal(heapWindow('pc', chromeMac, 8), true);
-  assert.equal(heapWindow('pc', firefox, undefined), false, "Firefox: its WebGPU takes no view into a 2 GB memory");
+  assert.equal(heapWindow('pc', firefox, undefined), true, 'Firefox says no memory');
   assert.equal(heapWindow('pc', chromeWin, 4), false, '4 GB');
   assert.equal(heapWindow('pc', safariMac, undefined), false, 'Safari on a Mac');
   assert.equal(heapWindow('phone', android, 8), false);
