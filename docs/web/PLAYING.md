@@ -526,9 +526,9 @@ Room set, the Room row says how many are in that room.
   is seen, from the first diamond to the last; the last one's message says it, and the Achievements tab has your
   quickest, Treasure hunter (1, 10 and 50 days) and Daily driver (3, 7 and 30 days in a row). Your time goes to the
   server: the Achievements tab shows how many players found all 15 that day and the 5 quickest, by their claimed names
-  (**Online, Your name**: a claim needs cloud saves, see section 5); a player without one is counted, not listed. The server keeps a player's first
-  time of the day, of the last 7 days. The minimap's and the world map's stars need **Free roam with others** on
-  (section 6); the rest works without it.
+  (**Online, Your name**: a claim needs cloud saves, see section 5); a player without one is counted, not listed. The
+  server keeps a player's first time of the day, of the last 7 days. The minimap's and the world map's stars need
+  **Free roam with others** on (section 6); the rest works without it.
 
 ## 6. Free roam with other players
 
