@@ -269,8 +269,9 @@ that room.
   Thai, Portuguese (Brazil), Polish, Turkish, Hungarian, Ukrainian or Bulgarian, for the menus and all the game's text. Where the
   server has the language packs, French, German, Italian, Spanish, Japanese and Russian also play with
   their dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish,
-  Turkish, Hungarian, Ukrainian and Bulgarian with their text at all. Without the packs those six play in English, and the other
-  languages with English voices and movies. Your browser fetches only your language's files: the dubbed voices are
+  Turkish, Hungarian, Ukrainian and Bulgarian with their text at all. Without a pack a language plays English voices and
+  movies with its own text; Russian, Portuguese, Polish, Turkish, Hungarian, Ukrainian and Bulgarian play wholly in English.
+  Your browser fetches only your language's files: the dubbed voices are
   about 50 MB (Russian 94 MB), and the dubbed movies are smaller than the English ones they replace. Hungarian's
   text writes ő and ű as õ and û, as its translation does: the game's fonts have no ő or ű. The start page follows the
   same choice (the list at its top sets it too): its text, settings and messages in that language, English until you

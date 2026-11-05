@@ -4,7 +4,8 @@
 TraduMix's and MixMods' Brazilian Portuguese translation, from PLProjekt's
 Polish one, from VileStuff's English subtitles, from muntazam's Turkish
 translation (its fonts, with tools/lang/turkish.json's text), from GameHunter's
-Hungarian one and from Clark X.'s Ukrainian one.
+Hungarian one, from Clark X.'s Ukrainian one and from StoyanKolev (IVANOFF)'s
+Bulgarian one.
 
     tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>]
                        [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]
@@ -102,6 +103,14 @@ their glyph table, the rest in Russian's order; also its memory-card texts and
 credits.  The rest of the installer is not used: a GlobalB.lzc that differs
 from the game's in one byte (the ™ of a shave gel's name) and two files the
 game never reads (LANGUAGES/Labels.bin, Largest.bin).
+
+<translation folder> (--bg) is StoyanKolev (IVANOFF)'s Bulgarian translation
+(ivanoff.free.bg), its installer unpacked with `innoextract` where it is an
+Inno Setup one, never run; or any folder below which it has
+LANGUAGES/English.bin and GLOBAL/GLOBALA.BUN.  Bulgarian takes English's place
+as Ukrainian does, on the Russian pack's fonts (its LanguageTextures.bin and
+GLOBALA.BUN are those): its text in Cyrillic; also its memory-card texts and
+credits.
 Rerunning it copies only what changed, each as a new file (a copy of the game
 folder made of hard links keeps its own).  Prints what each pack holds.
 """
@@ -190,7 +199,7 @@ UK = [
     ('CREDITS/UK_ENGLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
 ]
 # Bulgarian: (file in the translation, the game's file it stands in for)
-BG: list[tuple[str, str]] = [
+BG = [
     ('LANGUAGES/English.bin', 'LANGUAGES/English.bin'),
     ('LANGUAGES/LanguageTextures.bin', 'LANGUAGES/LanguageTextures.bin'),
     ('GLOBAL/GLOBALA.BUN', 'GLOBAL/GLOBALA.BUN'),
@@ -424,7 +433,7 @@ def bg(src, game):
     if p.same_as_game('LANGUAGES/English.bin', src=find(root, 'LANGUAGES/English.bin')):
         sys.exit(f'{root}: its LANGUAGES/English.bin is the game\'s own, not the translation')
     for s, rel in BG: p.add_file(find(root, s), rel)
-    done(p, 'bulgarian')    
+    done(p, 'bulgarian')
 
 
 STRINGS = 0x39000           # a language file's text: its chunk's id
@@ -530,7 +539,7 @@ def main():
     ap.add_argument('--tr', metavar='FOLDER', help='the Turkish translation, its installer extracted (innoextract), never run')
     ap.add_argument('--hu', metavar='INSTALLER', help='the Hungarian translation\'s installer (or its folder), never run')
     ap.add_argument('--uk', metavar='FOLDER', help='the Ukrainian translation, its installer extracted (innoextract), never run')
-    ap.add_argument('--bg', metavar='FOLDER', help='the Bulgarian translation, its installer extracted (innoextract), never run')
+    ap.add_argument('--bg', metavar='FOLDER', help='the Bulgarian translation, its installer extracted (innoextract) where it has one, never run')
     a = ap.parse_args()
     if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr or a.hu or a.uk or a.bg): sys.exit(__doc__)
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')

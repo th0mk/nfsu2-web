@@ -755,7 +755,7 @@ export function peersBad(v: string): string | null {
     const pm = /^:(\d+)/.exec(rest);
     if (pm) { got = rest.length > pm[0].length ? 6 : 5; pt = scanU32(pm[1]); }
     if ((got !== 4 && got !== 5) || [m[1], m[2], m[3], m[4]].some(x => scanU32(x) > 255) || pt === 0 || pt > 65535 ||
-      (got === 4 && t.includes(':'))) return t;
+        (got === 4 && t.includes(':'))) return t;
   }
   return null;
 }
@@ -898,7 +898,7 @@ export interface Resolved {
  * (device.ts: a phone's), below the file and the environment.
  */
 export function resolveEnv(text: string | null, environment: Record<string, string>, host: Record<string, string>,
-  device: Record<string, string> = {}): Resolved {
+                           device: Record<string, string> = {}): Resolved {
   const env: Record<string, string> = { ...environment };
   const source: Record<string, Source> = {};
   for (const k of Object.keys(env)) source[k] = 'environment';
