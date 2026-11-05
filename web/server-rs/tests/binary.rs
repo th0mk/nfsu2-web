@@ -1186,7 +1186,7 @@ async fn free_roams_friends_through_the_server() {
         }
     };
     // the start page: its own lists; no keyphrase, another site, a keyphrase without a name
-    assert_eq!(lists('A').await, serde_json::json!({ "me": "Al_", "done": "ok", "friends": [], "asks": [], "sent": [], "mail": [] }));
+    assert_eq!(lists('A').await, serde_json::json!({ "me": "Al_", "done": "ok", "friends": [], "asks": [], "sent": [], "mail": [], "contact": null }));
     assert_eq!(http(port, "GET", "/friends", &[], "").await.0, 401);
     assert_eq!(http(port, "GET", "/friends", &[("authorization", &bearer('A')), ("sec-fetch-site", "cross-site")], "").await.0, 403);
     assert_eq!(http(port, "GET", "/friends", &[("authorization", &bearer('A')), ("origin", "https://evil.example")], "").await.0, 403);
@@ -1328,6 +1328,20 @@ async fn free_roams_friends_through_the_server() {
     ask(&al, "add", "Bo");
     ask(&bo, "add", "Al");
     let _ = bo.until_ms(4000, move |g| friend_msgs(g, kb).into_iter().find(|m| m["op"] == "list" && m["friends"] == serde_json::json!(["Al_"]))).await;
+    // a Discord username from the start page: Discord's form only; Bo sees it on the start page and in the game
+    assert_eq!(post('A', "discord", "Al Races").await["done"], "name");
+    let r = post('A', "discord", "@Al.Races").await;
+    assert_eq!((r["done"].as_str(), r["contact"].as_str()), (Some("ok"), Some("al.races")), "{r}");
+    assert_eq!(lists('B').await["friends"], serde_json::json!([{ "name": "Al_", "where": "roam", "room": "", "contact": "al.races" }]));
+    let kb = n(&bo);
+    ask(&bo, "where", "");
+    assert_eq!(first(&bo, "where", kb).await["friends"][0]["contact"], "al.races");
+    // five changes, then one every 10 s
+    let mut dones = Vec::new();
+    for _ in 0..4 {
+        dones.push(post('A', "discord", "al.races").await["done"].as_str().unwrap().to_string());
+    }
+    assert_eq!(dones, ["ok", "ok", "ok", "rate"]);
     for x in [al, bo, cy, dee] {
         x.close().await;
     }
@@ -1339,12 +1353,15 @@ async fn free_roams_friends_through_the_server() {
         "\"Al_\" sent \"Bo_\" a message (got it)",
         "\"Al_\" sent \"Bo_\" a message (away, it waits)",
         "\"Al_\" asked \"Cy_\" to be friends (the start page)",
+        "\"Al_\" set a Discord name",
     ] {
         assert!(lines.iter().any(|x| x.contains(l)), "{l}: {lines:?}");
     }
+    assert!(!lines.iter().any(|x| x.contains("al.races")), "the log never has it");
     let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--vault-gb", "1"]), port);
     srv.ready().await;
     assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "" }]), "over the restart");
+    assert_eq!(lists('B').await["friends"], serde_json::json!([{ "name": "Al_", "where": "", "contact": "al.races" }]), "over the restart");
     // the limits: a page's friend messages (10, then one every 2 s), a client's reads of /friends (60, then one a second)
     let al = page("Al", Some('A'), 706, 0.0).await;
     sleep(300).await;

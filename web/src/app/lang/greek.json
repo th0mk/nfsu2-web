@@ -624,7 +624,6 @@
   "Career status": "Κατάσταση καριέρας",
   "today at {time}": "σήμερα στις {time}",
   "Quit the game first.": "Κλείσε πρώτα το παιχνίδι.",
-  "Copied.": "Αντιγράφηκε.",
   "Show passphrase": "Εμφάνιση φράσης πρόσβασης",
   "Hide passphrase": "Απόκρυψη φράσης πρόσβασης",
   "Saves from your other browser came in ({when}).": "Έφτασαν αποθηκεύσεις από το άλλο πρόγραμμα περιήγησής σου ({when}).",
@@ -1176,7 +1175,6 @@
   "Set up the radio": "Ρύθμιση τηλεχειριστηρίου",
   "The radio went away before its set-up was done.": "Το τηλεχειριστήριο αποσυνδέθηκε πριν ολοκληρωθεί η ρύθμισή του.",
   "no # or ; after a space in a room name": "δεν επιτρέπονται # ή ; μετά από κενό σε όνομα δωματίου",
-  "Invite link copied: {link}": "Ο σύνδεσμος πρόσκλησης αντιγράφηκε: {link}",
   "Copy this invite link: {link}": "Αντέγραψε αυτόν τον σύνδεσμο πρόσκλησης: {link}",
   "Copy an invite link to crew {name}": "Αντιγραφή συνδέσμου πρόσκλησης στην ομάδα {name}",
   "Copy an invite link to this room": "Αντιγραφή συνδέσμου πρόσκλησης σε αυτό το δωμάτιο",
@@ -1429,5 +1427,14 @@
   "{n} screenshots were not deleted: {error}": {
     "one": "{n} στιγμιότυπο δεν διαγράφηκε: {error}",
     "other": "{n} στιγμιότυπα δεν διαγράφηκαν: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Αντιγραφή ονόματος Discord {name}",
+  "Copied {name}": "Αντιγράφηκε: {name}",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Αντιγράφηκε",
+  "Discord username": "Όνομα χρήστη Discord",
+  "Your Discord": "Το Discord σου",
+  "Only your friends see it, so they can add you on Discord.": "Το βλέπουν μόνο οι φίλοι σου, για να σε προσθέσουν στο Discord.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Δεν είναι όνομα χρήστη Discord: 2 έως 32 πεζά γράμματα, ψηφία, _ ή .",
+  "Not saved: try again in a moment": "Δεν αποθηκεύτηκε: δοκίμασε ξανά σε λίγο"
 }

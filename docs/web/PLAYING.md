@@ -767,14 +767,18 @@ Good to know:
   does a race, an outrun or a race lobby. Both of you need a claimed name ("Your name": a claim needs cloud saves);
   without one the line says so. Your friends are listed in the start page's **Friends & crews** tab, one line
   each: where each one plays now after the name (free roam and its room, the game's Online lobby, offline),
-  with a Join arrow to drive in their room, an envelope for your messages (lime with a dot while some are unread) and
-  a grey bin to remove them; a request you could not answer in the game waits there (30 days), with ✓ and ✕, and one
+  with a Join arrow to drive in their room, Discord's mark when they gave their Discord username (a click copies it,
+  for Discord's Add Friend), an envelope for your messages (lime with a dot while some are unread) and a grey bin to
+  remove them; a request you could not answer in the game waits there (30 days), with ✓ and ✕, and one
   you sent has a ✕ to take it back. Under the list, **Add a player by name** sends a request to a player who is not
   near you: type their name (a claimed one) and press Enter or +; they get it in the game, or there, and answer it.
+  **Your Discord**, under it, is your Discord username for your friends (and nobody else) to add you on Discord: only
+  a username as Discord has them fits (2 to 32 small letters, digits, _ or .), and an empty field takes it away.
   In free roam the server pairs friends first, as crew-mates, so you see each other however busy it is: a friend's
   name over the car shows at any distance, in a pale lime white (a friend in one of your crews has the crew's colour),
   and so do their arrows on the minimap and the world map. When a friend comes into free roam, the notices on the left
-  say so; the page menu then has **Friends**: who is in free roam, with **Join** for one in another room. A friend is a
+  say so; the page menu then has **Friends**: who is in free roam, with **Join** for one in another room and Discord's
+  mark to copy one's Discord username. A friend is a
   friend in the game's Online mode too (EA Messenger), up to 50. In free roam the server takes a request only between
   two players whose cars are within 30 m of each other; by name, from the start page, five at once and then one every
   30 seconds (a player you block in EA Messenger never sends you one again). Your friends see the name of

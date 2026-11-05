@@ -24,6 +24,7 @@ import { unzip, zip } from './zip';
 import { contentHash, kept, keeps, keptBy, keysOf, profilesIn, readPhrase, sideOf, vaultAvailable, VaultError, VaultSync, type Link, type Remote, type SaveFile, type Side, type SyncState } from './vault';
 import { codeOf, dateLocale, listOf, live, N, t, tn, tvars, type Msg } from './i18n';
 import { canKeep, keepPhrase, keptPhrase, markOf } from './pwkeep';
+import { copyToast } from './copy';
 
 export interface VaultPanelDeps {
   saveDir: string;
@@ -269,7 +270,8 @@ export class VaultPanel {
       if (this.hidden || !this.input.value) return;
       this.input.focus(); this.input.select();
       if (!this.sync?.link) return;
-      try { await navigator.clipboard.writeText(this.input.value); this.msg(() => t('Copied.')); } catch { /* the selection is there to copy */ }
+      // (the Clipboard API only: the old way would take the selection away from the box)
+      try { await navigator.clipboard.writeText(this.input.value); copyToast(this.$('#vault-eye')); } catch { /* the selection is there to copy */ }
     });
     on('#vault-file', () => this.download());
     on('#vault-sync', () => this.syncNow());

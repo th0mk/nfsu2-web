@@ -612,7 +612,6 @@
   "Career status": "キャリアステータス",
   "today at {time}": "今日 {time}",
   "Quit the game first.": "先にゲームを終了してください。",
-  "Copied.": "コピーしました。",
   "Show passphrase": "パスフレーズを表示",
   "Hide passphrase": "パスフレーズを隠す",
   "Saves from your other browser came in ({when}).": "別のブラウザからセーブデータが届きました（{when}）。",
@@ -1161,7 +1160,6 @@
   "Set up the radio": "プロポを設定",
   "The radio went away before its set-up was done.": "設定が終わる前に、プロポが切断されました。",
   "no # or ; after a space in a room name": "ルーム名では、スペースの後に # や ; は使えません",
-  "Invite link copied: {link}": "招待リンクをコピーしました: {link}",
   "Copy this invite link: {link}": "この招待リンクをコピーしてください: {link}",
   "Copy an invite link to crew {name}": "クルー「{name}」の招待リンクをコピー",
   "Copy an invite link to this room": "このルームの招待リンクをコピー",
@@ -1405,5 +1403,14 @@
   "Delete all": "すべて削除",
   "Delete {n} screenshots ({size})?": "{n}枚のスクリーンショット（{size}）を削除しますか？",
   "They are deleted from this browser; downloaded backups keep their copies.": "このブラウザから削除されます。ダウンロード済みのバックアップには、そのコピーが残ります。",
-  "{n} screenshots were not deleted: {error}": "{n}枚のスクリーンショットを削除できませんでした: {error}"
+  "{n} screenshots were not deleted: {error}": "{n}枚のスクリーンショットを削除できませんでした: {error}",
+  "Copy Discord name {name}": "Discord の名前 {name} をコピー",
+  "Copied {name}": "{name} をコピーしました",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "コピーしました",
+  "Discord username": "Discord のユーザー名",
+  "Your Discord": "あなたの Discord",
+  "Only your friends see it, so they can add you on Discord.": "フレンドにだけ表示され、Discord であなたを追加できます。",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Discord のユーザー名ではありません。小文字の英字、数字、_、. で2～32文字。",
+  "Not saved: try again in a moment": "保存できませんでした。少ししてからもう一度お試しください"
 }

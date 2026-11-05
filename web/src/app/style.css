@@ -859,13 +859,23 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   content: ""; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--lime);
   box-shadow: 0 0 0 2px var(--panel);
 }
-.fl-contact { flex-basis: 100%; margin-top: -8px; padding-bottom: 8px; color: var(--muted); font-size: 14px; line-height: 20px; }
+.fl .fl-discord svg { fill: currentColor; stroke: none; }   /* (Discord's mark is a filled shape, the others are lines) */
 #friends > .set { box-shadow: inset 0 1px var(--line); }   /* under the Crews row, as the rows of a group */
 /* a request by name (friends.ts addField): the Crews row's box (its field's rules) under the list, a setting's 240 px
  * (the row's width on a phone), what the last one did under it */
 .fl-add { flex: none; width: 240px; }
 .friends-pop-box { margin-bottom: 16px; }
 .friends-pop-box .hint:last-child { margin-bottom: 0; }
+/* a copy button's toast (copy.ts copyToast): small, over the button (under it, .below, with no room above), in the top
+ * layer as a popover (its own box and place, not the browser's), gone after a moment */
+.copy-toast {
+  position: fixed; inset: auto; margin: 0; z-index: 30; width: max-content; max-width: calc(100vw - 16px); overflow: visible;
+  padding: 4px 12px; border: 0; border-radius: 8px; background: var(--field); color: var(--text); box-shadow: inset 0 0 0 1px var(--line);
+  font: 400 14px/20px var(--font); pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity 0.15s, transform 0.15s;
+}
+.copy-toast.below { transform: translateY(-4px); }
+.copy-toast.on { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .copy-toast, .copy-toast.below { transform: none; } }
 /* the away check (away.ts): in the middle, until the player is back; a kick or a ban (shell.ts netRemoved) the same,
  * over the touch controls it leaves; upright, in the middle of the picture */
 .toast.away {

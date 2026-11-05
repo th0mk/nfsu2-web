@@ -877,7 +877,6 @@
   "How far a trigger travels before it counts as fully pressed.": "Ako ďaleko treba spúšťač stlačiť, aby sa rátal ako úplne stlačený.",
   "Read only: the game runs in another tab. Change settings there; this tab takes over when it closes.": "Iba na čítanie: hra beží v inej karte. Nastavenia zmeň tam; keď sa zatvorí, táto karta to prevezme.",
   "Changes apply the next time you press Play.": "Zmeny sa prejavia pri ďalšom stlačení Hrať.",
-  "Invite link copied: {link}": "Odkaz s pozvánkou skopírovaný: {link}",
   "Copy this invite link: {link}": "Skopíruj tento odkaz s pozvánkou: {link}",
   "Colour of {name}": "Farba partie {name}",
   "Change the colour of {name}": "Zmeniť farbu partie {name}",
@@ -975,7 +974,6 @@
   "They could not be turned on. Try again under Cloud saves on the start page.": "Nepodarilo sa ich zapnúť. Skús to znova v časti Uloženia v cloude na úvodnej stránke.",
   "Continue": "Pokračovať",
   "Copy": "Kopírovať",
-  "Copied.": "Skopírované.",
   "Download passphrase": "Stiahnuť prístupovú frázu",
   "{name} is yours, held by this passphrase. Cloud saves are on too.": "Meno {name} je tvoje a drží ho táto prístupová fráza. Zapnuté sú aj uloženia v cloude.",
   "Enter it under Cloud saves on another device to sync your saves.": "Ak chceš synchronizovať uložené hry, zadaj ju v časti Uloženia v cloude na inom zariadení.",
@@ -1545,5 +1543,14 @@
     "few": "{n} snímky obrazovky sa nevymazali: {error}",
     "many": "{n} snímky obrazovky sa nevymazalo: {error}",
     "other": "{n} snímok obrazovky sa nevymazalo: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Skopírovať meno na Discorde {name}",
+  "Copied {name}": "Skopírované: {name}",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Skopírované",
+  "Discord username": "Používateľské meno na Discorde",
+  "Your Discord": "Tvoj Discord",
+  "Only your friends see it, so they can add you on Discord.": "Vidia ho len tvoji priatelia, aby si ťa mohli pridať na Discorde.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Nie je to používateľské meno na Discorde: 2 až 32 malých písmen, číslic, _ alebo .",
+  "Not saved: try again in a moment": "Neuložené: skús to znova o chvíľu"
 }

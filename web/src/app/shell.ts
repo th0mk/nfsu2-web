@@ -76,6 +76,7 @@ import { moviesKept, Predownload } from './predownload';
 import { movieCodec } from '../host/movie';
 import type { Packs } from '../host/datacache';
 import { texSplit } from '../gpu/index';
+import { copyText, copyToast } from './copy';
 
 type Phase = 'boot' | 'ready' | 'error' | 'waiting' | 'starting' | 'playing' | 'exited';
 
@@ -400,8 +401,8 @@ async function showPassphrase(phrase: string, claimed: string | null, taken: str
   const box = Object.assign(document.createElement('p'), { className: 'keyphrase', textContent: phrase });
   const copy = Object.assign(document.createElement('button'), { type: 'button', className: 'text-btn', textContent: t('Copy') });
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(phrase); copy.textContent = t('Copied.'); }
-    catch { getSelection()?.selectAllChildren(box); }
+    if (await copyText(phrase, copy)) copyToast(copy);
+    else getSelection()?.selectAllChildren(box);
   };
   const file = Object.assign(document.createElement('button'), { type: 'button', className: 'text-btn', textContent: t('Download passphrase') });
   file.onclick = () => vault.download();

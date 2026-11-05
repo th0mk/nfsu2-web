@@ -657,7 +657,6 @@
   "Career status": "Carrièrestatus",
   "today at {time}": "vandaag om {time}",
   "Quit the game first.": "Sluit eerst het spel af.",
-  "Copied.": "Gekopieerd.",
   "Show passphrase": "Wachtwoordzin tonen",
   "Hide passphrase": "Wachtwoordzin verbergen",
   "Saves from your other browser came in ({when}).": "Opgeslagen spellen uit je andere browser zijn binnengekomen ({when}).",
@@ -1230,7 +1229,6 @@
   "Set up the radio": "Zender instellen",
   "The radio went away before its set-up was done.": "De zender viel weg voordat het instellen klaar was.",
   "no # or ; after a space in a room name": "geen # of ; na een spatie in een kamernaam",
-  "Invite link copied: {link}": "Uitnodigingslink gekopieerd: {link}",
   "Copy this invite link: {link}": "Kopieer deze uitnodigingslink: {link}",
   "Copy an invite link to crew {name}": "Uitnodigingslink voor crew {name} kopiëren",
   "Copy an invite link to this room": "Uitnodigingslink voor deze kamer kopiëren",
@@ -1489,5 +1487,14 @@
   "{n} screenshots were not deleted: {error}": {
     "one": "{n} screenshot is niet verwijderd: {error}",
     "other": "{n} screenshots zijn niet verwijderd: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Discord-naam {name} kopiëren",
+  "Copied {name}": "{name} gekopieerd",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Gekopieerd",
+  "Discord username": "Discord-gebruikersnaam",
+  "Your Discord": "Je Discord",
+  "Only your friends see it, so they can add you on Discord.": "Alleen je vrienden zien het, zodat ze je op Discord kunnen toevoegen.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Geen Discord-gebruikersnaam: 2 tot 32 kleine letters, cijfers, _ of .",
+  "Not saved: try again in a moment": "Niet opgeslagen: probeer het zo nog eens"
 }

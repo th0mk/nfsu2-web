@@ -612,7 +612,6 @@
   "Career status": "สถานะอาชีพ",
   "today at {time}": "วันนี้ เวลา {time}",
   "Quit the game first.": "ออกจากเกมก่อน",
-  "Copied.": "คัดลอกแล้ว",
   "Show passphrase": "แสดงวลีรหัส",
   "Hide passphrase": "ซ่อนวลีรหัส",
   "Saves from your other browser came in ({when}).": "ได้รับเซฟจากเบราว์เซอร์อื่นของคุณแล้ว ({when})",
@@ -1161,7 +1160,6 @@
   "Set up the radio": "ตั้งค่ารีโมท RC",
   "The radio went away before its set-up was done.": "รีโมท RC หลุดการเชื่อมต่อก่อนตั้งค่าเสร็จ",
   "no # or ; after a space in a room name": "ชื่อห้องห้ามมี # หรือ ; ต่อจากช่องว่าง",
-  "Invite link copied: {link}": "คัดลอกลิงก์เชิญแล้ว: {link}",
   "Copy this invite link: {link}": "คัดลอกลิงก์เชิญนี้: {link}",
   "Copy an invite link to crew {name}": "คัดลอกลิงก์เชิญเข้าทีม {name}",
   "Copy an invite link to this room": "คัดลอกลิงก์เชิญเข้าห้องนี้",
@@ -1405,5 +1403,14 @@
   "Delete all": "ลบทั้งหมด",
   "Delete {n} screenshots ({size})?": "ต้องการลบภาพหน้าจอ {n} ภาพ ({size}) หรือไม่",
   "They are deleted from this browser; downloaded backups keep their copies.": "ภาพจะถูกลบออกจากเบราว์เซอร์นี้ ไฟล์สำรองที่ดาวน์โหลดไว้ยังมีสำเนาอยู่",
-  "{n} screenshots were not deleted: {error}": "ลบภาพหน้าจอ {n} ภาพไม่สำเร็จ: {error}"
+  "{n} screenshots were not deleted: {error}": "ลบภาพหน้าจอ {n} ภาพไม่สำเร็จ: {error}",
+  "Copy Discord name {name}": "คัดลอกชื่อ Discord {name}",
+  "Copied {name}": "คัดลอก {name} แล้ว",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "คัดลอกแล้ว",
+  "Discord username": "ชื่อผู้ใช้ Discord",
+  "Your Discord": "Discord ของคุณ",
+  "Only your friends see it, so they can add you on Discord.": "เห็นได้เฉพาะเพื่อนของคุณ เพื่อให้เพิ่มคุณใน Discord ได้",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "ไม่ใช่ชื่อผู้ใช้ Discord: ตัวอักษรพิมพ์เล็ก ตัวเลข _ หรือ . จำนวน 2 ถึง 32 ตัว",
+  "Not saved: try again in a moment": "บันทึกไม่สำเร็จ: ลองใหม่อีกครั้งในอีกสักครู่"
 }

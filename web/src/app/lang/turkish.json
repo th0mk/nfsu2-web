@@ -621,7 +621,6 @@
   "Career status": "Kariyer durumu",
   "today at {time}": "bugün {time}",
   "Quit the game first.": "Önce oyundan çık.",
-  "Copied.": "Kopyalandı.",
   "Show passphrase": "Parola ifadesini göster",
   "Hide passphrase": "Parola ifadesini gizle",
   "Saves from your other browser came in ({when}).": "Diğer tarayıcındaki kayıtlar geldi ({when}).",
@@ -1170,7 +1169,6 @@
   "Set up the radio": "RC kumandayı ayarla",
   "The radio went away before its set-up was done.": "RC kumanda, ayarı tamamlanmadan bağlantıdan koptu.",
   "no # or ; after a space in a room name": "oda adında boşluktan sonra # veya ; olamaz",
-  "Invite link copied: {link}": "Davet bağlantısı kopyalandı: {link}",
   "Copy this invite link: {link}": "Bu davet bağlantısını kopyala: {link}",
   "Copy an invite link to crew {name}": "{name} ekibi için davet bağlantısı kopyala",
   "Copy an invite link to this room": "Bu oda için davet bağlantısı kopyala",
@@ -1414,5 +1412,14 @@
   "Delete all": "Tümünü sil",
   "Delete {n} screenshots ({size})?": "{n} ekran görüntüsü ({size}) silinsin mi?",
   "They are deleted from this browser; downloaded backups keep their copies.": "Bu tarayıcıdan silinirler; indirilen yedeklerdeki kopyaları kalır.",
-  "{n} screenshots were not deleted: {error}": "{n} ekran görüntüsü silinemedi: {error}"
+  "{n} screenshots were not deleted: {error}": "{n} ekran görüntüsü silinemedi: {error}",
+  "Copy Discord name {name}": "Discord adını kopyala: {name}",
+  "Copied {name}": "{name} kopyalandı",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Kopyalandı",
+  "Discord username": "Discord kullanıcı adı",
+  "Your Discord": "Discord'un",
+  "Only your friends see it, so they can add you on Discord.": "Yalnızca arkadaşların görür, böylece seni Discord'da ekleyebilirler.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Discord kullanıcı adı değil: 2 ila 32 küçük harf, rakam, _ ya da .",
+  "Not saved: try again in a moment": "Kaydedilemedi: birazdan tekrar dene"
 }

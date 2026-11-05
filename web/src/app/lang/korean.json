@@ -612,7 +612,6 @@
   "Career status": "커리어 현황",
   "today at {time}": "오늘 {time}",
   "Quit the game first.": "먼저 게임을 종료하세요.",
-  "Copied.": "복사했어요.",
   "Show passphrase": "암호 문구 보기",
   "Hide passphrase": "암호 문구 숨기기",
   "Saves from your other browser came in ({when}).": "다른 브라우저의 저장 데이터가 들어왔어요({when}).",
@@ -1161,7 +1160,6 @@
   "Set up the radio": "조종기 설정",
   "The radio went away before its set-up was done.": "설정이 끝나기 전에 조종기 연결이 끊어졌어요.",
   "no # or ; after a space in a room name": "방 이름에는 공백 뒤에 # 또는 ;를 쓸 수 없음",
-  "Invite link copied: {link}": "초대 링크를 복사했어요: {link}",
   "Copy this invite link: {link}": "이 초대 링크를 복사하세요: {link}",
   "Copy an invite link to crew {name}": "{name} 크루 초대 링크 복사",
   "Copy an invite link to this room": "이 방의 초대 링크 복사",
@@ -1405,5 +1403,14 @@
   "Delete all": "모두 삭제",
   "Delete {n} screenshots ({size})?": "스크린샷 {n}개({size})를 삭제할까요?",
   "They are deleted from this browser; downloaded backups keep their copies.": "이 브라우저에서 삭제돼요. 다운로드한 백업에는 사본이 남아 있어요.",
-  "{n} screenshots were not deleted: {error}": "스크린샷 {n}개를 삭제하지 못했어요: {error}"
+  "{n} screenshots were not deleted: {error}": "스크린샷 {n}개를 삭제하지 못했어요: {error}",
+  "Copy Discord name {name}": "Discord 이름 {name} 복사",
+  "Copied {name}": "{name} 복사했어요",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "복사했어요",
+  "Discord username": "Discord 사용자명",
+  "Your Discord": "내 Discord",
+  "Only your friends see it, so they can add you on Discord.": "친구만 볼 수 있어요. 친구가 Discord에서 나를 추가할 수 있어요.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Discord 사용자명이 아니에요. 영문 소문자, 숫자, _, .로 2~32자.",
+  "Not saved: try again in a moment": "저장하지 못했어요. 잠시 후 다시 시도해 주세요"
 }

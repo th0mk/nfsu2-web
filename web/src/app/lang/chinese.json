@@ -612,7 +612,6 @@
   "Career status": "生涯狀態",
   "today at {time}": "今天 {time}",
   "Quit the game first.": "請先結束遊戲。",
-  "Copied.": "已複製。",
   "Show passphrase": "顯示通關密語",
   "Hide passphrase": "隱藏通關密語",
   "Saves from your other browser came in ({when}).": "已收到你另一個瀏覽器的存檔（{when}）。",
@@ -1161,7 +1160,6 @@
   "Set up the radio": "設定遙控器",
   "The radio went away before its set-up was done.": "遙控器在設定完成前就中斷連線了。",
   "no # or ; after a space in a room name": "房間名稱中，空格後面不能接 # 或 ;",
-  "Invite link copied: {link}": "已複製邀請連結：{link}",
   "Copy this invite link: {link}": "請複製這個邀請連結：{link}",
   "Copy an invite link to crew {name}": "複製車隊「{name}」的邀請連結",
   "Copy an invite link to this room": "複製這個房間的邀請連結",
@@ -1405,5 +1403,14 @@
   "Delete all": "全部刪除",
   "Delete {n} screenshots ({size})?": "要刪除 {n} 張截圖（{size}）嗎？",
   "They are deleted from this browser; downloaded backups keep their copies.": "它們將從此瀏覽器中刪除；已下載的備份仍保有它們的副本。",
-  "{n} screenshots were not deleted: {error}": "有 {n} 張截圖未能刪除：{error}"
+  "{n} screenshots were not deleted: {error}": "有 {n} 張截圖未能刪除：{error}",
+  "Copy Discord name {name}": "複製 Discord 名稱 {name}",
+  "Copied {name}": "已複製 {name}",
+  "Discord: {name}": "Discord：{name}",
+  "Copied": "已複製",
+  "Discord username": "Discord 使用者名稱",
+  "Your Discord": "你的 Discord",
+  "Only your friends see it, so they can add you on Discord.": "只有你的好友看得到，方便他們在 Discord 上加你。",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "不是 Discord 使用者名稱：2 到 32 個字元，可用小寫字母、數字、_ 或 .",
+  "Not saved: try again in a moment": "未儲存：請稍後再試"
 }

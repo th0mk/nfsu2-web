@@ -22,6 +22,7 @@ import { FLAG_CODES, FLAG_H, FLAG_SHEET_COLS, FLAG_W, flagAt, flagCode, flagName
 const FLAG_SHOWN = 2 / 3;
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
 import { SITE_KEYS } from './sitekeys';
+import { copyText, copyToast } from './copy';
 
 type Control =
   | { t: 'switch' }
@@ -151,16 +152,12 @@ export function iconButton(cls: string, name: string, path: string): HTMLButtonE
 const PLUS = 'M12 5v14M5 12h14', CROSS = 'M6 6l12 12M18 6L6 18', PERSON = 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7';
 const LINK = 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1';
 
-/** An invite link onto the clipboard; what to tell the player (in the page's language), the link in it either way:
- *  copied, or to copy by hand where the browser refused (an older WebView, a page without the focus). */
-export async function copyLink(link: string): Promise<string> {
-  try { await navigator.clipboard.writeText(link); return t('Invite link copied: {link}', { link }); } catch { /* the old way, then */ }
-  const ta = document.createElement('textarea'); ta.value = link; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0';
-  document.body.append(ta); ta.select();
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch { /* none */ }
-  ta.remove();
-  return ok ? t('Invite link copied: {link}', { link }) : t('Copy this invite link: {link}', { link });
+/** An invite link onto the clipboard from its button `at`, and a toast at the button says so (copy.ts); where the
+ *  browser refused (an older WebView, a page without the focus), what to tell the player instead (in the page's
+ *  language), the link in it to copy by hand.  null: copied. */
+export async function copyLink(link: string, at: HTMLElement): Promise<string | null> {
+  if (await copyText(link, at)) { copyToast(at); return null; }
+  return t('Copy this invite link: {link}', { link });
 }
 
 /** What a crews control shows and does: the Crews row's, and the page menu's while a game is in free roam */
@@ -208,7 +205,8 @@ export function crewControl(o: CrewControl, ctl: HTMLElement): HTMLInputElement 
     text.append(nm, n);
     const share = iconButton('crew-link', t('Copy an invite link to crew {name}', { name: c.name }), LINK);
     share.onclick = async () => {
-      const said = await copyLink(o.link(c.name));
+      const said = await copyLink(o.link(c.name), share);
+      if (said === null) return;
       if (o.said) { o.said(said); return; }
       note.textContent = said; note.classList.remove('warn');
     };
@@ -789,7 +787,8 @@ export class SettingsPanel {
         share.onclick = async () => {
           const r = checkRoom(inp.value);
           if (!r.ok) { if (r.why) this.deps.say?.(t('Not saved: {key} = {why}.', { key: it.key, why: tvars(r.why, r.v ?? {}) })); return; }
-          this.deps.say?.(await copyLink(inviteLink(location.origin, { room: r.name })));
+          const said = await copyLink(inviteLink(location.origin, { room: r.name }), share);
+          if (said !== null) this.deps.say?.(said);
         };
         box.append(inp, share);
         ctl.append(box);

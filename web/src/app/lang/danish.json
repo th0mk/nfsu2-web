@@ -657,7 +657,6 @@
   "Career status": "Karrierestatus",
   "today at {time}": "i dag kl. {time}",
   "Quit the game first.": "Afslut spillet først.",
-  "Copied.": "Kopieret.",
   "Show passphrase": "Vis adgangssætning",
   "Hide passphrase": "Skjul adgangssætning",
   "Saves from your other browser came in ({when}).": "Gemte spil fra din anden browser er kommet ({when}).",
@@ -1230,7 +1229,6 @@
   "Set up the radio": "Indstil senderen",
   "The radio went away before its set-up was done.": "Senderen forsvandt, før indstillingen var færdig.",
   "no # or ; after a space in a room name": "ingen # eller ; efter et mellemrum i et rumnavn",
-  "Invite link copied: {link}": "Invitationslink kopieret: {link}",
   "Copy this invite link: {link}": "Kopiér dette invitationslink: {link}",
   "Copy an invite link to crew {name}": "Kopiér et invitationslink til crewet {name}",
   "Copy an invite link to this room": "Kopiér et invitationslink til dette rum",
@@ -1489,5 +1487,14 @@
   "{n} screenshots were not deleted: {error}": {
     "one": "{n} skærmbillede blev ikke slettet: {error}",
     "other": "{n} skærmbilleder blev ikke slettet: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Kopiér Discord-navnet {name}",
+  "Copied {name}": "Kopieret: {name}",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Kopieret",
+  "Discord username": "Discord-brugernavn",
+  "Your Discord": "Din Discord",
+  "Only your friends see it, so they can add you on Discord.": "Kun dine venner kan se det, så de kan tilføje dig på Discord.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Ikke et Discord-brugernavn: 2 til 32 små bogstaver, cifre, _ eller .",
+  "Not saved: try again in a moment": "Ikke gemt: prøv igen om lidt"
 }

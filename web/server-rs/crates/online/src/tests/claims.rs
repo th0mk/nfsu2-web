@@ -486,3 +486,53 @@ fn a_one_way_friend_is_told_nothing() {
     assert_eq!(w.core.friends(&v, &g, Answer("Mallory".into(), true)).done, "friends");
     assert_eq!(w.core.friends(&a, &g, List).friends, [row("Victim", true), row("Bravo", false)]);
 }
+
+// a page's Discord username: Discord's form only (taken as typed, with a leading @ and capitals let go), not one the
+// name filter refuses; its friends both ways see it on their lists, nobody else; "" takes it away; kept over a
+// restart; the log says it changed, never what it is
+#[test]
+fn pages_give_friends_a_discord_name() {
+    use crate::buddy::FriendAsk::{Ask, Discord, List, Remove};
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("online");
+    let claims = Arc::new(Claims::in_memory());
+    let mut w = world_with(&claims, Some(dir.clone()));
+    let [a, b, c] = ['A', 'B', 'C'].map(|k| owner_of_token(&token(k)).unwrap());
+    for (n, o) in [("Alpha", &a), ("Bravo", &b), ("Charlie", &c)] {
+        claims.claim(n, o, now(&w)).unwrap();
+    }
+    let g: Arc<str> = Arc::from("g1");
+    let seen = |w: &mut World, o: &str, name: &str| {
+        w.core.friends(o, &g, List).friends.into_iter().find(|f| f.name == name).and_then(|f| f.contact)
+    };
+    assert_eq!(w.core.friends(&a, &g, Ask("Bravo".into())).done, "asked");
+    assert_eq!(w.core.friends(&b, &g, Ask("Alpha".into())).done, "friends");
+    // Charlie asked Alpha, who did not answer: no friend
+    assert_eq!(w.core.friends(&c, &g, Ask("Alpha".into())).done, "asked");
+    let r = w.core.friends(&a, &g, Discord("  @Alpha.Drives_9 ".into()));
+    assert_eq!((r.done, r.contact.as_deref()), ("ok", Some("alpha.drives_9")));
+    assert_eq!(seen(&mut w, &b, "Alpha").as_deref(), Some("alpha.drives_9"));
+    assert!(w.core.friends(&c, &g, List).friends.is_empty(), "a request is no friendship");
+    assert!(w.logged("\"Alpha\" set a Discord name") && !w.logged("alpha.drives_9"));
+    // not Discord's form, or a name the filter refuses: refused, the one before kept
+    for bad in ["a", "a..b", "ann drives", "ann-drives", "ännchen", "#1234", &"x".repeat(33), "hitler.fan"] {
+        let r = w.core.friends(&a, &g, Discord(bad.into()));
+        assert_eq!((r.done, r.contact.as_deref()), ("name", Some("alpha.drives_9")), "{bad}");
+    }
+    assert_eq!(w.core.friends(&a, &g, Discord("._.".into())).contact.as_deref(), Some("._."), "Discord allows it");
+    // over a restart
+    w.core.buddy_save();
+    w.core.stop();
+    let mut w = world_with(&claims, Some(dir.clone()));
+    assert_eq!(seen(&mut w, &b, "Alpha").as_deref(), Some("._."));
+    assert_eq!(w.core.friends(&a, &g, List).contact.as_deref(), Some("._."));
+    // a player without friends gives one too (its list made for it), and takes it away again
+    assert_eq!(w.core.friends(&c, &g, Discord("charlie".into())).contact.as_deref(), Some("charlie"));
+    let r = w.core.friends(&c, &g, Discord(" ".into()));
+    assert_eq!((r.done, r.contact), ("ok", None));
+    assert!(w.logged("\"Charlie\" took its Discord name away"));
+    // friends no more: Bravo sees it no more
+    assert_eq!(w.core.friends(&b, &g, Remove("Alpha".into())).done, "ok");
+    w.core.friends(&b, &g, Ask("Alpha".into()));
+    assert_eq!(seen(&mut w, &b, "Alpha"), None, "a request again is no friendship");
+}

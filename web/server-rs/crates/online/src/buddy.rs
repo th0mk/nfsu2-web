@@ -70,7 +70,8 @@
 //! name), so a friend made by touching front bumpers in free roam is a friend in the Messenger too.  Pages message
 //! their friends through the same store (`page_send`, `PAGE_MSG_LEN` characters): to the Messenger of a friend logged
 //! in there, else to the friend's pages, else it waits as the Messenger's own do, and a page takes the ones that
-//! waited with its list (`FriendAsk::ListMail`).
+//! waited with its list (`FriendAsk::ListMail`).  A page may give its persona's Discord username (`FriendAsk::Discord`:
+//! Discord's form only, `discord_name`), which its friends both ways see on their lists, nobody else.
 //!
 //! A buddy connection's state stays readable until the event that closed it is over, so the code still handling that
 //! event goes on with it (a handler whose own answer closed the connection goes on with no persona, and fails where
@@ -161,6 +162,19 @@ pub enum FriendAsk {
     /// a request to the persona `name` from the start page (its name typed: the server's friends.rs gives the claimed
     /// name as its claim spells it); friends at once when `name` asked first
     AskByName(String),
+    /// its Discord username for its friends to see (`discord_name`: Discord's form, not one the name filter refuses;
+    /// "" takes it away): "ok", "name" (not one), "full" (no list could be made for it)
+    Discord(String),
+}
+
+/// A Discord username as Discord allows one (2 to 32 of a-z, 0-9, `_` and `.`, never two `.` together), from what
+/// a player typed: the spaces around it, a leading `@` and capitals are let go.  None: not one.  (Its only use is
+/// for friends to add each other on Discord: a form this strict carries no message.)
+pub fn discord_name(typed: &str) -> Option<String> {
+    let t = typed.trim();
+    let t = t.strip_prefix('@').unwrap_or(t).to_ascii_lowercase();
+    let ok = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.';
+    ((2..=32).contains(&t.len()) && t.chars().all(ok) && !t.contains("..")).then_some(t)
 }
 
 /// a message for a page (`FriendReply::mail`, `PageMailHook`): who sent it, its text, and when (ms since 1970)
@@ -187,7 +201,7 @@ pub struct FriendRow {
     pub mutual: bool,
     /// in the Online lobby or the Messenger now (a mutual friend only)
     pub online: bool,
-    /// its line for its friends (`FriendsList::contact`; a mutual friend only)
+    /// its Discord username (`FriendsList::contact`; a mutual friend only)
     pub contact: Option<String>,
 }
 
@@ -206,6 +220,8 @@ pub struct FriendReply {
     pub sent: Vec<String>,
     /// `FriendAsk::ListMail`: the messages that waited for it, oldest first
     pub mail: Vec<PageMail>,
+    /// its own Discord username, for its friends (`FriendAsk::Discord`)
+    pub contact: Option<String>,
 }
 
 /// a message that waits for its persona: who sent it, its text, and when (ms since 1970)
@@ -234,7 +250,7 @@ pub struct FriendsList {
     pub owner: Option<Arc<str>>,
     /// a list of a name nobody claimed: for its session only, never written
     pub temp: bool,
-    /// a line its friends see beside its name (`C`; none can be set yet: kept, written, and shown to friends only)
+    /// its Discord username, which its friends see beside its name (`C`; `FriendAsk::Discord`, `discord_name`)
     pub contact: Option<String>,
 }
 
@@ -392,7 +408,7 @@ fn list_of_json(o: &serde_json::Map<String, Value>) -> Option<FriendsList> {
             l.m.push(Mail { from: from.to_string(), body: text("body", 500), subj: text("subj", 64), kind, t });
         }
     }
-    l.contact = o.get("C").and_then(Value::as_str).map(|s| clean_text(s, 64)).filter(|s| !s.is_empty());
+    l.contact = o.get("C").and_then(Value::as_str).and_then(discord_name);
     Some(l)
 }
 
@@ -1598,6 +1614,7 @@ impl Core {
                 if self.block(&me, group, name) { "ok" } else { "full" }
             }
             FriendAsk::Block(_) => "name",
+            FriendAsk::Discord(typed) => self.set_discord(&me, group, &typed),
         };
         // (each friend's list in memory, for whether it names this persona back)
         let keys: Vec<String> = self.buddies.lists.get(&mk).map(|l| l.b.keys().cloned().collect()).unwrap_or_default();
@@ -1629,7 +1646,36 @@ impl Core {
             .map(|(_, (n, _))| n.clone())
             .collect();
         let sent = l.into_iter().flat_map(|l| l.r.iter()).filter(|(k, (_, t))| waits(t) && not_friend(k)).map(|(_, (n, _))| n.clone()).collect();
-        FriendReply { me: Some(me), done, friends, asks, sent, mail }
+        let contact = l.and_then(|l| l.contact.clone());
+        FriendReply { me: Some(me), done, friends, asks, sent, mail, contact }
+    }
+
+    /// persona `me`'s Discord username from now on (`FriendAsk::Discord`): what it typed, "" none.  The log says that
+    /// it changed, never what it is.
+    fn set_discord(&mut self, me: &str, group: &Arc<str>, typed: &str) -> &'static str {
+        let to = if typed.trim().is_empty() {
+            None
+        } else {
+            match discord_name(typed) {
+                Some(d) if !nfsu2_names::blocked_name(&d) => Some(d),
+                _ => return "name",
+            }
+        };
+        let k = lower(me);
+        let had = self.buddies.list(me).and_then(|l| l.contact.clone());
+        if had == to {
+            return "ok";
+        }
+        if !self.make_list(me, group) {
+            return "full";
+        }
+        let Some(l) = self.buddies.lists.get_mut(&k) else { return "full" };
+        l.contact = to.clone();
+        self.buddies.mark(&k);
+        self.touch_lists();
+        let what = if to.is_some() { "set a Discord name" } else { "took its Discord name away" };
+        (self.log)(&format!("[online] \"{me}\" {what}"), Some(group));
+        "ok"
     }
 
     /// the page of persona `me` asks `name` to be friends (`FriendAsk::Ask` in free roam, `AskByName` on the start

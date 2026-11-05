@@ -687,7 +687,6 @@
   "Career status": "Статус карьеры",
   "today at {time}": "сегодня в {time}",
   "Quit the game first.": "Сначала выйдите из игры.",
-  "Copied.": "Скопировано.",
   "Show passphrase": "Показать парольную фразу",
   "Hide passphrase": "Скрыть парольную фразу",
   "Saves from your other browser came in ({when}).": "Пришли сохранения из вашего другого браузера ({when}).",
@@ -1276,7 +1275,6 @@
   "Set up the radio": "Настроить пульт",
   "The radio went away before its set-up was done.": "Пульт отключился до завершения настройки.",
   "no # or ; after a space in a room name": "в названии комнаты не должно быть # и ; после пробела",
-  "Invite link copied: {link}": "Ссылка-приглашение скопирована: {link}",
   "Copy this invite link: {link}": "Скопируйте эту ссылку-приглашение: {link}",
   "Copy an invite link to crew {name}": "Копировать ссылку-приглашение в команду «{name}»",
   "Copy an invite link to this room": "Копировать ссылку-приглашение в эту комнату",
@@ -1545,5 +1543,14 @@
     "few": "{n} скриншота не удалены: {error}",
     "many": "{n} скриншотов не удалены: {error}",
     "other": "{n} скриншота не удалены: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Скопировать имя в Discord {name}",
+  "Copied {name}": "Скопировано: {name}",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Скопировано",
+  "Discord username": "Имя пользователя в Discord",
+  "Your Discord": "Ваш Discord",
+  "Only your friends see it, so they can add you on Discord.": "Видят только ваши друзья, чтобы добавить вас в Discord.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Это не имя пользователя Discord: от 2 до 32 строчных букв, цифр, _ или .",
+  "Not saved: try again in a moment": "Не сохранено: попробуйте ещё раз чуть позже"
 }

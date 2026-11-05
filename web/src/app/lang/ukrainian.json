@@ -679,7 +679,6 @@
   "Career status": "Статус кар'єри",
   "today at {time}": "сьогодні о {time}",
   "Quit the game first.": "Спершу вийдіть із гри.",
-  "Copied.": "Скопійовано.",
   "Show passphrase": "Показати парольну фразу",
   "Hide passphrase": "Приховати парольну фразу",
   "Saves from your other browser came in ({when}).": "Надійшли збереження з вашого іншого браузера ({when}).",
@@ -1275,7 +1274,6 @@
   "Set up the radio": "Налаштувати пульт",
   "The radio went away before its set-up was done.": "Пульт від'єднався до завершення налаштування.",
   "no # or ; after a space in a room name": "у назві кімнати не має бути # і ; після пробілу",
-  "Invite link copied: {link}": "Посилання-запрошення скопійовано: {link}",
   "Copy this invite link: {link}": "Скопіюйте це посилання-запрошення: {link}",
   "Copy an invite link to crew {name}": "Копіювати посилання-запрошення до команди «{name}»",
   "Copy an invite link to this room": "Копіювати посилання-запрошення до цієї кімнати",
@@ -1545,5 +1543,14 @@
     "few": "{n} знімки екрана не видалено: {error}",
     "many": "{n} знімків екрана не видалено: {error}",
     "other": "{n} знімка екрана не видалено: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Скопіювати ім'я в Discord {name}",
+  "Copied {name}": "Скопійовано: {name}",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Скопійовано",
+  "Discord username": "Ім'я користувача в Discord",
+  "Your Discord": "Ваш Discord",
+  "Only your friends see it, so they can add you on Discord.": "Бачать лише ваші друзі, щоб додати вас у Discord.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Це не ім'я користувача Discord: від 2 до 32 малих літер, цифр, _ або .",
+  "Not saved: try again in a moment": "Не збережено: спробуйте ще раз за мить"
 }

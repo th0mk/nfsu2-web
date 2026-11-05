@@ -675,7 +675,6 @@
   "How far a trigger travels before it counts as fully pressed.": "Mennyire kell lenyomni a ravaszt, hogy teljesen lenyomottnak számítson.",
   "Read only: the game runs in another tab. Change settings there; this tab takes over when it closes.": "Csak olvasható: a játék egy másik lapon fut. Ott módosítsd a beállításokat; ez a lap átveszi, amikor az bezárul.",
   "Changes apply the next time you press Play.": "A változások a következő indításkor lépnek életbe.",
-  "Invite link copied: {link}": "Meghívólink kimásolva: {link}",
   "Copy this invite link: {link}": "Másold ki ezt a meghívólinket: {link}",
   "Colour of {name}": "{name} színe",
   "Change the colour of {name}": "{name} színének módosítása",
@@ -769,7 +768,6 @@
   "They could not be turned on. Try again under Cloud saves on the start page.": "Nem sikerült bekapcsolni. Próbáld újra a kezdőlap Felhőmentés részében.",
   "Continue": "Folytatás",
   "Copy": "Másolás",
-  "Copied.": "Másolva.",
   "Download passphrase": "Jelmondat letöltése",
   "{name} is yours, held by this passphrase. Cloud saves are on too.": "{name} mostantól a tiéd, ehhez a jelmondathoz kötve. A felhőmentés is be van kapcsolva.",
   "Store it somewhere safe: it can't be recovered.": "Őrizd meg biztonságos helyen: nem lehet visszaállítani.",
@@ -1408,5 +1406,14 @@
   "Delete all": "Összes törlése",
   "Delete {n} screenshots ({size})?": "{n} képernyőkép törlése ({size})?",
   "They are deleted from this browser; downloaded backups keep their copies.": "Törlődnek ebből a böngészőből; a letöltött biztonsági mentésekben megmarad a másolatuk.",
-  "{n} screenshots were not deleted: {error}": "{n} képernyőképet nem sikerült törölni: {error}"
+  "{n} screenshots were not deleted: {error}": "{n} képernyőképet nem sikerült törölni: {error}",
+  "Copy Discord name {name}": "Discord-név másolása: {name}",
+  "Copied {name}": "Másolva: {name}",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Másolva",
+  "Discord username": "Discord-felhasználónév",
+  "Your Discord": "A Discordod",
+  "Only your friends see it, so they can add you on Discord.": "Csak a barátaid látják, hogy felvehessenek Discordon.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Nem Discord-felhasználónév: 2–32 kisbetű, számjegy, _ vagy .",
+  "Not saved: try again in a moment": "Nem mentődött el: próbáld újra egy kicsit később"
 }

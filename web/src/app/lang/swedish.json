@@ -657,7 +657,6 @@
   "Career status": "Karriärstatus",
   "today at {time}": "i dag kl. {time}",
   "Quit the game first.": "Avsluta spelet först.",
-  "Copied.": "Kopierat.",
   "Show passphrase": "Visa lösenfras",
   "Hide passphrase": "Dölj lösenfras",
   "Saves from your other browser came in ({when}).": "Sparfiler från din andra webbläsare har kommit in ({when}).",
@@ -1230,7 +1229,6 @@
   "Set up the radio": "Ställ in sändaren",
   "The radio went away before its set-up was done.": "Sändaren försvann innan inställningen var klar.",
   "no # or ; after a space in a room name": "inget # eller ; efter ett mellanslag i ett rumsnamn",
-  "Invite link copied: {link}": "Inbjudningslänk kopierad: {link}",
   "Copy this invite link: {link}": "Kopiera den här inbjudningslänken: {link}",
   "Copy an invite link to crew {name}": "Kopiera en inbjudningslänk till crewen {name}",
   "Copy an invite link to this room": "Kopiera en inbjudningslänk till det här rummet",
@@ -1489,5 +1487,14 @@
   "{n} screenshots were not deleted: {error}": {
     "one": "{n} skärmbild raderades inte: {error}",
     "other": "{n} skärmbilder raderades inte: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Kopiera Discord-namnet {name}",
+  "Copied {name}": "Kopierade {name}",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Kopierat",
+  "Discord username": "Discord-användarnamn",
+  "Your Discord": "Din Discord",
+  "Only your friends see it, so they can add you on Discord.": "Bara dina vänner ser det, så att de kan lägga till dig på Discord.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Inte ett Discord-användarnamn: 2 till 32 små bokstäver, siffror, _ eller .",
+  "Not saved: try again in a moment": "Inte sparat: försök igen om en stund"
 }

@@ -33,17 +33,21 @@
 //!
 //! On the start page, with the keyphrase's token as /names takes it (this server's own pages only):
 //! - GET /friends -> {"me":<name>|null,"friends":[{"name","where":"roam"|"online"|"","room":<its room's name, "" for
-//!   the room of everyone; none when not in free roam or its page did not tell it>,"contact":<when it has one>}],
-//!   "asks":[names],"sent":[names],"mail":[the messages that waited, as above]}
-//! - POST /friends {"op":"accept"|"decline"|"remove"|"block","name":...}, {"op":"msg","name":...,"body":...}, or
+//!   the room of everyone; none when not in free roam or its page did not tell it>,"contact":<its Discord username,
+//!   when it gave one>}],"asks":[names],"sent":[names],"mail":[the messages that waited, as above],"contact":<the
+//!   player's own Discord username>|null}
+//! - POST /friends {"op":"accept"|"decline"|"remove"|"block","name":...}, {"op":"msg","name":...,"body":...},
 //!   {"op":"ask","name":<a player's name, as typed>} (a request by name: any claimed name, wherever its player is; its
-//!   open pages hear of it) -> {"done":...} and the same lists after it
+//!   open pages hear of it), or {"op":"discord","name":<the player's Discord username, as typed; "" none>} (its
+//!   friends both ways see it: nfsu2-online buddy.rs `discord_name`; "name" when it is not one) -> {"done":...} and
+//!   the same lists after it
 //!
 //! Limits: per client (and twice that per site) READ_BURST reads of /friends, then READ_RATE a second; per page
 //! SAY_BURST friend messages, then SAY_RATE a second (on top of the switch's own budget for control messages); per
 //! keyphrase MSG_BURST messages to friends, then MSG_RATE a second, from the game and the start page together (quick
-//! chat's three in six seconds), and ASK_BURST requests by name, then one every 30 s.  The console has the requests, friendships and messages (nfsu2-online's lines: who to
-//! whom, never what), never a keyphrase.
+//! chat's three in six seconds), ASK_BURST requests by name, then one every 30 s, and DISCORD_BURST changes of the
+//! Discord username, then one every 10 s.  The console has the requests, friendships and messages (nfsu2-online's
+//! lines: who to whom, never what) and that a Discord username changed (never which), never a keyphrase.
 
 use std::sync::{Arc, Weak};
 
@@ -66,6 +70,8 @@ pub const MSG_BURST: f64 = 3.0;
 pub const MSG_RATE: f64 = 0.5;
 pub const ASK_BURST: f64 = 5.0;
 pub const ASK_RATE: f64 = 1.0 / 30.0;
+pub const DISCORD_BURST: f64 = 5.0;
+pub const DISCORD_RATE: f64 = 1.0 / 10.0;
 /// the most of a POST's body (an op and a name)
 const MAX_BODY: usize = 1024;
 
@@ -79,6 +85,7 @@ pub struct Friends {
     says: Rate,
     msgs: Rate,
     asks: Rate,
+    discords: Rate,
 }
 
 /// what `can` found: the other player's browser and keyphrase, its claimed name, and the state ("new", ...)
@@ -92,7 +99,8 @@ struct Can {
 impl Friends {
     pub fn new(online: Arc<OnlineHost>, roam: Arc<RoamHub>, lan: Arc<LanSwitch>, claims: Arc<Claims>) -> Arc<Friends> {
         let (reads, says, msgs) = (Rate::new(READ_BURST, READ_RATE), Rate::new(SAY_BURST, SAY_RATE), Rate::new(MSG_BURST, MSG_RATE));
-        Arc::new(Friends { online, roam, lan, claims, reads, says, msgs, asks: Rate::new(ASK_BURST, ASK_RATE) })
+        let (asks, discords) = (Rate::new(ASK_BURST, ASK_RATE), Rate::new(DISCORD_BURST, DISCORD_RATE));
+        Arc::new(Friends { online, roam, lan, claims, reads, says, msgs, asks, discords })
     }
 
     /// the pages' friend messages come here (the switch holds this weakly: it outlives nothing), and a friend's
@@ -119,6 +127,7 @@ impl Friends {
         self.says.prune();
         self.msgs.prune();
         self.asks.prune();
+        self.discords.prune();
     }
 
     fn now() -> i64 {
@@ -265,7 +274,9 @@ impl Friends {
     /// the start page's view of the lists: each friend where it plays
     async fn page_json(&self, r: FriendReply) -> Value {
         let friends = self.placed(&r).await;
-        json!({ "me": r.me, "done": r.done, "friends": friends, "asks": r.asks, "sent": r.sent, "mail": mail_json(&r.mail) })
+        json!({
+            "me": r.me, "done": r.done, "friends": friends, "asks": r.asks, "sent": r.sent, "mail": mail_json(&r.mail), "contact": r.contact,
+        })
     }
 
     /// the friends of the lists, each where it plays (the module's doc, GET /friends): a one-way entry
@@ -357,6 +368,12 @@ impl App {
                         let now = nfsu2_util::now_ms() as i64;
                         let claimed = f.claims.holder(&name, now).and_then(|o| f.claims.mine(&o, now)).map(|m| m.name);
                         FriendAsk::AskByName(claimed.unwrap_or(name))
+                    }
+                    Some("discord") => {
+                        if !f.discords.take(&owner, "") {
+                            return self.json(q, s, 200, &json!({ "done": "rate" })).await;
+                        }
+                        FriendAsk::Discord(name)
                     }
                     Some("accept") => FriendAsk::Answer(name, true),
                     Some("decline") => FriendAsk::Answer(name, false),

@@ -877,7 +877,6 @@
   "How far a trigger travels before it counts as fully pressed.": "Jak daleko musí spoušť dojet, aby se počítala jako plně stisknutá.",
   "Read only: the game runs in another tab. Change settings there; this tab takes over when it closes.": "Jen pro čtení: hra běží v jiné kartě. Nastavení změň tam; tato karta to převezme, až se ta zavře.",
   "Changes apply the next time you press Play.": "Změny se projeví, až příště stiskneš „Hrát“.",
-  "Invite link copied: {link}": "Odkaz s pozvánkou zkopírován: {link}",
   "Copy this invite link: {link}": "Zkopíruj tento odkaz s pozvánkou: {link}",
   "Colour of {name}": "Barva party {name}",
   "Change the colour of {name}": "Změnit barvu party {name}",
@@ -975,7 +974,6 @@
   "They could not be turned on. Try again under Cloud saves on the start page.": "Nepodařilo se ho zapnout. Zkus to znovu v „Ukládání do cloudu“ na úvodní stránce.",
   "Continue": "Pokračovat",
   "Copy": "Kopírovat",
-  "Copied.": "Zkopírováno.",
   "Download passphrase": "Stáhnout přístupovou frázi",
   "{name} is yours, held by this passphrase. Cloud saves are on too.": "Jméno {name} je tvoje, drží ho tato přístupová fráze. Ukládání do cloudu je taky zapnuté.",
   "Enter it under Cloud saves on another device to sync your saves.": "Zadej ji v „Ukládání do cloudu“ na jiném zařízení a tvoje uložené hry se synchronizují.",
@@ -1545,5 +1543,14 @@
     "few": "{n} snímky obrazovky se nesmazaly: {error}",
     "many": "{n} snímku obrazovky se nesmazalo: {error}",
     "other": "{n} snímků obrazovky se nesmazalo: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Zkopírovat jméno na Discordu {name}",
+  "Copied {name}": "Zkopírováno: {name}",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Zkopírováno",
+  "Discord username": "Uživatelské jméno na Discordu",
+  "Your Discord": "Tvůj Discord",
+  "Only your friends see it, so they can add you on Discord.": "Vidí ho jen tvoji přátelé, aby si tě mohli přidat na Discordu.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Není to uživatelské jméno na Discordu: 2 až 32 malých písmen, číslic, _ nebo .",
+  "Not saved: try again in a moment": "Neuloženo: zkus to za chvíli znovu"
 }

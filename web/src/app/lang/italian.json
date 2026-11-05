@@ -672,7 +672,6 @@
   "Career status": "Stato della carriera",
   "today at {time}": "oggi alle {time}",
   "Quit the game first.": "Esci prima dal gioco.",
-  "Copied.": "Copiato.",
   "Show passphrase": "Mostra la frase segreta",
   "Hide passphrase": "Nascondi la frase segreta",
   "Saves from your other browser came in ({when}).": "Sono arrivati i salvataggi dall'altro tuo browser ({when}).",
@@ -1253,7 +1252,6 @@
   "Set up the radio": "Configura il radiocomando",
   "The radio went away before its set-up was done.": "Il radiocomando si è scollegato prima della fine della configurazione.",
   "no # or ; after a space in a room name": "niente # o ; dopo uno spazio nel nome di una stanza",
-  "Invite link copied: {link}": "Link di invito copiato: {link}",
   "Copy this invite link: {link}": "Copia questo link di invito: {link}",
   "Copy an invite link to crew {name}": "Copia un link di invito alla crew {name}",
   "Copy an invite link to this room": "Copia un link di invito a questa stanza",
@@ -1513,5 +1511,14 @@
     "one": "{n} screenshot non è stato eliminato: {error}",
     "many": "{n} screenshot non sono stati eliminati: {error}",
     "other": "{n} screenshot non sono stati eliminati: {error}"
-  }
+  },
+  "Copy Discord name {name}": "Copia il nome Discord {name}",
+  "Copied {name}": "{name} copiato",
+  "Discord: {name}": "Discord: {name}",
+  "Copied": "Copiato",
+  "Discord username": "Nome utente Discord",
+  "Your Discord": "Il tuo Discord",
+  "Only your friends see it, so they can add you on Discord.": "Lo vedono solo i tuoi amici, così possono aggiungerti su Discord.",
+  "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Non è un nome utente Discord: da 2 a 32 lettere minuscole, cifre, _ o .",
+  "Not saved: try again in a moment": "Non salvato: riprova tra un attimo"
 }
