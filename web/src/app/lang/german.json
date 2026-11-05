@@ -1570,5 +1570,10 @@
   "Everyone can join": "Alle können beitreten",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Deine Rennlobby: wer beitreten darf (deine Stufe und darunter, Freunde & Crew oder alle)",
   "Invite to a race": "Zu einem Rennen einladen",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Freunde in deine Rennlobby einladen, die Einladung eines Freundes annehmen, ein aus der Ferne beigetretenes Rennen verlassen"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Freunde in deine Rennlobby einladen, die Einladung eines Freundes annehmen, ein aus der Ferne beigetretenes Rennen verlassen",
+  "License plate": "Kennzeichen",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Bis zu 8 Buchstaben oder Ziffern. Leer lassen für das ursprüngliche Kennzeichen.",
+  "Original plate": "Ursprüngliches Kennzeichen",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "„{value}“ ist kein gültiges Kennzeichen (bis zu 8 ASCII-Buchstaben oder Ziffern)",
+  "Save": "Speichern"
 }

@@ -85,6 +85,8 @@ impl LanSwitch {
     /// three locks and a clock read): the destinations go up to the first whose running total one of the buckets
     /// cannot pay for, which is where checking them one destination after the other stops.
     pub(crate) fn route(&self, peer: &Arc<Peer>, data: &Bytes, dsts: impl Iterator<Item = u32> + Clone) -> bool {
+        if data.first() == Some(&KIND_UDP) && data.len() >= 16
+            && !nfsu2_util::plates::valid_hello(&data[16..]) { return true; }
         let n = data.len();
         let lan_only = (KIND_LAN_UDP..=KIND_LAN_ICMP).contains(&data[0]);
         if lan_only {

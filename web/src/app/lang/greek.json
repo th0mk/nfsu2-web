@@ -1510,5 +1510,10 @@
   "Everyone can join": "Μπορούν να μπουν όλοι",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Η αίθουσα αγώνα σου: ποιος μπορεί να μπει (το στάδιό σου και κάτω, φίλοι και ομάδα ή όλοι)",
   "Invite to a race": "Πρόσκληση σε αγώνα",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Πρόσκληση φίλων στην αίθουσα αγώνα σου, αποδοχή πρόσκλησης φίλου, αποχώρηση από αγώνα στον οποίο μπήκες από μακριά"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Πρόσκληση φίλων στην αίθουσα αγώνα σου, αποδοχή πρόσκλησης φίλου, αποχώρηση από αγώνα στον οποίο μπήκες από μακριά",
+  "License plate": "Πινακίδα κυκλοφορίας",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Έως 8 γράμματα ή ψηφία. Αφήστε κενό για την αρχική πινακίδα.",
+  "Original plate": "Αρχική πινακίδα",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "Το «{value}» δεν είναι έγκυρη πινακίδα (έως 8 γράμματα ASCII ή ψηφία)",
+  "Save": "Αποθήκευση"
 }

@@ -1483,5 +1483,10 @@
   "Everyone can join": "ทุกคนเข้าร่วมได้",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "ล็อบบี้การแข่งของคุณ: ใครเข้าร่วมได้ (ด่านของคุณลงไป เพื่อนและทีม หรือทุกคน)",
   "Invite to a race": "เชิญเข้าร่วมการแข่ง",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "เชิญเพื่อนเข้าล็อบบี้การแข่งของคุณ ตอบรับคำเชิญของเพื่อน ออกจากการแข่งที่คุณเข้าร่วมจากระยะไกล"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "เชิญเพื่อนเข้าล็อบบี้การแข่งของคุณ ตอบรับคำเชิญของเพื่อน ออกจากการแข่งที่คุณเข้าร่วมจากระยะไกล",
+  "License plate": "ป้ายทะเบียน",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "ตัวอักษรหรือตัวเลขไม่เกิน 8 ตัว เว้นว่างเพื่อใช้ป้ายทะเบียนเดิม",
+  "Original plate": "ป้ายทะเบียนเดิม",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "\"{value}\" ไม่ใช่ป้ายทะเบียนที่ถูกต้อง (ตัวอักษร ASCII หรือตัวเลขไม่เกิน 8 ตัว)",
+  "Save": "บันทึก"
 }

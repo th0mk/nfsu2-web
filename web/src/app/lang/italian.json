@@ -1595,5 +1595,10 @@
   "Everyone can join": "Possono partecipare tutti",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "La tua sala d'attesa: chi può partecipare (il tuo livello e inferiori, amici e crew, o tutti)",
   "Invite to a race": "Invita a una gara",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Invita amici nella tua sala d'attesa, accetta l'invito di un amico, lascia una gara a cui partecipi da lontano"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Invita amici nella tua sala d'attesa, accetta l'invito di un amico, lascia una gara a cui partecipi da lontano",
+  "License plate": "Targa",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Fino a 8 lettere o cifre. Lascia vuoto per la targa originale.",
+  "Original plate": "Targa originale",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "\"{value}\" non è una targa valida (massimo 8 lettere ASCII o cifre)",
+  "Save": "Salva"
 }

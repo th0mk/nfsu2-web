@@ -42,6 +42,7 @@ import type { NetBanCase, NetQueue, NetRaces, NetRemoved, NetRename } from '../n
 import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, uiPack, type Resolved } from './settings';
 import { checkSaves, exists, filesOf, listProfiles, NO_SAVE, PROFILES_DIR, readText, removeSaveDir, SavesOff, setWritesOff, settleStaged, UNREADABLE, writeFile, type SavesCheck } from './savefs';
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
+import { plateInput, plateText } from './plates';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, PlayersPanel, queueText, roomHash, roomLine, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
 import { panelTabs, type PanelTabs } from './tabs';
@@ -1872,6 +1873,7 @@ async function menuAction(act: string) {
       log.add(`[app] roam_collide = ${roamCollide} (the page menu)`);
       break;
     }
+    case 'plate': await openPlate(); break;
     case 'crews': openCrews(); break;
     case 'friends': openFriends(); break;
     case 'friend': m.close(); friendPrompt.menuItem()?.act(); break;
@@ -2415,4 +2417,42 @@ export async function boot() {
     fpsMode: (m?: FpsMode) => { if (m && FPS_MODES.includes(m)) fps.set(m); return fps.mode; },
     quitTimes: { forcedCloseMaxMs: FORCED_CLOSE_MAX_MS, stopAfterMs: STOP_AFTER_MS },
   };
+}
+
+/** F9 uses the same persisted setting as the start screen, applied without rebuilding the car. */
+let plateOpening = false;
+async function openPlate() {
+  if (plateOpening || document.getElementById('plate-dialog')) return;
+  plateOpening = true;
+  let text: string;
+  try { text = await readText(SAVE, 'settings.ini') ?? TEMPLATE; }
+  finally { plateOpening = false; }
+  const pop = document.createElement('dialog'); pop.className = 'dlg'; pop.id = 'plate-dialog';
+  const title = document.createElement('h2'); title.id = 'plate-title'; title.textContent = t('License plate');
+  pop.setAttribute('aria-labelledby', title.id);
+  const help = document.createElement('p'); help.className = 'hint'; help.id = 'plate-help';
+  help.textContent = t('Up to 8 letters or digits. Leave empty for the original plate.');
+  const label = document.createElement('label'); label.className = 'dlg-field';
+  const input = document.createElement('input'); input.type = 'text'; plateInput(input);
+  input.setAttribute('aria-label', t('License plate')); input.setAttribute('aria-describedby', help.id);
+  input.placeholder = t('Original plate');
+  input.value = plateText(resolveEnv(text, {}, {}).env.NFSU2_LICENSE_PLATE ?? '');
+  label.append(input);
+  const note = document.createElement('p'); note.setAttribute('role', 'status');
+  const save = document.createElement('button'); save.type = 'button'; save.className = 'btn selected'; save.textContent = t('Save');
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'btn'; cancel.textContent = t('Cancel');
+  cancel.onclick = () => pop.close();
+  save.onclick = async () => {
+    save.disabled = true;
+    try {
+      const value = plateText(input.value);
+      await editSettings(s => putKey(s, 'license_plate', value || null).text);
+      if (!session?.input?.plate?.(value)) throw new Error('The game could not apply the plate. Reopen the menu to try again.');
+      pop.close();
+    } catch(e) { note.textContent = String(e); save.disabled = false; }
+  };
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); save.click(); } });
+  pop.addEventListener('close', () => { pop.remove(); $('#menu [data-act="plate"]').focus(); }, { once: true });
+  const actions = document.createElement('div'); actions.className = 'row end'; actions.append(cancel, save);
+  pop.append(title, help, label, note, actions); document.body.append(pop); pop.showModal(); input.focus();
 }

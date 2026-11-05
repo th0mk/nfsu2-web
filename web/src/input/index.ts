@@ -41,7 +41,7 @@ import { PadPoller, type PadPage, type TouchPad } from './gamepad';
 import { SynthDriver } from './synth';
 import {
   IEV_FOCUS, IEV_KEY_DOWN, IEV_KEY_TAP, IEV_KEY_UP, IEV_LOG, IEV_MOUSE_DOWN, IEV_MOUSE_MOVE, IEV_MOUSE_UP, IEV_QUIT, IEV_SMS,
-  IEV_PHOTO, IEV_NAME, INAME_SEAT2, IEV_LOBBY, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
+  IEV_PHOTO, IEV_NAME, INAME_PLATE, INAME_SEAT2, IEV_LOBBY, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
   IM_EV_DROP, IM_EV_R, IM_EV_W, IM_EVENTS, IM_GAME_INACTIVE, IM_HDR_WORDS, IM_KEYS_HELD, IM_MAGIC, IM_MOUSE_X,
   IM_MOUSE_Y, IM_NAMES_GEN, IM_OFF_EV, IM_OFF_NAMES, IM_OFF_SYN, IM_QUIT_REQ, IM_SYN_R, IM_SYN_W, IM_TEXT,
   IM_TEXT_KIND, IM_TEXT_LEN, IM_TEXT_MAX, IM_TEXT_SEQ, IM_MENU_SCALE, IM_VERSION, IM_VIEW_ROLL, INPUT_EV_N, INPUT_MAGIC, INPUT_NAME_LEN,
@@ -96,6 +96,7 @@ export interface InputHandle {
   /** a new name for free roam and Online mode, now (the operator took the old one away: runtime/web/roam_web.c
    *  roam_plat_name), or (seat2) co-op player 2's in free roam (roam_plat_name2).  false: it cannot reach the game */
   name(name: string, seat2?: boolean): boolean;
+  plate(text: string): boolean;
   /** free roam's race lobby (runtime/roam_game.c mp_act): what (proto.ts LB_*), and for an invite's Join the lobby's
    *  host's id, the lobby's id and its race's hash.  false: it cannot reach the game */
   lobby(what: number, host?: number, lobby?: number, race?: number): boolean;
@@ -415,6 +416,14 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     photo(what, a = 0, b = 0) {
       if (!h || !api.canQuit()) return false;
       push(IEV_PHOTO, what, 0, 0, [], a, b);
+      return true;
+    },
+    plate(text) {
+      if (!h || !api.canQuit() || !/^[A-Z0-9]{0,8}$/.test(text)) return false;
+      const p = [...text].map(c => c.charCodeAt(0));
+      while (p.length < 11) p.push(0);
+      const le = (i: number) => p[i] | p[i+1]<<8 | p[i+2]<<16 | p[i+3]<<24;
+      push(IEV_NAME, 0, text.length, INAME_PLATE, p.slice(0,3), le(3), le(7));
       return true;
     },
     name(name, seat2 = false) {

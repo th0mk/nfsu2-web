@@ -1628,5 +1628,10 @@
   "Everyone can join": "Připojit se může kdokoli",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Tvoje závodní lobby: kdo se může připojit (tvoje úroveň a nižší, přátelé a parta, nebo všichni)",
   "Invite to a race": "Pozvat do závodu",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvat přátele do svého závodního lobby, přijmout pozvánku přítele, opustit závod, ke kterému ses připojil na dálku"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvat přátele do svého závodního lobby, přijmout pozvánku přítele, opustit závod, ke kterému ses připojil na dálku",
+  "License plate": "Registrační značka",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Až 8 písmen nebo číslic. Pro původní značku nechte prázdné.",
+  "Original plate": "Původní značka",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "„{value}“ není platná značka (až 8 písmen ASCII nebo číslic)",
+  "Save": "Uložit"
 }

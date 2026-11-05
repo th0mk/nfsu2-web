@@ -1483,5 +1483,10 @@
   "Everyone can join": "所有人可加入",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "你的比賽大廳：誰可以加入（你的階段及以下、好友與車隊，或所有人）",
   "Invite to a race": "邀請參加比賽",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "邀請好友到你的比賽大廳、接受好友的邀請、離開從遠處加入的比賽"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "邀請好友到你的比賽大廳、接受好友的邀請、離開從遠處加入的比賽",
+  "License plate": "车牌",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "最多 8 个字母或数字。留空可使用原始车牌。",
+  "Original plate": "原始车牌",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "“{value}”不是有效车牌（最多 8 个 ASCII 字母或数字）",
+  "Save": "保存"
 }

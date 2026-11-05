@@ -1570,5 +1570,10 @@
   "Everyone can join": "Iedereen kan meedoen",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Je racelobby: wie mag meedoen (jouw niveau en lager, vrienden & crew, of iedereen)",
   "Invite to a race": "Uitnodigen voor een race",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Vrienden uitnodigen voor je racelobby, een uitnodiging van een vriend aannemen, een race verlaten waar je op afstand aan meedoet"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Vrienden uitnodigen voor je racelobby, een uitnodiging van een vriend aannemen, een race verlaten waar je op afstand aan meedoet",
+  "License plate": "Kenteken",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Maximaal 8 letters of cijfers. Laat leeg voor het oorspronkelijke kenteken.",
+  "Original plate": "Oorspronkelijk kenteken",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "\"{value}\" is geen geldig kenteken (maximaal 8 ASCII-letters of cijfers)",
+  "Save": "Opslaan"
 }

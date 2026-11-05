@@ -1483,5 +1483,10 @@
   "Everyone can join": "누구나 참가 가능",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "내 레이스 로비: 참가할 수 있는 사람 (내 단계 이하, 친구와 크루, 또는 모두)",
   "Invite to a race": "레이스에 초대",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "내 레이스 로비에 친구 초대, 친구의 초대에 참가, 멀리서 참가한 레이스에서 나가기"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "내 레이스 로비에 친구 초대, 친구의 초대에 참가, 멀리서 참가한 레이스에서 나가기",
+  "License plate": "번호판",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "영문자 또는 숫자 최대 8자. 비워 두면 기본 번호판을 사용합니다.",
+  "Original plate": "기본 번호판",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "\"{value}\"은(는) 올바른 번호판이 아닙니다(ASCII 영문자 또는 숫자 최대 8자)",
+  "Save": "저장"
 }

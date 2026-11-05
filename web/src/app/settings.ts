@@ -26,9 +26,11 @@ export { LANGUAGES };
  *  players' names) and flag (one of flags.ts's codes).  ic: K_IC, "value ; comment" (the free-roam keys).  room:
  *  K_ROOM, text that does not read as a slur (names.mjs, as a player's name).  key: one of our controls' key, the
  *  browser's name of it (KeyboardEvent.code: sitekeys.ts), or off. */
+import { plateValid } from './plates';
+
 export type Kind = 'raw' | 'bool' | 'boolInv' | 'enum' | 'num' | 'id' | 'token' | 'int' | 'name' | 'peers'
   | 'path' | 'text' | 'room' | 'wxh' | 'fixes' | 'ifname' | 'ipv4' | 'mac' | 'host' | 'parts' | 'dump' | 'crews' | 'rgbs'
-  | 'phrases' | 'sayGroups' | 'names' | 'key' | 'flag';
+  | 'phrases' | 'sayGroups' | 'names' | 'key' | 'flag' | 'plate';
 
 export interface KeyDef {
   key: string;
@@ -114,6 +116,7 @@ export const KEYS: readonly KeyDef[] = [
   // free-roam multiplayer (the runtime checks the values too)
   { key: 'roam', env: 'NFSU2_ROAM', kind: 'bool', ic: true, scope: 'web' },
   { key: 'roam_name', env: 'NFSU2_ROAM_NAME', kind: 'name', ic: true, scope: 'web' },
+  { key: 'license_plate', env: 'NFSU2_LICENSE_PLATE', kind: 'plate', scope: 'web' },
   // the flag before the name (flags.ts; runtime/roam_game.c flag_*): the page has the list, so not in bundle.m's table
   { key: 'roam_flag', env: 'NFSU2_ROAM_FLAG', kind: 'flag', ic: true, scope: 'web' },
   { key: 'roam_port', env: 'NFSU2_ROAM_PORT', kind: 'int', vals: '1024..65535', ic: true, scope: 'mac' },
@@ -501,6 +504,9 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # [NFSU2_ROAM_FLAG]
 #roam_flag =
 
+# License plate: up to eight ASCII letters or digits; empty uses the original.
+#license_plate =
+
 # Your horn (key_horn and button_horn: N and the left stick click), in free roam and in
 # Online and LAN races; the other players hear the one you pick: dual (two
 # tones), single (one higher tone), truck (an air horn), train (five
@@ -856,6 +862,11 @@ export function checkSetting(key: string, val: string): Checked | Refused | null
       if (!intIn(d!.vals!, val)) return refuse(N('"{value}" is not a whole number in {vals}'), val, { vals: d!.vals! });
       if (lower(val) === 'auto') out = 'auto';
       break;
+    case 'plate': {
+      out = val.replace(/[a-z]/g, c => c.toUpperCase());
+      if (!plateValid(out)) return refuse(N('"{value}" is not a plate (up to 8 ASCII letters or digits)'), val);
+      break;
+    }
     case 'name': {
       const ok = val.length >= 1 && val.length <= 24 && /^[ -~]+$/.test(val);
       if (!ok) return refuse(N('"{value}" is not a name (printable ASCII, at most 24 characters)'), val);

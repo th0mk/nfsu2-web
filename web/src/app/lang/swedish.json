@@ -1570,5 +1570,10 @@
   "Everyone can join": "Alla kan gå med",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Din racelobby: vem får gå med (din nivå och lägre, vänner & crew, eller alla)",
   "Invite to a race": "Bjud in till ett race",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Bjud in vänner till din racelobby, tacka ja till en väns inbjudan, lämna ett race du gått med i på avstånd"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Bjud in vänner till din racelobby, tacka ja till en väns inbjudan, lämna ett race du gått med i på avstånd",
+  "License plate": "Registreringsskylt",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Högst 8 bokstäver eller siffror. Lämna tomt för originalskylten.",
+  "Original plate": "Originalskylt",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "\"{value}\" är ingen giltig registreringsskylt (högst 8 ASCII-bokstäver eller siffror)",
+  "Save": "Spara"
 }

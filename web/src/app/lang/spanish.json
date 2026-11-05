@@ -1599,5 +1599,10 @@
   "Everyone can join": "Puede unirse cualquiera",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Tu punto de encuentro: quién puede unirse (tu etapa o inferior, amigos y equipo, o todos)",
   "Invite to a race": "Invitar a una carrera",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Invitar a amigos a tu punto de encuentro, aceptar la invitación de un amigo, salir de una carrera a la que te has unido desde lejos"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Invitar a amigos a tu punto de encuentro, aceptar la invitación de un amigo, salir de una carrera a la que te has unido desde lejos",
+  "License plate": "Matrícula",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Hasta 8 letras o dígitos. Déjalo vacío para usar la matrícula original.",
+  "Original plate": "Matrícula original",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "«{value}» no es una matrícula válida (hasta 8 letras ASCII o dígitos)",
+  "Save": "Guardar"
 }

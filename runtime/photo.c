@@ -1391,10 +1391,14 @@ void sub_0048acb0(CPU *c){
     if ((int32_t)c->eax < SIZE_MODEL_A) cars_full++;
     if (!P.game_lod && (int32_t)c->eax < SIZE_FULL) c->eax = SIZE_FULL;
 }
+uint32_t roam_game_plate_begin(CPU *, uint32_t);
+void roam_game_plate_end(uint32_t);
 void sub_006162e0_orig(CPU *c);
 void sub_006162e0(CPU *c){
     if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0x30u; return; }
+    uint32_t previous = roam_game_plate_begin(c, c->ecx);
     sub_006162e0_orig(c);
+    roam_game_plate_end(previous);
 }
 void sub_00615630_orig(CPU *c);
 void lightkey_flares(uint32_t ri);               /* lightkey.c: whose flares these are (high beam) */

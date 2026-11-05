@@ -1628,5 +1628,10 @@
   "Everyone can join": "Mogą dołączyć wszyscy",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Twoja poczekalnia wyścigu: kto może dołączyć (twój etap i niżej, znajomi i ekipa albo wszyscy)",
   "Invite to a race": "Zaproś do wyścigu",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Zaproś znajomych do swojej poczekalni wyścigu, przyjmij zaproszenie znajomego, opuść wyścig, do którego dołączasz z daleka"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Zaproś znajomych do swojej poczekalni wyścigu, przyjmij zaproszenie znajomego, opuść wyścig, do którego dołączasz z daleka",
+  "License plate": "Tablica rejestracyjna",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Do 8 liter lub cyfr. Pozostaw puste, aby użyć oryginalnej tablicy.",
+  "Original plate": "Oryginalna tablica",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "„{value}” nie jest prawidłową tablicą (do 8 liter ASCII lub cyfr)",
+  "Save": "Zapisz"
 }

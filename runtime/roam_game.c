@@ -100,6 +100,7 @@
 #include "roam_plat.h"
 #include "carsfx.h"
 #include "names.h"
+#include "plate_pixels.h"
 #ifdef __wasm__
 #include "guest_span.h"               /* g_gwin_hi: the guest heap's window (Players' cars shown: Auto's top step) */
 #endif
@@ -448,6 +449,7 @@ typedef struct {
     int      st;
     int      peer; uint32_t peer_id;          /* session table index and id */
     char     name[RC_NAME_MAX + 1];
+    char     plate[RC_PLATE_MAX + 1];
     char     flagcode[RC_FLAG_MAX + 1];       /* the flag before the name, as the peer's HELLO has it ("" none) */
     int      flag;                            /* ...flags.dat's (-1 none: flag_find) */
     uint32_t car, world;                      /* the slot's car in this world */
@@ -939,6 +941,8 @@ static int skin_textures(CPU *c, uint32_t n){
 }
 
 /* ---- slots ------------------------------------------------------------------------------------ */
+#include "plates.inc" /* per-car text textures, all draw paths */
+
 static uint32_t skin_of(uint32_t rec){ return rec >= G_RECORDS && rec < G_RECORDS + 22u * REC_SZ ? (rec - G_RECORDS) / REC_SZ + 1u : 0; }
 /* slot k's paint slot: an opponent car's own (its record's place: 2-4), ours
  * 5 and up */
@@ -3984,7 +3988,7 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
 }
 
 /* ---- per-frame --------------------------------------------------------------------------------- */
-typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; char flag[RC_FLAG_MAX + 1]; int visible, paused; float dist; uint32_t cfg_gen;
+typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; char flag[RC_FLAG_MAX + 1]; char plate[RC_PLATE_MAX + 1]; int visible, paused; float dist; uint32_t cfg_gen;
                  int roams;            /* its status: in free roam, or paused there (shown or not) */
                  float rank;           /* the slots' order (assign): the nearest of the distances SOON_S and LOOK_S
                                           on, both cars at their speeds, and from our view point VIEW_M ahead (as
@@ -8465,6 +8469,7 @@ static void init_once(CPU *c){
 #ifdef ROAM_HOST_WIN
     cf.platform = RC_PLAT_WIN;                             /* HELLO byte 18: the Windows plugin */
 #else
+    snprintf(cf.plate, sizeof cf.plate, "%s", plate_self());
     cf.platform = RC_PLAT_MAC;
 #endif
     cf.test_mode = O.test; cf.max_players = maxp; cf.rate_hz = O.rate; cf.duels = DUELS; cf.drifts = DRIFTS; cf.lobbies = MPRACES;
@@ -8797,7 +8802,7 @@ static void assign(CPU *c, int64_t host){
         s->seats = v->seats; s->ghost2 = 1; s->soft2 = s->soft_r = 0;
         s->acq_us = roam_plat_now_us();
         snprintf(s->name, sizeof s->name, "%s", v->name);
-        memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode);
+        memcpy(s->plate, v->plate, sizeof s->plate); memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode);
         if (reuse){
             s->st = SL_ACTIVE; s->cfg_gen = v->cfg_gen; s->hidden = 1; g_acquires++; g_reuses++;
             set_name(s);
@@ -8967,6 +8972,17 @@ static void room_follow(void){
  * NFSU2_ROAM_NAME at the start would have.  Online mode's next login takes it too (online.c player_name). */
 static uint32_t g_name_gen;
 static void name_follow(void){
+    const char *plate=plate_self();
+    roam_plat_lock();
+    if(strcmp(g_s.conf.plate,plate)) {
+        snprintf(g_s.conf.plate,sizeof g_s.conf.plate,"%s",plate);
+        g_s.hub_hello_tx=INT64_MIN/4;
+        for(int i=0;i<RC_TABLE;i++) g_s.peer[i].last_hello_tx=INT64_MIN/4;
+    }
+    roam_plat_unlock();
+#if COOP
+    if(g_c2.on){ roam_plat_lock(); snprintf(g_c2.s.conf.plate,sizeof g_c2.s.conf.plate,"%s",plate); roam_plat_unlock(); }
+#endif
     char name[33];
     uint32_t gen = roam_plat_name(name);
     if (!gen || gen == g_name_gen) return;
@@ -9478,7 +9494,7 @@ void roam_game_frame(CPU *c){
             if (g_c2.on && c2_view(gi, p, &seats)) continue;
 #endif
             PeerView *v = &g_pv[g_npv++];
-            v->idx = gi; v->seats = seats; v->id = p->id; snprintf(v->name, sizeof v->name, "%s", p->name); memcpy(v->flag, p->flag, sizeof v->flag);
+            v->idx = gi; v->seats = seats; v->id = p->id; snprintf(v->name, sizeof v->name, "%s", p->name); memcpy(v->flag, p->flag, sizeof v->flag); memcpy(v->plate, p->plate, sizeof v->plate);
             /* shown while it is in free roam and its snapshots keep coming,
              * or while it is paused there: a paused game (pause menu, or a
              * window in the background: lifecycle.c parks the game, no
@@ -9580,6 +9596,7 @@ void roam_game_frame(CPU *c){
             for (int i = 0; i < g_npv; i++) if (g_pv[i].idx == s->peer && g_pv[i].id == s->peer_id) v = &g_pv[i];
             if (!v) continue;
             s->seats = v->seats;
+            memcpy(s->plate, v->plate, sizeof s->plate);
             if (strcmp(s->flagcode, v->flag)){ memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode); }
             s->oneway = v->oneway;
             /* a second first: a hitch in the friend's game (streaming) is a pause too */

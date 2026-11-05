@@ -1483,5 +1483,10 @@
   "Everyone can join": "誰でも参加できます",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "自分のレースロビー: 参加できる人（自分のステージ以下、フレンドとクルー、または全員）",
   "Invite to a race": "レースに招待",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "フレンドを自分のレースロビーに招待、フレンドの招待に参加、離れた場所から参加したレースから抜ける"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "フレンドを自分のレースロビーに招待、フレンドの招待に参加、離れた場所から参加したレースから抜ける",
+  "License plate": "ナンバープレート",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "英数字8文字まで。空欄にすると元のプレートを使用します。",
+  "Original plate": "元のプレート",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "「{value}」は無効なナンバープレートです（ASCII英数字8文字まで）",
+  "Save": "保存"
 }

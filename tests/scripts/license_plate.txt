@@ -1,0 +1,18 @@
+# Custom plate render check: run with NFSU2_LICENSE_PLATE=ABC12345. Other cars retain their original plates.
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    wzero
++0    photo hello                                  # a page that has photo mode
+12000wms dump plate_driving
++0    photo on
++30   photo dolly -1
++60   dump plate_rear
++0    photo drag 1 0
++60   dump plate_front
++10   quit

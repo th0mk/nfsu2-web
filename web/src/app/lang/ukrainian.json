@@ -1628,5 +1628,10 @@
   "Everyone can join": "Можуть приєднатися всі",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Ваше лобі гонки: хто може приєднатися (ваш етап і нижче, друзі й команда або всі)",
   "Invite to a race": "Запросити в гонку",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Запросити друзів у своє лобі гонки, прийняти запрошення друга, вийти з гонки, до якої ви приєдналися здалеку"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Запросити друзів у своє лобі гонки, прийняти запрошення друга, вийти з гонки, до якої ви приєдналися здалеку",
+  "License plate": "Номерний знак",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "До 8 літер або цифр. Залиште порожнім для оригінального номера.",
+  "Original plate": "Оригінальний номер",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "«{value}» — неприпустимий номер (до 8 літер ASCII або цифр)",
+  "Save": "Зберегти"
 }

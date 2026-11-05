@@ -767,3 +767,19 @@ int roam_plat_parse_peers(const char *list, int test_mode, uint16_t defport, uin
     }
     return n;
 }
+
+/* IEV_NAME/INAME_PLATE is one complete, bounded value, including clearing it. */
+static char g_plate_text[9];
+static unsigned g_plate_generation;
+void roam_plat_plate_input(const char *s,int n){
+    if(n<0 || n>8) return;
+    for(int i=0;i<n;i++) if(!((s[i]>='A' && s[i]<='Z') || (s[i]>='0' && s[i]<='9'))) return;
+    pthread_mutex_lock(&g_name_mx);
+    memset(g_plate_text,0,sizeof g_plate_text);memcpy(g_plate_text,s,n);g_plate_generation++;
+    pthread_mutex_unlock(&g_name_mx);
+}
+uint32_t roam_plat_plate(char out[9]){
+    pthread_mutex_lock(&g_name_mx);
+    unsigned gen=g_plate_generation;memcpy(out,g_plate_text,9);
+    pthread_mutex_unlock(&g_name_mx);return gen;
+}

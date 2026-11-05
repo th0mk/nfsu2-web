@@ -1599,5 +1599,10 @@
   "Everyone can join": "Todos podem entrar",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Seu lobby de corrida: quem pode entrar (sua fase ou abaixo, amigos e equipe, ou todos)",
   "Invite to a race": "Convidar para uma corrida",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Convidar amigos para seu lobby de corrida, aceitar o convite de um amigo, sair de uma corrida em que você entrou de longe"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Convidar amigos para seu lobby de corrida, aceitar o convite de um amigo, sair de uma corrida em que você entrou de longe",
+  "License plate": "Placa",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Até 8 letras ou dígitos. Deixe em branco para usar a placa original.",
+  "Original plate": "Placa original",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "\"{value}\" não é uma placa válida (até 8 letras ASCII ou dígitos)",
+  "Save": "Salvar"
 }
