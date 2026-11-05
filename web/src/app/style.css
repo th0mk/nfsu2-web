@@ -91,7 +91,9 @@ h3 { font-size: 16px; line-height: 24px; color: var(--lime); margin: 32px 0 8px;
 .panel-head + .msg { margin: -12px 0 16px; }
 #shots-head { gap: 4px 16px; }
 #shots-head .text-btn { padding: 0; height: 24px; }   /* Delete all, in line with the F12 hint */
-#played { margin: -12px 0 16px; }                  /* the play counted here, 4 px under the Profiles head (or its message) */
+/* the play counted here beside the Profiles heading, as Cloud saves' "Synced 12:43" */
+#profiles-head { margin-bottom: 16px; }
+.head-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 16px; }
 #settings[data-readonly] #settings-note, #online[data-readonly] #online-note { color: var(--warn); }
 
 /* who plays on this server now (players.ts PlayersPanel): three numbers in the game's value boxes */
@@ -434,12 +436,20 @@ summary:hover { color: var(--text); }
 .profiles .name { color: var(--lime); margin-right: auto; }
 .profiles .meta { color: var(--muted); font-size: 14px; line-height: 24px; }   /* the name's line: on the grid beside it */
 .profiles .text-btn { padding: 0; }                 /* in line with the text above when wrapped */
-.profiles li > .text-btn { height: 24px; }            /* a row stays as tall as its name */
+/* Rename and Delete as the friends list's icons: 32 px in a 40 px row, Delete dimmed until pointed at */
+.profiles li:has(> .acts) { padding: 4px 4px 4px 12px; }
+.profiles .acts { display: flex; gap: 2px; }
+.profiles .delete-btn { color: var(--edge); opacity: 0.6; }
+.profiles .delete-btn:is(:hover, :focus-visible):not(:disabled) { color: var(--bad); opacity: 1; }
 .profiles li.renaming { flex-direction: column; align-items: stretch; gap: 8px; }
 .profiles li.renaming .msg { margin-top: 0; }
-/* the screenshots (shots.ts): four to a row, each cut to 16:9, the game's glow on the one pointed at; the newest
- * eight, the dialog pages through the rest */
+/* the screenshots (shots.ts): each cut to 16:9, the game's glow on the one pointed at; the newest across the section,
+ * the next four in a row under it, the dialog pages through the rest */
 .shots { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.shots li:first-child { grid-column: 1 / -1; }
+/* 16:9 rounded down to the 4 px grid (each tile its own width's container); where round() is missing, plain 16:9 */
+.shots li { container-type: inline-size; }
+@supports (height: round(down, 10px, 4px)) { .shots .shot { aspect-ratio: auto; height: round(down, 100cqw * 9 / 16, 4px); } }
 .shots:empty { display: none; }
 .shot {
   position: relative; display: block; width: 100%; padding: 0; border: 2px solid transparent; border-radius: 4px;

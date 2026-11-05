@@ -672,7 +672,8 @@ export class VaultSync {
       const hash = await contentHash(files), l = await this.upgraded(hash);
       // unchanged since, unless a send was not answered: the server may have that one (the files here went back since)
       if (hash === l.hash && !l.sent?.length) return;
-      if (!profilesIn(files).length && l.profiles > 0) return this.ask('empty', l, files);
+      // none here: asked, but for all of them deleted on purpose (the Saves tab's Delete of the last one, the game's own)
+      if (!profilesIn(files).length && l.profiles > 0 && (l.dropped ?? 0) < (l.whole ?? l.profiles)) return this.ask('empty', l, files);
       // the folder deleted since it synced (its mark gone) and not whole again: what is here may be one profile the
       // game saved since, never sent over the cloud's by itself (a profile deleted on purpose leaves the mark)
       await this.marking;

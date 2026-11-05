@@ -359,6 +359,21 @@ export interface RenameFiles extends SaveFiles {
   remove(path: string): Promise<void>;
 }
 
+/** Delete a profile: its cover shoots' folders, then its own (the game's own names, any case), so one that stops
+ *  halfway leaves the profile and never a cover without one.  (Its line in
+ *  AUTOSAVE_SEEN goes at the next Play, turnOnAutosave.) */
+export async function deleteProfile(fs: RenameFiles, profilesDir: string, name: string): Promise<{ folders: number }> {
+  const same = (a: string, b: string) => lowerAscii(a) === lowerAscii(b);
+  const folders = new Set<string>();
+  for (const { path } of await fs.listFiles()) {
+    const p = path.split('/');
+    if (p.length >= 3 && p[0] === profilesDir && (same(p[1], name) || same(coverOf(p[1])?.profile ?? '', name))) folders.add(p[1]);
+  }
+  const order = [...folders].sort((a, b) => Number(same(a, name)) - Number(same(b, name)));   // its own folder last
+  for (const f of order) await fs.remove(`${profilesDir}/${f}`);
+  return { folders: folders.size };
+}
+
 /**
  * Rename a profile as if the game had made it under the new name: its folder and
  * file, the name inside (checksums made again), its cover shoots' folders, and

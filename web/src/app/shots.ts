@@ -1,7 +1,7 @@
 // The screenshots part of the Saves section.  F12 while the game runs saves the
 // next frame as a PNG at the top of the save folder (shell.ts screenshot,
 // saveScreenshot here), so a backup carries it with the saves.  Shown newest
-// first, four to a row, the newest eight.  One opens in the #shot-view dialog
+// first: the newest across the section, the next four in a row under it.  One opens in the #shot-view dialog
 // to page through all of them (the arrow keys too), download or delete.  Delete
 // all in the section's head deletes every one, after a question that says how
 // many and how much (2026-11-05: a player's backup was too large to download).
@@ -24,12 +24,13 @@ export interface ShotsDeps {
   say(text: string): void;
 }
 
-/** two rows of four, the newest; the dialog pages through the rest */
-const SHOWN = 8;
-const THUMB_W = 384;
+/** the newest across the section, four under it; the dialog pages through the rest */
+const SHOWN = 5;
+/** thumbnails' widths: the four's, the newest's (the section is at most 664 px wide, 1328 on a 2x screen) */
+const THUMB_W = 384, BIG_W = 1344;
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', bmp: 'image/bmp', tga: 'image/x-tga' };
 const ext = (name: string) => name.slice(name.lastIndexOf('.') + 1).toLowerCase();
-const key = (s: Entry) => `${s.path}|${s.size}|${s.mtime}`;
+const key = (s: Entry, w = THUMB_W) => `${s.path}|${s.size}|${s.mtime}|${w}`;
 
 /** Write an F12 screenshot at the top of the save folder as nfsu2-<date>_<time>.png; returns its name. */
 export async function saveScreenshot(saveDir: string, png: Blob, d = new Date()): Promise<string> {
@@ -137,7 +138,7 @@ export class ScreenshotsPart {
   /** The screenshots as the save folder has them now (saves-ui.ts refresh). */
   show(files: Entry[]) {
     this.shots = [...files].sort((a, b) => b.mtime - a.mtime || (a.path < b.path ? 1 : -1));
-    const keep = new Set(this.shots.map(key));
+    const keep = new Set(this.shots.flatMap(s => [key(s), key(s, BIG_W)]));
     for (const [k, p] of this.thumbs) if (!keep.has(k)) { this.thumbs.delete(k); void p.then(u => u && URL.revokeObjectURL(u)); }
     this.render();
     if (!this.open) return;
@@ -152,7 +153,7 @@ export class ScreenshotsPart {
     this.root.querySelector<HTMLElement>('#shots-clear')!.hidden = n === 0;
     const ul = this.root.querySelector<HTMLUListElement>('#shots')!;
     ul.replaceChildren(...this.shots.slice(0, SHOWN).map((s, i) => {
-      const b = this.tile(s);
+      const b = this.tile(s, i ? THUMB_W : BIG_W);
       b.setAttribute('aria-label', t('Screenshot, {when}', { when: when(s.mtime) }));
       b.title = when(s.mtime);
       b.onclick = () => void this.view(i);
@@ -162,23 +163,23 @@ export class ScreenshotsPart {
   }
 
   /** a tile with the screenshot's thumbnail, once it is made (its kind in words if it cannot be drawn) */
-  private tile(s: Entry): HTMLButtonElement {
+  private tile(s: Entry, w: number): HTMLButtonElement {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'shot';
-    void this.thumb(s).then(u => {
+    void this.thumb(s, w).then(u => {
       if (u) b.prepend(Object.assign(document.createElement('img'), { src: u, alt: '', decoding: 'async' }));
       else b.prepend(Object.assign(document.createElement('span'), { className: 'kind', textContent: ext(s.path).toUpperCase() }));
     });
     return b;
   }
 
-  private thumb(s: Entry): Promise<string | null> {
-    let p = this.thumbs.get(key(s));
+  private thumb(s: Entry, w: number): Promise<string | null> {
+    let p = this.thumbs.get(key(s, w));
     if (!p) {
-      p = this.queue.then(() => bitmap(this.deps.saveDir, s.path, THUMB_W))
+      p = this.queue.then(() => bitmap(this.deps.saveDir, s.path, w))
         .then(bmp => encode(bmp, 'image/jpeg')).then(b => URL.createObjectURL(b), () => null);
       this.queue = p;
-      this.thumbs.set(key(s), p);
+      this.thumbs.set(key(s, w), p);
     }
     return p;
   }

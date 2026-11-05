@@ -136,17 +136,6 @@
 
       <div class="pane" role="tabpanel" data-tab="saves" id="saves">
         <div class="panel-head">
-          <h3 data-i18n>Profiles</h3>
-          <div class="row">
-            <button type="button" class="btn" id="export" data-i18n>Download backup</button>
-            <label class="btn file-btn" data-i18n-html>Restore<input type="file" id="import"></label>
-          </div>
-        </div>
-        <p class="msg" id="saves-msg" role="status"></p>
-        <p class="hint" id="played" hidden></p>
-        <ul class="profiles" id="profiles" data-i18n-attr="aria-label" aria-label="Profiles in this browser"></ul>
-        <p class="hint" data-i18n-html>To save while playing: <span class="key-only"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>
-        <div class="panel-head sub">
           <h3 data-i18n>Screenshots</h3>
           <div class="row" id="shots-head">
             <p class="hint key-only" data-i18n-html>Screenshot with <kbd>F12</kbd></p>
@@ -155,6 +144,19 @@
         </div>
         <p class="hint" id="shots-info" hidden data-i18n>None yet.</p>
         <ul class="shots" id="shots" data-i18n-attr="aria-label" aria-label="Screenshots in this browser"></ul>
+        <div class="panel-head sub" id="profiles-head">
+          <div class="head-title">
+            <h3 data-i18n>Profiles</h3>
+            <p class="hint" id="played" hidden></p>
+          </div>
+          <div class="row">
+            <button type="button" class="btn" id="export" data-i18n>Download backup</button>
+            <label class="btn file-btn" data-i18n-html>Restore<input type="file" id="import"></label>
+          </div>
+        </div>
+        <p class="msg" id="saves-msg" role="status"></p>
+        <ul class="profiles" id="profiles" data-i18n-attr="aria-label" aria-label="Profiles in this browser"></ul>
+        <p class="hint" id="save-how" data-i18n-html>To save while playing: <span class="key-only"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>
         <div class="vault" id="vault" hidden>
           <div class="panel-head sub">
             <h3 data-i18n>Cloud saves</h3>
