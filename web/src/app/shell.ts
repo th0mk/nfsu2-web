@@ -38,7 +38,7 @@ import { TitleMark } from './titlemark';
 import { DriftPanel } from './drift';
 import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
-import type { NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
+import type { NetBanCase, NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
 import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
 import { checkSaves, exists, filesOf, listProfiles, NO_SAVE, PROFILES_DIR, readText, removeSaveDir, SavesOff, setWritesOff, settleStaged, UNREADABLE, writeFile, type SavesCheck } from './savefs';
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
@@ -1370,18 +1370,41 @@ let removedTimer: ReturnType<typeof setInterval> | null = null;
 const until = (ms: number) => new Date(ms).toLocaleString(dateLocale(), { dateStyle: 'medium', timeStyle: 'short' });
 /** the operator's message (in its own words), as a sentence after the page's */
 const said = (msg: string) => msg ? ` ${msg}${/[.!?]$/.test(msg) ? '' : '.'}` : '';
+/** which ban, for the player to quote: "Ban #12 · Ann · 1 Nov 2026"; null from a server that names none */
+function banLine(c: NetBanCase): string | null {
+  if (c.id === undefined) return null;
+  const made = c.at === undefined ? null : new Date(c.at).toLocaleDateString(dateLocale(), { dateStyle: 'medium' });
+  return [t('Ban #{n}', { n: c.id }), c.name, made].filter(Boolean).join(' · ');
+}
+/** an Apple device, whose Safari may play through iCloud Private Relay (a VPN of its own) */
+const apple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
 function netRemoved(r: NetRemoved) {
   const head = !r.ban ? t('You were removed from playing with others.')
     : r.until ? t('You can\'t play with others until {when}.', { when: until(r.until) })
     : t('You can\'t play with others any more.');
-  removedLine(`${head}${said(r.msg)} ${t('You can keep playing on your own.')}`);
+  // (the ban's name: this player's, under another name maybe; the log a player posts names nobody)
+  if (r.name) privacy.name(r.name, 'you');
+  const which = r.ban ? banLine(r) : null;
+  const solo = t('You can keep playing on your own.');
+  removedLine(which ? `${head}${said(r.msg)}\n${which}\n${solo} ${t('Think it\'s a mistake? Ask on Discord with the ban number.')}`
+    : `${head}${said(r.msg)} ${solo}`);
 }
-/** the operator's race ban (net/index.ts onRaces): why and until when, over the game (again when the LAN or Online
- *  screens open); null: lifted */
+/** the operator's race ban (net/index.ts onRaces), or someone else's ban by the player's address: why, until when,
+ *  which ban, over the game (again when the LAN or Online screens open); null: lifted */
 function netRaces(r: NetRaces | null) {
   if (!r) { toast(t('You can race other players again.'), 6000); return; }
+  // (by the address only: someone else's name, which the log a player posts keeps to itself)
+  if (r.name) privacy.name(r.name, r.addr ? 'player' : 'you');
+  const which = banLine(r), roam = t('Free roam stays open.');
+  if (r.addr) {
+    const fix = apple ? t('Turn off your VPN or iCloud Private Relay, or use another network.') : t('Turn off your VPN, or use another network.');
+    toast([`${t('Someone who played from your network or VPN was banned, so you can\'t race other players from it.')} ${roam}`, which, fix]
+      .filter(Boolean).join('\n'), 20_000);
+    return;
+  }
   const head = r.until ? t('You can\'t race other players until {when}.', { when: until(r.until) }) : t('You can\'t race other players any more.');
-  toast(`${head}${said(r.msg)} ${t('Free roam stays open.')}`, 12_000);
+  toast(which ? `${head}${said(r.msg)} ${roam}\n${which}\n${t('Think it\'s a mistake? Ask on Discord with the ban number.')}`
+    : `${head}${said(r.msg)} ${roam}`, which ? 16_000 : 12_000);
 }
 /** the operator took the player's name away (net/index.ts onRename): a question for another (claim-ui.ts renamePick);
  *  picked, the game plays under it at once (the input's name) and the page goes back to the others; Not now: playing

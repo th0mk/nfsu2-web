@@ -15,16 +15,21 @@
 //! and no keyphrase's owner, and means nothing without the key.
 //!
 //! - Its address, as the server's limits count it (an IPv4 address, or an IPv6 /56), for at most [`ADDR_MS`] (7 days)
-//!   after it was last the banned player's: addresses change hands (a phone network gives many players one address in
-//!   turn, a home's address goes to another home), and an address banned for good would one day turn a stranger away.
+//!   after it was last the banned player's, at most [`ADDRS_MAX`] of them: addresses change hands (a phone network
+//!   gives many players one address in turn, a home's address goes to another home), and a VPN's server, iCloud
+//!   Private Relay's and a school's are many players' at once.  So an address alone never turns anyone away: whoever
+//!   comes from it races nobody, and its page says why (someone who played from its network was banned) and what to
+//!   do (another network, the VPN off).  A player who keeps hopping from one VPN server to the next would only take
+//!   more strangers' races away: past [`ADDRS_MAX`] the ban takes in no more.
 //! - The id its page keeps in the browser's storage (the hello's "id", web/src/app/page-id.ts), for as long as the ban
 //!   lasts.  A page that found another id in its other store names that one too (the hello's "was").
 //! - The keyphrase its page plays with (the one that keeps its cloud saves and claims its name), by the owner
 //!   nfsu2-claims makes of its token (the switch's `AttachOpts::on_claim`), for as long as the ban lasts: the same on
 //!   every device and browser the player types it into.
 //!
-//! A connection that matches a full ban is turned away ([`Bans::by_addr`] when it connects, [`Bans::by_hello`] at
-//! its hello); one that matches a race ban (at its hello, its address too) races nobody.  A hello that matches by what
+//! A hello that matches a full ban by its page ids or keyphrase is turned away ([`Bans::by_hello`]); one that matches
+//! a race ban that way, or any ban by its address only ([`Match::Addr`]), races nobody.  A ban made with an address
+//! alone (a tool's, without a page id) names it by that, as by its own keys.  A hello that matches by what
 //! the ban was made with (the player's page ids and keyphrase then) adds what else it names: its address (as above),
 //! and its other page ids and keyphrase, each for [`LINK_MS`] (30 days) after it was last seen with one of those, at
 //! most [`KEYS_MAX`] of each (the first ones stay).  So the player's new browser is turned away while it keeps showing
@@ -67,6 +72,9 @@ pub const FOR_MAX: i64 = 3650 * DAY;
 /// the most page ids, and keyphrases, a ban takes in later, or a mark names: past them a hello adds none (a player
 /// who keeps clearing its storage, or a script making up ids, does not grow the file without end; the first stay)
 pub const KEYS_MAX: usize = 32;
+/// the most addresses a ban names at once (the latest a new one is made with, then the first a hello brings in; one
+/// whose time is up makes room)
+pub const ADDRS_MAX: usize = 3;
 /// the most marks kept (the oldest go first)
 const MARKS_MAX: usize = 5000;
 /// the most bans kept in the history (the oldest go first), and names taken away
@@ -145,21 +153,47 @@ pub struct Held {
     pub until: i64,
 }
 
+/// How a ban names a client: by what its player plays with (`Own`: its page ids, its keyphrase; or the address of a
+/// ban made with an address alone), or by the address it comes from only (`Addr`: a VPN's server, a phone network, a
+/// home: someone else's ban, as likely as not), which keeps it out of races and never turns it away
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Match {
+    Own,
+    Addr,
+}
+
 impl Ban {
     /// whether it is in force now (a rename never is)
     pub fn live(&self, now: i64) -> bool {
         self.kind != Kind::Name && self.until.is_none_or(|u| u > now)
     }
-    /// Its page's control message: {"t":"ban","msg":...,"until":ms} for a full ban, {"t":"races",...} for a race
-    /// ban, without until for good
-    pub fn message(&self) -> String {
-        let mut m = Map::new();
-        m.insert("t".into(), if self.kind == Kind::Races { "races" } else { "ban" }.into());
-        m.insert("msg".into(), self.msg.clone().into());
+    /// Its page's control message for a client it names as `m` says: {"t":"ban",...} for a full ban by the player's
+    /// own keys, else {"t":"races",...}; with its number, the player's name then, when it was made (ms since 1970),
+    /// the operator's message, its end (none: for good) and, by the address only, "addr":true (the page says that
+    /// someone who played from its network was banned)
+    pub fn message(&self, m: Match) -> String {
+        let mut o = Map::new();
+        let full = self.kind == Kind::Full && m == Match::Own;
+        o.insert("t".into(), if full { "ban" } else { "races" }.into());
+        o.insert("id".into(), self.id.into());
+        o.insert("name".into(), clean_msg(&self.name).into());
+        o.insert("at".into(), self.at.into());
+        o.insert("msg".into(), self.msg.clone().into());
         if let Some(u) = self.until {
-            m.insert("until".into(), u.into());
+            o.insert("until".into(), u.into());
         }
-        Value::Object(m).to_string()
+        if m == Match::Addr {
+            o.insert("addr".into(), true.into());
+        }
+        Value::Object(o).to_string()
+    }
+    /// whether it was made with an address alone (no page id, no keyphrase: a tool's): the address is its own key
+    fn addr_only(&self) -> bool {
+        self.pages.is_empty() && self.owners.is_empty()
+    }
+    /// how it names a client of this address (its hash) now, if it does
+    fn at_addr_as(&self, a: &str, now: i64) -> Option<Match> {
+        self.at_addr(a, now).then_some(if self.addr_only() { Match::Own } else { Match::Addr })
     }
     /// whether it was made with one of these page ids or keyphrases (their hashes)
     fn made_for(&self, pages: &[String], owners: &[String]) -> bool {
@@ -231,12 +265,13 @@ pub struct Denied {
     pub by: u64,
 }
 
-/// What a hello's player is under (`Bans::by_hello`): the full ban that turns it away, the race ban that keeps it
-/// out of races (each the one that lasts longest)
+/// What a hello's player is under (`Bans::by_hello`): the full ban that turns it away, the ban that keeps it out of
+/// races and how it names the player (a race ban by its own keys first, else any ban by its address only); each the
+/// one that lasts longest
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Verdict {
     pub full: Option<Ban>,
-    pub races: Option<Ban>,
+    pub races: Option<(Ban, Match)>,
 }
 
 /// Whom a ban or a mark names: the keyed hashes of addresses (`Bans::addr`), page ids and keyphrases (`Bans::keys`)
@@ -373,6 +408,11 @@ impl Bans {
             Err(e) if e.kind() == io::ErrorKind::NotFound => File::default(),
             Err(e) => return Err(e),
         };
+        let mut file = file;
+        // a ban from before ADDRS_MAX: its latest addresses
+        for b in &mut file.bans {
+            latest_addrs(&mut b.addrs);
+        }
         let deny = Arc::new(nfsu2_names::Deny::default());
         deny.set(file.names.iter().map(|d| d.name.clone()));
         Ok(Bans { path, key, file: Mutex::new(file), deny })
@@ -414,16 +454,11 @@ impl Bans {
         nfsu2_util::js::base64url(&mac.finalize().into_bytes())[..22].to_string()
     }
 
-    /// the live full ban an address (its hash) is under now, the one that lasts longest
-    pub fn by_addr(&self, addr: &str, now: i64) -> Option<Ban> {
-        let f = self.file.lock();
-        longest(&f.bans, |b| b.kind == Kind::Full && b.live(now) && b.at_addr(addr, now)).map(|i| f.bans[i].clone())
-    }
-
-    /// The live bans a hello's page ids or keyphrase are under now (a race ban: its address too), of each kind the
-    /// one that lasts longest.  When one was made with them, what else the hello names is added to it: its other page
-    /// ids and its keyphrase for `LINK_MS` (up to `KEYS_MAX` each), the address it came from (its hash) for
-    /// `ADDR_MS`, or each kept that much longer.  A hello that matches only by what a ban took in later (or by its
+    /// The live bans a hello's page ids or keyphrase are under now, of each kind the one that lasts longest, and
+    /// else the one its address is under (out of races only, `Match::Addr`; but a ban made with an address alone turns
+    /// it away).  When one was made with them, what else the hello names is added to it: its other page ids and its
+    /// keyphrase for `LINK_MS` (up to `KEYS_MAX` each), the address it came from (its hash) for `ADDR_MS` (up to
+    /// `ADDRS_MAX`), or each kept that much longer.  A hello that matches only by what a ban took in later (or by its
     /// address) adds nothing.
     pub fn by_hello(&self, s: &Seen, now: i64) -> Verdict {
         let pages: Vec<String> = s.pages.iter().map(|p| self.page(p)).collect();
@@ -436,26 +471,33 @@ impl Bans {
                     let b = &mut f.bans[i];
                     let (link, addr) = (b.until_for(LINK_MS, now), b.until_for(ADDR_MS, now));
                     for p in pages.iter().filter(|p| !b.pages.contains(p)) {
-                        changed |= hold(&mut b.later_pages, p, link, KEYS_MAX);
+                        changed |= hold(&mut b.later_pages, p, link, KEYS_MAX, now);
                     }
                     for o in owners.iter().filter(|o| !b.owners.contains(o)) {
-                        changed |= hold(&mut b.later_owners, o, link, KEYS_MAX);
+                        changed |= hold(&mut b.later_owners, o, link, KEYS_MAX, now);
                     }
                     if let Some(a) = s.addr {
-                        changed |= hold(&mut b.addrs, a, addr, usize::MAX);
+                        changed |= hold(&mut b.addrs, a, addr, ADDRS_MAX, now);
                     }
                     Some(b.clone())
                 }
-                None => longest(&f.bans, |b| {
-                    b.kind == kind
-                        && b.live(now)
-                        && (b.took_in(&pages, &owners, now) || (kind == Kind::Races && s.addr.is_some_and(|a| b.at_addr(a, now))))
-                })
-                .map(|i| f.bans[i].clone()),
+                None => longest(&f.bans, |b| b.kind == kind && b.live(now) && b.took_in(&pages, &owners, now)).map(|i| f.bans[i].clone()),
             };
             match kind {
                 Kind::Full => v.full = ban,
-                _ => v.races = ban,
+                _ => v.races = ban.map(|b| (b, Match::Own)),
+            }
+        }
+        // by its address: a ban made with that alone as by its own keys, any other out of races only
+        if let Some(a) = s.addr {
+            let at = |b: &Ban, m: Match| b.live(now) && b.at_addr_as(a, now) == Some(m);
+            if v.full.is_none() {
+                v.full = longest(&f.bans, |b| b.kind == Kind::Full && at(b, Match::Own)).map(|i| f.bans[i].clone());
+            }
+            if v.races.is_none() {
+                v.races = longest(&f.bans, |b| b.kind == Kind::Races && at(b, Match::Own))
+                    .map(|i| (f.bans[i].clone(), Match::Own))
+                    .or_else(|| longest(&f.bans, |b| at(b, Match::Addr)).map(|i| (f.bans[i].clone(), Match::Addr)));
             }
         }
         if changed {
@@ -464,9 +506,14 @@ impl Bans {
         v
     }
 
-    /// whether `ban` names one of these keys (a connection's: `Bans::keys`) now: the other connections a new ban removes
-    pub fn covers(&self, ban: &Ban, k: &Keys, now: i64) -> bool {
-        ban.made_for(&k.pages, &k.owners) || ban.took_in(&k.pages, &k.owners, now) || k.addrs.iter().any(|a| ban.at_addr(a, now))
+    /// whether `ban` names one of these keys (a connection's: `Bans::keys`) now, and how: the other connections a new
+    /// ban removes (`Match::Own`, a full ban) or keeps out of races
+    pub fn covers(&self, ban: &Ban, k: &Keys, now: i64) -> Option<Match> {
+        if ban.made_for(&k.pages, &k.owners) || ban.took_in(&k.pages, &k.owners, now) {
+            return Some(Match::Own);
+        }
+        let by: Vec<Match> = k.addrs.iter().filter_map(|a| ban.at_addr_as(a, now)).collect();
+        by.iter().copied().find(|m| *m == Match::Own).or(by.first().copied())
     }
 
     /// A new ban of `kind` (full or races) of the player `k` names (`name` for the operator), with `msg`, until
@@ -739,7 +786,9 @@ fn new_ban(id: u64, kind: Kind, name: &str, k: &Keys, msg: &str, until: Option<i
     let mut own = Keys::default();
     own.extend(k.clone());
     let addr = if kind == Kind::Name { now } else { b.until_for(ADDR_MS, now) };
-    b.addrs = own.addrs.into_iter().map(|h| Held { h, until: addr }).collect();
+    // the latest (a mark's and a player's keys name the newest last)
+    let skip = own.addrs.len().saturating_sub(ADDRS_MAX);
+    b.addrs = own.addrs.into_iter().skip(skip).map(|h| Held { h, until: addr }).collect();
     (b.pages, b.owners) = (own.pages, own.owners);
     b
 }
@@ -758,8 +807,9 @@ fn past_record(p: &Past) -> Record {
     Record { ban: p.ban.clone(), past: Some((p.ended, p.how, p.by)) }
 }
 
-/// `h` held until `until` in `l` (at most `max` long): false when that changed nothing worth writing
-fn hold(l: &mut Vec<Held>, h: &str, until: i64, max: usize) -> bool {
+/// `h` held until `until` in `l` (at most `max` long; one whose time is up makes room): false when that changed
+/// nothing worth writing
+fn hold(l: &mut Vec<Held>, h: &str, until: i64, max: usize, now: i64) -> bool {
     if let Some(x) = l.iter_mut().find(|x| x.h == h) {
         let later = x.until < until - SLACK;
         if later {
@@ -768,10 +818,19 @@ fn hold(l: &mut Vec<Held>, h: &str, until: i64, max: usize) -> bool {
         return later;
     }
     if l.len() >= max {
-        return false;
+        let Some(old) = l.iter().position(|x| x.until <= now) else { return false };
+        l.remove(old);
     }
     l.push(Held { h: h.to_string(), until });
     true
+}
+
+/// a ban's addresses cut to the `ADDRS_MAX` held longest (the ones last seen)
+fn latest_addrs(l: &mut Vec<Held>) {
+    if l.len() > ADDRS_MAX {
+        l.sort_by(|a, b| b.until.cmp(&a.until));
+        l.truncate(ADDRS_MAX);
+    }
 }
 
 /// the bans whose time is up go to the history, what the others name for a time goes when its time is up, and so do

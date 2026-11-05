@@ -18,8 +18,15 @@ fn hello(b: &Bans, pages: &[&str], owner: Option<&str>, addr: Option<&str>, now:
     b.by_hello(&Seen { pages, owner, addr }, now).full
 }
 
+/// what a stranger's hello from this address (its hash) hears: a ban's number and how the ban names it (never a full
+/// ban: `hello` says so)
+fn stranger(b: &Bans, addr: &str, now: i64) -> Option<(u64, Match)> {
+    let v = b.by_hello(&Seen { pages: &["a-stranger"], owner: Some("a-stranger's-key"), addr: Some(addr) }, now);
+    v.races.map(|(x, m)| (x.id, m))
+}
+
 #[test]
-fn a_ban_turns_away_its_address_and_its_page() {
+fn a_ban_turns_away_its_page_and_keeps_its_address_out_of_races() {
     let (_d, b) = bans();
     let (a1, a2) = (b.addr("203.0.113.5"), b.addr("198.51.100.7"));
     assert_ne!(a1, a2);
@@ -28,33 +35,34 @@ fn a_ban_turns_away_its_address_and_its_page() {
         b.add(Kind::Full, "Bob", &who(&b, Some(&a1), Some("page-1"), None), " Ramming,\n3 days ", Some(T0 + 3 * DAY), T0).unwrap();
     assert!(replaced.is_empty());
     assert_eq!((ban.id, ban.msg.as_str()), (1, "Ramming, 3 days"));
-    assert_eq!(b.by_addr(&a1, T0 + 1).map(|x| x.id), Some(1));
-    assert_eq!(b.by_addr(&a2, T0 + 1), None);
+    assert_eq!(stranger(&b, &a1, T0 + 1), Some((1, Match::Addr)));
+    assert_eq!(hello(&b, &["page-2"], None, Some(&a1), T0 + 1), None, "a stranger at its address plays on");
+    assert_eq!(stranger(&b, &a2, T0 + 1), None);
     assert_eq!(hello(&b, &["page-2"], None, Some(&a2), T0 + 1), None);
-    // the banned page at another address: that address is banned too
+    // the banned page at another address: that address is the ban's too
     assert_eq!(hello(&b, &["page-1"], None, Some(&a2), T0 + 1).map(|x| x.id), Some(1));
-    assert_eq!(b.by_addr(&a2, T0 + 2).map(|x| x.id), Some(1));
+    assert_eq!(stranger(&b, &a2, T0 + 2), Some((1, Match::Addr)));
     // and its time is up with the ban's
-    assert_eq!(b.by_addr(&a1, T0 + 3 * DAY), None);
+    assert_eq!(stranger(&b, &a1, T0 + 3 * DAY), None);
     assert_eq!(hello(&b, &["page-1"], None, None, T0 + 3 * DAY), None);
     assert!(b.list(T0 + 3 * DAY).is_empty());
 }
 
 #[test]
-fn an_address_is_banned_for_a_week_after_it_was_last_the_players_and_never_bans_a_page() {
+fn an_address_is_kept_out_of_races_for_a_week_after_it_was_last_the_players_and_never_bans_a_page() {
     let (_d, b) = bans();
     let a = b.addr("203.0.113.5");
     b.add(Kind::Full, "Bob", &who(&b, Some(&a), Some("p"), None), "", None, T0).unwrap();
-    // whoever else comes from that address is turned away, but their page and keyphrase are not banned for it
-    assert!(b.by_addr(&a, T0 + DAY).is_some());
+    // whoever else comes from that address races nobody, but their page and keyphrase are not banned for it
+    assert!(stranger(&b, &a, T0 + DAY).is_some());
     assert_eq!(hello(&b, &["someone-else"], Some("their-keyphrase"), Some(&a), T0 + DAY), None);
     let ban = &b.list(T0 + DAY)[0];
     assert_eq!((ban.pages.len(), ban.later_pages.len(), ban.later_owners.len()), (1, 0, 0));
-    assert!(b.by_addr(&a, T0 + ADDR_MS).is_none(), "the address goes after a week");
+    assert!(stranger(&b, &a, T0 + ADDR_MS).is_none(), "the address goes after a week");
     // the page comes back from it after two weeks: a week more for the address
     assert!(hello(&b, &["p"], None, Some(&a), T0 + 14 * DAY).is_some());
-    assert!(b.by_addr(&a, T0 + 20 * DAY).is_some());
-    assert!(b.by_addr(&a, T0 + 21 * DAY).is_none());
+    assert!(stranger(&b, &a, T0 + 20 * DAY).is_some());
+    assert!(stranger(&b, &a, T0 + 21 * DAY).is_none());
     // for good: the page still
     assert!(hello(&b, &["p"], None, None, T0 + 3000 * DAY).is_some());
     assert_eq!(b.list(T0 + 3000 * DAY)[0].addrs, vec![]);
@@ -69,11 +77,11 @@ fn a_banned_keyphrase_brings_in_a_new_browser_for_a_month_and_that_spreads_no_fu
     assert_eq!(hello(&b, &["phone"], Some("bob-key"), Some(&phone), T0 + 1).map(|x| x.id), Some(1));
     let ban = &b.list(T0 + 2)[0];
     assert_eq!((ban.pages.len(), ban.later_pages.len(), ban.owners.len(), ban.addrs.len()), (1, 1, 1, 2));
-    assert!(b.by_addr(&phone, T0 + 2).is_some());
+    assert!(stranger(&b, &phone, T0 + 2).is_some());
     // that browser alone, without the keyphrase: turned away, but it brings in nothing (a friend's browser, say:
     // not its network, not its owner's own keyphrase)
     assert!(hello(&b, &["phone"], Some("friend-key"), Some(&cafe), T0 + 3).is_some());
-    assert!(b.by_addr(&cafe, T0 + 4).is_none());
+    assert!(stranger(&b, &cafe, T0 + 4).is_none());
     assert!(hello(&b, &["friend-pc"], Some("friend-key"), None, T0 + 4).is_none());
     // for a month after it was last seen with the keyphrase (seen alone, it is not kept longer)
     assert!(hello(&b, &["phone"], None, None, T0 + LINK_MS).is_some());
@@ -138,7 +146,7 @@ fn a_new_ban_of_the_same_page_or_keyphrase_takes_the_place_of_the_old_one() {
     let (_, replaced) = b.add(Kind::Full, "Old", &who(&b, Some(&c), None, None), "", None, T0).unwrap();
     assert_eq!(replaced, vec![4]);
     // the longest of two that match is the one a page is told
-    assert_eq!(b.by_addr(&a, T0 + 2).map(|x| x.until), Some(None));
+    assert_eq!(stranger(&b, &a, T0 + 2).map(|(id, _)| id), Some(3));
     // the same keyphrase in another browser
     b.add(Kind::Full, "Kim", &who(&b, None, Some("k1"), Some("kim-key")), "", Some(T0 + DAY), T0).unwrap();
     assert_eq!(b.add(Kind::Full, "Kim", &who(&b, None, Some("k2"), Some("kim-key")), "", None, T0 + 1).unwrap().1, vec![6]);
@@ -159,7 +167,7 @@ fn bans_are_lifted_by_number_or_name() {
     assert_eq!(b.remove("#3", T0).unwrap().len(), 1);
     assert_eq!(b.remove("BOB", T0).unwrap().iter().map(|x| x.id).collect::<Vec<_>>(), vec![1, 2]);
     assert!(b.remove("4", T0).unwrap().is_empty());
-    assert!(b.by_addr(&a, T0).is_none());
+    assert!(stranger(&b, &a, T0).is_none());
 }
 
 #[test]
@@ -181,8 +189,10 @@ fn a_cheat_lines_player_is_marked_for_a_week_by_one_handle() {
     // a ban by its keys: whoever has one of them
     let (ban, _) = b.add(Kind::Full, &m.name, &m.keys, "", None, T0 + DAY).unwrap();
     assert!(hello(&b, &["bob-phone"], None, None, T0 + DAY).is_some());
-    assert!(b.covers(&ban, &who(&b, None, Some("new"), Some("bob-key")), T0 + DAY));
-    assert!(b.by_addr(&a2, T0 + DAY).is_some());
+    assert_eq!(b.covers(&ban, &who(&b, None, Some("new"), Some("bob-key")), T0 + DAY), Some(Match::Own));
+    assert_eq!(b.covers(&ban, &who(&b, Some(&a2), Some("new"), None), T0 + DAY), Some(Match::Addr));
+    assert_eq!(b.covers(&ban, &who(&b, None, Some("new"), None), T0 + DAY), None);
+    assert!(stranger(&b, &a2, T0 + DAY).is_some());
     // the file: hashes only, and the marks outlive a restart; a new handle after the old ones
     let text = std::fs::read_to_string(&b.path).unwrap();
     assert!(!text.contains("bob-") && !text.contains("203.0.113"), "{text}");
@@ -259,9 +269,17 @@ fn the_file_keeps_hashes_only_and_outlives_a_restart() {
 fn messages_for_the_page() {
     let (_d, b) = bans();
     let (ban, _) = b.add(Kind::Full, "B", &who(&b, None, Some("p"), None), "Bye \"now\"", Some(T0 + DAY), T0).unwrap();
-    assert_eq!(ban.message(), format!(r#"{{"t":"ban","msg":"Bye \"now\"","until":{}}}"#, T0 + DAY));
-    let (ban, _) = b.add(Kind::Full, "B", &who(&b, None, Some("p"), None), "", None, T0).unwrap();
-    assert_eq!(ban.message(), r#"{"t":"ban","msg":""}"#);
+    assert_eq!(
+        ban.message(Match::Own),
+        format!(r#"{{"t":"ban","id":1,"name":"B","at":{T0},"msg":"Bye \"now\"","until":{}}}"#, T0 + DAY)
+    );
+    // by the address only: out of races, and the page says why
+    assert_eq!(
+        ban.message(Match::Addr),
+        format!(r#"{{"t":"races","id":1,"name":"B","at":{T0},"msg":"Bye \"now\"","until":{},"addr":true}}"#, T0 + DAY)
+    );
+    let (ban, _) = b.add(Kind::Full, "B\u{202E}ob", &who(&b, None, Some("p"), None), "", None, T0).unwrap();
+    assert_eq!(ban.message(Match::Own), format!(r#"{{"t":"ban","id":2,"name":"Bob","at":{T0},"msg":""}}"#));
     assert_eq!(kick_message("a\u{202E}b\tc"), r#"{"t":"kick","msg":"ab c"}"#);
     assert_eq!(clean_msg(&"x".repeat(300)).len(), MSG_MAX);
 }
@@ -286,9 +304,9 @@ fn how_long_as_the_operator_writes_it() {
     assert_eq!(when(1_793_109_900_000), "2026-10-27 14:05 UTC");
 }
 
-/// a hello's race ban
+/// a hello's race ban (by its own keys or its address)
 fn races(b: &Bans, pages: &[&str], owner: Option<&str>, addr: Option<&str>, now: i64) -> Option<Ban> {
-    b.by_hello(&Seen { pages, owner, addr }, now).races
+    b.by_hello(&Seen { pages, owner, addr }, now).races.map(|(x, _)| x)
 }
 
 // a race ban turns nobody away: the hello hears it as the race ban, by the page, the keyphrase and (unlike a full
@@ -300,22 +318,25 @@ fn a_race_ban_keeps_its_player_out_of_races_only() {
     let (ban, _) =
         b.add(Kind::Races, "Bob", &who(&b, Some(&home), Some("pc"), Some("bob-key")), "Cheating", Some(T0 + 14 * DAY), T0).unwrap();
     assert_eq!(ban.kind, Kind::Races);
-    assert_eq!(ban.message(), format!(r#"{{"t":"races","msg":"Cheating","until":{}}}"#, T0 + 14 * DAY));
-    assert!(b.by_addr(&home, T0 + 1).is_none(), "no connection turned away");
+    assert_eq!(
+        ban.message(Match::Own),
+        format!(r#"{{"t":"races","id":1,"name":"Bob","at":{T0},"msg":"Cheating","until":{}}}"#, T0 + 14 * DAY)
+    );
+    assert!(hello(&b, &["other"], None, Some(&home), T0 + 1).is_none(), "no connection turned away");
     assert!(hello(&b, &["pc"], None, None, T0 + 1).is_none());
     assert_eq!(races(&b, &["pc"], None, None, T0 + 1).map(|x| x.id), Some(ban.id));
     assert_eq!(races(&b, &["new"], Some("bob-key"), Some(&phone), T0 + 1).map(|x| x.id), Some(ban.id));
     // that browser and network were taken in
     assert!(races(&b, &["new"], None, None, T0 + 2).is_some());
-    assert!(races(&b, &["other"], None, Some(&phone), T0 + 2).is_some(), "its address, at the hello");
+    assert_eq!(stranger(&b, &phone, T0 + 2), Some((ban.id, Match::Addr)), "its address, at the hello");
     assert!(races(&b, &["other"], None, Some(&b.addr("192.0.2.1")), T0 + 2).is_none());
     // a full ban of the same player stands beside it, and goes first
     let (full, replaced) = b.add(Kind::Full, "Bob", &who(&b, None, Some("pc"), None), "", Some(T0 + DAY), T0 + 3).unwrap();
     assert!(replaced.is_empty(), "another kind: not replaced");
     let v = b.by_hello(&Seen { pages: &["pc"], owner: None, addr: None }, T0 + 4);
-    assert_eq!((v.full.map(|x| x.id), v.races.map(|x| x.id)), (Some(full.id), Some(ban.id)));
+    assert_eq!((v.full.map(|x| x.id), v.races.map(|(x, m)| (x.id, m))), (Some(full.id), Some((ban.id, Match::Own))));
     let v = b.by_hello(&Seen { pages: &["pc"], owner: None, addr: None }, T0 + 2 * DAY);
-    assert_eq!((v.full, v.races.map(|x| x.id)), (None, Some(ban.id)));
+    assert_eq!((v.full, v.races.map(|(x, m)| (x.id, m))), (None, Some((ban.id, Match::Own))));
     // a new race ban takes the old one's place
     let (again, replaced) = b.add(Kind::Races, "Bob", &who(&b, None, Some("pc"), None), "", None, T0 + 3 * DAY).unwrap();
     assert_eq!(replaced, vec![ban.id]);
@@ -399,7 +420,7 @@ fn a_ban_changed_keeps_its_number_and_its_keys() {
     let (ban, _) = b.add(Kind::Full, "Bob", &who(&b, Some(&a), Some("p"), None), "msg", None, T0).unwrap();
     let (before, after) = b.change(ban.id, Some(Kind::Races), None, T0 + 1).unwrap().unwrap();
     assert_eq!((before.kind, after.kind, after.until, after.id), (Kind::Full, Kind::Races, None, ban.id));
-    assert!(b.by_addr(&a, T0 + 2).is_none());
+    assert_eq!(stranger(&b, &a, T0 + 2), Some((ban.id, Match::Addr)));
     assert!(races(&b, &["p"], None, None, T0 + 2).is_some() && hello(&b, &["p"], None, None, T0 + 2).is_none());
     let (_, after) = b.change(ban.id, None, Some(Some(T0 + DAY)), T0 + 3).unwrap().unwrap();
     assert_eq!((after.kind, after.until, after.addrs[0].until), (Kind::Races, Some(T0 + DAY), T0 + DAY));
@@ -413,4 +434,58 @@ fn a_ban_changed_keeps_its_number_and_its_keys() {
 fn messages_for_a_rename_and_a_race_ban_lifted() {
     assert_eq!(rename_message("Bad\u{202E}Name", " Pick\nanother "), r#"{"t":"rename","name":"BadName","msg":"Pick another"}"#);
     assert_eq!(races_lifted_message(), r#"{"t":"races","lifted":true}"#);
+}
+
+// an address alone never turns anyone away: a VPN's server or a phone network is many players' at once.  Whoever comes
+// from a banned player's address races nobody (its page hears why); its own race ban goes first.  A ban made with an
+// address alone (a tool without a page id) is its own key: that one is turned away.
+#[test]
+fn an_address_alone_keeps_out_of_races_only() {
+    let (_d, b) = bans();
+    let (vpn, home) = (b.addr("203.0.113.5"), b.addr("198.51.100.7"));
+    let (full, _) = b.add(Kind::Full, "Cheat", &who(&b, Some(&vpn), Some("cheat-pc"), Some("cheat-key")), "Cheating", None, T0).unwrap();
+    let v = b.by_hello(&Seen { pages: &["someone"], owner: Some("their-key"), addr: Some(&vpn) }, T0 + 1);
+    assert_eq!((v.full, v.races.map(|(x, m)| (x.id, m))), (None, Some((full.id, Match::Addr))));
+    assert!(b.list(T0 + 1)[0].later_owners.is_empty(), "takes nothing in");
+    // their own race ban goes first (its message is theirs)
+    let (own, _) = b.add(Kind::Races, "Someone", &who(&b, Some(&home), Some("someone"), None), "", Some(T0 + DAY), T0 + 2).unwrap();
+    let v = b.by_hello(&Seen { pages: &["someone"], owner: None, addr: Some(&vpn) }, T0 + 3);
+    assert_eq!(v.races.map(|(x, m)| (x.id, m)), Some((own.id, Match::Own)));
+    // a tool's ban, by its address alone: turned away there
+    let tool = b.addr("192.0.2.9");
+    let (t, _) = b.add(Kind::Full, "Tool", &who(&b, Some(&tool), None, None), "", None, T0).unwrap();
+    assert_eq!(hello(&b, &["anything"], None, Some(&tool), T0 + 1).map(|x| x.id), Some(t.id));
+    assert_eq!(b.covers(&t, &who(&b, Some(&tool), Some("x"), None), T0 + 1), Some(Match::Own));
+    let (r, _) = b.add(Kind::Races, "Tool2", &who(&b, Some(&home), None, None), "", None, T0 + 4).unwrap();
+    assert_eq!(stranger(&b, &home, T0 + 5), Some((r.id, Match::Own)));
+}
+
+// a ban names at most ADDRS_MAX addresses: a player hopping from one VPN server to the next takes nobody else's races
+// past those; one whose time is up makes room; a file from before keeps the ones last seen
+#[test]
+fn a_ban_holds_at_most_three_addresses() {
+    let (_d, b) = bans();
+    let a = |i: usize| b.addr(&format!("203.0.113.{i}"));
+    // made with five (a mark's): the latest three
+    let mut k = who(&b, None, Some("p"), None);
+    k.addrs = (0..5).map(a).collect();
+    let (ban, _) = b.add(Kind::Full, "Hopper", &k, "", None, T0).unwrap();
+    assert_eq!(ban.addrs.iter().map(|x| x.h.clone()).collect::<Vec<_>>(), vec![a(2), a(3), a(4)]);
+    assert!(stranger(&b, &a(1), T0 + 1).is_none());
+    // the banned page from another server: not taken in
+    assert!(hello(&b, &["p"], None, Some(&a(9)), T0 + 1).is_some(), "still turned away");
+    assert!(stranger(&b, &a(9), T0 + 2).is_none());
+    // one of the three seen again: a week from then; the others' time up: room for a new one
+    assert!(hello(&b, &["p"], None, Some(&a(2)), T0 + 4 * DAY).is_some());
+    assert!(hello(&b, &["p"], None, Some(&a(9)), T0 + ADDR_MS).is_some());
+    let held: Vec<_> = b.list(T0 + ADDR_MS)[0].addrs.iter().map(|x| x.h.clone()).collect();
+    assert_eq!(held, vec![a(2), a(9)]);
+    assert!(stranger(&b, &a(9), T0 + ADDR_MS + 1).is_some());
+    // a file from before: the three last seen
+    let dir = tempfile::tempdir().unwrap();
+    let addrs: Vec<String> = (1..=5).map(|i| format!(r#"{{"h":"a{i}","until":{}}}"#, [5, 1, 4, 2, 3][i - 1])).collect();
+    let old = format!(r#"{{"next":1,"bans":[{{"id":1,"name":"Old","at":0,"until":null,"pages":["x"],"addrs":[{}]}}]}}"#, addrs.join(","));
+    std::fs::write(dir.path().join("bans.json"), old).unwrap();
+    let ban = Bans::open(dir.path()).unwrap().list(0)[0].clone();
+    assert_eq!(ban.addrs.iter().map(|x| x.h.as_str()).collect::<Vec<_>>(), vec!["a1", "a3", "a5"]);
 }

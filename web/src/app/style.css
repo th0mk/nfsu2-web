@@ -787,7 +787,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .toast {
   max-width: 560px; padding: 8px 16px; border-radius: 8px; background: rgba(0, 0, 0, 0.8);
-  font-size: 14px; line-height: 20px; pointer-events: none;
+  font-size: 14px; line-height: 20px; pointer-events: none; white-space: pre-line;
 }
 /* the game's pause menu: what opens the page's menu, under the game's panel (pausehint.ts places it), as a toast */
 /* the site's address under the title screen's copyright (titlemark.ts): drawn there, placed and faded by the game's status */

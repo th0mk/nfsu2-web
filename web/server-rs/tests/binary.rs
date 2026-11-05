@@ -818,10 +818,11 @@ fn kinds(ctl: &[Value]) -> Vec<String> {
 }
 
 // The operator's commands (app/control.rs) on the running binary: who, a kick (the player is told, and may come
-// back), a ban (told, with its keyphrase on its other device; turned away by its address, by its page id at another
-// address, which then is banned too, by its keyphrase in a new browser, which then is taken in, and by an earlier
-// page id its page found; what was taken in brings in nothing more; the other player is left be), bans, unban, a ban
-// by a [cheat] line's handle; the state folder keeps no address, no page id and no keyphrase
+// back), a ban (told, with its number, name and date, with its keyphrase on its other device; turned away by its page
+// id at another address, which then is the ban's too, by its keyphrase in a new browser, which then is taken in, and
+// by an earlier page id its page found; what was taken in brings in nothing more; whoever else comes from its
+// addresses plays on, out of races, and hears why; at most three addresses; the other player is left be), bans,
+// unban, a ban by a [cheat] line's handle; the state folder keeps no address, no page id and no keyphrase
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn kicks_and_bans_through_the_control_socket() {
     let tmp = tempfile::tempdir().unwrap();
@@ -873,29 +874,41 @@ async fn kicks_and_bans_through_the_control_socket() {
     // and on her phone, with the same keyphrase: one player called Ann
     let phone = Browser::open_from(&host, port, "", None, None, Some("192.0.2.5")).await;
     phone.text(&ann_hello("page-ann-phone").to_string());
+    // and someone else on her network (a VPN's server, say)
+    let neighbour = Browser::open_from(&host, port, "", None, None, Some("192.0.2.1")).await;
+    neighbour.text(&hello("Neil", "page-neil"));
     sleep(200).await;
 
     // a ban: the same, and turned away
     let (ann_vip, phone_vip) = (nfsu2_util::vip_str(ann.vip), nfsu2_util::vip_str(phone.vip));
+    let neil_vip = nfsu2_util::vip_str(neighbour.vip);
     let ban = ctl(&state, &["ban", "Ann", "3d", "Ramming,", "3", "days"]);
     assert_eq!(ban.0, 0, "{}", ban.1);
     assert!(ban.1.starts_with("ban #1: \"Ann\" for 3 d (until "), "{}", ban.1);
     assert!(ban.1.contains("by its 2 pages, its keyphrase and its 2 addresses\nremoved "), "{}", ban.1);
     assert!(ban.1.contains(&format!("{ann_vip} \"Ann\"")) && ban.1.contains(&format!("{phone_vip} \"Ann\"")), "{}", ban.1);
+    assert!(ban.1.ends_with(&format!("\nout of races now: {neil_vip} \"Neil\"")), "{}", ban.1);
     assert_eq!(ann.until_ms(3000, |g| g.closed.clone()).await, (4003, "banned".into()));
     assert_eq!(phone.until_ms(3000, |g| g.closed.clone()).await, (4003, "banned".into()));
     let told = ann.got().ctl.iter().find(|m| m["t"] == "ban").cloned().expect("the ban's message");
-    assert_eq!(told["msg"], "Ramming, 3 days");
+    assert_eq!((told["msg"].clone(), told["id"].clone(), told["name"].clone()), ("Ramming, 3 days".into(), 1.into(), "Ann".into()));
+    assert!((nfsu2_util::now_ms() - told["at"].as_i64().unwrap()) < 10_000, "{told}");
     let until = told["until"].as_i64().unwrap() - nfsu2_util::now_ms();
     assert!((3 * 86_400_000 - 10_000..=3 * 86_400_000).contains(&until), "{told}");
-    // by its address (another page): before it gets a place
+    // the neighbour plays on, out of races, and hears whose ban it is
+    let heard = neighbour.until_ms(3000, |g| g.ctl.iter().find(|m| m["t"] == "races").cloned()).await;
+    assert_eq!((heard["addr"].clone(), heard["id"].clone(), heard["name"].clone()), (true.into(), 1.into(), "Ann".into()));
+    sleep(200).await;
+    assert!(neighbour.is_open(), "an address alone turns nobody away");
+    // by its address (another page): at its hello, out of races only
+    let raced = |got: &[Value]| got.iter().find(|m| m["t"] == "races").map(|m| (m["addr"].clone(), m["id"].clone()));
     let (got, closed) = turned_away(&host, port, "192.0.2.1", "page-other").await;
-    assert_eq!((kinds(&got), closed), (vec!["ban".to_string()], Some((4003, "banned".to_string()))));
-    // by its page at another address: at its hello, and that address is banned with it
+    assert_eq!((raced(&got), closed), (Some((true.into(), 1.into())), None), "{got:?}");
+    // by its page at another address: at its hello, and that address is the ban's too (its third)
     let (got, closed) = turned_away(&host, port, "192.0.2.9", "page-ann").await;
     assert_eq!((kinds(&got).last().cloned(), closed), (Some("ban".to_string()), Some((4003, "banned".to_string()))));
-    let (got, _) = turned_away(&host, port, "192.0.2.9", "page-new").await;
-    assert_eq!(kinds(&got), vec!["ban".to_string()], "the address the banned page came from");
+    let (got, closed) = turned_away(&host, port, "192.0.2.9", "page-new").await;
+    assert_eq!((raced(&got), closed), (Some((true.into(), 1.into())), None), "the address the banned page came from: {got:?}");
     // the phone's page, which the ban was made with too
     let (got, _) = turned_away(&host, port, "192.0.2.10", "page-ann-phone").await;
     assert_eq!(kinds(&got).last().cloned(), Some("ban".to_string()), "the phone's page");
@@ -930,8 +943,10 @@ async fn kicks_and_bans_through_the_control_socket() {
     let bans = ctl(&state, &["bans"]);
     assert_eq!(bans.0, 0);
     assert!(bans.1.starts_with("#1   \"Ann\""), "{}", bans.1);
-    // pages: hers and her phone's, then the fresh one and the cleared one; addresses: .1 .5 .9 .10 .20 .40
-    assert!(bans.1.ends_with(": \"Ramming, 3 days\"; by 4 pages (2 found later), 1 keyphrase, 6 addresses"), "{}", bans.1);
+    // pages: hers and her phone's, then the fresh one and the cleared one; addresses: .1 .5 .9 (not .10 .20 .40: three)
+    assert!(bans.1.ends_with(": \"Ramming, 3 days\"; by 4 pages (2 found later), 1 keyphrase, 3 addresses"), "{}", bans.1);
+    let (got, closed) = turned_away(&host, port, "192.0.2.20", "page-someone").await;
+    assert!(raced(&got).is_none() && closed.is_none(), "past the three: {got:?}");
     let file = std::fs::read_to_string(state.join("bans.json")).unwrap();
     for secret in ["192.0.2", "page-", "ann-keyphrase"] {
         assert!(!file.contains(secret), "{secret}: {file}");
@@ -944,8 +959,9 @@ async fn kicks_and_bans_through_the_control_socket() {
     assert_eq!(ctl(&state, &["unban", "#7"]), (1, "no ban #7 (bans lists them)".into()));
     assert_eq!(ctl(&tmp.path().join("elsewhere"), &["who"]).0, 1);
 
-    // lifted: back in
-    assert_eq!(ctl(&state, &["unban", "ann"]), (0, "lifted #1 \"Ann\"".into()));
+    // lifted: back in, and the neighbour races again
+    assert_eq!(ctl(&state, &["unban", "ann"]), (0, format!("lifted #1 \"Ann\"; races again: {neil_vip} \"Neil\"")));
+    assert_eq!(neighbour.until_ms(3000, |g| g.ctl.iter().rev().find(|m| m["lifted"] == true).cloned()).await["t"], "races");
     let ann = Browser::open_from(&host, port, "", None, None, Some("192.0.2.1")).await;
     ann.text(&hello("Ann", "page-ann"));
     sleep(200).await;
@@ -969,9 +985,13 @@ async fn kicks_and_bans_through_the_control_socket() {
     let lines = srv.lines();
     assert!(lines.iter().any(|l| l.starts_with("[ban] kicked 10.77.") && l.ends_with("\"Ann\": \"Stop ramming\"")), "{lines:?}");
     assert!(lines.iter().any(|l| l.starts_with("[ban] #1 \"Ann\" for 3 d (until ")), "{lines:?}");
-    assert!(lines.iter().any(|l| l == "[ban] turned away a client of ban #1 \"Ann\" (its address)"), "{lines:?}");
+    assert!(
+        lines.iter().any(|l| l == "[ban] a client at an address of ban #1 \"Ann\" plays on, out of races (its address only)"),
+        "{lines:?}"
+    );
     assert!(lines.iter().any(|l| l == "[ban] turned away a client of ban #1 \"Ann\" (its page or keyphrase)"), "{lines:?}");
-    assert!(lines.iter().any(|l| l == "[ban] lifted #1 \"Ann\""), "{lines:?}");
+    assert!(lines.iter().any(|l| l.starts_with("[ban] lifted #1 \"Ann\"; races again: ") && l.ends_with(" \"Neil\"")), "{lines:?}");
+    assert!(lines.iter().any(|l| l.ends_with(&format!("{phone_vip} \"Ann\"; out of races now: {neil_vip} \"Neil\""))), "{lines:?}");
     assert!(lines.iter().any(|l| l.starts_with("[ban] #2 \"Racer\" (c1) for 1 d (until ")), "{lines:?}");
     assert!(!lines.iter().any(|l| l.contains("192.0.2")), "no client address in the log: {lines:?}");
 }

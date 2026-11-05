@@ -49,14 +49,17 @@
 // unpackCompact; the hello's "bundle":1 and "compact":1).
 //
 // The operator may remove a player (web/server-rs/crates/lan, Kicks and bans):
-// the switch sends {"t":"kick"} or {"t":"ban"} with the operator's message,
-// then closes with 4001 or 4003.  The page tells the player (onRemoved) and
-// stays off the switch for the rest of this game, as after goOffline.  The
-// hello names this browser's own id (NetOptions.id, and NetOptions.was), which
-// a ban names besides the player's address, and the token of the keyphrase it
-// plays with (NetOptions.claim), which says whose claimed names it may play
-// under, and which a ban names too.  A race ban keeps the player on the switch
-// ({"t":"races"}: onRaces; the switch drops its races).  A name the operator
+// the switch sends {"t":"kick"} or {"t":"ban"} with the operator's message (a
+// ban with its number, the banned player's name and when it was made), then
+// closes with 4001 or 4003.  The page tells the player (onRemoved) and stays
+// off the switch for the rest of this game, as after goOffline.  The hello
+// names this browser's own id (NetOptions.id, and NetOptions.was), which a ban
+// names besides the player's address, and the token of the keyphrase it plays
+// with (NetOptions.claim), which says whose claimed names it may play under,
+// and which a ban names too.  A race ban keeps the player on the switch
+// ({"t":"races"}: onRaces; the switch drops its races); so does someone else's
+// ban that names only this player's address ("addr": a VPN's server, a phone
+// network, a home shared with the banned player).  A name the operator
 // took away ({"t":"rename"}, then the close 4004: onRename) keeps the page off
 // the switch until the player picks another (rename), under which it goes back.
 //
@@ -133,11 +136,25 @@ export interface NetOptions {
   waitMs?: number;
 }
 export interface NetPeer { vip: string; name: string; self: boolean }
+/** which ban, as the switch names it (a server from before says none of it): its number, the player's name when it
+ *  was made, and when that was (ms since 1970) */
+export interface NetBanCase { id?: number; name?: string; at?: number }
 /** a kick or a ban, as the switch said it: the operator's message (maybe ""), and a ban's end (ms since 1970; none:
  *  for good) */
-export interface NetRemoved { ban: boolean; msg: string; until?: number }
-/** a race ban, as the switch said it: the operator's message (maybe ""), and its end (ms since 1970; none: for good) */
-export interface NetRaces { msg: string; until?: number }
+export interface NetRemoved extends NetBanCase { ban: boolean; msg: string; until?: number }
+/** a race ban, as the switch said it: the operator's message (maybe ""), and its end (ms since 1970; none: for good);
+ *  addr: someone else's ban, by this player's address only (out of races while it plays from that network) */
+export interface NetRaces extends NetBanCase { msg: string; until?: number; addr?: boolean }
+/** the ban's number, name and date in a switch's message, as far as it gives them */
+function banCase(m: Record<string, unknown>): NetBanCase {
+  return {
+    ...(typeof m.id === 'number' ? { id: m.id } : {}),
+    ...(typeof m.name === 'string' && m.name ? { name: m.name } : {}),
+    ...(typeof m.at === 'number' ? { at: m.at } : {}),
+  };
+}
+/** "#12 ("Ann")" for the log, "" without a number */
+const caseText = (c: NetBanCase) => c.id === undefined ? '' : ` #${c.id}${c.name ? ` ("${c.name}")` : ''}`;
 /** a name the operator took away, and the message with it (maybe "") */
 export interface NetRename { name: string; msg: string }
 /** the switch's close codes for a kick, a ban and a name taken away */
@@ -763,7 +780,7 @@ export class Link implements NetLink {
         this.removal = null;
         this.stayOff = true; this.offForName = false;
         this.release('away');
-        this.log(`the operator ${r.ban ? `banned this player${r.until ? ` until ${new Date(r.until).toISOString()}` : ' for good'}` : 'kicked this player'}` +
+        this.log(`the operator ${r.ban ? `banned this player${caseText(r)}${r.until ? ` until ${new Date(r.until).toISOString()}` : ' for good'}` : 'kicked this player'}` +
           `${r.msg ? ` ("${r.msg}")` : ''}: no switch for the rest of this game`);
         this.o.onRemoved?.(r);
         return;
@@ -830,12 +847,16 @@ export class Link implements NetLink {
       this.o.onQueue?.({ pos: m.pos, of: m.of, ...(typeof m.eta === 'number' ? { eta: m.eta } : {}) });
     } else if (m.t === 'races') {
       // a race ban (or its end): the switch drops this player's races from now on; free roam goes on
-      const r: NetRaces | null = m.lifted ? null : { msg: typeof m.msg === 'string' ? m.msg : '', ...(typeof m.until === 'number' ? { until: m.until } : {}) };
+      const r: NetRaces | null = m.lifted ? null : {
+        msg: typeof m.msg === 'string' ? m.msg : '', ...(typeof m.until === 'number' ? { until: m.until } : {}),
+        ...banCase(m), ...(m.addr === true ? { addr: true } : {}),
+      };
       const same = JSON.stringify(r) === JSON.stringify(this.races);
       this.races = r;
       if (!same) {
-        this.log(r ? `the operator's race ban${r.until ? ` until ${new Date(r.until).toISOString()}` : ' for good'}${r.msg ? ` ("${r.msg}")` : ''}: no races with others`
-          : 'the race ban was lifted: races with others again');
+        this.log(!r ? 'the race ban was lifted: races with others again'
+          : r.addr ? `someone else's ban${caseText(r)} names this network's address (a VPN's, a phone network's, a shared home's): no races with others from it`
+          : `the operator's race ban${caseText(r)}${r.until ? ` until ${new Date(r.until).toISOString()}` : ' for good'}${r.msg ? ` ("${r.msg}")` : ''}: no races with others`);
         this.o.onRaces?.(r);
       }
     } else if (m.t === 'rename') {
@@ -843,7 +864,7 @@ export class Link implements NetLink {
       this.renaming = { name: typeof m.name === 'string' ? m.name : '', msg: typeof m.msg === 'string' ? m.msg : '' };
     } else if (m.t === 'kick' || m.t === 'ban') {
       // its close follows
-      this.removal = { ban: m.t === 'ban', msg: typeof m.msg === 'string' ? m.msg : '', ...(typeof m.until === 'number' ? { until: m.until } : {}) };
+      this.removal = { ban: m.t === 'ban', msg: typeof m.msg === 'string' ? m.msg : '', ...(typeof m.until === 'number' ? { until: m.until } : {}), ...banCase(m) };
     } else if (m.t === 'peers' && Array.isArray(m.peers)) {
       const old = this.peerMap;
       this.peerMap = new Map();

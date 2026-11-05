@@ -83,6 +83,13 @@ Checked against the guide or the code, and confirmed by players in threads:
 - `PAGE-NOT-ISOLATED` ("not cross-origin isolated") on nfsu2.xyz itself: something in the browser changes the page,
   most often an extension. A guest or incognito window works for the players who tried it (its saves are gone when it
   closes: it only shows the cause); then, in a normal window, turn the extensions off one by one.
+- Ban boxes (since 2026-11-05). "Someone who played from your network or VPN was banned, so you can't race other
+  players from it": someone else's ban names that address (a VPN's server, iCloud Private Relay, a phone network, a
+  household); turning the VPN or Private Relay off, or another network, fixes it, and free roam stays open meanwhile.
+  "You can't play with others any more" or "You can't race other players…" with "Ban #N": the player's own ban; only
+  staff can check or lift it, by that number: ask them to post the number and their in-game name, and never judge
+  whether the ban was right. Before 2026-11-05 a VPN user could get a cheater's full ban by address ("turn off the VPN"
+  fixed it then too).
 - Saves gone after closing the browser: the browser deletes site data when it closes (Chrome: `chrome://settings/content/siteData`,
   allow nfsu2.xyz to save data). Lost saves do not come back; Saves, Download backup, and cloud saves keep a copy.
 - `SAVES-UNREADABLE` ("Play without saving?" and "This browser can't read or write your saves right now (…)", on a page

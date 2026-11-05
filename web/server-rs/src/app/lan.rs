@@ -125,19 +125,9 @@ impl App {
         }
         let (r, w) = stream.split();
         let share = Arc::new((share, hold));
-        // the operator's bans (control.rs): by the address's keyed hash now, by its page's ids and its keyphrase at its
-        // hello
+        // the operator's bans (control.rs), at its hello: by its page's ids and its keyphrase, and by the address's
+        // keyed hash (alone, that keeps it out of races only: a VPN's server is many players')
         let ident = (!key_.is_empty()).then(|| self.bans.addr(&key_));
-        let refuse = ident.as_ref().and_then(|a| self.bans.by_addr(a, nfsu2_util::now_ms())).map(|b| {
-            log::limited(
-                "ban",
-                "turned away",
-                &key_,
-                &format!("[ban] turned away a client of ban #{} \"{}\" (its address)", b.id, b.name),
-                2,
-            );
-            bytes::Bytes::from(b.message())
-        });
         let (bans, a, k0, days) = (self.bans.clone(), ident.clone(), key_.clone(), self.days.clone());
         let deny = self.bans.deny();
         let on_hello: nfsu2_lan::OnHello = Box::new(move |h| {
@@ -151,9 +141,10 @@ impl App {
             let v = bans.by_hello(&seen, now);
             // a full ban: turned away
             if let Some(b) = v.full {
-                let line = format!("[ban] turned away a client of ban #{} \"{}\" (its page or keyphrase)", b.id, b.name);
+                let by = if b.pages.is_empty() && b.owners.is_empty() { "its address" } else { "its page or keyphrase" };
+                let line = format!("[ban] turned away a client of ban #{} \"{}\" ({by})", b.id, b.name);
                 log::limited("ban", "turned away", &k0, &line, 2);
-                answer.refuse = Some((bytes::Bytes::from(b.message()), nfsu2_lan::CLOSE_BANNED));
+                answer.refuse = Some((bytes::Bytes::from(b.message(nfsu2_bans::Match::Own)), nfsu2_lan::CLOSE_BANNED));
                 return answer;
             }
             // a name taken away (`rename`): its page asks for another, with the rename's message
@@ -171,11 +162,19 @@ impl App {
                 answer.refuse = Some((bytes::Bytes::from(nfsu2_bans::rename_message(h.name, &msg)), nfsu2_lan::CLOSE_RENAME));
                 return answer;
             }
-            // a race ban: it plays on, out of races
-            if let Some(b) = v.races {
-                let line = format!("[ban] a client of race ban #{} \"{}\" plays on, out of races", b.id, b.name);
+            // a race ban, or someone's ban by the address only: it plays on, out of races
+            if let Some((b, m)) = v.races {
+                let line = match m {
+                    nfsu2_bans::Match::Own => format!("[ban] a client of race ban #{} \"{}\" plays on, out of races", b.id, b.name),
+                    nfsu2_bans::Match::Addr => format!(
+                        "[ban] a client at an address of {} #{} \"{}\" plays on, out of races (its address only)",
+                        b.kind.word(),
+                        b.id,
+                        b.name
+                    ),
+                };
                 log::limited("ban", "turned away", &k0, &line, 2);
-                answer.no_races = Some(bytes::Bytes::from(b.message()));
+                answer.no_races = Some(bytes::Bytes::from(b.message(m)));
             }
             answer
         });
@@ -197,7 +196,7 @@ impl App {
                 log::limited("lan", "joins and leaves", &k2, &line, 20);
             })),
             ident,
-            refuse,
+            refuse: None,
             // the client's country as Cloudflare names it (a trusted proxy's CF-IPCountry): the 5-minute counts of the
             // paths' round trips by country (nfsu2-lan paths.rs), nothing else
             country: nfsu2_headers::client_country(&q, &self.o.trust),
