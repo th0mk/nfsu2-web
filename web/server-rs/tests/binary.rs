@@ -23,6 +23,28 @@ fn game_folder(root: &Path) -> (PathBuf, PathBuf) {
     let data = root.join("game");
     std::fs::create_dir_all(&data).unwrap();
     std::fs::write(data.join("SPEED2.EXE"), "MZ").unwrap();
+    // Synthetic road data for the default meet-race service; no game assets.
+    fn chunk(id: u32, payload: &[u8]) -> Vec<u8> {
+        let mut out = id.to_le_bytes().to_vec();
+        out.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+    let dir = data.join("TRACKS/ROUTESL4RA");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut road = vec![0; 0x8c + 2 * 0x38];
+    road[0x34..0x36].copy_from_slice(&2u16.to_le_bytes());
+    road[0x8c + 0x38..0x8c + 0x3c].copy_from_slice(&100f32.to_le_bytes());
+    let mut routes = chunk(0x34121, &road);
+    routes.extend(chunk(0x34122, &[0; 4]));
+    let mut barrier = vec![0; 0x24];
+    for (i, x) in [500f32, 500., 600., 500.].iter().enumerate() {
+        barrier[i * 4..i * 4 + 4].copy_from_slice(&x.to_le_bytes());
+    }
+    barrier[0x11] = 1;
+    barrier[0x14..0x18].copy_from_slice(&0xd59bf29bu32.to_le_bytes());
+    std::fs::write(dir.join("RoutesFreeRoam.bin"), routes).unwrap();
+    std::fs::write(dir.join("PathsFreeRoam.bin"), chunk(0x80034147, &chunk(0x3414d, &barrier))).unwrap();
     let wasm = root.join("game.wasm");
     std::fs::write(&wasm, vec![7u8; 4096]).unwrap();
     (data, wasm)
@@ -1673,4 +1695,20 @@ async fn a_friend_is_invited_to_a_race_lobby_through_the_server() {
         x.close().await;
     }
     assert_eq!(srv.stop().await, Some(0));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn meet_races_start_without_feature_flags() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (data, wasm) = game_folder(tmp.path());
+    let (port, state) = (free_port(), tmp.path().join("state"));
+    let mut cmd = command(&data, &wasm, port, &state, &[]);
+    cmd.env_remove("NFSU2_MEET_RACES_ROOMS");
+    cmd.env_remove("NFSU2_MEET_RACE_TEST_PERIOD_MS");
+    cmd.env_remove("NFSU2_MEET_RACE_TEST_FINISH_OFFSET");
+    let mut server = Server::spawn(cmd, port);
+    server.ready().await;
+    assert!(state.join("meet-rewards").is_dir(), "default startup initializes meet races");
+    assert!(!server.lines().iter().any(|s| s.contains("[meet-race] disabled")));
+    assert_eq!(server.stop().await, Some(0));
 }

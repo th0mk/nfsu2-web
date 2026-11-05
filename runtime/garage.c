@@ -403,6 +403,7 @@ static void name_of(uint32_t payload, char *out){
     for (; i < 32u && MR8(payload + P_NAME + i); i++) out[i] = (char)MR8(payload + P_NAME + i);
     out[i] = 0;
 }
+#include "meet_cash.inc"
 /* the record of ours with the handle h with a car in it, 0: none */
 static uint32_t xowned(uint32_t db, uint32_t h){ uint32_t r = xfind(db, h); return r && MR8(r + R_OWNED) ? r : 0; }
 /* the handle of the first of the first n slots with a car in it, 0: none */
@@ -429,7 +430,7 @@ void sub_0052a280_orig(CPU *c);
 void sub_0052a280(CPU *c){
     uint32_t db = c->ecx + PR_CARS, out = MR32(c->esp + 4u), size = MR32(c->esp + 8u);
     int p = player_of(db);
-    if (!g_blk || p < 0 || size < P_NAME + 32u){ sub_0052a280_orig(c); return; }
+    if (!g_blk || p < 0 || size < P_NAME + 32u){ sub_0052a280_orig(c); if(p==0)meet_cash_payload(out,size); return; }
     static State st0;
     State *st = &st0;
     state_of(c, db, st);
@@ -437,6 +438,7 @@ void sub_0052a280(CPU *c){
     if (st->drive) MR32(CAREER + K_CAR) = st->stand;
     if (st->qr) MR32(G_QR_CAR) = st->stand;
     sub_0052a280_orig(c);
+    if(p==0)meet_cash_payload(out,size);
     MR32(CAREER + K_CAR) = k; MR32(G_QR_CAR) = q;
     /* kept by name and car part: the newest of each (a payload made again
      * while nothing changed takes its place, not an older one's) */
@@ -489,6 +491,7 @@ void garage_profile_written(const char *path){
     if (!in) return;
     size_t n = fread(f, 1, sizeof f, in); fclose(in);
     if (n != PROFILE_SIZE || memcmp(f, "20CM", 4)) return;
+    meet_cash_written(path);
     mpcredit_profile_written(path);              /* (a whole profile on disk: a failed write leaves its wins waiting) */
     const uint8_t *pl = f + PAYLOAD_AT;
     char name[33]; unsigned i = 0;
@@ -614,9 +617,10 @@ static void not_empty(uint32_t at, const char *what){
  * profile still names the stand-in */
 void sub_005344d0_orig(CPU *c);
 void sub_005344d0(CPU *c){
-    uint32_t db = c->ecx + PR_CARS;
+    uint32_t db = c->ecx + PR_CARS, mc_in=MR32(c->esp+4u),mc_size=MR32(c->esp+8u);
     g_topup = 0;
     sub_005344d0_orig(c);
+    if(db==CARS0)meet_cash_loaded(mc_in,mc_size);
     if (!g_blk || db != CARS0) return;
     if (g_topup){
         /* no slots 6-10 saved (an older page's profile, the PC game's): 2 a

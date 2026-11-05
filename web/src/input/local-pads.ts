@@ -45,6 +45,7 @@ export class LocalSeats {
 /** One record per seat in the SAME game's shared memory, not six processes. */
 export class LocalPadWriter {
   private seats = new LocalSeats();
+  private previous = Array(INPUT_LOCAL_PADS).fill(0);
   private words: Int32Array;
   private bits = new Float32Array(1);
   private ints = new Int32Array(this.bits.buffer);
@@ -57,10 +58,12 @@ export class LocalPadWriter {
     this.seats.owners.forEach((o, seat) => { if (o && Atomics.load(this.words, seat * IM_LOCAL_WORDS + IM_LOCAL_COOP) === 1) out.add(o.index); });
     return out;
   }
-  poll(pads: readonly (Gamepad | null)[], read: (g: Gamepad) => PadSnapshot, muted = false) {
+  poll(pads: readonly (Gamepad | null)[], read: (g: Gamepad) => PadSnapshot, muted = false, capture?: (s:PadSnapshot,pressed:number,seat:number)=>boolean) {
     this.seats.poll(pads).forEach((g, seat) => {
-      const state = g && !muted ? read(g) : null;
+      let state = g && !muted ? read(g) : null;
       const at = seat * IM_LOCAL_WORDS, w = this.words;
+      const buttons=state?.buttons??0,pressed=buttons&~this.previous[seat];this.previous[seat]=buttons;
+      if(state && Atomics.load(w,at+IM_LOCAL_COOP)===1 && capture?.(state,pressed,seat))state={...state,buttons:0,axes:state.axes.map(()=>0)};
       const seq = Atomics.load(w, at + IM_LOCAL_SEQ);
       Atomics.store(w, at + IM_LOCAL_SEQ, (seq + 1) | 0);
       Atomics.store(w, at + IM_LOCAL_CONNECTED, state ? 1 : 0);

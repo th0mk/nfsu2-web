@@ -132,3 +132,12 @@ __attribute__((export_name("crowd_lobby"))) int crowd_lobby(uint32_t lobby, uint
 /* players established now */
 __attribute__((export_name("crowd_peers"))) int crowd_peers(void){ return rc_established(&S); }
 __attribute__((export_name("crowd_stop"))) void crowd_stop(void){ rc_shutdown(&S, 0); }
+
+/* Optional meet-race entrant for the live server/game regression harness. */
+__attribute__((export_name("crowd_meet_race"))) void crowd_meet_race(void){
+    strcpy(S.race_profile,"BOT");S.race_eligible=1;
+    if(S.race.phase==1 && !S.race.mine && !S.race_action)rc_meet_race_command(&S,1);
+    if(S.race.phase>=5 && S.race.mine && !S.race_action)rc_meet_race_command(&S,2);
+}
+__attribute__((export_name("crowd_meet_phase"))) int crowd_meet_phase(void){return S.race.phase;}
+__attribute__((export_name("crowd_meet_destination"))) float crowd_meet_destination(int k){return k>=0&&k<3?S.race.destination[k]:0;}

@@ -59,6 +59,7 @@ export const attachNet: AttachNet = (proc, o) => {
     rename: (name: string) => link.rename(name),
     solid: (collide: 'on' | 'off' | 'none') => link.setSolid(collide),
     say: (p: number, race?: boolean) => link.say(p, race),
+    meetRace: (seat: number, action: number) => link.meetRace(seat, action),
     friend: (m: Record<string, unknown>) => link.friend(m),
     crews: (hashes: readonly number[], rgbs: readonly number[]) => link.setCrews(hashes, rgbs),
     room: (name: string) => link.setRoom(name),

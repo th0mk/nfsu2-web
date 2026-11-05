@@ -556,6 +556,18 @@ Good to know:
   sends you their car 5 times a second instead of 20 (past 1 km, twice), which saves traffic and doesn't show at that
   distance. When many players arrive at once, their cars load one after another, about one a second, so the last of 32
   can take half a minute to appear.
+- **Meet races:** While parked at a meet in an owned career car, join its next race
+  from the side panel. Starts are five minutes apart, with 2–16 entrants. **J** joins or leaves; **K** dismisses an
+  invitation or results. Player two uses **Shift+J / Shift+K**. Each controller uses **LB+RB+A** to join and **LB+RB+B**
+  to leave; the panel's buttons also work on touch screens. Remain within 40 m of the meet until GO. The last five
+  seconds show a countdown. Cars stay freely controllable.
+  At GO, a destination appears on the minimap and full map, on reachable roads within the same career region.
+  Choose your own route: the race never sets or clears GPS. The first three finishers earn **300 / 200 / 100**
+  career credits. The first finish starts a thirty-second closing clock; every race ends within five minutes.
+  Leave at any time. Final results appear in the side panel, and finishing does not advance the story.
+  Save your career to confirm a prize. Both split-screen players can enter independently and share the host's
+  career bank. Driving past activity markers does not affect the race. Entering a shop or another activity,
+  or changing room, marks that racer as Left; resetting or teleporting while racing disqualifies them.
 - **Ghost mode:** Online, Ghost mode. **Off** (the default): you collide with the other players' cars. **Players**: you
   drive through them, and they through yours. **Everything**: traffic and the game's tuners pass through you as well
   (and through the other players' cars on your screen), in free roam with others only: races stay as the game has

@@ -212,6 +212,7 @@ export interface NetLink {
   /** quick chat: the player says phrase p (runtime/roam_game.c say_frame sends it; race: in a race between players,
    *  runtime/racehorn.c qc_say); false: no free roam (race: no LAN play) */
   say(p: number, race?: boolean): boolean;
+  meetRace(seat: number, action: number): boolean;
   /** free roam's friends: a message to the server ({"t":"friend",...m}, or m's own "t": "room"); false: the link is
    *  not up now */
   friend(m: Record<string, unknown>): boolean;
@@ -698,6 +699,12 @@ export class Link implements NetLink {
     if (!ep) return false;
     this.picks = (this.picks + 1) & 0xffffff;
     Atomics.store(ep.i32, P.W_SAY, (this.picks << 8 | (p & 0xff)) | 0);
+    return true;
+  }
+  meetRace(seat: number, action: number): boolean {
+    if (!this.roam || (seat !== 0 && seat !== 1) || (action !== 1 && action !== 2)) return false;
+    const word = P.W_MEET_RACE + seat, old = Atomics.load(this.roam.i32, word);
+    Atomics.store(this.roam.i32, word, ((((old >>> 8) + 1) & 0xffffff) << 8) | action);
     return true;
   }
   friend(m: Record<string, unknown>): boolean {

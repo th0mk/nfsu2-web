@@ -26,7 +26,7 @@ export const CALLBACKS = ['log', 'onPeers', 'onNotice', 'onLobby', 'onSay', 'onB
   'onRemoved', 'onRaces', 'onRename', 'onAttached'] as const;
 export type NetCallback = typeof CALLBACKS[number];
 /** NetLink's calls, made in the worker */
-export type NetCall = 'setAway' | 'goOffline' | 'rename' | 'setSolid' | 'say' | 'friend' | 'setCrews' | 'setRoom' | 'close';
+export type NetCall = 'setAway' | 'goOffline' | 'rename' | 'setSolid' | 'say' | 'friend' | 'setCrews' | 'setRoom' | 'meetRace' | 'close';
 /** the link as the worker last saw it (its peer list only when that changed: worker.ts PEERS_MS) */
 export interface NetNow { state: NetState; vip: string | null; peers?: NetPeer[]; roam: boolean; lan: boolean; stats: NetStats }
 /** NetOptions without its callbacks (what can go to the worker) */
@@ -137,6 +137,10 @@ class RemoteLink implements NetLink {
     if (this.direct) return this.direct.say(p, race);
     this.call('say', [p, race]);
     return race ? this.now.lan : this.now.roam;
+  }
+  meetRace(seat:number,action:number):boolean {
+    if(this.direct)return this.direct.meetRace(seat,action);
+    this.call('meetRace',[seat,action]);return this.now.roam;
   }
   friend(m: Record<string, unknown>): boolean {
     if (this.direct) return this.direct.friend(m);

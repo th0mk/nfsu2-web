@@ -222,6 +222,8 @@ export interface PadPage {
   /** the whole controller each time it is read while no dialog is open (photo mode: runtime/photo.c), with the
    *  buttons pressed since the last read; true: the page has it now, the game gets it at rest */
   capture?(s: PadSnapshot, pressed: number): boolean;
+  /** The reserved co-op controller, identified by its native local-pad slot. */
+  captureLocal?(s: PadSnapshot, pressed: number, device:number): boolean;
 }
 
 /** the touch controls' share of the pad (web/src/app/touch.ts): PAD_* button bits and the left stick's x */
@@ -365,7 +367,7 @@ export class PadPoller {
     const both = this.touch ? withTouch(s, this.touch) : s;
     if (this.touch && !g) this.buzz();
     const out = this.page ? this.forPage(both, pressed) : both;
-    this.localPads?.poll(pads, mapStandard, !!globalThis.document?.hidden || !!this.page?.dialog());
+    this.localPads?.poll(pads, mapStandard, !!globalThis.document?.hidden || !!this.page?.dialog(), (s,p,device)=>!!this.page?.captureLocal?.(s,p,device));
     if (this.same(out)) return;
     this.publish(out, !this.last || this.last.connected !== out.connected || this.last.index !== out.index || this.last.name !== out.name);
     this.last = out;

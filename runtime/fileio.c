@@ -273,6 +273,8 @@ int fileio_resolve_save_w(const char *win, char *out, size_t outsz){ return reso
 /* A profile the game saves, "<root>/NFS Underground 2/<NAME>/<NAME>" (any
  * case): garage.c keeps its slots 6-10 in a file beside it. */
 void garage_profile_written(const char *path);
+int meet_cash_save_path_ready(const char *path);
+int meet_cash_before_write(const char *path,uint32_t buffer,uint32_t length);
 void savegame_profile_written(void);          /* savegame.c: the pause menu's Save, for its log */
 void garage_profile_deleted(const char *path);
 static int is_profile(const char *path){
@@ -639,7 +641,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
               fd = -1;
           else if (movie_mode == 3 && !strncasecmp(bn2, "blank", 5)) { }
           else {
-              fd = open(real, flags, 0644);
+              fd = ((flags & (O_WRONLY|O_RDWR)) && is_profile(real) && !meet_cash_save_path_ready(real)) ? (errno=ENOSPC,-1) : open(real, flags, 0644);
               /* mode 2: open it but make it look empty -> the player reports "done" */
               if (fd >= 0 && movie_mode == 2 && ext &&
                   (!strcasecmp(ext,".vp6") || !strcasecmp(ext,".vp8") ||
@@ -798,6 +800,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
                     if (ln){ fprintf(stderr, "[guest] %.*s\n", (int)ln, lb); ln = 0; }
                 } }
             if(pnw) MR32(pnw)=len; r=1; }
+        else if(is_profile(f->path) && !meet_cash_before_write(f->path,buf,len)){if(pnw)MR32(pnw)=0;set_err(c,112u);r=0;}
         else { ssize_t w=write(f->fd, g_mem+buf, len); if(w<0)w=0;
                if(pnw) MR32(pnw)=(uint32_t)w; r=1; }
     }
