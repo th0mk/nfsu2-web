@@ -44,11 +44,13 @@
  *   rh_lights_mine()        the player's headlights: 0 as the game has them, 1 off, 2 high beam (lightkey.c's
  *                           lightkey_mine), 0 where there is no light key
  *   rh_lights_car(k, car, st)   slot k's car (0: none) and its player's headlights, to show (lightkey_car)
+ *   rh_damage_on()          the crash damage is on (damage.c's damage_net_on): friends' damage is shown, and the
+ *                           HELLO asks for it (RC_HF_DENTS); 0 where there is no crash damage
  *   rh_damage_rev()         the player's car's crash damage as published: +1 for every change friends should see
  *                           (damage.c's damage_net_rev), 0 where there is no crash damage
- *   rh_damage_mine(&epoch, &first, dents, max)   that damage's dents (RC_EXT_DAMAGE's, RC_DMG_BYTES each): how many
+ *   rh_damage_mine(&epoch, &first, dents, max)   that damage's dents (RC_MSG_DENTS's, RC_DMG_BYTES each): how many
  *   rh_damage_car(c, k, car, peer, epoch, first, n, dents)   slot k's car (0: none), its player and the dents its
- *                           record has, to make on it (damage_net_car)
+ *                           player's last DENTS had, to make on it (damage_net_car)
  *   ROAM_HOST_SCRIPT        defined when the input-script commands exist
  *   RH_FE_NODES             the most objects FEng draws of one package (its
  *                           level sorter's nodes)
@@ -81,6 +83,7 @@ void showoff_car(CPU *c, int k, uint32_t car, uint8_t open);
 int  lightkey_mine(void);                /* lightkey.c */
 void lightkey_car(int k, uint32_t car, int st);
 /* damage.c: the crash damage, where it is built in */
+__attribute__((weak)) int damage_net_on(void);
 __attribute__((weak)) uint32_t damage_net_rev(void);
 __attribute__((weak)) int  damage_net_mine(uint8_t *epoch, uint16_t *first, uint8_t *dents, int max);
 __attribute__((weak)) void damage_net_car(CPU *c, int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t first,
@@ -118,6 +121,7 @@ __attribute__((weak)) void damage_net_car(CPU *c, int k, uint32_t car, uint32_t 
 #define rh_showoff_car(c, k, car, open) showoff_car((c), (k), (car), (open))
 #define rh_lights_mine() lightkey_mine()
 #define rh_lights_car(k, car, st) lightkey_car((k), (car), (st))
+#define rh_damage_on()   (damage_net_on ? damage_net_on() : 0)
 #define rh_damage_rev()  (damage_net_rev ? damage_net_rev() : 0u)
 #define rh_damage_mine(e, f, d, m) (damage_net_mine ? damage_net_mine((e), (f), (d), (m)) : 0)
 #define rh_damage_car(c, k, car, peer, e, f, n, d) \

@@ -457,9 +457,11 @@ typedef struct {
     uint32_t h_orig;                          /* a car of our own: its first ride (an opponent's copy) */
     int      have_orig, activated;
     uint32_t cfg_gen;  int pending_cfg;       /* the record the car shows / one waiting */
-    uint32_t look;                            /* hash of the record the car shows, its damage left out (rec_look; 0: none) */
-    /* the crash damage of the record the car shows (RC_EXT_DAMAGE: damage_peers makes it on the car) */
+    uint32_t look;                            /* hash of the record the car shows (0: none) */
+    /* the crash damage of the friend's car (its DENTS, rc_peer dents_*: damage_peers makes it on the car), as of the
+     * peer's dents_gen dmg_gen (of the peer at index dmg_idx: co-op moves a slot to player 2's session's peer) */
     uint8_t  dmg_epoch; uint16_t dmg_first; int dmg_n; uint8_t dmg[RC_DMG_MAX * RC_DMG_BYTES];
+    uint32_t dmg_gen; int dmg_idx;
     int64_t  load_t0, load_wait; long load_f0;    /* load_wait: how long the load may take (loads_waiting) */
     int      hidden;
     int      paused;                          /* the friend is paused (for a second now): so says the name over the car */
@@ -727,18 +729,13 @@ static int car_state(uint32_t car, rc_state *s, int horn, uint8_t *thumps, int *
     return 1;
 }
 static int local_state(rc_state *s){ return car_state(player_car(), s, g_horn, &g_thumps, &g_landed, rh_showoff_mine()); }
-/* the look of a car record, its crash damage left out: a record with new damage but the same look needs no new load */
-static uint32_t rec_look(const uint8_t *cfg, int len){
-    uint32_t h = rc_carcfg_look(cfg, len);
-    return h ? h : rc_fnv1a_bytes(cfg, (uint32_t)len);
-}
-/* the crash damage a slot's car is to show, from its record */
-static void slot_damage(Slot *s, const uint8_t *cfg, int len){
-    static rc_carcfg dc;
-    s->dmg_n = 0;
-    if (rc_carcfg_decode(cfg, len, &dc) != RC_OK || !dc.dmg_n) return;
-    s->dmg_epoch = dc.dmg_epoch; s->dmg_first = dc.dmg_first; s->dmg_n = dc.dmg_n;
-    memcpy(s->dmg, dc.dmg, (size_t)dc.dmg_n * RC_DMG_BYTES);
+/* a slot's friend's crash damage, as its peer's last DENTS had it (with the session's lock held): again when the peer
+ * has a new one, or the slot another peer */
+static void slot_damage(Slot *s, const rc_peer *p, int gi){
+    if (s->dmg_idx == gi && s->dmg_gen == p->dents_gen) return;
+    s->dmg_idx = gi; s->dmg_gen = p->dents_gen;
+    s->dmg_epoch = p->dents_epoch; s->dmg_first = p->dents_first; s->dmg_n = p->dents_n;
+    memcpy(s->dmg, p->dent, (size_t)p->dents_n * RC_DMG_BYTES);
 }
 /* the car look: type name hash and one (slot, key, owner) per filled part
  * slot of the car's RideInfo (player 1's: its drift setup and its horn; player 2's, co-op: the ride's own, no horn) */
@@ -770,8 +767,6 @@ static int car_cfg(uint32_t car, int mine, uint8_t *out, int cap, char *tname){
     cfg_rating(car, &c);                             /* the car as the game rates it (the others' games cannot: RC_EXT_RATING) */
     int horn = mine ? rh_horn_mine() : -1;           /* the horn the others hear from this car */
     if (horn >= 0){ c.has_horn = 1; c.horn = (uint8_t)horn; }
-    /* the crash damage's dents (damage.c), for friends to make on their copy of the car (player 1's car only) */
-    if (mine) c.dmg_n = (uint8_t)rh_damage_mine(&c.dmg_epoch, &c.dmg_first, c.dmg, RC_DMG_MAX);
     for (uint32_t sl = 0; sl < RC_PART_SLOTS; sl++){
         uint32_t part = MR32(ride + 0x590u + 4u * sl);
         if (!part || !ok(part, 0xe)) continue;
@@ -2044,8 +2039,7 @@ static int begin_load(CPU *c, int k, const uint8_t *cfg, int len, uint32_t gen){
     roam_texlist_engine = 0;
     uint32_t a2[2] = { 0, 0 }; rh_call(c, FN_LOADER_SERVICE, G_CARLOADER, 0, 2, a2);
     s->load_t0 = roam_plat_now_us(); s->load_f0 = rh_frame(); s->pending_cfg = 1; s->cfg_gen = gen;
-    s->look = rec_look(cfg, len);
-    slot_damage(s, cfg, len);
+    s->look = rc_fnv1a_bytes(cfg, (uint32_t)len);
     snprintf(s->carname, sizeof s->carname, "%s", cc.type_name);
     s->loads++;
     rlog("[roam] f=%ld slot %d: loading %s's %s (%u parts, skin %u, handle 0x%x)\n", rh_frame(), k, s->name,
@@ -4586,9 +4580,10 @@ static void showoff_peers(CPU *c){
         rh_showoff_car(c, k, ok(car, 0x9e0) ? car : 0, open[k]);
     }
 }
-/* friends' crash damage (damage.c): each shown car gets the dents its player's record has; damage.c makes only those it
- * has not made yet (a few a frame, the nearest cars', within limits: damagecore.cpp), and takes them off a car that goes
- * to another player */
+/* friends' crash damage (damage.c): each shown car gets the dents its player last sent (RC_MSG_DENTS); damage.c makes
+ * only those it has not made yet (a few a frame, the nearest cars', within limits: damagecore.cpp), and takes them off a
+ * car that goes to another player */
+_Static_assert(NSLOT == 64, "damagecore.cpp keeps 64 slots of friends' cars (kNetSlots): change both");
 static void damage_peers(CPU *c){
     for (int k = 0; k < NSLOT; k++){
         const Slot *s = &g_sl[k];
@@ -8532,6 +8527,8 @@ static void init_once(CPU *c){
     /* quick chat: where there is a page to pick and show phrases (settings.ini quick_chat = off: neither, and the
      * HELLO tells the others to send none) */
     cf.say = SAYS && roam_plat_quickchat() && env_int("NFSU2_ROAM_SAY", 1, 0, 1);
+    /* friends' crash damage (damage.c): the HELLO asks for it only where the damage is on (RC_HF_DENTS) */
+    cf.dents = rh_damage_on();
     cf.discovery = disc && !O.test;
     rc_io io = { 0, 0, 0, 0 };
     rc_session_init(&g_s, &cf, &io);
@@ -8851,12 +8848,12 @@ static void assign(CPU *c, int64_t host){
         int was = s->st;
         s->peer = v->idx; s->peer_id = v->id; s->unseen_since = 0; s->near_since = 0; s->idle_since = 0; s->soft = 0; s->crew = v->crew;
         s->seats = v->seats; s->ghost2 = 1; s->soft2 = s->soft_r = 0;
+        s->dmg_n = 0; s->dmg_idx = -1;               /* (the new friend's crash damage: from its peer, the next frame) */
         s->acq_us = roam_plat_now_us();
         snprintf(s->name, sizeof s->name, "%s", v->name);
         memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode);
         if (reuse){
             s->st = SL_ACTIVE; s->cfg_gen = v->cfg_gen; s->hidden = 1; g_acquires++; g_reuses++;
-            slot_damage(s, v->cfg, v->cfg_len);
             set_name(s);
             rlog("[roam] f=%ld slot %d for %s, %.0f m away: the parked %s already wears this look\n", rh_frame(), k,
                     s->name, (double)v->dist, s->carname);
@@ -9465,9 +9462,11 @@ void roam_game_frame(CPU *c){
     if (have_ls && (!O.collide || g_pass.me)) ls.bits |= RC_BIT_PASS;
     if (have_ls && g_du.busy) ls.bits |= RC_BIT_BUSY;
     uint8_t cfgb[RC_CFG_MAX]; int cfgn = 0; char tname[RC_CFG_TYPE_NAME + 1] = {0};
-    static uint32_t dmg_rev;
+    if (in_roam && host >= g_cfg_next){ cfgn = local_cfg(cfgb, sizeof cfgb, tname); g_cfg_next = host + 5000000; }
+    /* our car's crash damage (damage.c), as published: its own message (rc_set_dents), never in the record */
+    static uint8_t dmg_d[RC_DMG_MAX * RC_DMG_BYTES]; static uint32_t dmg_rev; static int dmg_n; static uint8_t dmg_e; static uint16_t dmg_f;
     uint32_t dr = rh_damage_rev();
-    if (in_roam && (host >= g_cfg_next || dr != dmg_rev)){ cfgn = local_cfg(cfgb, sizeof cfgb, tname); g_cfg_next = host + 5000000; dmg_rev = dr; }
+    if (dr != dmg_rev){ dmg_n = rh_damage_mine(&dmg_e, &dmg_f, dmg_d, RC_DMG_MAX); dmg_rev = dr; }
     if (have_ls){
         if (g_lp_ok){
             float dx = ls.p[0] - g_lp[0], dy = ls.p[1] - g_lp[1], dz = ls.p[2] - g_lp[2];
@@ -9498,6 +9497,7 @@ void roam_game_frame(CPU *c){
         if (g_s.cfg_rev != before) rlog("[roam] f=%ld my car: %s, %d-byte record, revision %u\n", rh_frame(), tname, cfgn, g_s.cfg_rev);
     }
     if (have_ls) rc_push_state(&g_s, &ls, host);
+    if (dmg_rev) rc_set_dents(&g_s, dmg_e, dmg_f, dmg_n, dmg_d, host);
 #if COOP
     c2_push(host, st);
 #endif
@@ -9561,7 +9561,8 @@ void roam_game_frame(CPU *c){
             if (slotted >= 0){ g_sl[slotted].crew = v->crew; g_sl[slotted].friend = rc_peer_friend(ses, i) != 0; }
             /* the record only when a slot will need it */
             if (p->cfg_len && (slotted < 0 || g_sl[slotted].cfg_gen != p->cfg_gen)){
-                memcpy(v->cfg, p->cfg, (size_t)p->cfg_len); v->cfg_len = p->cfg_len; v->look = rec_look(p->cfg, p->cfg_len); }
+                memcpy(v->cfg, p->cfg, (size_t)p->cfg_len); v->cfg_len = p->cfg_len; v->look = rc_fnv1a_bytes(p->cfg, (uint32_t)p->cfg_len); }
+            if (slotted >= 0) slot_damage(&g_sl[slotted], p, gi);   /* (its crash damage: damage_peers) */
             /* their horn: the record's (read once a record), the dual one without */
             if (g_phorn[gi].id != p->id || g_phorn[gi].gen != p->cfg_gen){
                 static rc_carcfg hc;
@@ -9663,9 +9664,6 @@ void roam_game_frame(CPU *c){
                 continue;
             }
             if (!ok(s->car, 0x9e0)) continue;
-            /* a new record of the same look (its crash damage changed): no load, only the damage */
-            if (!s->h_new && v->cfg_len > 0 && v->cfg_gen != s->cfg_gen && v->look && v->look == s->look){
-                s->cfg_gen = v->cfg_gen; slot_damage(s, v->cfg, v->cfg_len); }
             /* a new look: load it while the old one stays on */
             if (!s->h_new && v->cfg_len > 0 && v->cfg_gen != s->cfg_gen && g_heavy < HEAVY_PER_FRAME && load_may_start(c)
                 && begin_load(c, k, v->cfg, v->cfg_len, v->cfg_gen))
