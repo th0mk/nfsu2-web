@@ -229,6 +229,9 @@ fn pieces() -> Vec<&'static str> {
     p.extend(["1488", "88", "spider", "shinigami", "zuniga", "adolf"]);
     // a lone n before digits, the "pid" words' surroundings, Nigeria
     p.extend(["n", "1663", "pid", "topi", "drift", "nigeria"]);
+    // the hate phrases' words, and a word that starts as their group does
+    p.extend(HATE_VERBS.iter().chain(HATE_BETWEEN).chain(HATE_GROUPS));
+    p.push("jewel");
     p
 }
 
@@ -404,12 +407,12 @@ const SCRIPT: &str = r#"
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 const [names, corpus] = process.argv.slice(2);
-const { SLURS, EDGE_OK, PID_STEMS, blockedName } = await import(pathToFileURL(names).href);
+const { SLURS, EDGE_OK, PID_STEMS, HATE, blockedName } = await import(pathToFileURL(names).href);
 let blocked = '';
 for (const n of JSON.parse(fs.readFileSync(corpus, 'utf8'))) blocked += blockedName(n) ? '1' : '0';
 const m = /const LOOKALIKE = (\{[\s\S]*?\});/.exec(fs.readFileSync(names, 'utf8'));
 const lookalike = m && Object.entries(Function(`return (${m[1]})`)()).map(([k, v]) => [k.codePointAt(0), v.codePointAt(0)]);
-process.stdout.write(JSON.stringify({ blocked, slurs: SLURS, edgeOk: EDGE_OK, stems: PID_STEMS, lookalike }));
+process.stdout.write(JSON.stringify({ blocked, slurs: SLURS, edgeOk: EDGE_OK, stems: PID_STEMS, hate: HATE, lookalike }));
 "#;
 
 /// a folder of its own under the system's temp, gone with it
@@ -452,6 +455,9 @@ fn answers_as_names_mjs() {
     assert_eq!(strings(&js["edgeOk"]["start"]), EDGE_OK_START, "the edge list's words a part may start with");
     assert_eq!(strings(&js["edgeOk"]["end"]), EDGE_OK_END, "the edge list's words a part may end with");
     assert_eq!(strings(&js["stems"]), PID_STEMS, "the English words' starts before a pid word");
+    assert_eq!(strings(&js["hate"]["verbs"]), HATE_VERBS, "the hate phrases' verbs");
+    assert_eq!(strings(&js["hate"]["between"]), HATE_BETWEEN, "the words between in a hate phrase");
+    assert_eq!(strings(&js["hate"]["groups"]), HATE_GROUPS, "the hate phrases' groups");
 
     let pairs = js["lookalike"].as_array().expect("names.mjs's LOOKALIKE table, read from its source");
     let char_of = |v: &serde_json::Value| v.as_u64().and_then(|c| char::from_u32(c as u32)).expect("a code point");

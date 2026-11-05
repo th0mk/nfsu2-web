@@ -23,7 +23,8 @@
 //    "Zuniga", "Hoonigan" is "hooniga" when cut to 7 letters)
 // The other offensive names go the same way (picked from the live server's names, 2026-10-26 and 2026-11-02): Nazi
 // ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it (the
-// neo-Nazi code).  A swear word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an
+// neo-Nazi code); and hate aimed at a group as a phrase (HATE: a verb, a word between or none, the group).  A swear
+// word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an
 // English word that ends in "pid" (rapid, cupid, stupid), or after a vowel when it runs into the next part
 // ("TopiDrift"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
 export const SLURS = Object.freeze({
@@ -37,8 +38,7 @@ export const SLURS = Object.freeze({
     'niger', 'higger', 'chigga', 'negroid', 'zencigot', 'kacap', 'rusnya', 'pideras', 'frocio', 'pretomacaco',
     'kitler', 'fitler', 'ritler', 'sitler', 'xitler', 'heitler', 'nitler', 'neonazi', 'nazist', 'uncleadolf',
     'austrianartist', 'austrianpainter', 'pintoraustria', 'zyklonb', 'kristalnacht', 'ovendodger',
-    'hatejew', 'killjew', 'jewkill', 'gasjew', 'deadjew', 'jewslay', 'jewdestroy', 'fckjew', 'fuckjew', 'huntjew',
-    'jebaczyd', 'zydzidopieca', 'osamabin', 'alqaeda', 'pedophil', 'pedofil']),
+    'jewkill', 'jewslay', 'jewdestroy', 'jebaczyd', 'zydzidopieca', 'osamabin', 'alqaeda', 'pedophil', 'pedofil']),
   whole: Object.freeze(['fag', 'dyke', 'coon', 'spic', 'paki', 'kike', 'gook', 'chink',
     'niga', 'nyga', 'ngga', 'neger', 'xach', 'xoxol', 'hohol', 'ukrop', 'pider', 'pedik', 'nazi', 'taliban', 'rape',
     'nig']),
@@ -54,6 +54,14 @@ export const EDGE_OK = Object.freeze({
 /** the starts of the English words that end in "pid": rapid, cupid, stupid, tepid, vapid, insipid, lipid, limpid,
  *  sapid, intrepid, hispid */
 export const PID_STEMS = Object.freeze(['ra', 'cu', 'stu', 'te', 'va', 'insi', 'li', 'lim', 'sa', 'intre', 'his']);
+/** hate aimed at a group as a phrase, matched anywhere as the anywhere list's words are: a verb, one of the words
+ *  that may come between or none, a group ("GasJews", "Kill_All_Jews") */
+export const HATE = Object.freeze({
+  verbs: Object.freeze(['gas', 'kill', 'hate', 'hunt', 'slay', 'burn', 'shoot', 'nuke', 'bomb', 'dead', 'death', 'fck',
+    'fuck', 'fuk', 'destroy', 'exterminate']),
+  between: Object.freeze(['s', 'the', 'all', 'allthe', 'da', 'dem', 'them', 'those', 'every', 'dirty', 'to']),
+  groups: Object.freeze(['jew']),
+});
 
 const LOOKALIKE = {
   А: 'A', а: 'a', В: 'B', в: 'b', Е: 'E', е: 'e', К: 'K', к: 'k', М: 'M', м: 'm', Н: 'H', н: 'h', О: 'O', о: 'o',
@@ -73,7 +81,8 @@ function letter(ch) {
   return ch >= 'a' && ch <= 'z' ? ch : '';
 }
 const word = w => [...w].map(letter).join('');
-const ANYWHERE = SLURS.anywhere.map(word), WHOLE = SLURS.whole.map(word), EDGE = SLURS.edge.map(word);
+const PHRASES = HATE.verbs.flatMap(v => ['', ...HATE.between].flatMap(b => HATE.groups.map(g => v + b + g)));
+const ANYWHERE = [...SLURS.anywhere, ...PHRASES].map(word), WHOLE = SLURS.whole.map(word), EDGE = SLURS.edge.map(word);
 const OK_START = EDGE_OK.start.map(word), OK_END = EDGE_OK.end.map(word), STEMS = PID_STEMS.map(word);
 const DYKE = [word('dyke')], NIGER = word('niger'), NIGERIA = word('nigeri');
 const digit = ch => ch !== undefined && ch >= '0' && ch <= '9';

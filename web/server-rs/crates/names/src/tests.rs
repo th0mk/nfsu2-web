@@ -129,6 +129,14 @@ pub(crate) const BLOCKED: &[&str] = &[
     "xChigga",
     "Nazista",
     "ZyklonB",
+    // hate aimed at a group as a phrase, with a word between (2026-11-05)
+    "GasTheJews",
+    "Gas_The_Jews",
+    "KillAllTheJews",
+    "HuntTheJews",
+    "DeathToJews",
+    "g4sTh3J3ws",
+    "BurnDaJews",
 ];
 /// 'ñigga', 'nіgga' (Cyrillic і), fullwidth, 'ΝΙGGΑ' (Greek Ν Ι Α), combining low lines, circled, 'fаg' (Cyrillic а),
 /// 'Ηitler' (Greek Η), fullwidth, fullwidth digits
@@ -247,6 +255,16 @@ pub(crate) const ALLOWED: &[&str] = &[
     "TopiDrift",
     "N1995",
     "Doran1994TR",
+    // a hate phrase's words on their own
+    "Jewel",
+    "JewishRacer",
+    "Andrew",
+    "Matthew",
+    "KillerQueen",
+    "GasMonkey",
+    "Deadpool",
+    "Bombshell",
+    "Shooter",
 ];
 
 // names.mjs: the lists' words, the ways round them, and not the other words
@@ -254,6 +272,13 @@ pub(crate) const ALLOWED: &[&str] = &[
 fn lists_ways_round_and_other_words() {
     for w in ANYWHERE.iter().chain(WHOLE).chain(EDGE) {
         assert!(blocked_name(w), "{w}");
+    }
+    for v in HATE_VERBS {
+        for b in [""].iter().chain(HATE_BETWEEN) {
+            for g in HATE_GROUPS {
+                assert!(blocked_name(&format!("{v}{b}{g}")), "{v}{b}{g}");
+            }
+        }
     }
     for n in BLOCKED.iter().chain(UNICODE) {
         assert!(blocked_name(n), "{n}");
@@ -377,6 +402,11 @@ fn chat_lines() {
         ("ya pidor", "pidor"),
         ("big nigabro", "nigabro"),
         ("austrian artist", "austrian artist"),
+        ("lets gasthejews", "gasthejews"),
+        ("gas thejews", "gas thejews"),
+        ("gas the jews", "gas the jews"),
+        ("KILL ALL THE J3WS now", "KILL ALL THE J3WS"),
+        ("we kill all the jews", "kill all the jews"),
     ] {
         assert_eq!(slur(line).as_deref(), Some(span), "{line}");
     }
@@ -397,6 +427,8 @@ fn chat_lines() {
         "topi drift",
         "Zuniga and Nigar",
         "lap 1:48.8",
+        "las vegas the jewel",
+        "kill all the bots then the jews",
         "",
         "   ",
     ] {
