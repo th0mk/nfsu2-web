@@ -143,11 +143,13 @@
  * an older version sends none and drops these.  Also there:
  *   "N2CS", version 1, 0, the length (u16), then the bit stream's bytes as
  *   0x585D50 sent them: a joiner's car state, to every joiner on the list;
- *   "N2PL", version 1, 0, the count (u8), then that many addresses (u32,
- *   host order): the creator's list of the other joiners, to each joiner
- *   every PL_MS.  Taken only from the race's creator, and car states only
- *   from the addresses on its list, only for a slot that is neither the
- *   creator's nor ours.
+ *   "N2PL", version 1, flags (PL_SLOTS: the slots follow), the count (u8),
+ *   0, then that many addresses (u32, host order), then (PL_SLOTS) the slot
+ *   each of them drives (a byte each, 0xFF none) and the creator's own: the
+ *   creator's list of the other joiners, to each joiner every PL_MS.  Taken
+ *   only from the race's creator, and car states only from the addresses on
+ *   its list, only for a slot that is neither the creator's nor ours.  (A
+ *   game without the slots reads the addresses and leaves the rest.)
  * Who may speak for whom: the game's own race link is a handshaken CommUDP
  * link to the creator, but anyone on the virtual LAN who sends a datagram to
  * our UDP 3658 becomes a "race peer" (net_lan.c's list).  So the creator
@@ -155,14 +157,21 @@
  * link drops datagrams from any other address and answers none of them,
  * 0x753211), a joiner takes the list only from an address its race link
  * sends to (vlan_race_sent_to: a joiner's game sends only to its creator),
- * and only from the first one it came from in this race; and each address on it
- * speaks for one slot, the first its car states named, which no other
- * address may name in this race.  Both reset when the race is over.  The
- * messages are the same, so games with and without these checks race
- * together as before.  (The game's own relay could already carry a joiner's
- * message naming another slot: the creator decodes a joiner's car by the
- * connection's slot but passes the message's bytes on as they are, and the
- * other joiners read the slot from them.)
+ * and only from the first one it came from in this race; and each address
+ * speaks for the slot its own game drives (racenet_slot_of): the creator
+ * knows it from its race connections (each one's link to its joiner's
+ * address, G_CONNS, and the joiner it is, G_SEATS) and lists it.  With a
+ * list from an older creator (no slots) each address speaks for the first
+ * slot its car states named, which no other address may name in this race
+ * (until the 2026-11-05 security audit the only rule: a joiner that named
+ * another's slot first, from the race's start, spoke for that car all race,
+ * and every game drew it where that joiner said and reported its jumps
+ * against the player who drove it).  Both reset when the race is over.
+ * Games with and without these checks race together as before.  (The game's
+ * own relay could already carry a joiner's message naming another slot: the
+ * creator decodes a joiner's car by the connection's slot but passes the
+ * message's bytes on as they are, and the other joiners read the slot from
+ * them.)
  *
  * The race clocks: a joiner's follows the creator's (0x5891B0, about 20
  * samples a second, each the creator's clock plus half the round trip), and
@@ -227,6 +236,17 @@
 #define PL_MS        1000u         /* the creator's list of the joiners, every PL_MS */
 #define PL_STALE_MS  5000u         /*   and the list a joiner goes by, at most this old */
 #define NPL          8
+#define PL_SLOTS     1u            /*   its flag: the slots follow the addresses */
+/* who drives which slot (above): the creator's race connections (0x5877D0 runs them) */
+#define G_CONNS      0x008691d0u   /* CONN_N of CONN_SZ: +0 state (CONN_UP), +4 its id, +0xC its link (+0 its CommUDP port) */
+#define CONN_N       5u
+#define CONN_SZ      0x14u
+#define CONN_UP      3u
+#define PORT_PEER    0x7cu         /* a CommUDP port: its peer's sockaddr (family, port, address in network order) */
+#define G_SEATS      0x008693c8u   /* the creator's joiners (0x5895C0): SEAT_N of SEAT_SZ, +0 the slot, +4 the connection's id */
+#define SEAT_N       5u
+#define SEAT_SZ      0x20u
+#define SLOT_ANY     (-2)          /* racenet_slot_of: not known (an older creator's list), the first slot named */
 /* the fade (above) */
 #define FADE_MIN     0.15f         /* m: a frame's move this much off the car's own (its velocity, its last move) is a correction */
 #define FADE_MAX     10.f          /* m: a correction (with what still shows of the last ones) over this is shown */
@@ -571,7 +591,8 @@ void sub_005f8900(CPU *c){
 }
 
 /* ---- car states straight from their games (above) ---- */
-static struct { uint32_t from, at, n, ip[NPL]; } g_pl;   /* a joiner: the creator's list (host order), when it came */
+static struct { uint32_t from, at, n, ip[NPL]; int slots, host; int8_t slot[NPL]; } g_pl;   /* a joiner: the creator's list
+                                                        * (host order), when it came; with the slots: each one's, the creator's */
 static struct { uint32_t ip, slot; } g_bind[NPL]; static int g_nbind;   /* this race: the slot each joiner's states name */
 /* out of a network race: no list, no slots (the next race starts anew) */
 static void direct_reset(void){ memset(&g_pl, 0, sizeof g_pl); g_nbind = 0; }
@@ -597,24 +618,58 @@ void sub_00585d50(CPU *c){
     }
     sub_00585d50_orig(c);
 }
-/* the creator's list to each joiner: the others (every PL_MS, racenet_frame).
- * Only the race peers the game's race link sends to (its joiners), not
- * everyone who sent a datagram to our UDP 3658 (above). */
+/* the creator: the slot its race connection to ip (host order) drives, -1
+ * none (the connection whose link's peer is that address, the joiner that
+ * connection is) */
+static int conn_slot(uint32_t ip){
+    for (uint32_t i = 0; i < CONN_N; i++){
+        uint32_t e = G_CONNS + CONN_SZ * i, port = rd32(rd32(e + 0xcu));
+        if (rd32(e) != CONN_UP || !ok(port, PORT_PEER + 8u) || MR16(port + PORT_PEER) != 2u ||
+            __builtin_bswap32(MR32(port + PORT_PEER + 4u)) != ip) continue;
+        uint32_t id = rd32(e + 4u);
+        for (uint32_t k = 0; k < SEAT_N; k++)
+            if (rd32(G_SEATS + SEAT_SZ * k + 4u) == id){
+                int32_t s = (int32_t)rd32(G_SEATS + SEAT_SZ * k);
+                return s >= 0 && s < 6 ? s : -1;
+            }
+    }
+    return -1;
+}
+/* the slot the racer at ip (host order) drives (racecars.c's N2RS, our
+ * N2CS): on the creator its race connection's, on a joiner the creator's
+ * list's (the creator's own for the address the list came from); -1 none,
+ * SLOT_ANY not known (no list yet, or an older creator's without the slots:
+ * the first slot it names, above) */
+int racenet_slot_of(uint32_t ip){
+    if (is_host()) return conn_slot(ip);
+    if (!g_pl.slots) return SLOT_ANY;
+    if (ip == g_pl.from) return g_pl.host;
+    for (uint32_t k = 0; k < g_pl.n; k++) if (g_pl.ip[k] == ip) return g_pl.slot[k];
+    return -1;
+}
+/* the creator's list to each joiner: the others and their slots (every
+ * PL_MS, racenet_frame).  Only the race peers the game's race link sends to
+ * (its joiners), not everyone who sent a datagram to our UDP 3658 (above). */
 static void list_send(void){
-    uint32_t all[16], peers[NPL];
-    int na = vlan_race_peers(all, 16, PEER_MS), n = 0;
+    uint32_t all[16], peers[NPL], pl = rd32(G_PLAYER1), me = pl ? rd32(pl + 4u) : 0;
+    int na = vlan_race_peers(all, 16, PEER_MS), n = 0, slot[NPL];
+    int16_t own = ok(me, 0x9e0) ? (int16_t)MR16(me + 0xau) : -1;
     for (int i = 0; i < na && n < NPL; i++) if (vlan_race_sent_to(all[i], PEER_MS)) peers[n++] = all[i];
+    for (int i = 0; i < n; i++) slot[i] = conn_slot(peers[i]);
     for (int i = 0; i < n; i++){
-        uint8_t m[8 + 4 * NPL];
+        uint8_t m[8 + 5 * NPL + 1];
         int k = 0;
-        memcpy(m, "N2PL", 4); m[4] = 1; m[5] = 0; m[7] = 0;
+        memcpy(m, "N2PL", 4); m[4] = 1; m[5] = PL_SLOTS; m[7] = 0;
         for (int j = 0; j < n; j++){
             if (j == i) continue;
             for (int b = 0; b < 4; b++) m[8 + 4 * k + b] = (uint8_t)(peers[j] >> (8 * b));
             k++;
         }
         m[6] = (uint8_t)k;
-        vlan_rt_send(HORN_PORT, peers[i], m, 8 + 4 * k);
+        int p = 8 + 4 * k;
+        for (int j = 0; j < n; j++) if (j != i) m[p++] = slot[j] >= 0 ? (uint8_t)slot[j] : 0xffu;
+        m[p++] = own >= 0 && own < 6 ? (uint8_t)own : 0xffu;
+        vlan_rt_send(HORN_PORT, peers[i], m, p);
     }
 }
 /* the other racers' addresses (racecars.c sends them our car): the creator's
@@ -639,10 +694,16 @@ void racenet_list(const uint8_t *m, int n, uint32_t from){
     if (n < 8 || m[4] != 1 || m[6] > NPL || n < 8 + 4 * m[6] || is_host()) return;
     if (!vlan_race_sent_to(from, PEER_MS) || (g_pl.from && g_pl.from != from)){ R.pl_refused++; return; }
     g_pl.from = from; g_pl.at = ms_now(); g_pl.n = 0;
+    /* the slots (an older creator's list has none: SLOT_ANY, as before) */
+    const uint8_t *sl = (m[5] & PL_SLOTS) && n >= 8 + 5 * m[6] + 1 ? m + 8 + 4 * m[6] : 0;
+    g_pl.slots = sl != 0;
+    g_pl.host = sl && sl[m[6]] < 6 ? sl[m[6]] : -1;
     for (int k = 0; k < m[6]; k++){
         const uint8_t *q = m + 8 + 4 * k;
         uint32_t a = (uint32_t)q[0] | (uint32_t)q[1] << 8 | (uint32_t)q[2] << 16 | (uint32_t)q[3] << 24;
-        if (a && a != from) g_pl.ip[g_pl.n++] = a;
+        if (!a || a == from) continue;
+        g_pl.slot[g_pl.n] = (int8_t)(sl && sl[k] < 6 ? sl[k] : -1);
+        g_pl.ip[g_pl.n++] = a;
     }
 }
 /* bits of a bit stream from pos on, most significant first (0x581D90) */
@@ -654,8 +715,9 @@ static uint32_t bits_at(const uint8_t *b, uint32_t pos, uint32_t nb){
 /* An N2CS from the horn's port (racehorn.c, on the game thread): to the
  * game's handler, as the creator's copy goes.  Only from a joiner on the
  * creator's list, only a car state, only for a slot that is neither ours nor
- * the creator's (whose states the game answers), and only for the slot that
- * address named first in this race, if no other address named it before. */
+ * the creator's (whose states the game answers), and only for the slot the
+ * list says that address drives (an older creator's list: the slot it named
+ * first in this race, if no other address named it before). */
 void racenet_carspam(CPU *c, const uint8_t *m, int n, uint32_t from){
     if (!direct_on() || n < (int)CS_HDR || m[4] != 1 || is_host() || !in_race()) return;
     uint32_t len = (uint32_t)m[6] | (uint32_t)m[7] << 8, nb = rd32(G_SLOTBITS), known = 0;
@@ -664,14 +726,19 @@ void racenet_carspam(CPU *c, const uint8_t *m, int n, uint32_t from){
         m[CS_HDR] != MSG_CARSPAM || nb < 1u || nb > 8u || 40u + nb > 8u * len){ R.cs_refused++; return; }
     uint32_t slot = bits_at(m + CS_HDR, 40u, nb) + rd32(G_SLOTMIN);
     if (slot >= 6u || slot == rd32(G_MYSLOT) || slot == rd32(G_HOSTSLOT)){ R.cs_refused++; return; }
-    /* one slot an address, one address a slot, for this race (above) */
-    int b = 0;
-    while (b < g_nbind && g_bind[b].ip != from) b++;
-    if (b < g_nbind && g_bind[b].slot != slot){ R.cs_refused++; return; }
-    if (b == g_nbind){
-        for (int i = 0; i < g_nbind; i++) if (g_bind[i].slot == slot){ R.cs_refused++; return; }
-        if (g_nbind == NPL){ R.cs_refused++; return; }
-        g_bind[g_nbind].ip = from; g_bind[g_nbind].slot = slot; g_nbind++;
+    /* the slot the creator's list says it drives */
+    int want = racenet_slot_of(from);
+    if (want != SLOT_ANY && (uint32_t)want != slot){ R.cs_refused++; return; }
+    if (want == SLOT_ANY){
+        /* an older creator's list: one slot an address, one address a slot, for this race (above) */
+        int b = 0;
+        while (b < g_nbind && g_bind[b].ip != from) b++;
+        if (b < g_nbind && g_bind[b].slot != slot){ R.cs_refused++; return; }
+        if (b == g_nbind){
+            for (int i = 0; i < g_nbind; i++) if (g_bind[i].slot == slot){ R.cs_refused++; return; }
+            if (g_nbind == NPL){ R.cs_refused++; return; }
+            g_bind[g_nbind].ip = from; g_bind[g_nbind].slot = slot; g_nbind++;
+        }
     }
     R.cs_came++;
     /* the bytes below the hook's frame, the call below them */
@@ -1175,7 +1242,8 @@ static void end(uint64_t t){
     if (!R.host)
         fprintf(stderr, "[racenet]   straight between the joiners' games: %u car states sent, %u came, %u refused; "
                 "the creator's list %s (%u other joiners), %u lists from elsewhere refused\n", R.cs_sent, R.cs_came, R.cs_refused,
-                !direct_on() ? "not used (NFSU2_RACE_DIRECT=0)" : g_pl.at ? "came" : "never came (an older version)", g_pl.n,
+                !direct_on() ? "not used (NFSU2_RACE_DIRECT=0)" : !g_pl.at ? "never came (an older version)" :
+                g_pl.slots ? "came with their slots" : "came without their slots (an older version)", g_pl.n,
                 R.pl_refused);
     if (!R.host && clock_on())
         fprintf(stderr, "[racenet]   race clock (ours): %u of the creator's answers, the least round trip %.0f ms, its clock's steps %u; "

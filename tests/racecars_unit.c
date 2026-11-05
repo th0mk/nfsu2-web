@@ -10,7 +10,8 @@
  *   wire       our car goes to every racer: N2RS, our slot, the state as it is
  *   stranger   an N2RS from an address that is not a racer: refused
  *   own-slot   one naming our slot: refused
- *   bound      a racer's first slot is its own; another racer naming it, or
+ *   bound      (an older creator: no word on who drives which slot) a
+ *              racer's first slot is its own; another racer naming it, or
  *              the first naming another: refused
  *   rtt        its echo of our stamp, less what it held: the round trip
  *   drawn      its car put where its states carry it to, through the game's apply
@@ -19,6 +20,11 @@
  *   hit        a hit here: its own physics (the car left where it is) until
  *              a state from after the hit, then drawn again
  *   reset      the race over: no racers, no slots
+ *   claimed    the next race, the slots known (racenet_slot_of): a racer
+ *              naming another's slot from the race's start refused every
+ *              time, that car not drawn from its states
+ *   honest     then every racer's own slot taken, each car from its own
+ *   old-creator slots not known: the first named, as before
  * Every case prints "PASS <case> ..." or "FAIL <case> ..."; exit 1 on a FAIL. */
 #include <stdint.h>
 #include <stdio.h>
@@ -45,6 +51,14 @@ static int g_fail;
 /* racenet.c's racers and the virtual LAN: what was sent */
 static uint32_t g_peers[4]; static int g_npeers;
 int racenet_race_peers(uint32_t *ip, int max){ int n = g_npeers < max ? g_npeers : max; memcpy(ip, g_peers, 4u * (size_t)n); return n; }
+/* and the slot each drives (the creator's race connections, a joiner's list from it): -2, not known (an older
+ * creator's list), unless a case sets them */
+static uint32_t g_slot_ip[4]; static int g_slot_of[4], g_nslot;
+int racenet_slot_of(uint32_t ip){
+    if (!g_nslot) return -2;
+    for (int i = 0; i < g_nslot; i++) if (g_slot_ip[i] == ip) return g_slot_of[i];
+    return -1;
+}
 static struct { uint32_t to; int n; uint8_t m[256]; } g_out[16]; static int g_nout;
 int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n){
     (void)port;
@@ -249,6 +263,48 @@ int main(void){
     int any = 0;
     for (int i = 0; i < NCARS; i++) any |= g_rc[i].ip != 0;
     CHECK(!any && !racecars_fed(CAR_A), "reset: racers left %d", any);
+
+    /* claimed: the next race, the slots known (the creator's race connections, or its list on a joiner: A drives 2,
+     * B 3); B names A's slot from the race's start, every frame for half a second (the 2026-11-05 security audit:
+     * first come, it spoke for A's car all race, put it where it liked, and its jumps went into every game's report
+     * against A) */
+    O.init = 0; setenv("NFSU2_RACE_DRIVE", "0", 1); opts();
+    MR32(RC) = RC_RACING;
+    frame();
+    g_slot_ip[0] = IP_A; g_slot_of[0] = 2; g_slot_ip[1] = IP_B; g_slot_of[1] = 3; g_nslot = 2;
+    uint32_t ref1 = S.refused;
+    for (int k = 0; k < 30; k++){
+        frame();
+        racecars_heard(m, n2rs(m, 2, 3000000 + (uint32_t)k * 16667u, 500.f, 0.f, now32(), 0, 0), IP_B);
+    }
+    uint32_t tries = S.refused - ref1;
+    CHECK(tries == 30 && !rc_ip(IP_B) && !racecars_fed(CAR_A), "claimed: B naming A's slot 2 from the start refused %u of 30, "
+          "A's car from B's states %d", tries, racecars_fed(CAR_A));
+
+    /* honest: then A's states for slot 2 and B's for slot 3 (B still naming 2 now and then): each car from its own */
+    for (int k = 0; k < 10; k++){
+        frame();
+        uint32_t t = 3500000 + (uint32_t)k * 16667u;
+        racecars_heard(m, n2rs(m, 2, t, 120.f + 0.5f * (float)k, 30.f, now32(), 0, 0), IP_A);
+        racecars_heard(m, n2rs(m, 3, t, 400.f, 0.f, now32(), 0, 0), IP_B);
+        if (k % 3 == 0) racecars_heard(m, n2rs(m, 2, t, 500.f, 0.f, now32(), 0, 0), IP_B);
+    }
+    Rc *a2 = rc_ip(IP_A), *b2 = rc_ip(IP_B);
+    CHECK(a2 && a2->slot == 2 && a2->n == 10 && rc_of_car(CAR_A) == a2 && b2 && b2->slot == 3 && b2->n == 10 && rc_of_car(CAR_B) == b2 &&
+          S.refused == ref1 + 34, "honest: A for slot 2 %d (%u states), B for slot 3 %d (%u states), B naming 2 refused %u more",
+          a2 && a2->slot == 2 && rc_of_car(CAR_A) == a2, a2 ? a2->n : 0, b2 && b2->slot == 3 && rc_of_car(CAR_B) == b2, b2 ? b2->n : 0,
+          S.refused - ref1 - 30);
+
+    /* old-creator: the next race, the slots not known (a list from a creator of an older version): the first slot an
+     * address names, as before (not every state refused) */
+    MR32(RC) = 0; frame(); MR32(RC) = RC_RACING; frame();
+    g_nslot = 0;
+    racecars_heard(m, n2rs(m, 2, 4000000, 500.f, 0.f, now32(), 0, 0), IP_B);
+    racecars_heard(m, n2rs(m, 2, 4000000, 120.f, 30.f, now32(), 0, 0), IP_A);
+    racecars_heard(m, n2rs(m, 3, 4000000, 400.f, 0.f, now32(), 0, 0), IP_A);
+    Rc *a3 = rc_ip(IP_A), *b3 = rc_ip(IP_B);
+    CHECK(b3 && b3->slot == 2 && a3 && a3->slot == 3, "old-creator: B naming slot 2 first takes it %d, A then slot 3 %d",
+          b3 && b3->slot == 2, a3 && a3->slot == 3);
 
     printf("racecars unit tests: %s\n", g_fail ? "FAILED" : "all passed");
     return g_fail;

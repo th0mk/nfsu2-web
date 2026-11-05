@@ -1,9 +1,10 @@
 // The runtime's native unit tests, built with the commands in their heads and run: tests/objtable_unit.c (the kernel
 // object table of runtime/win32_ext.c: a full table takes back a finished thread's slot, never one a wait or a handle
 // still names), tests/watchdog_unit.c (runtime/watchdog.c: no false stall from a stamp a little ahead of its
-// clock), tests/racenet_unit.c (runtime/racenet.c: the creator's list only from the creator, each joiner's car
-// states for its own slot only) and tests/racecars_unit.c (runtime/racecars.c: each racer's own car states, who may
-// speak for which car, the cars drawn and driven).  Every case of theirs passes, and each one ran.
+// clock), tests/racenet_unit.c (runtime/racenet.c: the creator's list only from the creator, with the slot each
+// joiner's game drives, each joiner's car states for that slot only) and tests/racecars_unit.c (runtime/racecars.c:
+// each racer's own car states, who may speak for which car, the cars drawn and driven).  Every case of theirs
+// passes, and each one ran.
 //   node --test web/test/runtime-unit.test.mjs        (macOS with clang: Xcode's command line tools; about 10 s)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,13 +47,15 @@ test('watchdog_unit: no false stall from a stamp ahead of the watchdog\'s clock,
 
 test('racenet_unit: the creator\'s list only from the creator, a joiner\'s states only for its own slot', { skip }, () => {
   const { out, pass } = run('racenet_unit', ['-O1', '-g', '-Wall', '-Wno-unused-function']);
-  for (const c of ['stranger', 'creator', 'second', 'direct', 'own-slot', 'taken-slot', 'rules', 'reset', 'host-list']) assert.ok(pass.includes(c), `case ${c} passed`);
-  assert.ok(pass.length >= 13, `every check ran (${pass.length})`);
+  for (const c of ['stranger', 'creator', 'second', 'direct', 'own-slot', 'taken-slot', 'rules', 'reset', 'list-slots', 'old-creator', 'host-list',
+    'host-slots']) assert.ok(pass.includes(c), `case ${c} passed`);
+  assert.ok(pass.length >= 17, `every check ran (${pass.length})`);
   assert.match(out, /racenet unit tests: all passed/);
 });
 
 test('racecars_unit: each racer\'s own car states, only for its own car, drawn and driven', { skip }, () => {
   const { out, pass } = run('racecars_unit', ['-O1', '-g', '-Wall', '-Wno-unused-function', '-ffp-contract=off']);
-  for (const c of ['wire', 'stranger', 'own-slot', 'bound', 'rtt', 'drawn', 'ghost', 'hit', 'hit-back', 'driven', 'reset']) assert.ok(pass.includes(c), `case ${c} passed`);
+  for (const c of ['wire', 'stranger', 'own-slot', 'bound', 'rtt', 'drawn', 'ghost', 'hit', 'hit-back', 'driven', 'reset', 'claimed', 'honest',
+    'old-creator']) assert.ok(pass.includes(c), `case ${c} passed`);
   assert.match(out, /racecars unit tests: all passed/);
 });

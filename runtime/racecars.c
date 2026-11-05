@@ -66,8 +66,12 @@
  *   addressee (0: none), 20 how long it held that one (u32 µs), 24 the states
  *   (rc_state_put).
  * Who may speak for whom (as racenet.c's N2CS): only an address on the
- * race's peers (racenet_race_peers), and each address for one slot only, the
- * first it named in this race, which no other address may name.
+ * race's peers (racenet_race_peers), only for the slot its game drives
+ * (racenet_slot_of: the creator's race connections, on a joiner the
+ * creator's list), and each address for one slot only, which no other
+ * address may name in this race.  Until the 2026-11-05 security audit that
+ * slot was the first it named: a joiner that named another's first spoke for
+ * that car all race.  From a creator too old to list the slots, still so.
  *
  * Test knobs (read only with NFSU2_INPUT_SCRIPT set, racenet.c's test_env):
  * NFSU2_RACE_CARS=0 off (the game's and racenet.c's way), NFSU2_RACE_CARS_HZ,
@@ -152,6 +156,7 @@
 
 int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n);
 int racenet_race_peers(uint32_t *ip_h, int max);   /* racenet.c: the other racers' addresses */
+int racenet_slot_of(uint32_t ip_h);                /*   and the slot each drives (-1 none, -2 not known) */
 
 static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
 static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
@@ -421,6 +426,9 @@ void racecars_heard(const uint8_t *m, int n, uint32_t from){
     int slot = m[6], ns = m[7];
     uint32_t me = my_car();
     if (!known || slot >= 6 || !ok(me, 0x9e0) || slot == (int16_t)MR16(me + CAR_SLOT) || ns < 1 || ns > 3){ S.refused++; return; }
+    /* only the slot its game drives, as the creator knows it (racenet_slot_of) */
+    int want = racenet_slot_of(from);
+    if (want != -2 && want != slot){ S.refused++; return; }
     /* one slot an address, one address a slot, for this race */
     for (int i = 0; i < NCARS; i++) if (g_rc[i].ip && g_rc[i].ip != from && g_rc[i].slot == slot){ S.refused++; return; }
     Rc *r = rc_of_ip(from, 1);

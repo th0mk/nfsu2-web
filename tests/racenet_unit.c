@@ -21,8 +21,14 @@
  *   rules      our slot, the creator's, a slot past 5, an address not on
  *              the list: refused
  *   reset      the race over: no list, no slots; the next race starts anew
+ *   (the cases above with a list from an older creator, without the slots)
+ *   list-slots a list with the slots: a joiner naming another's slot from
+ *              the race's start refused every time; each joiner its own taken
+ *   old-creator a list without the slots: the first slot named, as before
  *   host-list  the creator: its list only to the race peers its race link
  *              sends to, naming only them (not a stranger who sent to 3658)
+ *   host-slots the creator: each listed joiner's slot from the game's race
+ *              connections (none for one without a connection), its own
  * Every case prints "PASS <case> ..." or "FAIL <case> ..."; exit 1 on a FAIL. */
 #include <stdint.h>
 #include <stdio.h>
@@ -52,12 +58,14 @@ static uint32_t g_peer[4]; static int g_npeer;
 static uint32_t g_sentto[4]; static int g_nsentto;
 static int g_nout;
 static uint32_t g_pl_to[8], g_pl_named[8][NPL_MAX_TEST]; static int g_pl_k[8], g_npl_out;   /* the creator's lists sent */
+static uint8_t g_pl_raw[8][64]; static int g_pl_len[8];                                         /*   (as they went) */
 int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n){
     (void)port; g_nout++;
     const uint8_t *m = p;
     if (n >= 8 && !memcmp(m, "N2PL", 4) && g_npl_out < 8){
         int k = g_npl_out++;
         g_pl_to[k] = ip_h; g_pl_k[k] = m[6];
+        g_pl_len[k] = n < 64 ? n : 64; memcpy(g_pl_raw[k], m, (size_t)g_pl_len[k]);
         for (int i = 0; i < m[6] && i < NPL_MAX_TEST && 8 + 4 * i + 3 < n; i++)
             g_pl_named[k][i] = (uint32_t)m[8 + 4 * i] | (uint32_t)m[9 + 4 * i] << 8 | (uint32_t)m[10 + 4 * i] << 16 | (uint32_t)m[11 + 4 * i] << 24;
     }
@@ -122,11 +130,37 @@ static int carspam(uint8_t *m, uint32_t slot, int len){
     for (int i = 6; i < len; i++) m[CS_HDR + i] = (uint8_t)(0x40 + i);
     return (int)CS_HDR + len;
 }
-/* the creator's list: the given addresses */
+/* the creator's list: the given addresses (an older creator's: no slots) */
 static int list(uint8_t *m, const uint32_t *ip, int k){
     memcpy(m, "N2PL", 4); m[4] = 1; m[5] = 0; m[6] = (uint8_t)k; m[7] = 0;
     for (int i = 0; i < k; i++) for (int b = 0; b < 4; b++) m[8 + 4 * i + b] = (uint8_t)(ip[i] >> (8 * b));
     return 8 + 4 * k;
+}
+/* and with the slot each drives, then the creator's own (flag 1) */
+static int list_slots(uint8_t *m, const uint32_t *ip, const uint8_t *slot, int k, uint8_t own){
+    int n = list(m, ip, k);
+    m[5] = 1;
+    for (int i = 0; i < k; i++) m[n++] = slot[i];
+    m[n++] = own;
+    return n;
+}
+/* the creator's race connections as the game keeps them (0x8691D0: +0 state 3, +4 its id, +0xC its link, whose +0 is
+ * its CommUDP port, +0x7C the peer's sockaddr), and its joiners (0x8693C8: +0 the slot, +4 the connection's id) */
+#define T_CONNS 0x008691d0u
+#define T_SEATS 0x008693c8u
+#define T_LINKS 0x100a0000u
+static void seats_free(void){
+    commit(T_CONNS, 0x300);
+    for (uint32_t k = 0; k < 5; k++){ MR32(T_SEATS + 0x20u * k) = 0xffffffffu; MR32(T_SEATS + 0x20u * k + 4u) = 0xffffffffu; }
+}
+/* connection i to ip (its id), the joiner in seat s with that slot */
+static void conn_put(int i, int s, uint32_t ip, uint32_t id, int slot){
+    uint32_t e = T_CONNS + 0x14u * (uint32_t)i, link = T_LINKS + 0x1000u * (uint32_t)i, port = link + 0x100u;
+    commit(T_CONNS, 0x300); commit(link, 0x200);
+    MR32(e) = 3; MR32(e + 4u) = id; MR32(e + 0xcu) = link; MR32(link) = port;
+    MR16(port + 0x7cu) = 2; MR16(port + 0x7eu) = (uint16_t)(3658u >> 8 | (3658u & 255u) << 8);
+    MR32(port + 0x80u) = __builtin_bswap32(ip);                /* (network order) */
+    MR32(T_SEATS + 0x20u * (uint32_t)s) = (uint32_t)slot; MR32(T_SEATS + 0x20u * (uint32_t)s + 4u) = id;
 }
 
 /* ---- the rates, the race clock, the cars where their owners have them ---- */
@@ -446,6 +480,42 @@ int main(void){
     CHECK(out && g_calls == 4 && g_nbind == 1 && g_bind[0].ip == j3 && g_bind[0].slot == 3,
           "reset: out of the race nothing taken; in the next one j3 may name slot 3 (%d calls)", g_calls);
 
+    /* list-slots: the creator's list says j2 drives slot 2, j3 slot 3 (itself 0); j3 names j2's slot from the race's
+     * start, 30 times (the 2026-11-05 security audit: it spoke for j2's car all race): refused every time; then each
+     * joiner's own taken, and j2's after j3's tries */
+    {
+        MR32(RC) = 0; frame(); MR32(RC) = RC_RACING; frame();        /* a new race */
+        const uint8_t js[2] = { 2, 3 };
+        n = list_slots(pl, joiners, js, 2, 0); racenet_list(pl, n, creator);
+        int c0 = g_calls; uint32_t r0 = R.cs_refused;
+        for (int k = 0; k < 30; k++){ n = carspam(m, 2, 20); racenet_carspam(&g_c, m, n, j3); }
+        uint32_t tries = R.cs_refused - r0;
+        int claimed = g_calls == c0 && tries == 30;
+        n = carspam(m, 2, 20); racenet_carspam(&g_c, m, n, j2);
+        int j2_own = g_calls == c0 + 1 && g_bytes[5] >> 5 == 2;
+        n = carspam(m, 3, 20); racenet_carspam(&g_c, m, n, j3);
+        int j3_own = g_calls == c0 + 2 && g_bytes[5] >> 5 == 3;
+        n = carspam(m, 3, 20); racenet_carspam(&g_c, m, n, j2);
+        int j2_other = g_calls == c0 + 2 && R.cs_refused == r0 + 31;
+        CHECK(claimed && j2_own && j3_own && j2_other, "list-slots: j3 naming j2's slot 2 from the start refused %u of 30, "
+              "j2's own taken %d, j3's own taken %d, j2 naming j3's refused %d", tries, j2_own, j3_own, j2_other);
+    }
+    /* old-creator: a list without the slots (a creator of an older version): the first slot named, as before (not every
+     * state refused) */
+    {
+        MR32(RC) = 0; frame(); MR32(RC) = RC_RACING; frame();
+        n = list(pl, joiners, 2); racenet_list(pl, n, creator);
+        int c0 = g_calls; uint32_t r0 = R.cs_refused;
+        n = carspam(m, 2, 20); racenet_carspam(&g_c, m, n, j3);
+        int first = g_calls == c0 + 1;
+        n = carspam(m, 2, 20); racenet_carspam(&g_c, m, n, j2);
+        int second = g_calls == c0 + 1 && R.cs_refused == r0 + 1;
+        n = carspam(m, 3, 20); racenet_carspam(&g_c, m, n, j2);
+        int other = g_calls == c0 + 2;
+        CHECK(first && second && other, "old-creator: no slots listed: j3 naming slot 2 first taken %d, j2 naming it then refused %d, "
+              "j2 naming slot 3 taken %d", first, second, other);
+    }
+
     /* the creator: a stranger who sent a datagram to its UDP 3658 is a race
      * peer too, but its race link sends only to its joiners */
     MR32(G_NET_HOST) = 1;
@@ -460,6 +530,35 @@ int main(void){
     }
     CHECK(each_other && !to_s && !named_s, "host-list: the list only to the joiners the race link sends to, naming only them "
           "(%d lists, to the stranger %d, naming it %d)", g_npl_out, to_s, named_s);
+
+    /* host-slots: j2's connection is the joiner in slot 2, j3's in slot 3 (the seats in another order than the
+     * connections), j4 has none; our own car slot 4: each list names the others' slots (0xFF for j4) and ours */
+    {
+        const uint32_t j4 = 0x0a4d0505u;
+        seats_free();
+        conn_put(0, 1, j2, 0x11u, 2); conn_put(1, 0, j3, 0x22u, 3);
+        MR16(CAR_ME + 0xau) = 4;
+        g_peer[3] = j4; g_npeer = 4; g_sentto[2] = j4; g_nsentto = 3;
+        g_npl_out = 0; g_fake_ns += 1000000000u; frame();
+        int good = g_npl_out == 3;
+        for (int k = 0; k < g_npl_out; k++){
+            const uint8_t *q = g_pl_raw[k];
+            int kk = q[6], len = 8 + 5 * kk + 1;
+            good &= g_pl_len[k] == len && (q[5] & 1) && q[len - 1] == 4;
+            for (int i = 0; i < kk; i++){
+                uint32_t a = g_pl_named[k][i];
+                good &= q[8 + 4 * kk + i] == (a == j2 ? 2 : a == j3 ? 3 : 0xff) && a != g_pl_to[k];
+            }
+        }
+        CHECK(good, "host-slots: %d lists, each with the other joiners' slots from the race connections (none for j4) and ours", g_npl_out);
+        /* what racecars.c's N2RS goes by on the creator: each joiner's connection's slot, none for an address without
+         * one; a connection not up (state 2) none */
+        int s2 = racenet_slot_of(j2), s3 = racenet_slot_of(j3), s4 = racenet_slot_of(j4), sx = racenet_slot_of(stranger);
+        MR32(T_CONNS) = 2; int down = racenet_slot_of(j2); MR32(T_CONNS) = 3;
+        CHECK(s2 == 2 && s3 == 3 && s4 == -1 && sx == -1 && down == -1, "host-slots: the creator's racenet_slot_of: j2 %d, j3 %d, j4 %d, "
+              "the stranger %d, j2's connection not up %d", s2, s3, s4, sx, down);
+        MR16(CAR_ME + 0xau) = 0xffffu; g_nsentto = 2; g_npeer = 3;
+    }
 
     /* the race's report of each car's largest jump (racenet_jump): a car that moves 1 m a frame (20 ms) with a state
      * every frame, then 280 m at once: 280; a stall of 1.5 s and a jump of 120 m as its state ends it: left out (a
