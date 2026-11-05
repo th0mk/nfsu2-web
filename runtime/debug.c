@@ -101,6 +101,8 @@ void guest_hook(CPU *c, uint32_t ip){
     { int hornmenu_hook(CPU *, uint32_t); if (hornmenu_hook(c, ip)) return; }
     { int tonemenu_hook(CPU *, uint32_t); if (tonemenu_hook(c, ip)) return; }
     { int powerunits_hook(CPU *, uint32_t); if (powerunits_hook(c, ip)) return; }
+    { int shownames_hook(CPU *, uint32_t); if (shownames_hook(c, ip)) return; }
+    { int hudbank_hook(CPU *, uint32_t); if (hudbank_hook(c, ip)) return; }
     { int regional_hook(CPU *, uint32_t); if (regional_hook(c, ip)) return; }
     { int garage_hook(CPU *, uint32_t); if (garage_hook(c, ip)) return; }
     { int vinylcat_hook(CPU *, uint32_t); if (vinylcat_hook(c, ip)) return; }

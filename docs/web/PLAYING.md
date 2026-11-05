@@ -375,6 +375,14 @@ that room.
   speedometer shows. Until you change it, it follows Speedometer Units, as in the original game (kW with km/h).
   Torque still follows the speedometer (Nm with km/h, ft-lbs with mph), and the dyno results' 0-60 and 0-100 are
   mph times either way.
+- **Show Player Names:** the game's Options, Gameplay (also in the pause menu's) has the game's own Show Player Names
+  row before Save, which the original game has only in a LAN lobby's options. Off hides the names over other players'
+  cars, in free roam and in LAN races; On, the default, shows them. It stays with the game's options on this device
+  (backups carry it, cloud saves do not).
+- **The Bank in free roam:** the Bank box at the top right of career free roam shows only while it has something to
+  say: for 20 s after your bank changes (a race's or an outrun's prize, a purchase, a money icon), for 10 s when free
+  roam starts, and for 8 s after the pause menu, the map or a shop. In the original game it is always there. The
+  magazine and DVD cover rewards show as before.
 - **Exposure and White Level:** for eyes that a bright picture tires. The game's Options, Display (also the pause
   menu's) has two sliders after Level Of Detail. Exposure makes the whole picture darker or brighter, from half to
   twice as bright (the middle, the default, is the game's own). White Level is the brightest the picture gets, from
@@ -548,8 +556,8 @@ Good to know:
 - **Keep right:** a new career starts in the airport's car park, and every new player drives out of it into the
   others. As your car leaves that spot, the top of the screen says "Please keep right to help avoid crashes" for 15 s
   (while other players are in free roam).
-- **Names over the cars** follow the game's own player-names option, as in its LAN races. A player who paused shows
-  as "paused" there.
+- **Names over the cars** follow the game's own player-names option, as in its LAN races: Show Player Names in the
+  game's Options, Gameplay (also the pause menu's) turns them off. A player who paused shows as "paused" there.
 - **Horn:** hold N to honk, or click the controller's left stick (on a car with hydraulics that click works the
   hydraulics: honk with N). The others hear it from your car: louder the nearer they are, from the side your car is on, and lower in pitch as you drive away from them. Pick yours in
   Online, Your horn (the play button next to it lets you hear each one): dual tone, single tone, air horn, train horn,

@@ -437,7 +437,10 @@ fixes of the original game's crashes and glitches. Changing its core gameplay me
 performance and tuning, AI and traffic, the career's progression, races and rewards, the economy.
 
 - A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
-  (Power Units in Options, Gameplay; drift mode with X, and since 19f84c9 with the drift races' handling and the car's
+  (Power Units in Options, Gameplay; Show Player Names there too (also in the pause menu's Options, Gameplay): Off
+  hides the names over other players' cars, in free roam and LAN races; the Bank box in career free roam shows only
+  for 20 s after the bank changes, 10 s when free roam starts and 8 s after the pause menu, the map or a shop, the
+  answer to "hide the Bank"; drift mode with X, and since 19f84c9 with the drift races' handling and the car's
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
   (right looks right; straight down is the game's Look Back since 77a2a706; the left stick when the game's controls
   steer or brake with the right one, since c04e9dc0) and turns it in the garage; quick chat,

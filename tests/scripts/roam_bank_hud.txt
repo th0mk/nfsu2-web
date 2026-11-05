@@ -1,0 +1,52 @@
+# The Bank in career free roam's HUD (runtime/hudbank.c) only when it says something, from a career save in free roam
+# (run-suite's NFSU2_SAVE_SEED, roam-pair's --seed; e.g. work/seed/career/s4_outrun): shown when free roam starts
+# ("[bank] shown (free roam, ...)"), hidden 10 s later ("[bank] hidden (time's up, ...)"); shown 20 s after the bank
+# changed (a poke here), and 8 s after the pause menu, the world map (M) and the crib ("back"); the reward pop-up
+# (Cash_Reward: a magazine's, its setter's values poked, 0x4AC170) shows with the Bank hidden.  The HUD gives the Bank's
+# part (the HUD's +0x80) its bits at +0x1C: 0x80000 (524288) while it shows.  roam-pair --page app saves the page at
+# each "log SHOT <name>":
+#   roam-pair --page app --solo --a Ban:roam_bank_hud.txt --seed <save tree> --env NFSU2_ROAM=0 --out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++60   expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown: free roam started
++0    log SHOT bank_start
++10000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288   # hidden 10 s after
++0    log SHOT bank_hidden
++0    poke 0x861e74 123456                                  # the bank changes
++30   expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown
++0    log SHOT bank_changed
++18000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288  # still, 18.5 s after
++3000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288    # hidden 20 s after
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  log SHOT pause
++0    tap ESCAPE                                            # back to the game
++30   expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown after the pause menu
++0    log SHOT bank_back
++9000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288    # hidden 8 s after
++0    poke 0x8364a8 1                                       # a magazine's reward pop-up, as 0x4AC170 sets it
++0    poke 0x8364a0 5000
++0    poke 0x8364a4 0
++0    poke 0x8364ac 4
++0    poke 0x83649c 1 byte
++30   log SHOT reward
++0    expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288     # the Bank still hidden
++0    expect b:0x83649c == 0                                # the pop-up shown (its update clears the flag)
++60   log SHOT reward_later
++9000ms tapuntil M UI_InGame_WorldMap.fng 90 1500     # the world map
++120  log SHOT map
++0    tap ESCAPE                                            # back to the game
++30   expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown after the map
++0    log SHOT bank_after_map
++9000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288   # hidden 8 s after
++0    shopgo CRIB_1                                         # the crib, the career's garage (as coop_shop.txt)
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitfe UI_CareerCrib.fng 3000
++300  roam fe2roam 14000                                    # Return to Explore Mode
++0    waitmem 0x8654a4 6 6000
++120  expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown after the crib
++0    log SHOT bank_after_crib
++60   quit

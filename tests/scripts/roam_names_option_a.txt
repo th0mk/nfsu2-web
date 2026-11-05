@@ -1,0 +1,46 @@
+# Show Player Names (runtime/shownames.c) hides the names over other players' cars in free roam (roam_game.c's tags
+# read the game's byte), instance A (with roam_names_option_b.txt): both from one career save in free roam, on its
+# spot (roam-pair --seed); B drives some 20 m ahead.  A shoots it with B's name over its car, then with the byte
+# poked to 0 (no name) and back to 1 (the name back), then turns it off in the pause menu's Options > Gameplay
+# ("[names] Show Player Names Off") and shoots it again without the name.  roam-pair --page app saves the page at
+# each "log SHOT <name>":
+#   roam-pair --page app --a Ann:roam_names_option_a.txt --b Bob:roam_names_option_b.txt --seed <save tree>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++1300 expect b:0x8500c9 == 1
++0    log SHOT names_on
++0    poke 0x8500c9 0 byte
++30   log SHOT names_off_poke
++0    poke 0x8500c9 1 byte
++30   log SHOT names_on_again
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  log SHOT pause
++0    tap RIGHT
++60   tap RIGHT
++60   tap RIGHT                                    # Options (after Return to Explore Mode, Save, ...)
++60   tap RETURN
++0    waitfng UI_PauseOptionsMain.fng 600
++120  tap RIGHT
++60   tap RIGHT                                    # Gameplay (after Audio, Display)
++60   tap RETURN
++0    waitfng UI_PauseOptions.fng 600
++120  tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN                                     # Show Player Names
++90   tap LEFT                                     # Off
++90   expect b:0x8500c9 == 0
++0    tap ESCAPE
++120  tap ESCAPE
++120  tap ESCAPE                                   # back to the game
++180  log SHOT names_off_menu
++0    roam mp status
++10   quit

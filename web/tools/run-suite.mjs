@@ -15,6 +15,9 @@
 //     --script FILE     an ad-hoc scenario: tests/scripts/FILE (with --marker, --name, --net NAME;
 //                       NFSU2_SAVE_SEED seeds its save directory)
 //     --save-out DIR    each scenario's save directory afterwards, as DIR/<scenario>/ (a seed for the next run)
+//     --reg PATH        the registry.txt the test page starts with, a path on the server (default
+//                       /tests/web/seed/registry_perf4_native.txt; registry_perf4_names_off.txt beside it has Show Player
+//                       Names off, as after a run that turned it off: tests/scripts/options_names_again.txt)
 //     --allow WHY,...   with --script: what the scenario expects of web/tools/judge.mjs's failures (freeze for
 //                       watchdog_loading.txt)
 //     --fast            fast-forward (NFSU2_FAST=1, runtime/framerate.c): the game does not wait for the wall clock
@@ -84,6 +87,8 @@ const TABLE = [
   ['tonepause', 'pause_tone.txt', '[tone] white level 90 %', '', 400],
   // Power Units (runtime/powerunits.c): a row of Options > Gameplay after Speedometer Units
   ['powerunits', 'options_units.txt', '[units] power in bhp', '', 400],
+  // Show Player Names (runtime/shownames.c): the game's own row in Options > Gameplay, before Save
+  ['shownames', 'options_names.txt', '[names] Show Player Names Off', '', 400],
   // the European game's Corsa and 106 (runtime/regional.c): Quick Race in the Corsa
   ['eucars', 'qr_eucars.txt', '[expect] PASS', '', 400],
   // photo mode (runtime/photo.c): on, its camera, off, and the pause menu's Photo Mode, as the page drives them
@@ -108,7 +113,10 @@ const SEED = process.env.NFSU2_SAVE_SEED ?? '';
 const OPT = [{ name: 'outrun', script: 'career_outrun.txt', marker: 'player completion 6 (6 won', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
   seed: true, blocked: SEED ? undefined : 'needs a career save from stage 2 on: NFSU2_SAVE_SEED=<save tree>' },
 { name: 'sponsor', script: 'career_sponsor.txt', marker: 'waitfng UI_postrace.fng satisfied', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
-  seed: true, blocked: SEED ? undefined : 'needs a career save in stage 2 before its sponsor: NFSU2_SAVE_SEED=<save tree>' }];
+  seed: true, blocked: SEED ? undefined : 'needs a career save in stage 2 before its sponsor: NFSU2_SAVE_SEED=<save tree>' },
+// the Bank in free roam's HUD only when it says something (runtime/hudbank.c)
+{ name: 'bankhud', script: 'roam_bank_hud.txt', marker: 'SHOT bank_after_crib', extra: '', alarm: 400,
+  seed: true, blocked: SEED ? undefined : 'needs a career save in free roam: NFSU2_SAVE_SEED=<save tree>' }];
 
 // the environment of tests/run_suite.sh + tools/autorun.sh
 const SUITE_ENV = {
@@ -120,14 +128,14 @@ const SUITE_ENV = {
 const argv = process.argv.slice(2);
 // a game in headless Chrome keeps about three cores busy
 const JOBS = Math.max(1, Math.min(4, Math.floor(os.cpus().length / 3)));
-const opt = { base: 'http://localhost:8611', run: '', jobs: JOBS, env: [], scale: 1, script: '', marker: '', name: '', net: '', saveOut: '', allow: [], list: false, fast: false };
+const opt = { base: 'http://localhost:8611', run: '', jobs: JOBS, env: [], scale: 1, script: '', marker: '', name: '', net: '', saveOut: '', allow: [], list: false, fast: false, reg: '/tests/web/seed/registry_perf4_native.txt' };
 const names = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i], v = () => argv[++i];
   if (a === '--base') opt.base = v(); else if (a === '--run') opt.run = v(); else if (a === '--jobs') opt.jobs = +v();
   else if (a === '--env') opt.env.push(v()); else if (a === '--timeout-scale') opt.scale = +v();
   else if (a === '--script') opt.script = v(); else if (a === '--marker') opt.marker = v(); else if (a === '--name') opt.name = v();
-  else if (a === '--net') opt.net = v(); else if (a === '--save-out') opt.saveOut = v();
+  else if (a === '--net') opt.net = v(); else if (a === '--save-out') opt.saveOut = v(); else if (a === '--reg') opt.reg = v();
   else if (a === '--allow') opt.allow.push(...v().split(','));
   else if (a === '--fast') opt.fast = true;
   else if (a === '--list') opt.list = true; else names.push(a);
@@ -161,7 +169,7 @@ function urlFor(s) {
   q.set('wasm', '/game.wasm'); q.set('pages', '16384'); q.append('arg', '/data/SPEED2.EXE');
   for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
   q.set('save', saveName(s)); if (!s.seed) q.set('fresh', '');     // a seeded save dir is prepared by seedSave
-  q.set('reg', '/tests/web/seed/registry_perf4_native.txt');
+  q.set('reg', opt.reg);
   q.set('script', s.script.startsWith('/') ? s.script : `/tests/scripts/${s.script}`);
   if (s.net) q.set('net', s.net);
   return `${opt.base}/test/hostcheck.html?${q}`;

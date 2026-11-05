@@ -1,0 +1,30 @@
+# Show Player Names (runtime/shownames.c) after a restart: a registry.txt with it off (ShowPlayerNames=0, as
+# options_names.txt leaves it: roam-pair --fetch registry.txt shows it) at the start: Off ("[names] Show Player Names
+# Off (registry ShowPlayerNames), after the defaults"); hosting a LAN lobby (as lan_host_short.txt) and leaving it
+# keep it Off.
+#   run-suite --script options_names_again.txt --reg /tests/web/seed/registry_perf4_names_off.txt --net names
+#             --marker "LOG lan_left"
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    waitfng GarageMain.fng 3000
++0    expect b:0x8500c9 == 0
++300  tap RIGHT
++60   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
++120  tap RETURN                                   # LAN
++8000ms click 0.407 0.919                          # Host LAN Server
++0    waitfng UI_PC_LAN.fng 600
++30   tap BACK
++10   tap BACK
++10   tap BACK
++10   tap BACK
++30   type NAMES
++60   tap RETURN
++0    waitfng UI_OLMAIN.fng 1500
++300  expect b:0x8500c9 == 0                       # in the lobby
++0    tap ESCAPE
++200  tap LEFT
++60   tap RETURN                                   # leave it: Yes
++300  expect b:0x8500c9 == 0                       # out of it
++0    log LOG lan_left
++60   quit

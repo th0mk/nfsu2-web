@@ -1,0 +1,12 @@
+# Show Player Names in free roam, instance B (with roam_names_option_a.txt): from the same career save, on its spot;
+# B drives some 20 m ahead of A and stays there while A takes its shots.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++900  down UP
++130  up UP
++90000ms roam mp status
++10   quit
