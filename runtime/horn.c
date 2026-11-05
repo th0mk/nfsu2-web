@@ -6,9 +6,9 @@
  * (0x47E610), but none of its sound banks holds a horn: every sound in
  * SOUND/ was decoded (EA-XA, the BNKl banks of the .abk files) and looked
  * at, and the traffic bank has two engine loops only.  So the horns are made
- * here, eight kinds; the player picks theirs (NFSU2_HORN), and the others
- * hear that one (roam_game.c sends it with the car's look, racehorn.c with
- * each honk):
+ * here, fourteen kinds, nine synthesised and five recorded; the player picks
+ * theirs (NFSU2_HORN), and the others hear that one (roam_game.c sends it
+ * with the car's look, racehorn.c with each honk):
  *   dual       a car's dual horn: two tones a major third apart, each a buzzy
  *              band-limited wave with its upper harmonics lifted around
  *              2.7 kHz, summed through a soft clip that gives the pair its
@@ -28,6 +28,16 @@
  *   trombone   a sad trombone: wah, wah, wah, waaah (falling a semitone a
  *              note, the last one shaking), through a mute that opens with
  *              each note
+ *   sputter    a dying horn: it catches, cuts out and sags flat, then wobbles
+ * and recorded (web/src/static/horns.bin, web/tools/mkhorns.mjs cuts them;
+ * the start page plays the same file):
+ *   dixie      a Dixie air horn's twelve notes
+ *   oldcar     an old car's horn
+ *   broken     a broken car horn's honk
+ *   thecar     the horn of the film The Car (1977), a short honk and a long one
+ *   thecar_long  the same horn held: it sounds while the key is held
+ * A recorded horn but thecar_long plays to its end once it starts, let go or
+ * not, and again while it is held.
  * Each player's horn is pitched one of five ways (from the name), so players
  * with the same kind can still tell who honks.
  *
@@ -100,6 +110,8 @@ static const Note CUCARACHA[] = {                    /* from G */
     { 5, 18, 0 }, { 5, 18, 0 }, { 4, 18, 0 }, { 4, 18, 0 }, { 2, 18, 0 }, { 2, 18, 0 }, { 0, 54, 0 }, { REST, 80, 0 } };
 static const Note CLOWN[] = { { 0, 22, 0 }, { REST, 9, 0 }, { -3, 30, 0 }, { REST, 45, 0 } };
 static const Note TROMBONE[] = { { 0, 42, 0 }, { -1, 42, 0 }, { -2, 42, 0 }, { -3, 170, 1 }, { REST, 90, 0 } };
+static const Note SPUTTER[] = { { 0, 8, 0 }, { REST, 6, 0 }, { -1, 14, 0 }, { REST, 5, 0 }, { 0, 7, 0 }, { -2, 9, 0 }, { REST, 12, 0 },
+    { -1, 45, 1 }, { REST, 8, 0 }, { -3, 7, 0 }, { -4, 60, 1 }, { REST, 70, 0 } };
 #define TUNE(t) .tune = (t), .ntune = (int)(sizeof (t) / sizeof (t)[0])
 #define GAP_S  0.035f                /* each note's end silent: its valve closes */
 
@@ -123,6 +135,10 @@ typedef struct {
     int   swell;                     /* the level follows the envelope's 1.5th power (the Klaxon) */
     const Note *tune; int ntune;     /* the tones play this tune, over again */
     float gate, nsag, vib;           /* the tune: each note's rise and fall (s, 0: 4 ms), its pitch x (1 - nsag (1 - that)), the vibrato's depth */
+    /* 1: no tones but horns.bin's clip of this name (only att, rel and level
+     * count); again: s of silence before it plays again while held (a clip
+     * with a loop loops instead) */
+    int   clip; float again;
 } Kind;
 /* the highest harmonic stays below 20 kHz at the highest pitch (x 1.12) and
  * a fast pass (x 1.4) */
@@ -135,25 +151,72 @@ static const Kind KINDS[HORN_KINDS] = {
       .att = .006f, .rel = .025f, .drive = 1.7f, .level = 1.035f },
     { .name = "truck", .n = 2, .f = { 185.f, 222.f }, .a = { 1.f, .85f }, .dly = { 0.f, .025f },
       .nh = 40, .roll = .8f, .form = 1100.f, .width = 700.f, .lift = 2.f, .top = 6000.f,
-      .att = .030f, .rel = .050f, .sag = .06f, .drive = 1.5f, .hiss = .03f, .level = 1.175f },
+      .att = .030f, .rel = .050f, .sag = .06f, .drive = 1.5f, .hiss = .03f, .level = 1.2f },
     { .name = "train", .n = 5, .f = { 311.1f, 370.f, 415.3f, 493.9f, 622.3f }, .a = { .55f, .5f, .5f, .45f, .4f },
       .dly = { 0.f, .02f, .035f, .05f, .07f },
       .nh = 16, .roll = 1.f, .form = 1400.f, .width = 900.f, .lift = 1.2f, .top = 5000.f,
-      .att = .050f, .rel = .080f, .sag = .03f, .drive = .9f, .hiss = .02f, .level = 1.29f },
+      .att = .050f, .rel = .080f, .sag = .03f, .drive = .9f, .hiss = .02f, .level = 1.342f },
     { .name = "klaxon", .n = 1, .f = { 380.f }, .a = { 1.f },
       .nh = 28, .roll = .5f, .width = 1.f, .top = 9000.f,
-      .att = .180f, .rel = .150f, .sag = .72f, .drive = 2.2f, .res = 750.f, .level = 1.95f, .swell = 1 },
+      .att = .180f, .rel = .150f, .sag = .72f, .drive = 2.2f, .res = 750.f, .level = 2.173f, .swell = 1 },
     { .name = "cucaracha", .n = 2, .f = { 392.f, 393.6f }, .a = { 1.f, .5f },
       .nh = 18, .roll = .8f, .form = 2000.f, .width = 1000.f, .lift = 1.5f, .top = 7000.f,
-      .att = .012f, .rel = .040f, .sag = .02f, .drive = 1.4f, .hiss = .01f, .level = 1.f, TUNE(CUCARACHA) },
+      .att = .012f, .rel = .040f, .sag = .02f, .drive = 1.4f, .hiss = .01f, .level = 1.085f, TUNE(CUCARACHA) },
     { .name = "clown", .n = 1, .f = { 340.f }, .a = { 1.f },
       .nh = 30, .roll = .6f, .form = 1600.f, .width = 700.f, .lift = 3.f, .top = 8000.f,
-      .att = .010f, .rel = .040f, .drive = 3.f, .level = 1.19f, TUNE(CLOWN), .gate = .015f, .nsag = .12f },
+      .att = .010f, .rel = .040f, .drive = 3.f, .level = 1.285f, TUNE(CLOWN), .gate = .015f, .nsag = .12f },
     { .name = "trombone", .n = 1, .f = { 233.1f }, .a = { 1.f },
       .nh = 36, .roll = 1.f, .width = 1.f, .top = 5000.f,
       .att = .020f, .rel = .060f, .drive = 1.2f, .res = 350.f, .wah = 1400.f, .level = 1.22f,
       TUNE(TROMBONE), .gate = .040f, .vib = .02f },
+    { .name = "dixie", .clip = 1, .att = .002f, .rel = .030f, .again = .30f, .level = .566f },
+    { .name = "oldcar", .clip = 1, .att = .002f, .rel = .030f, .again = .15f, .level = 1.318f },
+    { .name = "broken", .clip = 1, .att = .002f, .rel = .030f, .again = .15f, .level = 1.24f },
+    { .name = "sputter", .n = 1, .f = { 360.f }, .a = { 1.f },
+      .nh = 28, .roll = .7f, .form = 2400.f, .width = 900.f, .lift = 2.f, .top = 8000.f,
+      .att = .010f, .rel = .030f, .drive = 3.f, .hiss = .05f, .level = 1.084f, TUNE(SPUTTER), .gate = .010f, .nsag = .15f, .vib = .03f },
+    { .name = "thecar", .clip = 1, .att = .002f, .rel = .030f, .again = .30f, .level = 1.246f },
+    { .name = "thecar_long", .clip = 1, .att = .005f, .rel = .080f, .level = 1.171f },
 };
+
+/* ---- the recorded horns: web/src/static/horns.bin (web/tools/mkhorns.mjs) ---------- */
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc23-extensions"
+static const uint8_t g_horns_bin[] = {
+#embed "../web/src/static/horns.bin"
+};
+#pragma clang diagnostic pop
+typedef struct { const uint8_t *pcm; uint32_t n, l0, l1; float rate; } Clip;   /* l1: 0, no loop */
+static uint32_t rd16(const uint8_t *p){ return (uint32_t)p[0] | (uint32_t)p[1] << 8; }
+static uint32_t rd32(const uint8_t *p){ return rd16(p) | rd16(p + 2) << 16; }
+/* the clip of that name; 0 (n 0) when horns.bin has none (the kind sounds as the dual horn) */
+static int clip_find(const char *name, Clip *c){
+    const uint8_t *b = g_horns_bin;
+    uint32_t len = (uint32_t)sizeof g_horns_bin, cnt = len >= 8 ? rd16(b + 4) : 0, head = 8u + 32u * cnt;
+    memset(c, 0, sizeof *c);
+    if (len < 8 || memcmp(b, "HRN1", 4) || head > len) return 0;
+    for (uint32_t i = 0; i < cnt; i++){
+        const uint8_t *e = b + 8 + 32 * i;
+        if (strncmp((const char *)e, name, 16)) continue;
+        uint32_t off = rd32(e + 16), n = rd32(e + 20), l0 = rd32(e + 24), l1 = rd32(e + 28);
+        if (!n || off > (len - head) / 2 || n > (len - head) / 2 - off || l1 > n || (l1 && l0 + 4 > l1)) return 0;
+        c->pcm = b + head + 2 * off; c->n = n; c->l0 = l0; c->l1 = l1; c->rate = (float)rd16(b + 6);
+        return 1;
+    }
+    return 0;
+}
+/* sample i (past a loop's end: from its start again; outside the clip: 0) */
+static inline float clip_s(const Clip *c, int64_t i){
+    if (c->l1 && i >= (int64_t)c->l1) i -= c->l1 - c->l0;
+    if (i < 0 || i >= (int64_t)c->n) return 0.f;
+    return (float)(int16_t)rd16(c->pcm + 2 * i) * (1.f / 32768.f);
+}
+/* between samples i and i + 1, t of the way (a cubic through i - 1 .. i + 2) */
+static inline float clip_at(const Clip *c, uint32_t i, float t){
+    float xm = clip_s(c, (int64_t)i - 1), x0 = clip_s(c, i), x1 = clip_s(c, (int64_t)i + 1), x2 = clip_s(c, (int64_t)i + 2);
+    float c1 = 0.5f * (x1 - xm), c2 = xm - 2.5f * x0 + 2.f * x1 - 0.5f * x2, c3 = 0.5f * (x2 - xm) + 1.5f * (x0 - x1);
+    return ((c3 * t + c2) * t + c1) * t + x0;
+}
 
 const char *horn_name(int kind){ return KINDS[kind >= 0 && kind < HORN_KINDS ? kind : 0].name; }
 int horn_mine(void){
@@ -167,8 +230,14 @@ int horn_mine(void){
     }
     return mine;
 }
-/* how long a voice let go takes to fade out (to -80 dB) before another horn takes it */
-static uint32_t tail_ms(int kind){ return (uint32_t)(9.3f * KINDS[kind].rel * 1000.f) + 120u; }
+/* how long a voice let go takes to fade out (to -80 dB) before another horn takes it; a recorded one may still
+ * play to its end (at the lowest of the five pitches) */
+static uint32_t tail_ms(int kind){
+    uint32_t ms = (uint32_t)(9.3f * KINDS[kind].rel * 1000.f) + 120u;
+    Clip c;
+    if (KINDS[kind].clip && clip_find(KINDS[kind].name, &c) && !c.l1) ms += (uint32_t)(1000.f * (float)c.n / c.rate / 0.89f);
+    return ms;
+}
 
 static uint32_t now_ms(void){
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -246,9 +315,14 @@ int horn_sound(uint32_t who, const char *name, int kind, const float *p, const f
     }
     if (!p && who != PREVIEW_WHO && name) snprintf(g_self, sizeof g_self, "%s", name);
     int k = 0, start = 0;
+    uint32_t now = now_ms();
     while (k < HORN_VOICES && !(g_vo[k].used && g_vo[k].who == who)) k++;
+    if (k == HORN_VOICES){                                 /* a recorded horn let go a moment ago, maybe still playing: it goes on */
+        for (k = 0; k < HORN_VOICES; k++)
+            if (!g_vo[k].used && g_vo[k].who == who && KINDS[g_vo[k].kind].clip && g_vo[k].free_at && (int32_t)(now - g_vo[k].free_at) < 0) break;
+        if (k < HORN_VOICES){ g_vo[k].used = 1; g_vo[k].free_at = 0; }
+    }
     if (k == HORN_VOICES){
-        uint32_t now = now_ms();
         for (k = 0; k < HORN_VOICES; k++) if (!g_vo[k].used && (!g_vo[k].free_at || (int32_t)(now - g_vo[k].free_at) >= 0)) break;
         if (k == HORN_VOICES) return -1;
         g_vo[k].used = 1; g_vo[k].who = who; g_vo[k].tune = fnv1a(name); g_vo[k].kind = kind; g_vo[k].free_at = 0; start = 1;
@@ -273,10 +347,15 @@ void horn_preview(void){ master_read(); horn_sound(PREVIEW_WHO, g_self, horn_min
 
 /* ---- the mixer ----------------------------------------------------------------- */
 static float g_tbl[HORN_KINDS][TBL + 1];
+static Clip g_clip[HORN_KINDS];                          /* the recorded kinds' clips (n 0: none, the dual horn instead) */
 static int g_tbl_ok;
 static void tbl_init(void){
     for (int h = 0; h < HORN_KINDS; h++){
         const Kind *K = &KINDS[h];
+        if (K->clip){
+            if (!clip_find(K->name, &g_clip[h])) fprintf(stderr, "[horn] horns.bin has no %s: the dual horn instead\n", K->name);
+            continue;
+        }
         double peak = 0.0;
         for (int i = 0; i < TBL; i++){
             double x = 2.0 * M_PI * i / TBL, s = 0.0;
@@ -309,6 +388,8 @@ static struct {
     int   note; uint32_t left, in;                       /* the tune: the note, samples left of it and into it, */
     float ratio, gate, gs, vph;                          /* its pitch, on/off, that smoothed, the vibrato's phase (cycles) */
     uint32_t rng;
+    uint32_t cpos, cwait; float cfrac;                   /* a clip: where it is (sample and fraction); samples of silence before it plays again */
+    int   cplay; float cgain, cpan;                      /* it plays; the gain and side it plays to its end with once let go */
     uint32_t frames; float peak[2];                      /* the log line at the end */
 } g_v[HORN_VOICES];
 
@@ -324,17 +405,19 @@ void horn_mix(float *acc, unsigned frames, unsigned rate){
     for (int v = 0; v < HORN_VOICES; v++){
         float gain = bitsf(GET(g_in[v].gain));
         if (now - GET(g_in[v].stamp) > STALE_MS) gain = 0.f;
+        int held = gain > 0.f;
         if (!g_v[v].live){
             if (!(gain > 0.f)) continue;
             memset(&g_v[v], 0, sizeof g_v[v]);
             g_v[v].live = 1;
             uint32_t kd = GET(g_in[v].kind);
-            g_v[v].kind = kd < HORN_KINDS ? (int)kd : 0;
+            g_v[v].kind = kd < HORN_KINDS && !(KINDS[kd].clip && !g_clip[kd].n) ? (int)kd : 0;
             float t = detune(GET(g_in[v].tune));            /* a voice keeps its pitch until it is silent */
             for (int i = 0; i < KINDS[g_v[v].kind].n; i++){
                 g_v[v].f[i] = KINDS[g_v[v].kind].f[i] * t / fs;
                 g_v[v].on[i] = (uint32_t)(KINDS[g_v[v].kind].dly[i] * fs);
             }
+            if (KINDS[g_v[v].kind].clip){ g_v[v].f[0] = g_clip[g_v[v].kind].rate * t / fs; g_v[v].cplay = 1; }   /* samples per sample */
             g_v[v].pitch = bitsf(GET(g_in[v].pitch));
             g_v[v].note = -1; g_v[v].ratio = 1.f; g_v[v].rng = 0x9e3779b9u * (uint32_t)(v + 1);
         }
@@ -344,6 +427,14 @@ void horn_mix(float *acc, unsigned frames, unsigned rate){
         float k_gate = 1.f - expf(-1.f / ((K->gate > 0.f ? K->gate : 0.004f) * fs)), dvib = 5.f / fs;
         float svf = K->res > 0.f ? 2.f * sinf((float)M_PI * K->res / fs) : 0.f, wah = 2.f * (float)M_PI * K->wah / fs;
         float pan = bitsf(GET(g_in[v].pan)), tp = bitsf(GET(g_in[v].pitch));
+        const Clip *C = K->clip ? &g_clip[g_v[v].kind] : 0;
+        uint32_t again = C ? (uint32_t)(K->again * fs) + 1u : 0u;
+        if (C && !C->l1){                                  /* a clip without a loop plays to its end, let go or not */
+            if (!held) g_v[v].cwait = 0;                   /* (but not again) */
+            else if (!g_v[v].cplay && !g_v[v].cwait){ g_v[v].cpos = 0; g_v[v].cfrac = 0.f; g_v[v].cplay = 1; }
+            if (held){ g_v[v].cgain = gain; g_v[v].cpan = pan; }
+            else if (g_v[v].cplay){ gain = g_v[v].cgain; pan = g_v[v].cpan; }   /* where it was last heard */
+        }
         float th = (pan + 1.f) * (float)M_PI * 0.25f;     /* equal power */
         float tgl = gain * cosf(th) * vol, tgr = gain * sinf(th) * vol, te = gain > 0.f ? 1.f : 0.f;
         /* far horns lose their top: a one-pole low-pass from ~1.5 kHz (gain 0.05, 160 m) up to none (gain 0.6) */
@@ -372,26 +463,38 @@ void horn_mix(float *acc, unsigned frames, unsigned rate){
                 }
             }
             float s = 0.f;
-            for (int t = 0; t < K->n; t++){
-                if (age < g_v[v].on[t]) continue;
-                float *ph = &g_v[v].ph[t];
-                *ph += g_v[v].f[t] * bend; if (*ph >= 1.f) *ph -= 1.f;
-                float w = wave(tb, *ph) * K->a[t], r = (float)(age - g_v[v].on[t]) * rise;
-                if (g_v[v].on[t] && r < 1.f) w *= r;          /* a later trumpet speaks over 30 ms */
-                s += w;
+            if (C){
+                if (g_v[v].cwait){ if (!--g_v[v].cwait){ g_v[v].cpos = 0; g_v[v].cfrac = 0.f; g_v[v].cplay = 1; } }
+                else if (g_v[v].cplay){
+                    s = clip_at(C, g_v[v].cpos, g_v[v].cfrac);
+                    float fr = g_v[v].cfrac + g_v[v].f[0] * bend; uint32_t adv = (uint32_t)fr;
+                    g_v[v].cfrac = fr - (float)adv; g_v[v].cpos += adv;
+                    if (C->l1){ while (g_v[v].cpos >= C->l1) g_v[v].cpos -= C->l1 - C->l0; }
+                    else if (g_v[v].cpos >= C->n){ g_v[v].cplay = 0; if (held) g_v[v].cwait = again; }
+                }
+                hy = s;                                    /* as recorded: no clip, resonance or high-pass */
+            } else {
+                for (int t = 0; t < K->n; t++){
+                    if (age < g_v[v].on[t]) continue;
+                    float *ph = &g_v[v].ph[t];
+                    *ph += g_v[v].f[t] * bend; if (*ph >= 1.f) *ph -= 1.f;
+                    float w = wave(tb, *ph) * K->a[t], r = (float)(age - g_v[v].on[t]) * rise;
+                    if (g_v[v].on[t] && r < 1.f) w *= r;          /* a later trumpet speaks over 30 ms */
+                    s += w;
+                }
+                if (K->hiss > 0.f){
+                    uint32_t x = g_v[v].rng; x ^= x << 13; x ^= x >> 17; x ^= x << 5; g_v[v].rng = x;
+                    s += K->hiss * ((float)(int32_t)x * (1.f / 2147483648.f));
+                }
+                s *= K->drive;
+                s = s / (1.f + fabsf(s));
+                if (svf > 0.f){
+                    float fc = svf + wah * amp;                  /* the mute opens with the note */
+                    lo += fc * bd; float hi = s - lo - 0.5f * bd; bd += fc * hi;
+                    s = K->wah > 0.f ? lo : 0.3f * s + 0.5f * bd;
+                }
+                hy = k_hp * (hy + s - hx); hx = s;
             }
-            if (K->hiss > 0.f){
-                uint32_t x = g_v[v].rng; x ^= x << 13; x ^= x >> 17; x ^= x << 5; g_v[v].rng = x;
-                s += K->hiss * ((float)(int32_t)x * (1.f / 2147483648.f));
-            }
-            s *= K->drive;
-            s = s / (1.f + fabsf(s));
-            if (svf > 0.f){
-                float fc = svf + wah * amp;                  /* the mute opens with the note */
-                lo += fc * bd; float hi = s - lo - 0.5f * bd; bd += fc * hi;
-                s = K->wah > 0.f ? lo : 0.3f * s + 0.5f * bd;
-            }
-            hy = k_hp * (hy + s - hx); hx = s;
             lp += (hy - lp) * k_lp;
             env += (te - env) * (te > env ? k_att : k_rel);
             gl += (tgl - gl) * k_smooth; gr += (tgr - gr) * k_smooth;

@@ -1,10 +1,11 @@
 // The start page's horns (web/src/app/horn-preview.ts, Settings' Listen button) against the game's (runtime/horn.c):
 //   node --test web/test/horn-preview.test.mjs        (the comparison needs wasi-sdk in deps/)
-// 1. every kind renders: sound, no overload, and as long as it should be;
+// 1. every kind renders: sound, no overload, and as long as it should be; a recorded one plays to its end when let go
+//    early, and sounds as the dual horn without its clip;
 // 2. every kind as horn.c renders it (tests/horn_render.c, built for wasm as the game is) and as the port does, held
 //    the same time: the same length, and the same sound sample for sample (the port does horn.c's float arithmetic:
 //    identical but where expf, sinf, cosf or exp2f round a last bit differently), so a horn changed in one and not
-//    the other fails here.
+//    the other fails here.  The recorded kinds' clips: web/src/static/horns.bin, which horn.c embeds.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,16 +26,27 @@ const FLAGS = ['--target=wasm32-wasip1-threads', '-pthread', '-O3', '-msimd128',
 const LINK = ['-Wl,--import-memory,--export-memory,--shared-memory,--initial-memory=67108864,--max-memory=268435456'];
 const dB = x => 20 * Math.log10(Math.max(x, 1e-9));
 const peak = a => a.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
+const BIN = fs.readFileSync(path.join(REPO, 'web/src/static/horns.bin'));
+H.setHornClips(BIN);
 
 test('every horn renders', () => {
-  assert.deepEqual(H.HORN_NAMES, ['dual', 'single', 'truck', 'train', 'klaxon', 'cucaracha', 'clown', 'trombone'], "horn.c's kinds, in its order");
+  assert.deepEqual(H.HORN_NAMES, ['dual', 'single', 'truck', 'train', 'klaxon', 'cucaracha', 'clown', 'trombone',
+    'dixie', 'oldcar', 'broken', 'sputter', 'thecar', 'thecar_long'], "horn.c's kinds, in its order");
   for (const name of H.HORN_NAMES) {
     const pcm = H.renderHorn(name), held = H.previewHold(name), p = dB(peak(pcm));
     assert.ok(pcm.every(Number.isFinite), `${name}: finite`);
-    assert.ok(p > -16 && p < -6, `${name}: peak ${p.toFixed(1)} dBFS`);
+    assert.ok(p > -19 && p < -6, `${name}: peak ${p.toFixed(1)} dBFS`);   // (the lowest: dixie, a dense recording)
     assert.ok(pcm.length / 48000 > held && pcm.length / 48000 < held + 1.6, `${name}: ${(pcm.length / 48000).toFixed(2)} s for ${held.toFixed(2)} s held`);
   }
   assert.deepEqual(H.renderHorn('kazoo', 0.5), H.renderHorn('dual', 0.5), 'a kind the game does not have: the dual horn');
+  for (const name of ['dixie', 'thecar']) {
+    const len = H.renderHorn(name, 0.2).length / 48000;
+    assert.ok(len > H.previewHold(name), `${name} let go after 0.2 s: plays to its end (${len.toFixed(2)} s)`);
+  }
+  assert.ok(H.renderHorn('thecar_long', 0.2).length / 48000 < 1.2, 'thecar_long stops when let go');
+  H.setHornClips(new Uint8Array(0));
+  assert.deepEqual(H.renderHorn('dixie', 0.5), H.renderHorn('dual', 0.5), 'a recorded kind without its clip: the dual horn');
+  H.setHornClips(BIN);
 });
 
 test("the page's horns are horn.c's", { skip: !CC && 'no wasi-sdk in deps/' }, () => {
@@ -42,7 +54,7 @@ test("the page's horns are horn.c's", { skip: !CC && 'no wasi-sdk in deps/' }, (
   execFileSync(CC, [...FLAGS, '-o', w, 'tests/horn_render.c', ...LINK], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const dir = fs.mkdtempSync(path.join(OUT, 'horn-'));
   try {
-    for (const name of H.HORN_NAMES) for (const [held, rate] of [[H.previewHold(name), 48000], [0.275, 44100]]) {
+    for (const name of H.HORN_NAMES) for (const [held, rate] of [[H.previewHold(name), 48000], [0.275, 44100], [3.3, 44100]]) {
       execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), w, name, String(held), String(rate), `/tmp/${name}.f32`],
         { encoding: 'utf8', env: { ...process.env, WASI_DIR: `/tmp=${dir}` }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 });
       const b = fs.readFileSync(path.join(dir, `${name}.f32`));

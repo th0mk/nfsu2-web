@@ -64,7 +64,9 @@ const GROUPS: Group[] = [
     { key: 'roam_flag', label: N('Your flag'), help: N('Shown before your name over your car in free roam.'), c: { t: 'flag' } },
     { key: 'horn', label: N('Your horn'), help: N('With other players. Its key and button: Controls, Site.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
-      ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
+      ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')], ['dixie', N('Dixie horn')],
+      ['oldcar', N('Old car horn')], ['broken', N('Broken horn')], ['sputter', N('Sputtering horn')], ['thecar', N('The Car (1977)')],
+      ['thecar_long', N('The Car, long blast')]], preview: { play: playHorn, stop: stopHorn } } },
     { key: 'roam_room', label: N('Room'), help: N('With a name, free roam shows only players in the same room.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
     { key: 'roam_block', label: N('Blocked players'), help: N('Names, separated by commas: you never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not a tuner you race in an outrun.'),
