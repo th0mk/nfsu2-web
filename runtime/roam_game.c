@@ -2343,7 +2343,8 @@ static void push_pose(Slot *s, rc_pose *P, int64_t newest, int64_t rt, float dt)
 #define TAG_ALL         (TAG_N + 1 + TAG_MPN)
 #define TAG_DUEL_MAX    120
 /* the names' objects in a HUD; co-op free roam has a set for each player's (its half of the screen) */
-typedef struct { uint32_t hud, obj[TAG_ALL]; uint8_t looked[TAG_ALL], shown[TAG_ALL], alpha[TAG_ALL]; char text[TAG_ALL][TAG_DUEL_MAX]; uint32_t rgb[TAG_ALL]; } TagSet;
+typedef struct { uint32_t hud, obj[TAG_ALL]; uint8_t looked[TAG_ALL], shown[TAG_ALL], alpha[TAG_ALL]; char text[TAG_ALL][TAG_DUEL_MAX]; uint32_t rgb[TAG_ALL];
+                 uint32_t probe, probe_hash; } TagSet;   /* (probe: the first copy made, its hash: tags_live) */
 static TagSet g_tags[2], *g_tagp = &g_tags[0];
 #define g_tag (*g_tagp)
 static void gstr(uint32_t a, const char *s, uint32_t cap){
@@ -2476,6 +2477,7 @@ static uint32_t tag_obj(CPU *c, int k, uint32_t pkg){
         char nm[24]; snprintf(nm, sizeof nm, k == TAG_DUEL ? "ROAM_OUTRUN" : k >= TAG_MP0 ? "ROAM_RACE_%d" : "ROAM_PLAYER_%d",
                               k >= TAG_MP0 ? k - TAG_MP0 + 1 : k + 1);   /* past the HUD's six: copies of the first */
         g_tag.obj[k] = o1 ? fe_clone(c, pkg, o1, nm) : 0;
+        if (g_tag.obj[k] && !g_tag.probe){ g_tag.probe = g_tag.obj[k]; g_tag.probe_hash = MR32(g_tag.obj[k] + 0x10u); }
         if (!g_tag.obj[k] && k == TAG_DUEL) rlog("[roam] f=%ld no copy of ONLINE_PLAYER_1 for the outrun's line of text\n", rh_frame());
         else if (!g_tag.obj[k]) rlog("[roam] f=%ld no copy of ONLINE_PLAYER_1 for name %d: one name fewer over friends' cars\n", rh_frame(), k + 1);
         return g_tag.obj[k];
@@ -2668,7 +2670,8 @@ static uint32_t flag_texture(CPU *c, int i){
 }
 /* each name's image for its flag, made (or looked up) once per HUD: a copy of the package's first image, which is
  * off the screen and not in a group, its turn, pivot and texture corners as a flag needs them */
-typedef struct { uint32_t hud, like, obj[TAG_N]; uint8_t looked[TAG_N], shown[TAG_N], alpha[TAG_N]; uint32_t tex[TAG_N]; int said; } FlagSet;
+typedef struct { uint32_t hud, like, obj[TAG_N]; uint8_t looked[TAG_N], shown[TAG_N], alpha[TAG_N]; uint32_t tex[TAG_N]; int said;
+                 uint32_t probe, probe_hash; } FlagSet;   /* (probe: the first image made, its hash: tags_live) */
 static FlagSet g_fls[2], *g_flp = &g_fls[0];
 #define g_fl (*g_flp)
 static uint32_t flag_obj(CPU *c, int k, uint32_t pkg){
@@ -2691,6 +2694,7 @@ static uint32_t flag_obj(CPU *c, int k, uint32_t pkg){
     MR32(o + 0x1cu) |= 0x400000u;
     gcall1(c, FN_FE_HIDE, 0, o);
     g_fl.obj[k] = o;
+    if (!g_fl.probe){ g_fl.probe = o; g_fl.probe_hash = MR32(o + 0x10u); }
     return o;
 }
 static void flag_hide(CPU *c, int k){
@@ -2792,6 +2796,31 @@ static void view_eye(uint32_t cam, float *e, float *f){
     look_eye(e, f);
 #endif
 }
+/* Our objects are the HUD package's: the names' copies of ONLINE_PLAYER_1 and the flags' images went with an old HUD.
+ * A next HUD at its address (free roam again after a shop or a race: hud the same) has objects of its own and none of
+ * ours, and a flag's image kept from the old one (world_changed forgot the names' objects, not the flags') was written
+ * to: its colour and size (FN_FE_COLOR, FN_FE_SCALE) faulted in 0x517AD0, 0x504640 or 0x5178D0 once a car's load had
+ * its memory (error 134 in free roam after a shop, every log with flags, 2026-11-04/05).  So every frame, before any
+ * is touched, the objects held must still be the package's: the first copy made of each kind in its lists under its
+ * name (as the minimap's are checked, mm_copy_live), and ONLINE_PLAYER_1 the one its name finds there */
+static uint32_t g_tag_h1;          /* ONLINE_PLAYER_1's hash */
+static int fe_held(CPU *c, uint32_t pkg, uint32_t o, uint32_t hash){
+    if (!o) return 1;
+    uint32_t pk = gcall1(c, FN_FE_PACKAGE, 0, pkg);
+    return ok(pk, 0x54) && fe_list_of(pk + 0x4cu, o, 0) && rd32(o + 0x10u) == hash;
+}
+static int tags_live(CPU *c, uint32_t pkg){
+    if (!fe_held(c, pkg, g_tag.probe, g_tag.probe_hash)) return 0;
+#if FLAGS
+    if (!fe_held(c, pkg, g_fl.probe, g_fl.probe_hash)) return 0;
+#endif
+    if (g_tag.looked[0] && g_tag.obj[0]){
+        if (!g_tag_h1){ uint32_t sa = g_gmem + TAG_SCR + 0x48u; gstr(sa, "ONLINE_PLAYER_1", 24); g_tag_h1 = gcall1(c, FN_FE_HASH, 0, sa); }
+        uint32_t a[2] = { pkg, g_tag_h1 };
+        if (rh_call(c, FN_FE_FIND, 0, 0, 2, a) != g_tag.obj[0]) return 0;
+    }
+    return 1;
+}
 static long g_tag_self = -9;       /* photo mode's frame of the names (roam_game_names): the player's own too */
 static uint8_t g_tag_was_s[2][NSLOT + 1];   /* by car (g_sl, NSLOT the player's own): its name shown the frame before */
 static int g_tag_seat;                       /* the pass: 0 player 1's view and HUD, 1 co-op player 2's */
@@ -2829,6 +2858,16 @@ static void tags_update_seat(CPU *c){
     g_flag_new = 0;
 #endif
     if (!hud || !ok(pkg, 0x20) || !g_gmem) return;
+    if (!tags_live(c, pkg)){                        /* a new HUD at the old one's address: ours went with the old one */
+        int held = 0;
+        for (int k = 0; k < TAG_ALL; k++) held += g_tag.obj[k] != 0;
+#if FLAGS
+        for (int k = 0; k < TAG_N; k++) held += g_fl.obj[k] != 0;
+        memset(&g_fl, 0, sizeof g_fl); g_fl.hud = hud;
+#endif
+        rlog("[roam] f=%ld names: a new HUD at the old one's address: its %d objects for the names forgotten\n", rh_frame(), held);
+        memset(&g_tag, 0, sizeof g_tag); g_tag.hud = hud;
+    }
     uint32_t cam = rd32(view + 0x40u);
     int on = O.labels && g_in_roam && MR8(G_SHOW_NAMES) && ok(cam, 0x60) && hud_on_top(p1pkg);
     /* the cars a name can show on: in front of the camera, on the screen and
@@ -8443,7 +8482,11 @@ static void world_changed(CPU *c, uint32_t w){
         if (any || g_npending) rlog("[roam] f=%ld world 0x%08x -> 0x%08x: friends' cars gone with it\n", rh_frame(), g_world_seen, w);
         world_gone();
         flush_unloads(c);                           /* before the next world loads its own cars */
-        memset(&g_tag, 0, sizeof g_tag);            /* never touch the old HUD's objects */
+        memset(g_tags, 0, sizeof g_tags);           /* never touch the old HUD's objects (either player's) */
+#if FLAGS
+        memset(g_fls, 0, sizeof g_fls);             /* (nor the images of the flags before the names: they went with it, and
+                                                       a next HUD at its address kept them, drawn after the next shop) */
+#endif
         memset(&g_mm, 0, sizeof g_mm);              /* (nor its minimap's: the next HUD may be at its address) */
         g_pass.first = g_pass.end = 0;            /* its triggers too */
     }
