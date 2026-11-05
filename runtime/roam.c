@@ -825,6 +825,8 @@ void photo_frame(CPU *c);                     /* photo.c: photo mode (F12, the p
 void language_texts_frame(CPU *c);            /* language.c: texts of our own in the game's language table */
 void sms_frame(CPU *c);                       /* sms.c: a text message of ours on the game's phone */
 void hiddenraces_frame(void);                 /* hiddenraces.c: the career's hidden races on the map (show_hidden_races) */
+void visualrep_frame(void);                   /* visualrep.c: the visual rating by the stage (visual_rep_remover) */
+void visualrep_meter(CPU *c);                 /* visualrep.c: ... and no Visual Rating box in the shops */
 void carspot_frame(void);                     /* carspot.c: the career's kept spot, if no place, the new career's start (issue 55) */
 void walls_frame(void);                       /* walls.c: a car past the career's walls back on the roads it can reach */
 void savegame_frame(void);                    /* savegame.c: the pause menu's Save, once its save is over */
@@ -842,12 +844,15 @@ __attribute__((weak)) int roam_asipeer_cmd(CPU *c, const char *args, long *wait_
     fprintf(stderr, "[roam] asi: not in this build (ASIPEER=1 ./link.sh orig makes out/nfsu2_asipeer)\n"); return 1; }
 int roam_hook(CPU *c, uint32_t ip){
     switch (ip){
-    case HOOK_SITE(0x00581475): reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); carspot_frame(); walls_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); lightkey_frame(c); photo_frame(c); savegame_frame(); coop_frame(c); roam_frame(c); return 1;
+    case HOOK_SITE(0x00581475): reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); visualrep_frame(); carspot_frame(); walls_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); lightkey_frame(c); photo_frame(c); savegame_frame(); coop_frame(c); roam_frame(c); return 1;
     /* Player::Update's HUD step (0x600590), behind its call of the HUD
      * update (0x4EC5A0), where the game places its own LAN race labels */
     case HOOK_SITE(0x006005e0): roam_game_hud(c); return 1;
     /* the main loop's call of World::DoTimestep (0x609CE0), its only one */
     case HOOK_SITE(0x00581407): racenet_prestep(c); return 1;
+    /* the customization shops' push of the Visual Rating box (0x557EC0), at
+     * its test of "up already?" (0x52CF60's al) */
+    case HOOK_SITE(0x00557ed0): visualrep_meter(c); return 1;
     }
     return 0;
 }

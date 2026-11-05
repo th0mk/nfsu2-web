@@ -1,0 +1,48 @@
+# The career's visual rating by the stage (runtime/visualrep.c, visual_rep_remover) in a career Graphics shop, off
+# against on: a career save (stage 2 or later), in free roam the rating (the log's "[career] ... visual rating" line:
+# with the tweak, the car's own) and the stage's pay word (peekx: a cover shoot pays its cash and the rating times
+# this), then CC_GRAPHICS, Vinyls, the bottom layer, a category's list (vr_list) and two vinyls (vr_v1, vr_v2).
+# Off: the car's own rating (0.00 for a stock car) and the shop's Visual Rating box (UI_Menu_Asset_Reputation.fng in
+# the fnglist lines from the list on).  On: "[career] visual rating by stage", the stage's stars (0, 1, 3, 5.5, 8, 10)
+# in the log, and no box (no UI_Menu_Asset_Reputation.fng in any fnglist line).
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --seed <career save, e.g. s4_perf2>
+#        --a Ex:visual_rep_shop.txt:NFSU2_ROAM=1,NFSU2_ROAM_ROOM=<own>[,NFSU2_VISUAL_REP_REMOVER=1]
+# What the rating changes, the cover shoots offered: career_cover.txt from s2_start (a stock car), without
+# NFSU2_CAREER_BOT_VISUAL (it wins over the setting):
+#   node web/tools/roam-pair.mjs --solo --page play --seed ~/projects/nsfu2/work/seed/career/s2_start
+#        --a Ann:career_cover.txt:NFSU2_ROAM=0,NFSU2_CAREER_BOT_SHOWFIRST=1[,NFSU2_VISUAL_REP_REMOVER=1]
+# Off: "STAGE_2_DVD_1 not offered: it needs visual rating 1.00, the car has 0.00", and no shoot (its waitfng times
+# out).  On: "showcase STAGE_2_DVD_1: approach (needs visual rating 1.00, the car has 3.00)", UI_ShowCase_Preview.fng
+# and the cover saved.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank: room for parts
++60   visual
++0    peekx *(0x85ad40+0x72d8+*0x862838*0x104+0x100)+4   # the stage's word a cover shoot's pay multiplies the rating by
++0    dump vr_roam
++60   shopgo CC_GRAPHICS
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the shop
++1500 fnglist
++0    dump vr_shop
++30   tap RIGHT                       # Vinyls
++120  tap RETURN
++600  fnglist
++0    dump vr_layers
++30   tap RETURN                      # the bottom layer
++600  fnglist
++0    dump vr_cats
++30   tap RETURN                      # into the first category
++600  fnglist
++0    dump vr_list
++30   tap DOWN
++300  dump vr_v1
++3    dump vr_v1b
++30   tap DOWN
++300  dump vr_v2
++3    dump vr_v2b
++0    visual
++0    fnglist
++60   quit
