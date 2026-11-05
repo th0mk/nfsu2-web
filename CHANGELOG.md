@@ -16,6 +16,7 @@ not guessed.
 - **Vinyls:** Art Factory 28 to 34, Sha_Do's designs that only the Japanese release had, on every car after Art Factory 27 (ported to the PC by the underground2.net team).
 - **Languages:** Czech, Slovak and Greek, the game and the start page.
 - **Music:** scrobble the songs you hear, EA Trax and the Radio, to Last.fm: Settings, Game.
+- **Controllers:** the Steam Controller (the 2015 and the 2026 one) and a Steam Deck's controls work without Steam in Chrome and Edge: Controls, Controller, Connect a Steam Controller.
 - **Free roam:** a second player on the same computer joins your career's free roam, the screen split in two: pause, Add Player 2, then START on a controller or the keyboard's left half, and a car from your garage. Online they show as your name and " 2".
 - **Free roam:** with player 2 in, a career race asks Together or Alone (only player 1's place counts), and the two of you can outrun each other.
 - **Free roam:** at a busy car meet the cars around you stay shown, and on a slow connection they show up sooner.
