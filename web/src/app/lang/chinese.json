@@ -859,7 +859,7 @@
   "Sequential: pull to shift up": "序列式：拉為升檔",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "遊戲一次只換一檔。序列式：排檔桿每入一個檔位就換一檔，倒檔則拉起手煞車。手煞車：任何檔位都會拉起手煞車。",
   "Drift mode (in free roam)": "甩尾模式（自由漫遊中）",
-  "Open trunk, then hood, then doors (parked, in free roam)": "依序開啟後車廂、引擎蓋、車門（停車時，自由漫遊中）",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "依序開啟引擎蓋、後車廂、車門，再全部開啟（停車時，自由漫遊中）",
   "Drift mode: on": "甩尾模式：開啟",
   "Drift mode: off": "甩尾模式：關閉",
   "Drift mode only works in free roam": "甩尾模式只能在自由漫遊中使用",
@@ -1321,7 +1321,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "遊戲已被停止：{what}。請重新啟動{browser}，然後按「開始遊戲」。",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "遊戲檔案沒有正確載入。請在這個頁面依序按「其他」、「刪除遊戲資料」，然後按「開始遊戲」（你的存檔會保留）。如果再次發生，可能是你的網路封鎖了遊戲：請換一個網路試試。",
   "The game didn't load. Trying again in {n} s, or press Retry.": "遊戲未能載入。將於 {n} 秒後重試，你也可以按「重試」。",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "自由漫遊中停車時：按住 {button}，依序開啟後車廂、引擎蓋、車門。",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "自由漫遊中停車時：按住 {button}，依序開啟引擎蓋、後車廂、車門，再全部開啟。",
   "With other players. Its key and button: Controls, Site.": "與其他玩家同玩時可使用。按鍵與按鈕：操作方式、網站。",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "在自由漫遊中對附近的玩家、在多人比賽中對所有玩家傳送短語：先按 1 至 4，再按 1 至 4（控制器：按下任一搖桿，再將右搖桿撥動兩次；觸控：聊天按鈕）。",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "未刪減版：EA Trax 歌曲未經剪輯，部分為較長的版本。原版：遊戲發行時的版本。",
@@ -1331,7 +1331,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "以瀏覽器名稱表示的按鍵（KeyX、Digit5、F6、Numpad7）或 off",
   "{key} or Home on the controller": "{key} 或控制器的 Home 鍵",
   "Drift mode": "甩尾模式",
-  "Trunk, hood, doors": "後車廂、引擎蓋、車門",
+  "Hood, trunk, doors": "引擎蓋、後車廂、車門",
   "Headlights": "車頭燈",
   "Add friend": "加好友",
   "Add a friend (front bumpers touching)": "加好友（前保險桿相碰）",
@@ -1399,5 +1399,8 @@
   "Faster": "加快",
   "Camera on the car in the middle": "視角對準中間的車",
   "Add a path point": "加入路徑點",
-  "Play the path": "播放路徑"
+  "Play the path": "播放路徑",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "右搖桿環顧車子四周（關閉時，搖桿往上也不再開關車頭燈）",
+  "Hide HUD": "隱藏 HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "開車時隱藏或顯示 HUD（車子上方的名字與聊天也一樣）"
 }

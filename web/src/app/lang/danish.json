@@ -925,7 +925,7 @@
   "Sequential: pull to shift up": "Sekventiel: træk for at skifte op",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spillet skifter ét gear ad gangen. Sekventiel: hver gang du sætter stangen i et gear, er det ét skift, og bakgearet holder håndbremsen. Håndbremse: ethvert gear holder den.",
   "Drift mode (in free roam)": "Drift-tilstand (i udforsknings-mode)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Åbn bagagerum, så motorhjelm, så døre (parkeret, i udforsknings-mode)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Åbn motorhjelm, så bagagerum, så døre, så det hele (parkeret, i udforsknings-mode)",
   "Drift mode: on": "Drift-tilstand: til",
   "Drift mode: off": "Drift-tilstand: fra",
   "Drift mode only works in free roam": "Drift-tilstand virker kun i udforsknings-mode",
@@ -1402,7 +1402,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Spillet blev stoppet: {what}. Genstart {browser}, og tryk derefter på Spil.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Spillets filer blev ikke indlæst korrekt. På denne side: Andet, Slet spildata og derefter Spil (dine gemte spil bliver). Sker det igen, blokerer dit netværk måske spillet: prøv et andet netværk.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Spillet blev ikke indlæst. Prøver igen om {n} sek., eller tryk på Prøv igen.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Parkeret i udforsknings-mode: hold {button} nede for at åbne bagagerum, så motorhjelm, så døre.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Parkeret i udforsknings-mode: hold {button} nede for at åbne motorhjelm, så bagagerum, så døre, så det hele.",
   "With other players. Its key and button: Controls, Site.": "Med andre spillere. Tast og knap: Kommandoer, Siden.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Send sætninger til spillere i nærheden i udforsknings-mode og til alle i flerspillerløb: 1 til 4, derefter 1 til 4 (controller: tryk en stick ind, og skub så højre stick to gange; touch: chatknappen).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Ucensureret: EA Trax-sangene uredigerede, nogle i længere versioner. Original: som de var i spillet.",
@@ -1412,7 +1412,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "en tast med browserens navn for den (KeyX, Digit5, F6, Numpad7) eller off",
   "{key} or Home on the controller": "{key} eller Home på controlleren",
   "Drift mode": "Drift-tilstand",
-  "Trunk, hood, doors": "Bagagerum, motorhjelm, døre",
+  "Hood, trunk, doors": "Motorhjelm, bagagerum, døre",
   "Headlights": "Forlygter",
   "Add friend": "Tilføj ven",
   "Add a friend (front bumpers touching)": "Tilføj en ven (forkofangerne mod hinanden)",
@@ -1480,5 +1480,8 @@
   "Faster": "Hurtigere",
   "Camera on the car in the middle": "Kamera på bilen i midten",
   "Add a path point": "Tilføj et rutepunkt",
-  "Play the path": "Afspil ruten"
+  "Play the path": "Afspil ruten",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Højre stick ser rundt om bilen (Fra: stick op skifter heller ikke forlygterne længere)",
+  "Hide HUD": "Skjul HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Skjul eller vis HUD'en under kørsel (også navne og chat over bilerne)"
 }

@@ -947,7 +947,7 @@
   "Sequential: pull to shift up": "Séquentiel : tirer pour monter",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Le jeu passe les rapports un par un. Séquentiel : chaque passage du levier dans un rapport est un changement, et la marche arrière tient le frein à main. Frein à main : n'importe quel rapport le tient.",
   "Drift mode (in free roam)": "Mode drift (en mode Exploration)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Ouvrir coffre, puis capot, puis portières (à l'arrêt, en mode Exploration)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Ouvrir capot, puis coffre, puis portières, puis tout (à l'arrêt, en mode Exploration)",
   "Drift mode: on": "Mode drift : activé",
   "Drift mode: off": "Mode drift : désactivé",
   "Drift mode only works in free roam": "Le mode drift ne marche qu'en mode Exploration",
@@ -1429,7 +1429,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Le jeu a été arrêté : {what}. Redémarrez {browser}, puis appuyez sur Jouer.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Les fichiers du jeu ne se sont pas bien chargés. Sur cette page : Autres, Supprimer les données du jeu, puis Jouer (vos sauvegardes restent). Si cela se reproduit, votre réseau bloque peut-être le jeu : essayez un autre réseau.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Le jeu ne s'est pas chargé. Nouvel essai dans {n} s, ou appuyez sur Réessayer.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "À l'arrêt en mode Exploration : maintenir {button} pour ouvrir coffre, puis capot, puis portières.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "À l'arrêt en mode Exploration : maintenir {button} pour ouvrir capot, puis coffre, puis portières, puis tout.",
   "With other players. Its key and button: Controls, Site.": "Avec d'autres joueurs. Touche et bouton : Commandes, Site.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Envoyez des phrases aux joueurs proches de vous en mode Exploration et à tous dans les courses multijoueurs : 1 à 4, puis 1 à 4 (manette : un clic sur un stick, puis deux coups de stick droit ; tactile : le bouton de chat).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Non censurés : les morceaux EA Trax non modifiés, certains en version plus longue. D'origine : tels que dans le jeu.",
@@ -1439,7 +1439,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "une touche sous le nom que lui donne le navigateur (KeyX, Digit5, F6, Numpad7) ou off",
   "{key} or Home on the controller": "{key} ou Home sur la manette",
   "Drift mode": "Mode drift",
-  "Trunk, hood, doors": "Coffre, capot, portières",
+  "Hood, trunk, doors": "Capot, coffre, portières",
   "Headlights": "Phares",
   "Add friend": "Ajouter un ami",
   "Add a friend (front bumpers touching)": "Ajouter un ami (pare-chocs avant qui se touchent)",
@@ -1507,5 +1507,8 @@
   "Faster": "Plus vite",
   "Camera on the car in the middle": "Caméra sur la voiture du milieu",
   "Add a path point": "Ajouter un point au trajet",
-  "Play the path": "Lire le trajet"
+  "Play the path": "Lire le trajet",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Le stick droit regarde autour de la voiture (Désactivé : le stick vers le haut ne commande plus les phares non plus)",
+  "Hide HUD": "Masquer le HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Masquer ou afficher le HUD en conduisant (noms et chat au-dessus des voitures aussi)"
 }

@@ -553,7 +553,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Hra bola zastavená: {what}. Reštartuj {browser} a potom stlač Hrať.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Súbory hry sa nenačítali správne. Na tejto stránke: Ostatné, Vymazať dáta hry, potom Hrať (tvoje uložené hry zostanú). Ak sa to stane znova, tvoja sieť možno blokuje hru: skús inú sieť.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Hra sa nenačítala. Ďalší pokus o {n} s, alebo stlač Skúsiť znova.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Keď stojíš vo voľnej jazde: podrž {button} a otvorí sa kufor, potom kapota, potom dvere.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Keď stojíš vo voľnej jazde: podrž {button} a otvorí sa kapota, potom kufor, potom dvere, potom všetko.",
   "With other players. Its key and button: Controls, Site.": "S ostatnými hráčmi. Kláves a tlačidlo: Ovládanie, Stránka.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Posielaj frázy hráčom v okolí vo voľnej jazde a všetkým v závodoch pre viacerých hráčov: 1 až 4, potom 1 až 4 (ovládač: stlač páčku, potom dvakrát švihni pravou páčkou; dotyk: tlačidlo chatu).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Necenzurované: skladby EA Trax bez úprav, niektoré v dlhších verziách. Originál: tak, ako vyšli s hrou.",
@@ -563,7 +563,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "kláves podľa názvu v prehliadači (KeyX, Digit5, F6, Numpad7) alebo off",
   "{key} or Home on the controller": "{key} alebo Home na ovládači",
   "Drift mode": "Režim driftu",
-  "Trunk, hood, doors": "Kufor, kapota, dvere",
+  "Hood, trunk, doors": "Kapota, kufor, dvere",
   "Headlights": "Svetlomety",
   "Add friend": "Pridať priateľa",
   "Add a friend (front bumpers touching)": "Pridať priateľa (dotyk prednými nárazníkmi)",
@@ -1462,7 +1462,7 @@
   "Hydraulics (hold, then the arrows)": "Hydraulika (podrž, potom šípky)",
   "Horn (with other players)": "Klaksón (s ostatnými hráčmi)",
   "Headlights off or on; hold for high beam": "Svetlomety vyp. alebo zap.; podržaním diaľkové svetlá",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Otvoriť kufor, potom kapotu, potom dvere (keď stojíš, vo voľnej jazde)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Otvoriť kapotu, potom kufor, potom dvere, potom všetko (keď stojíš, vo voľnej jazde)",
   "Quick chat (with other players): group, then phrase": "Rýchly chat (s ostatnými hráčmi): skupina, potom fráza",
   "Message a friend (in free roam)": "Napísať priateľovi (vo voľnej jazde)",
   "Start an event, take an outrun": "Spustiť závod, prijať outrun",
@@ -1534,5 +1534,8 @@
   "Faster": "Rýchlejšie",
   "Camera on the car in the middle": "Kamera na auto v strede",
   "Add a path point": "Pridať bod dráhy",
-  "Play the path": "Prehrať dráhu"
+  "Play the path": "Prehrať dráhu",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Pravou páčkou sa rozhliadaš okolo auta (Vyp.: páčka hore už neprepína ani svetlomety)",
+  "Hide HUD": "Skryť HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Skryť alebo zobraziť HUD počas jazdy (aj mená a chat nad autami)"
 }

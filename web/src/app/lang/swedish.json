@@ -925,7 +925,7 @@
   "Sequential: pull to shift up": "Sekventiell: dra för att växla upp",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spelet växlar en växel i taget. Sekventiell: varje gång du för spaken till en växel är det en växling, och backen håller handbromsen. Handbroms: varje växel håller den.",
   "Drift mode (in free roam)": "Driftläge (i läget Utforska)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Öppna bagagelucka, sedan motorhuv, sedan dörrar (parkerad, i läget Utforska)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Öppna motorhuv, sedan bagagelucka, sedan dörrar, sedan allt (parkerad, i läget Utforska)",
   "Drift mode: on": "Driftläge: på",
   "Drift mode: off": "Driftläge: av",
   "Drift mode only works in free roam": "Driftläget fungerar bara i läget Utforska",
@@ -1402,7 +1402,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Spelet stoppades: {what}. Starta om {browser} och tryck sedan på Spela.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Spelets filer laddades inte ordentligt. På den här sidan: Övrigt, Radera speldata, sedan Spela (dina sparfiler finns kvar). Om det händer igen kan ditt nätverk blockera spelet: prova ett annat nätverk.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Spelet laddades inte. Försöker igen om {n} s, eller tryck på Försök igen.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Parkerad i läget Utforska: håll in {button} för att öppna bagagelucka, sedan motorhuv, sedan dörrar.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Parkerad i läget Utforska: håll in {button} för att öppna motorhuv, sedan bagagelucka, sedan dörrar, sedan allt.",
   "With other players. Its key and button: Controls, Site.": "Med andra spelare. Tangent och knapp: Kontroller, Sidan.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Skicka fraser till spelare nära dig i läget Utforska och till alla i flerspelarrace: 1 till 4, sedan 1 till 4 (handkontroll: tryck in en styrspak och för sedan högra styrspaken två gånger; pekskärm: chattknappen).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Ocensurerade: EA Trax-låtarna oredigerade, några i längre versioner. Original: som i spelet.",
@@ -1412,7 +1412,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "en tangent med webbläsarens namn för den (KeyX, Digit5, F6, Numpad7) eller off",
   "{key} or Home on the controller": "{key} eller Home på handkontrollen",
   "Drift mode": "Driftläge",
-  "Trunk, hood, doors": "Bagagelucka, motorhuv, dörrar",
+  "Hood, trunk, doors": "Motorhuv, bagagelucka, dörrar",
   "Headlights": "Strålkastare",
   "Add friend": "Lägg till vän",
   "Add a friend (front bumpers touching)": "Lägg till en vän (främre stötfångarna mot varandra)",
@@ -1480,5 +1480,8 @@
   "Faster": "Snabbare",
   "Camera on the car in the middle": "Kamera på bilen i mitten",
   "Add a path point": "Lägg till en banpunkt",
-  "Play the path": "Spela banan"
+  "Play the path": "Spela banan",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Höger styrspak ser runt bilen (Av: spaken uppåt växlar inte heller strålkastarna längre)",
+  "Hide HUD": "Dölj HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Dölj eller visa HUD:en under körning (även namn och chatt över bilarna)"
 }

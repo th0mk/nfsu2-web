@@ -924,7 +924,7 @@
   "Thumb stick": "Analóg kar",
   "Auto ({size})": "Auto ({size})",
   "Drift mode (in free roam)": "Drift mód (Felfedező módban)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Csomagtartó, majd motorháztető, majd ajtók nyitása (parkolva, Felfedező módban)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Motorháztető, majd csomagtartó, majd ajtók, majd minden nyitása (parkolva, Felfedező módban)",
   "Horn": "Duda",
   "Steering": "Kormányzás",
   "Straight ahead": "Egyenes irány",
@@ -1324,7 +1324,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "A játék leállt: {what}. Indítsd újra a böngészőt ({browser}), majd nyomd meg a „Játék” gombot.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "A játék fájljai nem töltődtek be rendesen. Ezen az oldalon: „Egyéb”, „Játékadatok törlése”, majd „Játék” (a mentéseid megmaradnak). Ha újra előfordul, lehet, hogy a hálózatod blokkolja a játékot: próbálj egy másik hálózatot.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "A játék nem töltődött be. Új próba {n} mp múlva, vagy nyomd meg az „Újrapróbálás” gombot.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Parkolva, Felfedező módban: {button} nyomva tartásával nyílik a csomagtartó, majd a motorháztető, majd az ajtók.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Parkolva, Felfedező módban: {button} nyomva tartásával nyílik a motorháztető, majd a csomagtartó, majd az ajtók, majd minden.",
   "With other players. Its key and button: Controls, Site.": "Ha másokkal játszol. Billentyű és gomb: Irányítás, Oldal.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Küldj mondatokat a közeledben lévő játékosoknak Felfedező módban, és mindenkinek a többjátékos versenyeken: 1–4, aztán még egyszer 1–4 (kontroller: nyomd be az egyik analóg kart, aztán billentsd meg kétszer a jobbat; érintőképernyő: a chat gomb).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Cenzúrázatlan: az EA Trax zenék vágatlanul, némelyik hosszabb változatban. Eredeti: ahogy a játékban voltak.",
@@ -1334,7 +1334,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "billentyű a böngészőben használt nevén (KeyX, Digit5, F6, Numpad7) vagy off",
   "{key} or Home on the controller": "{key} vagy a kontroller Home gombja",
   "Drift mode": "Drift mód",
-  "Trunk, hood, doors": "Csomagtartó, motorháztető, ajtók",
+  "Hood, trunk, doors": "Motorháztető, csomagtartó, ajtók",
   "Headlights": "Fényszóró",
   "Add friend": "Barát hozzáadása",
   "Add a friend (front bumpers touching)": "Barát hozzáadása (összeérő első lökhárítókkal)",
@@ -1402,5 +1402,8 @@
   "Faster": "Gyorsabban",
   "Camera on the car in the middle": "Kamera a középső autón",
   "Add a path point": "Útvonalpont hozzáadása",
-  "Play the path": "Útvonal lejátszása"
+  "Play the path": "Útvonal lejátszása",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "A jobb analóg karral körbenézel az autó körül (Ki: a kar felfelé már a fényszórót sem kapcsolja)",
+  "Hide HUD": "HUD elrejtése",
+  "Hide or show the HUD while driving (names and chat over cars too)": "HUD elrejtése vagy megjelenítése vezetés közben (az autók feletti nevek és a chat is)"
 }

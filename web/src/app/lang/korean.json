@@ -859,7 +859,7 @@
   "Sequential: pull to shift up": "시퀀셜: 당기면 기어 올림",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "게임은 기어를 한 단씩 바꿔요. 시퀀셜: 레버를 기어에 넣을 때마다 한 단 변속하고, 후진에서는 핸드브레이크가 걸려요. 핸드브레이크: 어느 기어에서나 걸려요.",
   "Drift mode (in free roam)": "드리프트 모드(자유 주행에서)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "트렁크, 보닛, 문 순서로 열기(정차 중, 자유 주행에서)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "보닛, 트렁크, 문, 전체 순서로 열기(정차 중, 자유 주행에서)",
   "Drift mode: on": "드리프트 모드: 켜짐",
   "Drift mode: off": "드리프트 모드: 꺼짐",
   "Drift mode only works in free roam": "드리프트 모드는 자유 주행에서만 쓸 수 있습니다",
@@ -1321,7 +1321,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "게임이 중지됐어요: {what}. {browser} 재시작 후 '플레이'를 누르세요.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "게임 파일을 제대로 불러오지 못했어요. 이 페이지에서 '기타', '게임 데이터 삭제'를 차례로 누른 다음 '플레이'를 누르세요(저장 데이터는 그대로예요). 또 이런 일이 생기면 네트워크에서 게임을 막고 있을 수 있어요. 다른 네트워크로 시도해 보세요.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "게임을 불러오지 못했어요. {n}초 후에 다시 시도하며, '다시 시도'를 눌러도 돼요.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "자유 주행에서 정차 중: {button}을(를) 길게 누르면 트렁크, 보닛, 문 순서로 열려요.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "자유 주행에서 정차 중: {button}을(를) 길게 누르면 보닛, 트렁크, 문, 전체 순서로 열려요.",
   "With other players. Its key and button: Controls, Site.": "다른 플레이어와 있을 때 울려요. 키와 버튼: 조작법, 사이트.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "자유 주행에서는 근처의 플레이어에게, 멀티플레이 레이스에서는 모두에게 문구를 보내요. 1~4를 누른 다음 다시 1~4(컨트롤러: 스틱 하나를 누른 다음 오른쪽 스틱을 두 번 튕기기, 터치: 채팅 버튼).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "무삭제: EA Trax 노래를 편집 없이 들려주고, 일부는 더 긴 버전이에요. 원본: 게임 출시 때 그대로예요.",
@@ -1331,7 +1331,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "브라우저에서 쓰는 키 이름(KeyX, Digit5, F6, Numpad7) 또는 off",
   "{key} or Home on the controller": "{key} 또는 컨트롤러의 Home",
   "Drift mode": "드리프트 모드",
-  "Trunk, hood, doors": "트렁크, 보닛, 문",
+  "Hood, trunk, doors": "보닛, 트렁크, 문",
   "Headlights": "헤드라이트",
   "Add friend": "친구 추가",
   "Add a friend (front bumpers touching)": "친구 추가(앞 범퍼끼리 닿았을 때)",
@@ -1399,5 +1399,8 @@
   "Faster": "더 빠르게",
   "Camera on the car in the middle": "가운데 차에 카메라 맞추기",
   "Add a path point": "경로 점 추가",
-  "Play the path": "경로 재생"
+  "Play the path": "경로 재생",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "오른쪽 스틱으로 차 주위 둘러보기(꺼짐: 스틱을 위로 밀어도 헤드라이트가 바뀌지 않아요)",
+  "Hide HUD": "HUD 숨기기",
+  "Hide or show the HUD while driving (names and chat over cars too)": "주행 중 HUD 숨기기/보이기(차 위의 이름과 채팅도)"
 }

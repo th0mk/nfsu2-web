@@ -73,6 +73,11 @@ const RIGHT: Row[] = [
   { y: 118, xb: 'B', ps: 'circle', does: N('Look back') },
   { y: 134, xb: 'RS', ps: 'R3', does: N('Free look'), stick: 'rs', to: [162, 94] },
 ];
+/** what a row does, in the page's language: the right stick's free look says Off when the player turned it off
+ *  (sitekeys.ts button_look; the left stick's look, while the game reads the right one, is not drawn) */
+function doesOf(r: Row): string {
+  return r.stick === 'rs' && siteButton('button_look') === 'off' ? `${t(r.does)}: ${t('Off')}` : t(r.does);
+}
 /** a row's second line; a stick's: what its click does of ours (the player's buttons: sitekeys.ts), or none */
 function subOf(r: Row): string | undefined {
   if (!r.stick) return r.sub;
@@ -121,12 +126,12 @@ function drawing(): string {
 function spoken(f: Family): string {
   const say = (r: Row) => r.say?.[f === 'xb' ? 0 : 1] ?? (SPOKEN[r[f]] ? t(SPOKEN[r[f]]) : r[f]);
   const low = (s: string) => language() === 'english' ? s.toLowerCase() : s;
-  return t('Controller: {list}', { list: [...LEFT, ...MIDDLE, ...RIGHT].map(r => `${say(r)}: ${low(t(r.does))}${subOf(r) ? `, ${t(subOf(r)!)}` : ''}`).join('; ') });
+  return t('Controller: {list}', { list: [...LEFT, ...MIDDLE, ...RIGHT].map(r => `${say(r)}: ${low(doesOf(r))}${subOf(r) ? `, ${t(subOf(r)!)}` : ''}`).join('; ') });
 }
 
 function padSvg(): string {
   let s = drawing();
-  const does = (r: Row) => esc(t(r.does));
+  const does = (r: Row) => esc(doesOf(r));
   for (const r of LEFT) {
     const x = 86 - chipW(r);
     s += chip(x, r) + `<text class="pad-label" x="${x - 5}" y="${r.y + 4}" text-anchor="end">${does(r)}</text>`;
@@ -180,11 +185,11 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
   const kept = [...pad.querySelectorAll<HTMLElement>(':scope > [data-keep]')];
   const draw = () => {
     const menus = esc(t('In menus: D-pad and {a}, {b} goes back.')).replace('{a}', cap('A', 'cross')).replace('{b}', cap('B', 'circle'));
-    const hold = siteButton('button_hold');            // (the player's: sitekeys.ts)
+    const hold = siteButton('button_hold'), look = siteButton('button_look');   // (the player's: sitekeys.ts)
     pad.innerHTML = padSvg() + `<div class="pad-foot">
     <p class="hint">${menus}</p>
-    ${hold === 'off' ? '' : `<p class="hint">${esc(t('Parked in free roam: hold {button} to open trunk, then hood, then doors.', { button: buttonName(hold) }))}</p>`}
-    <p class="hint">${esc(t('Right stick up: headlights off or on; hold it for high beam.'))}</p>
+    ${hold === 'off' ? '' : `<p class="hint">${esc(t('Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.', { button: buttonName(hold) }))}</p>`}
+    ${look === 'off' ? '' : `<p class="hint">${esc(t('Right stick up: headlights off or on; hold it for high beam.'))}</p>`}
     <div class="seg" role="radiogroup" aria-label="${esc(t('Button names'))}">
       <label class="opt"><input type="radio" name="${id}-fam" value="xb">Xbox</label>
       <label class="opt"><input type="radio" name="${id}-fam" value="ps">PlayStation</label>

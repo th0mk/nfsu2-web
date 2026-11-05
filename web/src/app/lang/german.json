@@ -925,7 +925,7 @@
   "Sequential: pull to shift up": "Sequenziell: Ziehen schaltet hoch",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Das Spiel schaltet Gang für Gang. Sequenziell: Jedes Einlegen eines Gangs mit dem Hebel ist ein Schaltvorgang, und der Rückwärtsgang zieht die Handbremse. Handbremse: Jeder Gang zieht sie.",
   "Drift mode (in free roam)": "Driftmodus (in der freien Fahrt)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Kofferraum, dann Motorhaube, dann Türen öffnen (geparkt, in der freien Fahrt)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Motorhaube, dann Kofferraum, dann Türen, dann alles öffnen (geparkt, in der freien Fahrt)",
   "Drift mode: on": "Driftmodus: ein",
   "Drift mode: off": "Driftmodus: aus",
   "Drift mode only works in free roam": "Den Driftmodus gibt es nur in der freien Fahrt",
@@ -1402,7 +1402,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Das Spiel wurde gestoppt: {what}. Starte {browser} neu und drück danach auf „Spielen“.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Die Dateien des Spiels wurden nicht richtig geladen. Auf dieser Seite: „Sonstiges“, „Spieldaten löschen“, dann „Spielen“ (deine Spielstände bleiben). Passiert das wieder, blockiert dein Netzwerk vielleicht das Spiel: Versuche ein anderes Netzwerk.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Das Spiel wurde nicht geladen. Neuer Versuch in {n} s, oder drück auf „Erneut versuchen“.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Geparkt in der freien Fahrt: {button} halten, um Kofferraum, dann Motorhaube, dann Türen zu öffnen.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Geparkt in der freien Fahrt: {button} halten, um Motorhaube, dann Kofferraum, dann Türen, dann alles zu öffnen.",
   "With other players. Its key and button: Controls, Site.": "Mit anderen Spielern. Tasten dafür: Steuerung, Website.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Schick Spielern in deiner Nähe in der freien Fahrt und allen in Multiplayer-Rennen Sätze: 1 bis 4, dann 1 bis 4 (Controller: einen Stick drücken, dann den rechten Stick zweimal kurz in eine Richtung; Touch: die Chat-Schaltfläche).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Unzensiert: die EA-Trax-Songs unbearbeitet, manche in längeren Versionen. Original: wie im Spiel ausgeliefert.",
@@ -1412,7 +1412,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "eine Taste unter ihrem Namen im Browser (KeyX, Digit5, F6, Numpad7) oder off",
   "{key} or Home on the controller": "{key} oder Home am Controller",
   "Drift mode": "Driftmodus",
-  "Trunk, hood, doors": "Kofferraum, Motorhaube, Türen",
+  "Hood, trunk, doors": "Motorhaube, Kofferraum, Türen",
   "Headlights": "Scheinwerfer",
   "Add friend": "Freund hinzufügen",
   "Add a friend (front bumpers touching)": "Einen Freund hinzufügen (Frontstoßstangen berühren sich)",
@@ -1480,5 +1480,8 @@
   "Faster": "Schneller",
   "Camera on the car in the middle": "Kamera auf den Wagen in der Mitte",
   "Add a path point": "Einen Pfadpunkt setzen",
-  "Play the path": "Den Pfad abspielen"
+  "Play the path": "Den Pfad abspielen",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Rechter Stick schaut ums Auto herum (Aus: Stick nach oben schaltet auch die Scheinwerfer nicht mehr)",
+  "Hide HUD": "HUD ausblenden",
+  "Hide or show the HUD while driving (names and chat over cars too)": "HUD beim Fahren aus- oder wieder einblenden (auch Namen und Chat über den Autos)"
 }

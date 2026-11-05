@@ -1,0 +1,23 @@
+# Hiding the HUD in a Quick Race (runtime/photo.c, "the HUD hidden"): F10 hides it ("[hud] ... F10: the HUD hidden"),
+# the pause menu opens over it and F10 there does nothing ("a screen over the HUD"), back in the race F10 shows it
+# again ("the HUD shown").  On the renderer's page the dumps show it (hud_on, hud_hidden, hud_pause, hud_shown).
+#   node web/tools/run-suite.mjs --base <server> --script hud_hide_race.txt --marker "LOG hud_race_done"
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++600  dump hud_on
++0    tap F10
++30   dump hud_hidden
++0    tapuntil ESCAPE UI_Pause.fng 60 600
++60   dump hud_pause
++0    tap F10                                      # nothing: a screen over the HUD
++30   tap ESCAPE                                   # back to the race
++120  tap F10
++30   dump hud_shown
++0    log hud_race_done
++10   quit

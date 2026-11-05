@@ -868,7 +868,7 @@
   "Sequential: pull to shift up": "Sıralı: vites büyütmek için çek",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Oyun vitesleri teker teker değiştirir. Sıralı: kolun bir vitese her geçişi bir vites değişimidir, geri vites ise el frenini basılı tutar. El freni: herhangi bir vites el frenini basılı tutar.",
   "Drift mode (in free roam)": "Drift modu (serbest sürüşte)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Bagajı, sonra kaputu, sonra kapıları aç (park hâlinde, serbest sürüşte)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Kaputu, sonra bagajı, sonra kapıları, sonra hepsini aç (park hâlinde, serbest sürüşte)",
   "Drift mode: on": "Drift modu: açık",
   "Drift mode: off": "Drift modu: kapalı",
   "Drift mode only works in free roam": "Drift modu yalnızca serbest sürüşte çalışır",
@@ -1330,7 +1330,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Oyun durduruldu: {what}. {browser} uygulamasını yeniden başlat, sonra Oyna'ya bas.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Oyunun dosyaları düzgün yüklenmedi. Bu sayfada: Diğer, Oyun verisini sil, sonra Oyna (kayıtların kalır). Yine olursa ağın oyunu engelliyor olabilir: başka bir ağ dene.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Oyun yüklenmedi. {n} sn içinde yeniden denenecek; ya da Yeniden dene'ye bas.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Serbest sürüşte park hâlindeyken bagajı, sonra kaputu, sonra kapıları açmak için basılı tut: {button}.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Serbest sürüşte park hâlindeyken kaputu, sonra bagajı, sonra kapıları, sonra hepsini açmak için basılı tut: {button}.",
   "With other players. Its key and button: Controls, Site.": "Diğer oyuncularla. Tuşu ve düğmesi: Kontroller, Site.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Serbest sürüşte yakınındaki oyunculara, çok oyunculu yarışlarda herkese ifade gönder: 1–4, sonra yine 1–4 (oyun kolu: bir çubuğa bas, sonra sağ çubuğu iki kez it; dokunmatik: sohbet düğmesi).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Sansürsüz: EA Trax şarkıları düzenlenmemiş hâliyle, bazıları daha uzun sürümlerde. Orijinal: oyunda olduğu gibi.",
@@ -1340,7 +1340,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "tarayıcıdaki adıyla bir tuş (KeyX, Digit5, F6, Numpad7) ya da off",
   "{key} or Home on the controller": "{key} ya da oyun kolundaki Home",
   "Drift mode": "Drift modu",
-  "Trunk, hood, doors": "Bagaj, kaput, kapılar",
+  "Hood, trunk, doors": "Kaput, bagaj, kapılar",
   "Headlights": "Farlar",
   "Add friend": "Arkadaş ekle",
   "Add a friend (front bumpers touching)": "Arkadaş ekle (ön tamponlar birbirine değerken)",
@@ -1408,5 +1408,8 @@
   "Faster": "Daha hızlı",
   "Camera on the car in the middle": "Kamera ortadaki arabada",
   "Add a path point": "Yola nokta ekle",
-  "Play the path": "Yolu oynat"
+  "Play the path": "Yolu oynat",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Sağ çubuk arabanın etrafına bakar (Kapalı: çubuğu yukarı itmek artık farları da değiştirmez)",
+  "Hide HUD": "HUD'u gizle",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Sürerken HUD'u gizle ya da göster (arabaların üstündeki isimler ve sohbet de)"
 }

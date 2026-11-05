@@ -869,7 +869,7 @@
   "Sequential: pull to shift up": "Σειριακός: τράβηγμα για ανέβασμα ταχύτητας",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Το παιχνίδι αλλάζει μία ταχύτητα κάθε φορά. Σειριακός: κάθε μετακίνηση του λεβιέ σε θέση ταχύτητας κάνει μία αλλαγή, ενώ η όπισθεν κρατά το χειρόφρενο. Χειρόφρενο: οποιαδήποτε θέση ταχύτητας το κρατά πατημένο.",
   "Drift mode (in free roam)": "Λειτουργία ντριφτ στην ελεύθερη οδήγηση",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Άνοιγμα πορτμπαγκάζ, μετά καπό και μετά πορτών, όταν είσαι σταματημένος στην ελεύθερη οδήγηση",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Άνοιγμα καπό, μετά πορτμπαγκάζ, μετά πορτών και μετά όλων, όταν είσαι σταματημένος στην ελεύθερη οδήγηση",
   "Drift mode: on": "Λειτουργία ντριφτ: ενεργή",
   "Drift mode: off": "Λειτουργία ντριφτ: ανενεργή",
   "Drift mode only works in free roam": "Η λειτουργία ντριφτ λειτουργεί μόνο στην ελεύθερη οδήγηση",
@@ -1336,7 +1336,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Το παιχνίδι σταμάτησε: {what}. Επανεκκίνησε το πρόγραμμα περιήγησης {browser} και μετά πάτησε «Παίξε».",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Τα αρχεία του παιχνιδιού δεν φορτώθηκαν σωστά. Σε αυτή τη σελίδα: «Άλλα → Διαγραφή δεδομένων παιχνιδιού» και μετά «Παίξε». Οι αποθηκεύσεις σου διατηρούνται. Αν συμβεί ξανά, ίσως το δίκτυό σου αποκλείει το παιχνίδι: δοκίμασε άλλο δίκτυο.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Το παιχνίδι δεν φορτώθηκε. Νέα προσπάθεια σε {n} δευτ. ή πάτησε «Επανάληψη».",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Όταν είσαι σταματημένος στην ελεύθερη οδήγηση, κράτησε πατημένο το {button} για να ανοίξεις το πορτμπαγκάζ, μετά το καπό και μετά τις πόρτες.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Όταν είσαι σταματημένος στην ελεύθερη οδήγηση, κράτησε πατημένο το {button} για να ανοίξεις το καπό, μετά το πορτμπαγκάζ, μετά τις πόρτες και μετά όλα μαζί.",
   "With other players. Its key and button: Controls, Site.": "Με άλλους παίκτες. Πλήκτρο και κουμπί: «Χειρισμός → Ιστότοπος».",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Στείλε φράσεις στους κοντινούς παίκτες στην ελεύθερη οδήγηση και σε όλους στους αγώνες πολλών παικτών: 1 έως 4 και μετά ξανά 1 έως 4. Στο χειριστήριο, πάτησε έναν μοχλό και κίνησε απότομα τον δεξί μοχλό δύο φορές. Στην αφή, χρησιμοποίησε το κουμπί συνομιλίας.",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Χωρίς λογοκρισία: τα τραγούδια του EA Trax χωρίς περικοπές, κάποια σε μεγαλύτερες εκδόσεις. Αρχική έκδοση: όπως περιλαμβάνονταν στο παιχνίδι.",
@@ -1346,7 +1346,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "πλήκτρο με το όνομα που χρησιμοποιεί το πρόγραμμα περιήγησης (KeyX, Digit5, F6, Numpad7) ή off",
   "{key} or Home on the controller": "{key} ή Home στο χειριστήριο",
   "Drift mode": "Λειτουργία ντριφτ",
-  "Trunk, hood, doors": "Πορτμπαγκάζ, καπό, πόρτες",
+  "Hood, trunk, doors": "Καπό, πορτμπαγκάζ, πόρτες",
   "Headlights": "Προβολείς",
   "Add friend": "Προσθήκη φίλου",
   "Add a friend (front bumpers touching)": "Προσθήκη φίλου με τους μπροστινούς προφυλακτήρες να ακουμπούν",
@@ -1373,5 +1373,8 @@
   "Scotland": "Σκωτία",
   "Wales": "Ουαλία",
   "Northern Ireland": "Βόρεια Ιρλανδία",
-  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "κωδικός χώρας όπως nl ή gb-eng, gb-sct, gb-wls ή gb-nir"
+  "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "κωδικός χώρας όπως nl ή gb-eng, gb-sct, gb-wls ή gb-nir",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Ο δεξιός μοχλός κοιτάζει γύρω από το αυτοκίνητο (Ανενεργό: ο μοχλός πάνω δεν ανάβει ούτε σβήνει πια τους προβολείς)",
+  "Hide HUD": "Απόκρυψη ενδείξεων",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Απόκρυψη ή εμφάνιση των ενδείξεων στην οδήγηση (και των ονομάτων και της συνομιλίας πάνω από τα αυτοκίνητα)"
 }

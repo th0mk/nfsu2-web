@@ -859,7 +859,7 @@
   "Sequential: pull to shift up": "ซีเควนเชียล: ดึงเพื่อเพิ่มเกียร์",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "เกมเปลี่ยนเกียร์ทีละเกียร์ ซีเควนเชียล: ทุกครั้งที่โยกคันเกียร์เข้าเกียร์จะเปลี่ยนหนึ่งเกียร์ และเกียร์ถอยหลังจะดึงเบรกมือ เบรกมือ: ทุกเกียร์จะดึงเบรกมือ",
   "Drift mode (in free roam)": "โหมดดริฟต์ (ในการขับอิสระ)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "เปิดฝากระโปรงท้าย ตามด้วยฝากระโปรงหน้า แล้วประตู (ขณะจอด ในการขับอิสระ)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "เปิดฝากระโปรงหน้า ตามด้วยฝากระโปรงท้าย แล้วประตู แล้วทั้งหมด (ขณะจอด ในการขับอิสระ)",
   "Drift mode: on": "โหมดดริฟต์: เปิด",
   "Drift mode: off": "โหมดดริฟต์: ปิด",
   "Drift mode only works in free roam": "โหมดดริฟต์ใช้ได้เฉพาะในการขับอิสระ",
@@ -1321,7 +1321,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "เกมถูกหยุด: {what} ให้รีสตาร์ต {browser} แล้วกด “เล่น”",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "ไฟล์เกมโหลดไม่สมบูรณ์ ในหน้านี้ให้กด “อื่นๆ” แล้วกด “ลบข้อมูลเกม” จากนั้นกด “เล่น” (เซฟของคุณยังอยู่) หากเกิดขึ้นอีก เครือข่ายของคุณอาจบล็อกเกมอยู่ ให้ลองใช้เครือข่ายอื่น",
   "The game didn't load. Trying again in {n} s, or press Retry.": "โหลดเกมไม่สำเร็จ จะลองใหม่ใน {n} วินาที หรือกด “ลองอีกครั้ง”",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "ขณะจอดในการขับอิสระ: กด {button} ค้างไว้เพื่อเปิดฝากระโปรงท้าย ตามด้วยฝากระโปรงหน้า แล้วประตู",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "ขณะจอดในการขับอิสระ: กด {button} ค้างไว้เพื่อเปิดฝากระโปรงหน้า ตามด้วยฝากระโปรงท้าย แล้วประตู แล้วทั้งหมด",
   "With other players. Its key and button: Controls, Site.": "ใช้เมื่อเล่นกับผู้เล่นคนอื่น คีย์และปุ่ม: การควบคุม, เว็บไซต์",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "ส่งวลีถึงผู้เล่นที่อยู่ใกล้คุณขณะขับอิสระ และถึงทุกคนในการแข่งแบบผู้เล่นหลายคน: กด 1 ถึง 4 แล้วกด 1 ถึง 4 อีกครั้ง (คอนโทรลเลอร์: กดอนาล็อกอันใดอันหนึ่งลง แล้วปัดอนาล็อกขวาสองครั้ง หน้าจอสัมผัส: ปุ่มแชต)",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "ไม่เซ็นเซอร์: เพลง EA Trax แบบไม่ตัดต่อ บางเพลงเป็นเวอร์ชันที่ยาวกว่า ต้นฉบับ: แบบที่มากับเกม",
@@ -1331,7 +1331,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "คีย์ตามชื่อที่เบราว์เซอร์ใช้ (KeyX, Digit5, F6, Numpad7) หรือ off",
   "{key} or Home on the controller": "{key} หรือปุ่ม Home บนคอนโทรลเลอร์",
   "Drift mode": "โหมดดริฟต์",
-  "Trunk, hood, doors": "ฝากระโปรงท้าย ฝากระโปรงหน้า ประตู",
+  "Hood, trunk, doors": "ฝากระโปรงหน้า ฝากระโปรงท้าย ประตู",
   "Headlights": "ไฟหน้า",
   "Add friend": "เพิ่มเพื่อน",
   "Add a friend (front bumpers touching)": "เพิ่มเพื่อน (กันชนหน้าแตะกัน)",
@@ -1399,5 +1399,8 @@
   "Faster": "เร็วขึ้น",
   "Camera on the car in the middle": "กล้องที่รถตรงกลาง",
   "Add a path point": "เพิ่มจุดเส้นทาง",
-  "Play the path": "เล่นเส้นทาง"
+  "Play the path": "เล่นเส้นทาง",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "อนาล็อกขวามองรอบรถ (ปิด: ดันอนาล็อกขึ้นจะไม่สลับไฟหน้าอีกต่อไป)",
+  "Hide HUD": "ซ่อน HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "ซ่อนหรือแสดง HUD ขณะขับ (รวมถึงชื่อและแชตเหนือรถ)"
 }

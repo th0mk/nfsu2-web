@@ -1,13 +1,14 @@
 // This site's own controls' keys and buttons (web/src/app/sitekeys.ts):
 //   node --test web/test/sitekeys.test.mjs
 // - the keys and buttons from the game's environment (settings.ini key_*, button_*): the defaults, a key moved, off
-//   (never the menu's), a name it does not know; the key names on the caps
+//   (never the menu's), a name it does not know; the free look's switch; the key names on the caps
 // - what may be picked: the game's own keys, quick chat's 1 to 4, the browser's, keys that type text for the ones
-//   that work in menus too, another of ours; the horn and quick chat on one click
+//   that work in menus too (not hiding the HUD's), another of ours; the horn and quick chat on one click
 // - the keys the player put one of the game's controls on, from registry.txt's user maps (runtime/dinput_kbd.c)
 // - the Site tab's rows (in a real browser, web/tools/browser.mjs): a press on a key's box takes the next key, a key
-//   it may not have says why, Esc leaves it as it was, Off turns it off, a controller's press sets a button, a key
-//   the game has a control on says so; the menu's copy only shows them
+//   it may not have says why, Esc leaves it as it was, Off turns it off, a controller's press sets a button, a click
+//   on the free look's cap switches it Auto / Off (no press waited for), a key the game has a control on says so;
+//   the menu's copy only shows them
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -23,17 +24,23 @@ const K = await import('data:text/javascript;base64,' + Buffer.from(await build(
 
 test('the keys and buttons from the environment', () => {
   K.applySiteKeys({});
-  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, 'KeyI', 'KeyF', 'F12', 'F9', 'F7', 'F8']);
-  assert.deepEqual(['button_hold', 'button_horn', 'button_chat'].map(K.siteButton), ['ddown', 'ls', 'rs']);
+  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, null, 'KeyI', 'KeyF', 'F12', 'F10', 'F9', 'F7', 'F8']);
+  assert.deepEqual(['button_hold', 'button_horn', 'button_chat', 'button_look'].map(K.siteButton), ['ddown', 'ls', 'rs', 'auto']);
   assert.ok(K.SITE_KEYS.includes('key_lights'), 'the headlights\' key is one of settings.ini\'s');
+  assert.ok(K.SITE_KEYS.includes('key_hud') && K.SITE_KEYS.includes('button_look'), 'hiding the HUD\'s key and the free look\'s switch too');
+  K.applySiteKeys({ NFSU2_BUTTON_LOOK: 'sideways' });
+  assert.equal(K.siteButton('button_look'), 'auto', 'a choice it does not know: the default');
   K.applySiteKeys({ NFSU2_KEY_DRIFT: 'KeyZ', NFSU2_KEY_HORN: 'off', NFSU2_KEY_MENU: 'off', NFSU2_KEY_PHOTO: 'Nonsense',
-    NFSU2_KEY_LIGHTS: 'Digit6', NFSU2_BUTTON_HOLD: 'dup', NFSU2_BUTTON_HORN: 'off', NFSU2_BUTTON_CHAT: 'ls' });
+    NFSU2_KEY_LIGHTS: 'Digit6', NFSU2_BUTTON_HOLD: 'dup', NFSU2_BUTTON_HORN: 'off', NFSU2_BUTTON_CHAT: 'ls', NFSU2_BUTTON_LOOK: 'off',
+    NFSU2_KEY_HUD: 'Delete' });
   assert.equal(K.siteKey('drift'), 'KeyZ');
   assert.equal(K.siteKey('lights'), 'Digit6');
   assert.equal(K.siteKey('horn'), null, 'off');
   assert.equal(K.siteKey('menu'), 'F9', 'the menu is never off');
   assert.equal(K.siteKey('photo'), 'F12', 'a name it does not know: the default');
-  assert.deepEqual(['button_hold', 'button_horn', 'button_chat'].map(K.siteButton), ['dup', 'off', 'ls']);
+  assert.deepEqual(['button_hold', 'button_horn', 'button_chat', 'button_look'].map(K.siteButton), ['dup', 'off', 'ls', 'off']);
+  assert.equal(K.siteKey('hud'), 'Delete');
+  assert.equal(K.menuKeyOf('Delete'), null, 'hiding the HUD is the game\'s (runtime/photo.c), no key of the menus');
   assert.equal(K.menuKeyOf('F9'), 'menu');
   assert.equal(K.menuKeyOf('F12'), 'photo');
   assert.equal(K.menuKeyOf('KeyZ'), null, 'drift mode is no key of the menus');
@@ -45,6 +52,7 @@ test('the keys and buttons from the environment', () => {
   K.applySiteKeys({});
   assert.deepEqual(['KeyX', 'Digit5', 'Numpad7', 'Backquote', 'F12', 'PageUp'].map(K.keyName), ['X', '5', 'Num 7', '`', 'F12', 'Page Up']);
   assert.deepEqual(['ls', 'rs'].map(v => K.buttonName(v, true)), ['L3', 'R3']);
+  assert.deepEqual(['auto', 'off'].map(v => K.buttonName(v)), ['Auto', 'Off']);
 });
 
 test('what may be picked', () => {
@@ -61,7 +69,14 @@ test('what may be picked', () => {
   assert.equal(K.refusal('lights', 'F6'), '', 'a driving key may be an F key');
   assert.match(K.refusal('horn', 'Digit2'), /quick chat's/);
   assert.match(K.refusal('horn', 'F5'), /can't be used/);
-  assert.match(K.refusal('drift', 'KeyO'), /O is already Trunk, hood, doors/);
+  assert.match(K.refusal('drift', 'KeyO'), /O is already Hood, trunk, doors/);
+  assert.match(K.refusal('drift', 'F10'), /F10 is already Hide HUD/);
+  assert.match(K.refusal('menu', 'F10'), /F10 is already Hide HUD/);
+  assert.equal(K.refusal('hud', 'KeyZ'), '', 'hiding the HUD works only while driving: a letter may do');
+  assert.equal(K.refusal('hud', 'F6'), '');
+  assert.match(K.refusal('hud', 'F11'), /can't be used/);
+  assert.match(K.refusal('hud', 'KeyW'), /one of the game's keys/);
+  assert.equal(K.buttonRefusal('button_look', 'off'), '');
   assert.match(K.refusal('menu', 'KeyZ'), /types nothing/, 'the menu works in menus: no letters');
   assert.equal(K.refusal('menu', 'F6'), '');
   assert.match(K.refusal('menu', 'F7'), /already Next song/);
@@ -103,6 +118,16 @@ test('the Site tab\'s rows', async () => {
     await p.waitForFunction(() => document.querySelector('#box [data-our="friend"] .set-state'));
     assert.deepEqual(await row('drift'), { caps: ['X', 'D-pad ↓'], state: '' });
     assert.deepEqual(await row('chat'), { caps: ['1–4', 'RS'], state: '' });
+    assert.deepEqual(await row('hud'), { caps: ['F10'], state: '' });
+    // the free look: a switch, a click its next choice (no press waited for); back to the default: no line
+    assert.deepEqual(await row('look'), { caps: ['Auto'], state: '' });
+    await p.click('#box [data-our="look"] dt > button');
+    assert.equal(await p.evaluate(() => /** @type {any} */ (window).file.button_look), 'off');
+    assert.deepEqual(await row('look'), { caps: ['Off'], state: '' });
+    await p.click('#box [data-our="look"] dt > button');
+    assert.equal(await p.evaluate(() => 'button_look' in /** @type {any} */ (window).file), false, 'Auto, the default: no line');
+    assert.deepEqual(await row('look'), { caps: ['Auto'], state: '' });
+    await p.click('#box [data-our="look"] dt > button');
     assert.match((await row('friend')).state, /One of the game's controls is on F/, 'the game has F');
     const lights = await row('lights');
     assert.deepEqual(lights.caps, ['G'], 'the headlights: a key, no button (the look\'s stick up)');
@@ -152,5 +177,6 @@ test('the Site tab\'s rows', async () => {
     await p.evaluate(() => { const w = /** @type {any} */ (window); new w.K.SiteKeysView(w.deps).render(document.getElementById('copy'), false); });
     assert.equal(await p.evaluate(() => document.querySelectorAll('#copy button').length), 0);
     assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#copy [data-our="horn"] kbd')].map(k => k.textContent)), ['N', 'Off']);
+    assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#copy [data-our="look"] kbd')].map(k => k.textContent)), ['Off']);
   } finally { await browser.close(); }
 });

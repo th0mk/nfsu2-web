@@ -409,10 +409,19 @@ int look_back_held(const PadState *s);   /* look.c */
  * with it, 2026-11-03: the stick steered and turned the view at once).  Then it takes the left stick, if the game
  * reads neither of that one's axes nor its directions (POV 1, an action on one in the in-game tables: 0x5c1840 sets
  * the bits of all four for each button and direction pressed, +0x98 being the front end's); else there is no look.
+ * The player may turn the look off (the start page's Controls, Site, Free look: settings.ini button_look off,
+ * NFSU2_BUTTON_LOOK=off; players who wanted the original camera, 2026-11-03/04): no stick looks round then, and with
+ * it the stick's headlights go (lightkey.c reads the look's stick).
  * The page hears "rstick" (status_web.c's block): 1 while the game reads the right stick, when its click and flicks
  * are the game's again, not quick chat's (web/src/app/quickchat.ts); 2 added while its click is another of the game's
  * controls (rstick_status, below). */
 static int g_look_stick = PAD_AXIS_RX;   /* PAD_AXIS_RX, PAD_AXIS_LX, or -1: no look */
+/* the player turned the look off (NFSU2_BUTTON_LOOK=off; auto, the default, or unset: on) */
+static int look_off(void){
+    static int off = -1;
+    if (off < 0){ const char *v = getenv("NFSU2_BUTTON_LOOK"); off = v && !strcasecmp(v, "off"); }
+    return off;
+}
 static int g_rstick_reads;               /* the game reads the right stick (look_stick_from) */
 static void rstick_status(void);
 __attribute__((weak)) int host_status_slot(const char *name){ (void)name; return -1; }
@@ -426,7 +435,7 @@ static int pov1_bound(uint32_t ch){
 static void look_stick_from(uint32_t ch){
     int r = chan_reads_axis(ch, k_axis_ofs[3]) || chan_reads_axis(ch, k_axis_ofs[4]);
     int l = chan_reads_axis(ch, k_axis_ofs[0]) || chan_reads_axis(ch, k_axis_ofs[1]) || pov1_bound(ch);
-    int st = !r ? PAD_AXIS_RX : !l ? PAD_AXIS_LX : -1;
+    int st = look_off() ? -1 : !r ? PAD_AXIS_RX : !l ? PAD_AXIS_LX : -1;
     static int said = -1;
     g_rstick_reads = r;
     rstick_status();
@@ -434,12 +443,12 @@ static void look_stick_from(uint32_t ch){
     if (said >= 0 || st != PAD_AXIS_RX)
         fprintf(stderr, "[pad] looking round: %s\n", st == PAD_AXIS_RX ? "the right stick"
                 : st == PAD_AXIS_LX ? "the left stick (the game's controls read the right one)"
-                : "none (the game's controls read both sticks)");
+                : look_off() ? "none (turned off: button_look)" : "none (the game's controls read both sticks)");
     g_look_stick = st;
     said = r;
 }
-/* look.c: the stick the look turns with (PAD_AXIS_RX or PAD_AXIS_LX, its Y the next axis), -1 none */
-int pad_look_stick(void){ return g_look_stick; }
+/* look.c, lightkey.c: the stick the look turns with (PAD_AXIS_RX or PAD_AXIS_LX, its Y the next axis), -1 none */
+int pad_look_stick(void){ return look_off() ? -1 : g_look_stick; }
 
 /* ---- our buttons ------------------------------------------------------------------
  * The controller's buttons the runtime and the page add on top of the game's: D-pad down held a second (showoff.c:

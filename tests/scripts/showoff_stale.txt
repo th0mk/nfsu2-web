@@ -3,10 +3,11 @@
 # -> 0x433A30 -> 0x433AD0).  With that type's animations thrown away, the game called through 0 for ever (free roam's
 # freeze or error 134 in a crowd, 2026-11-02 22:47 to 11-03: sub_00433ad0 < sub_00433d10 < car_apply).  New career ->
 # prologue free roam with NFSU2_TEST_SHOWOFF_STALE=1: the player's car's trunk node is first made for a type with no
-# animations and left closed, as a slot's earlier car leaves it.  O: the trunk opens; 2 s later O three times: the
-# hood, the doors, all closed (the old way: the trunk never finished opening, so its closing looked the other type up);
-# then O four times 4 frames apart: each part turns back while it opens.  Good: "[showoff] ... test: my car's trunk node
-# is one of another car type", the trunk opens and closes, no "UNRESOLVED INDIRECT CALL", no freeze, quit at the end.
+# animations and left closed, as a slot's earlier car leaves it.  O twice: the hood, then the trunk opens (alone); 2 s
+# later O three times: the doors (the trunk closes), all, all closed (the old way: the trunk never finished opening,
+# so its closing looked the other type up); then O five times 4 frames apart: each part turns back while it opens.
+# Good: "[showoff] ... test: my car's trunk node is one of another car type", the trunk opens and closes, no
+# "UNRESOLVED INDIRECT CALL", no freeze, quit at the end.
 #   node web/tools/run-suite.mjs --base <server> --script showoff_stale.txt --marker stale_end
 #     --env NFSU2_TEST_SHOWOFF_STALE=1 --env ROAM_PROFILE=<name>
 0     pad connect
@@ -29,13 +30,15 @@
 +0    roam waitroam 3000
 +0    roam smsauto on
 +900  log open1
-+0    tap O
++0    tap O                           # the hood
++60   tap O                           # the trunk
 +2000ms log open2
-+0    tap O
-+500ms tap O
-+500ms tap O
++0    tap O                           # the doors
++500ms tap O                          # all
++500ms tap O                          # all closed
 +2000ms log quick
 +0    tap O 2
++4    tap O 2
 +4    tap O 2
 +4    tap O 2
 +4    tap O 2

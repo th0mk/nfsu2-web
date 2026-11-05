@@ -947,7 +947,7 @@
   "Sequential: pull to shift up": "Sequencial: puxe para subir",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "O jogo troca uma marcha por vez. Sequencial: cada vez que você engata uma marcha com a alavanca é uma troca, e a ré segura o freio de mão. Freio de mão: qualquer marcha o segura.",
   "Drift mode (in free roam)": "Modo drift (no Modo Livre)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Abrir porta-malas, depois capô, depois portas (parado, no Modo Livre)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Abrir capô, depois porta-malas, depois portas, depois tudo (parado, no Modo Livre)",
   "Drift mode: on": "Modo drift: ligado",
   "Drift mode: off": "Modo drift: desligado",
   "Drift mode only works in free roam": "O modo drift só funciona no Modo Livre",
@@ -1429,7 +1429,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "O jogo foi interrompido: {what}. Reinicie {browser} e depois pressione Jogar.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Os arquivos do jogo não carregaram direito. Nesta página: Outros, Excluir dados do jogo e depois Jogar (seus jogos salvos continuam). Se acontecer de novo, sua rede pode estar bloqueando o jogo: tente outra rede.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "O jogo não carregou. Tentando de novo em {n} s, ou pressione Tentar de novo.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Parado no Modo Livre: segure {button} para abrir porta-malas, depois capô, depois portas.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Parado no Modo Livre: segure {button} para abrir capô, depois porta-malas, depois portas, depois tudo.",
   "With other players. Its key and button: Controls, Site.": "Com outros jogadores. Tecla e botão: Controles, Site.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Envie frases aos jogadores perto de você no Modo Livre e a todos nas corridas multijogador: 1 a 4, depois 1 a 4 (controle: aperte um analógico e depois mova o analógico direito duas vezes; toque: o botão de chat).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Sem censura: as músicas da EA Trax sem edição, algumas em versões mais longas. Original: como vieram no jogo.",
@@ -1439,7 +1439,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "uma tecla pelo nome que o navegador dá a ela (KeyX, Digit5, F6, Numpad7) ou off",
   "{key} or Home on the controller": "{key} ou Home no controle",
   "Drift mode": "Modo drift",
-  "Trunk, hood, doors": "Porta-malas, capô, portas",
+  "Hood, trunk, doors": "Capô, porta-malas, portas",
   "Headlights": "Faróis",
   "Add friend": "Adicionar amigo",
   "Add a friend (front bumpers touching)": "Adicionar um amigo (para-choques dianteiros encostados)",
@@ -1507,5 +1507,8 @@
   "Faster": "Mais rápido",
   "Camera on the car in the middle": "Câmera no carro do meio",
   "Add a path point": "Adicionar um ponto ao trajeto",
-  "Play the path": "Reproduzir o trajeto"
+  "Play the path": "Reproduzir o trajeto",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "O analógico direito olha ao redor do carro (Desligado: para cima ele também deixa de ligar e desligar os faróis)",
+  "Hide HUD": "Ocultar HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Ocultar ou mostrar o HUD ao dirigir (nomes e chat sobre os carros também)"
 }

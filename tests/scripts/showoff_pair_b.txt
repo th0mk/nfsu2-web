@@ -1,7 +1,9 @@
 # Show-off between players, instance B (watches; with showoff_pair_a.txt): new career -> prologue free roam; stands
-# while A drives about 20 m ahead and opens its trunk, hood and doors, then drives off.  B's log has A's car's parts
-# opening and closing ("[showoff] ... slot K: trunk opens"); with roam-pair --page app the page is saved every 4 s
-# from behind (b_back_*), then from A's left side (b_side_*: B jumps there, "mp follow").
+# while A drives about 20 m ahead and opens its hood, then its trunk alone, its doors alone and all, then drives off.
+# B's log has A's car's parts opening and closing ("[showoff] ... slot K: hood opens", then "hood closes" with "trunk
+# opens"); with roam-pair --page app the page is saved every 3.5 s from A's left side, 10 m off and looking a little
+# past its front (b_side_*: B jumps there, "mp follow", just before the hood opens), so A's car is clear of B's own:
+# b_side_1 and 2 the hood alone, 3 and 4 the trunk alone, 5 and 6 the doors alone, 7 to 9 all, 10 closed again.
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
 +30   tap RETURN
@@ -23,17 +25,16 @@
 +0    roam mp waitpeers 1 6000
 +0    roam mp waitcars 1 3000
 +0    roam mp waitsolid 1 6000
-+4000ms log SHOT b_back_1
-+4000ms log SHOT b_back_2
-+4000ms log SHOT b_back_3
-+4000ms log SHOT b_back_4
-+4000ms log SHOT b_back_5
-+0    roam mp follow 0 1 7 -90
++4000ms roam mp follow 0 0 10 -60
 +3000ms log SHOT b_side_1
-+4000ms log SHOT b_side_2
-+4000ms log SHOT b_side_3
-+4000ms log SHOT b_side_4
-+4000ms log SHOT b_side_5
-+4000ms log SHOT b_side_6
++3500ms log SHOT b_side_2
++3500ms log SHOT b_side_3
++3500ms log SHOT b_side_4
++3500ms log SHOT b_side_5
++3500ms log SHOT b_side_6
++3500ms log SHOT b_side_7
++3500ms log SHOT b_side_8
++3500ms log SHOT b_side_9
++3500ms log SHOT b_side_10
 +0    roam mp status
 +10   quit

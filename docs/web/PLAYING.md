@@ -120,7 +120,7 @@ While you drive:
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
 | X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button, on a controller D-pad down held a second while driving |
-| O | Parked in free roam: open the trunk, then the hood too, then the doors too, then close them all (see section 6); on a controller hold D-pad down a second |
+| O | Parked in free roam: open the hood, then the trunk alone, then the doors alone, then all of them, then close them all (see section 6); on a controller hold D-pad down a second |
 | 1 to 4, then 1 to 4 | Quick chat in free roam and in races with other players: a group, then a phrase (see section 6) |
 | I | Message a friend in free roam: the answer to the newest message, or a friend to pick (see section 6, Friends) |
 | M, Tab | Map, messages |
@@ -128,6 +128,7 @@ While you drive:
 | Esc or P | Pause; Esc also goes back in menus |
 | Enter | Choose (menus); in free roam, start an event at its marker or take an outrun |
 | F12 | Photo mode while you drive (see below), and in it the photo; elsewhere a screenshot. Both are PNGs kept with your saves and shown in Saves on the start page |
+| F10 | Hide the HUD while you drive, and show it again: the names and quick chat lines over other players' cars go with it; the pause menu, the map, messages and a race's results still show. Free roam and races; off again at each Play; no touch button. Another key, or none, in Controls, Site |
 | **F7** | Next song: the game's next EA Trax song, or with Radio on the folder's next track (not while the game is paused) |
 | **F8** | Frame-rate counter: off, on, detailed |
 | **F9** | The page menu: when the game last saved, full screen, counter, ghost mode (off, players, everything) and crews (in free roam), radio, controls, log, **Quit game**, and Stop waiting: play offline while you wait in line; on a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
@@ -138,10 +139,11 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Change the keys:** in the game, Options, Controls. It opens on Keyboard Configuration; Up to that title, then
   Right, is Joypad Configuration, the controller's buttons. The game lists a controller once it has seen it: press a
   button on it before opening Controls. A controller's buttons are kept with the profile (leaving Options saves them),
-  the keys for every profile. The site's own keys and buttons (drift mode, the trunk, the horn, the headlights, quick
-  chat's controller button, messages, friends, photo mode, the page menu, the next song, the counter) are set on the
-  start page, Controls, Site: click one, then press the new key or controller button, or pick Off (the page menu
-  always has a key, and Home). Keys the game itself uses can't be picked; one of the game's controls you put on one of
+  the keys for every profile. The site's own keys and buttons (drift mode, the hood, trunk and doors, the horn, the
+  headlights, the controller's free look, quick chat's controller button, messages, friends, photo mode, hiding the
+  HUD, the page menu, the next song, the counter) are set on the start page, Controls, Site: click one, then press the
+  new key or controller button, or pick Off (the page menu always has a key, and Home); the free look's Auto or Off
+  switches with a click. Keys the game itself uses can't be picked; one of the game's controls you put on one of
   the site's keys in the game's Controls takes it: the site's control leaves it to the game, and Site says so. D-pad
   down and the stick clicks with the game's own controls on them as it comes (Career Status, hydraulics) are shared as
   before: a short press, and a car with hydraulics, stay the game's. The touch controls' Drift and Horn work whatever
@@ -177,7 +179,7 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   ones). The browser shows a pad to the page only after a button is pressed on it. The triggers are throttle and
   brake, the left stick steers, LB is nitrous, RB the handbrake, A and X shift, Y and B are camera and look back, View
   respawns, Start pauses; D-pad up starts an event or takes an outrun, left and right are the map and messages, down
-  is Career Status (in free roam, held a second: drift mode while driving, the trunk, hood and doors parked). A
+  is Career Status (in free roam, held a second: drift mode while driving, the hood, trunk and doors parked). A
   click of the left stick is the horn, unless your car has hydraulics: then the stick clicks are the game's hydraulics
   (left: pressurize, right: bounce). While driving (free roam, races, races with other players) the right stick
   looks round the car: the view turns to where it points (right looks right, half way out half as far) and swings
@@ -186,7 +188,9 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   stick (the game's Options, Controls, Joypad Configuration), the left stick looks round instead, as long as the game
   uses nothing of it (no steering or pedal, no direction bound to a control); if it does, neither stick looks round.
   The stick that looks round, pushed straight up, is the headlights (G): a flick up turns them off or back on, held up
-  is high beam until you let go.
+  is high beam until you let go. For the original camera, Controls, Site, Free look: Off (a click on its Auto) turns
+  the look off: no stick looks round, straight back is no look back (B still is), and stick up no longer switches the
+  headlights (G still does).
   In free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
   bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. With the
   right stick steering or on a pedal, its click stays the game's (bounce), and 1 to 4 open quick chat. In the
@@ -602,10 +606,11 @@ Good to know:
   version sees the body move but not the wheels, and no nitrous, and hears none of it.
 - **Tyre smoke:** when you slide, spin your wheels or do a burnout, the others see the smoke from your tyres, as the
   game draws it for any car. Between players on different versions, neither sees the other's.
-- **Trunk, hood and doors:** parked in free roam, O opens the trunk, pressed again the hood too, then both doors too,
-  then closes them all; on a controller, hold D-pad down for a second (a short press is still Career Status). The
-  others see them open; they close by themselves when the car drives off. The open trunk shows its trunk audio, the
-  layout, speakers and amps, on your car and on the others'. Players on an older version see your car closed.
+- **Hood, trunk and doors:** parked in free roam, O opens the hood, pressed again the trunk instead, then both doors
+  instead, then all of them, then closes them all; on a controller, hold D-pad down for a second (a short press is still
+  Career Status). The others see them open; they close by themselves when the car drives off. The open trunk shows its
+  trunk audio, the layout, speakers and amps, on your car and on the others'. Players on an older version see your car
+  closed.
 - **Headlights:** the other players' headlights light the road in front of their cars, as yours do, a little dimmer
   and in their own colour; in Online and LAN races too. Display, more: Other cars' headlights (All cars: AI racers and
   traffic too; Off: only yours, as in the original game). The Windows plugin draws only your own.

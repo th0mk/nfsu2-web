@@ -947,7 +947,7 @@
   "Sequential: pull to shift up": "Sequenziale: tira per salire",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Il gioco cambia una marcia alla volta. Sequenziale: ogni volta che la leva entra in una marcia è una cambiata, e la retromarcia tiene il freno a mano. Freno a mano: qualsiasi marcia lo tiene.",
   "Drift mode (in free roam)": "Modalità dérapage (in modalità Esplora)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Apri bagagliaio, poi cofano, poi portiere (da fermo, in modalità Esplora)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Apri cofano, poi bagagliaio, poi portiere, poi tutto (da fermo, in modalità Esplora)",
   "Drift mode: on": "Modalità dérapage: attivata",
   "Drift mode: off": "Modalità dérapage: disattivata",
   "Drift mode only works in free roam": "La modalità dérapage funziona solo in modalità Esplora",
@@ -1429,7 +1429,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Il gioco è stato fermato: {what}. Riavvia {browser}, poi premi Gioca.",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "I file del gioco non si sono caricati bene. In questa pagina: Altro, Elimina i dati di gioco, poi Gioca (i tuoi salvataggi restano). Se succede di nuovo, forse la tua rete blocca il gioco: prova un'altra rete.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Il gioco non si è caricato. Nuovo tentativo tra {n} s, oppure premi Riprova.",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "Da fermo in modalità Esplora: tieni premuto {button} per aprire bagagliaio, poi cofano, poi portiere.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "Da fermo in modalità Esplora: tieni premuto {button} per aprire cofano, poi bagagliaio, poi portiere, poi tutto.",
   "With other players. Its key and button: Controls, Site.": "Con altri giocatori. Tasto e pulsante: Controlli, Sito.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Invia frasi ai giocatori vicini a te in modalità Esplora e a tutti nelle gare multigiocatore: da 1 a 4, poi da 1 a 4 (controller: premi uno stick, poi muovi due volte lo stick destro; touch: il pulsante della chat).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Senza censure: i brani EA Trax non modificati, alcuni in versioni più lunghe. Originale: come nel gioco uscito.",
@@ -1439,7 +1439,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "un tasto con il nome che gli dà il browser (KeyX, Digit5, F6, Numpad7) o off",
   "{key} or Home on the controller": "{key} o Home sul controller",
   "Drift mode": "Modalità dérapage",
-  "Trunk, hood, doors": "Bagagliaio, cofano, portiere",
+  "Hood, trunk, doors": "Cofano, bagagliaio, portiere",
   "Headlights": "Fari",
   "Add friend": "Aggiungi amico",
   "Add a friend (front bumpers touching)": "Aggiungi un amico (paraurti anteriori a contatto)",
@@ -1507,5 +1507,8 @@
   "Faster": "Più veloce",
   "Camera on the car in the middle": "Visuale sull'auto al centro",
   "Add a path point": "Aggiungi un punto al percorso",
-  "Play the path": "Riproduci il percorso"
+  "Play the path": "Riproduci il percorso",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Lo stick destro guarda intorno all'auto (Disattivato: lo stick in su non comanda più neanche i fari)",
+  "Hide HUD": "Nascondi HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Nascondi o mostra l'HUD durante la guida (anche nomi e chat sopra le auto)"
 }

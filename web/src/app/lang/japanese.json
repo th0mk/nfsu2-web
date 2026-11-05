@@ -859,7 +859,7 @@
   "Sequential: pull to shift up": "シーケンシャル: 引いてシフトアップ",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "このゲームのギアは1段ずつ変わります。シーケンシャル: レバーをギアに入れるたびに1段シフトし、リバースではサイドブレーキがかかります。サイドブレーキ: どのギアでもかかります。",
   "Drift mode (in free roam)": "ドリフトモード（フリーロームで）",
-  "Open trunk, then hood, then doors (parked, in free roam)": "トランク、ボンネット、ドアの順に開ける（停車中、フリーロームで）",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "ボンネット、トランク、ドア、すべての順に開ける（停車中、フリーロームで）",
   "Drift mode: on": "ドリフトモード: オン",
   "Drift mode: off": "ドリフトモード: オフ",
   "Drift mode only works in free roam": "ドリフトモードはフリーロームでのみ使えます",
@@ -1321,7 +1321,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "ゲームが停止されました: {what}。{browser}を再起動してから、「プレイ」を押してください。",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "ゲームのファイルが正しく読み込まれませんでした。このページで「その他」、「ゲームデータを削除」の順に押してから、「プレイ」を押してください（セーブデータはそのまま残ります）。また起きる場合は、ネットワークがゲームをブロックしている可能性があります。別のネットワークを試してください。",
   "The game didn't load. Trying again in {n} s, or press Retry.": "ゲームを読み込めませんでした。{n}秒後に再試行します。「再試行」を押すこともできます。",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "フリーロームで停車中：{button}を長押しすると、トランク、ボンネット、ドアの順に開きます。",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "フリーロームで停車中：{button}を長押しすると、ボンネット、トランク、ドア、すべての順に開きます。",
   "With other players. Its key and button: Controls, Site.": "他のプレイヤーといるときに使えます。キーとボタン: 操作方法、サイト。",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "フリーロームでは近くのプレイヤーに、マルチプレイレースでは全員にフレーズを送ります。1～4を押してから、もう一度1～4を押します（コントローラー: どちらかのスティックを押し込んでから右スティックを2回はじく、タッチ: チャットボタン）。",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "無修正：EA Trax の楽曲を編集なしで再生し、一部は長いバージョンです。オリジナル：ゲーム発売時のバージョンです。",
@@ -1331,7 +1331,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "ブラウザでのキー名（KeyX、Digit5、F6、Numpad7）または off",
   "{key} or Home on the controller": "{key}またはコントローラーのHome",
   "Drift mode": "ドリフトモード",
-  "Trunk, hood, doors": "トランク、ボンネット、ドア",
+  "Hood, trunk, doors": "ボンネット、トランク、ドア",
   "Headlights": "ヘッドライト",
   "Add friend": "フレンド追加",
   "Add a friend (front bumpers touching)": "フレンド追加（フロントバンパー同士が接触）",
@@ -1399,5 +1399,8 @@
   "Faster": "速く",
   "Camera on the car in the middle": "真ん中の車にカメラを向ける",
   "Add a path point": "パスにポイントを追加",
-  "Play the path": "パスを再生"
+  "Play the path": "パスを再生",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "右スティックで車の周りを見る（オフ：スティックを上に倒してもヘッドライトは切り替わりません）",
+  "Hide HUD": "HUDを隠す",
+  "Hide or show the HUD while driving (names and chat over cars too)": "運転中にHUDを隠す・表示する（車の上の名前とチャットも）"
 }

@@ -370,6 +370,9 @@ context lists every problem the developer has a report on, with its first thread
   the game's Joypad Configuration steers or brakes with no longer looks round; the left stick does when the game uses
   none of it. On an older version: reload. On a newer one the report is new. Threads 1567127501359153282,
   1567191097149497415 (also 1567230313292112002, "Option to change view stick on gamepad", which this answers).
+  The look can be turned off: the start page's Controls, Site, Free look (a click on its Auto makes it Off): no stick
+  looks round, straight back is no Look Back, and the stick straight up no longer switches the headlights (G still
+  does); the answer to "make the 360 camera optional" (threads 1567427206119166022, 1567191097149497415).
 - Free roam, error 134 with `tlsf_alloc < gheap_alloc_c < gbuf_alloc` at the top of the stack while other players'
   cars load, on PCs with AMD and with Intel graphics, also on the live version; `HeapAlloc(2, 0x0, 1398016) FAILED`
   lines come before it. No fix yet. A log with this stack adds to thread 1567239277035790336.
@@ -402,9 +405,10 @@ context lists every problem the developer has a report on, with its first thread
   held back a second). Since abba6770 such a key or button is left to the game, ours does nothing on it, and the log
   says so once (`[keys] X is bound to Shift Up in the game: drift mode stays off it`, `[pad] D-pad down is bound to
   ...`). A D-pad down, left stick or right stick still on its default (Career Status, hydraulics) works as before.
-  Since a10b03d6 the site's own are set on the start page, Controls, Site: a list of them (drift mode, trunk/hood/
-  doors, horn, quick chat, message, add friend, photo mode, menu, next song, frame-rate counter) with each one's key
-  and controller button as caps; click one, then press the new key or button, or Off. Keys the game itself uses can't
+  Since a10b03d6 the site's own are set on the start page, Controls, Site: a list of them (drift mode, hood/trunk/
+  doors, horn, headlights, free look, quick chat, message, add friend, photo mode, hide HUD, menu, next song,
+  frame-rate counter) with each one's key and controller button as caps; click one, then press the new key or button,
+  or Off (the free look's cap switches Auto / Off with a click). Keys the game itself uses can't
   be picked, quick chat's 1-4 stay, the menu always keeps a key (and Home or both sticks), and a key the player put a
   game control on says so there. It applies at the next Play; the touch controls' Drift and Horn work whatever is
   picked. Until that is live, only the game's own Controls can be changed.
@@ -449,11 +453,13 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for the eyes, in
   the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in the start page's Game, more:
   Show hidden races, since dec0e11; wide body kits and the other unique visual parts for every car once Caleb is beaten,
-  since 2970e8e; opening the trunk, hood and doors parked in free roam, O (then again: the hood, the doors, all closed)
-  or a controller's D-pad down held a second, other players see them, they close when the car drives off, since
-  1ccb47ac (the open trunk showed no trunk audio: empty boxes on the player's own car, nothing on others'; since
-  68128859 it shows the layout, speakers and amps on every car); car meets on the world map, with the GPS to them,
-  since 109bdcc4; Songs in the start page's Game (Uncensored or the game's Original versions) and F7 for the next song,
+  since 2970e8e; opening the trunk, hood and doors parked in free roam, O or a controller's D-pad down held a second,
+  other players see them, they close when the car drives off, since 1ccb47ac (the open trunk showed no trunk audio:
+  empty boxes on the player's own car, nothing on others'; since 68128859 it shows the layout, speakers and amps on
+  every car); one part at a time: O the hood, again the trunk alone, the doors alone, all of them, all closed (the
+  answer to "open only the hood" or "only the doors", threads 1567568582660071586, 1567034148458205255); car meets on
+  the world map, with the GPS to them, since 109bdcc4; Songs in the start page's Game (Uncensored or the game's
+  Original versions) and F7 for the next song,
   since 32540c78; drift battles between players (drift mode on, then the challenge offered as for an outrun: 90 s,
   most drift points win $100 out of the loser's bank, no nitrous, the cars drive through each other), since 19dc8394;
   a picture that looks stretched, cars too wide, wheels oval: the original game draws everything about 10 % too wide
@@ -467,7 +473,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   changeable (it starts at 5 and 5), and a race of one lap shows Completed % in place of LAP 1/1, since 81fad175;
   headlights on G: a tap turns them off or back on, held is high beam (brighter, reaching farther) until let go, and
   friends in free roam see it; on a controller the look's stick straight up; another key, or none, in Controls,
-  Site; since a64138c4; the guide
+  Site; since a64138c4; the whole HUD hidden while driving, F10 (again: back), free roam and races, the names and
+  quick chat lines over other players' cars with it, the pause menu, map and messages still shown, off again at each
+  Play, no touch button; another key, or none, in Controls, Site, Hide HUD (thread 1567596160397344910); the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.

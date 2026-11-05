@@ -2824,6 +2824,10 @@ static int tags_live(CPU *c, uint32_t pkg){
     return 1;
 }
 static long g_tag_self = -9;       /* photo mode's frame of the names (roam_game_names): the player's own too */
+#if SAYS
+/* photo.c: the player hid the HUD, the names over the cars with it; none where photo.c is not built in */
+__attribute__((weak)) int photo_hud_hidden(void){ return 0; }
+#endif
 static uint8_t g_tag_was_s[2][NSLOT + 1];   /* by car (g_sl, NSLOT the player's own): its name shown the frame before */
 static int g_tag_seat;                       /* the pass: 0 player 1's view and HUD, 1 co-op player 2's */
 #define g_tag_was (g_tag_was_s[g_tag_seat])
@@ -3006,6 +3010,7 @@ static void tags_update_seat(CPU *c){
         if (ahead > 2.f && z > 0.f && x >= 0.f && x <= w && y >= 0.f && y <= h){
             mid[nm] = g_s.conf.self_id; mxy[3 * nm] = x / w; mxy[3 * nm + 1] = halves ? y / h * 0.5f : y / h; mxy[3 * nm + 2] = 1.f; nm++; }
     }
+    if (photo_hud_hidden()){ roam_plat_say_marks(mid, mxy, 0); return; }   /* (no lines over the cars either) */
     if (nm) roam_plat_say_marks(mid, mxy, nm);
 #endif
 }

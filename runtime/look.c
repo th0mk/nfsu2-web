@@ -20,7 +20,9 @@
  * the right stick (the game's Joypad Configuration) the left stick looks
  * round, if the game reads none of it either, else nothing does
  * (dinput_pad.c pad_look_stick; players steered with the right stick, and
- * it turned the view as it steered, 2026-11-03).
+ * it turned the view as it steered, 2026-11-03).  The player may turn the
+ * look off (the start page's Controls, Site, Free look: settings.ini
+ * button_look off): no stick looks round then, the game's camera as it was.
  *
  * How: the drive camera puts the camera where it wants it each frame, in the
  * main loop's update (0x5811C0, before the sound's 0x483B40); the frame is

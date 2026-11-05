@@ -969,7 +969,7 @@
   "Sequential: pull to shift up": "Секвентально: на себя — вверх",
   "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Игра переключает передачи по одной. Секвентально: каждое включение передачи рычагом — одно переключение, а задняя передача держит ручник. Ручник: его держит любая передача.",
   "Drift mode (in free roam)": "Режим дрифта (в свободной езде)",
-  "Open trunk, then hood, then doors (parked, in free roam)": "Открыть багажник, затем капот, затем двери (на стоянке, в свободной езде)",
+  "Open hood, then trunk, then doors, then all (parked, in free roam)": "Открыть капот, затем багажник, затем двери, затем всё (на стоянке, в свободной езде)",
   "Drift mode: on": "Режим дрифта: вкл.",
   "Drift mode: off": "Режим дрифта: откл.",
   "Drift mode only works in free roam": "Режим дрифта работает только в свободной езде",
@@ -1456,7 +1456,7 @@
   "The game was stopped: {what}. Restart {browser}, then press Play.": "Игра остановлена: {what}. Перезапустите {browser}, затем нажмите «Играть».",
   "The game's files didn't load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Файлы игры загрузились неправильно. На этой странице: «Прочее», «Удалить данные игры», затем «Играть» (ваши сохранения останутся). Если это повторится, возможно, игру блокирует ваша сеть: попробуйте другую сеть.",
   "The game didn't load. Trying again in {n} s, or press Retry.": "Игра не загрузилась. Новая попытка через {n} с, или нажмите «Повторить».",
-  "Parked in free roam: hold {button} to open trunk, then hood, then doors.": "На стоянке в свободной езде: удерживайте {button}, чтобы открыть багажник, затем капот, затем двери.",
+  "Parked in free roam: hold {button} to open hood, then trunk, then doors, then all.": "На стоянке в свободной езде: удерживайте {button}, чтобы открыть капот, затем багажник, затем двери, затем всё.",
   "With other players. Its key and button: Controls, Site.": "С другими игроками. Клавиша и кнопка: Управление, Сайт.",
   "Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).": "Отправляйте фразы игрокам рядом в свободной езде и всем в сетевых гонках: от 1 до 4, затем снова от 1 до 4 (геймпад — нажать стик, затем дважды двинуть правый стик; сенсорный экран — кнопка чата).",
   "Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.": "Без цензуры: песни EA Trax без правок, некоторые в более длинных версиях. Оригинал: как в вышедшей игре.",
@@ -1466,7 +1466,7 @@
   "a key by the browser's name for it (KeyX, Digit5, F6, Numpad7) or off": "имя клавиши в браузере (KeyX, Digit5, F6, Numpad7) или off",
   "{key} or Home on the controller": "{key} или Home на геймпаде",
   "Drift mode": "Режим дрифта",
-  "Trunk, hood, doors": "Багажник, капот, двери",
+  "Hood, trunk, doors": "Капот, багажник, двери",
   "Headlights": "Фары",
   "Add friend": "Добавить в друзья",
   "Add a friend (front bumpers touching)": "Добавить в друзья (касание передними бамперами)",
@@ -1534,5 +1534,8 @@
   "Faster": "Быстрее",
   "Camera on the car in the middle": "Камера на машине посередине",
   "Add a path point": "Добавить точку пути",
-  "Play the path": "Пуск пути"
+  "Play the path": "Пуск пути",
+  "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Правый стик — обзор вокруг машины (Откл.: стик вверх больше не переключает и фары)",
+  "Hide HUD": "Скрыть HUD",
+  "Hide or show the HUD while driving (names and chat over cars too)": "Скрыть или показать HUD за рулём (имена и чат над машинами тоже)"
 }

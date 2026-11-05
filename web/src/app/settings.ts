@@ -190,8 +190,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_map_max', env: 'NFSU2_ROAM_MAP_MAX', kind: 'int', vals: '0..4096', ic: true, scope: 'web', device: true },
   // our own controls beside the game's (sitekeys.ts): each one's key and controller button, kept by this device (its
   // keyboard and controller).  The runtime reads those it handles (runtime/dinput_kbd.c dikbd_site_key: drift mode, the
-  // show-off, the horn, the headlights; and Message a friend's and Add friend's, whose clashes with the game's controls
-  // it tells the page; dinput_pad.c: the buttons), the page the rest.  Not in bundle.m's table: the Mac app passes them
+  // show-off, the horn, the headlights, hiding the HUD; and Message a friend's and Add friend's, whose clashes with the
+  // game's controls it tells the page; dinput_pad.c: the buttons and the free look's switch), the page the rest.  Not in bundle.m's table: the Mac app passes them
   // on as NFSU2_KEY_* and NFSU2_BUTTON_* all the same
   { key: 'key_drift', env: 'NFSU2_KEY_DRIFT', kind: 'key', scope: 'web', device: true },
   { key: 'key_showoff', env: 'NFSU2_KEY_SHOWOFF', kind: 'key', scope: 'web', device: true },
@@ -200,12 +200,14 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'key_message', env: 'NFSU2_KEY_MESSAGE', kind: 'key', scope: 'web', device: true },
   { key: 'key_friend', env: 'NFSU2_KEY_FRIEND', kind: 'key', scope: 'web', device: true },
   { key: 'key_photo', env: 'NFSU2_KEY_PHOTO', kind: 'key', scope: 'web', device: true },
+  { key: 'key_hud', env: 'NFSU2_KEY_HUD', kind: 'key', scope: 'web', device: true },
   { key: 'key_menu', env: 'NFSU2_KEY_MENU', kind: 'key', scope: 'web', device: true },
   { key: 'key_song', env: 'NFSU2_KEY_SONG', kind: 'key', scope: 'web', device: true },
   { key: 'key_fps', env: 'NFSU2_KEY_FPS', kind: 'key', scope: 'web', device: true },
   { key: 'button_hold', env: 'NFSU2_BUTTON_HOLD', kind: 'enum', vals: 'ddown|dup|dleft|dright|off', scope: 'web', device: true },
   { key: 'button_horn', env: 'NFSU2_BUTTON_HORN', kind: 'enum', vals: 'ls|rs|off', scope: 'web', device: true },
   { key: 'button_chat', env: 'NFSU2_BUTTON_CHAT', kind: 'enum', vals: 'rs|ls|off', scope: 'web', device: true },
+  { key: 'button_look', env: 'NFSU2_BUTTON_LOOK', kind: 'enum', vals: 'auto|off', scope: 'web', device: true },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -425,15 +427,16 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 
 # The keys of this site's own controls, beside the game's (the start page's
 # Controls, Site, sets them by a press): the browser's name of a key (KeyX,
-# Digit5, F6, Numpad7, Backquote ...) or off.  Drift mode and the trunk,
-# hood and doors (free roam), the horn (with other players), the
+# Digit5, F6, Numpad7, Backquote ...) or off.  Drift mode and the hood,
+# trunk and doors (free roam), the horn (with other players), the
 # headlights (a tap off or on, held high beam), Message a friend and Add
-# friend (free roam), photo mode, the page's menu (never off), the next
-# song and the frame-rate counter.  A key one of the game's controls is on
-# (its Options, Controls) stays the game's.
+# friend (free roam), photo mode, hiding the HUD while driving (off again
+# at each Play), the page's menu (never off), the next song and the
+# frame-rate counter.  A key one of the game's controls is on (its
+# Options, Controls) stays the game's.
 # [NFSU2_KEY_DRIFT, NFSU2_KEY_SHOWOFF, NFSU2_KEY_HORN, NFSU2_KEY_LIGHTS,
-# NFSU2_KEY_MESSAGE, NFSU2_KEY_FRIEND, NFSU2_KEY_PHOTO, NFSU2_KEY_MENU,
-# NFSU2_KEY_SONG, NFSU2_KEY_FPS]
+# NFSU2_KEY_MESSAGE, NFSU2_KEY_FRIEND, NFSU2_KEY_PHOTO, NFSU2_KEY_HUD,
+# NFSU2_KEY_MENU, NFSU2_KEY_SONG, NFSU2_KEY_FPS]
 #key_drift = KeyX
 #key_showoff = KeyO
 #key_horn = KeyN
@@ -441,18 +444,23 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #key_message = KeyI
 #key_friend = KeyF
 #key_photo = F12
+#key_hud = F10
 #key_menu = F9
 #key_song = F7
 #key_fps = F8
 # The controller's: the D-pad direction held a second for drift mode
-# (driving) and the trunk, hood and doors (parked): ddown, dup, dleft,
+# (driving) and the hood, trunk and doors (parked): ddown, dup, dleft,
 # dright or off, a short press staying the game's; the stick click for the
-# horn and the one for quick chat: ls, rs or off.  The game's Home button,
-# or both sticks pressed in, always opens the page's menu.
-# [NFSU2_BUTTON_HOLD, NFSU2_BUTTON_HORN, NFSU2_BUTTON_CHAT]
+# horn and the one for quick chat: ls, rs or off; the free look round the
+# car while driving: auto (the right stick, the left one while the game's
+# controls read the right one) or off (no stick looks round, and stick up
+# no longer switches the headlights).  The game's Home button, or both
+# sticks pressed in, always opens the page's menu.
+# [NFSU2_BUTTON_HOLD, NFSU2_BUTTON_HORN, NFSU2_BUTTON_CHAT, NFSU2_BUTTON_LOOK]
 #button_hold = ddown
 #button_horn = ls
 #button_chat = rs
+#button_look = auto
 
 # ---- Multiplayer ---------------------------------------------------------
 

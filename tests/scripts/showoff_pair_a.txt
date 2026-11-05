@@ -1,6 +1,7 @@
 # Show-off between players, instance A (acts; with showoff_pair_b.txt): new career -> prologue free roam, where both
-# players start on the same spot; A drives about 20 m ahead of B and stops, then O: the trunk, then the hood too, then
-# the doors too (each a few seconds apart, B looks), then drives off (all close by themselves: B sees them close).
+# players start on the same spot; A drives about 20 m ahead of B and stops, then O: the hood, then the trunk alone,
+# then the doors alone, then all (each a few seconds apart, B looks), then drives off (all close by themselves: B sees
+# them close).
 #   node web/tools/roam-pair.mjs --page app --a Al:showoff_pair_a.txt --b Bo:showoff_pair_b.txt --env NFSU2_ROAM_ROOM=<r>
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
@@ -27,13 +28,15 @@
 +130  up UP
 +0    down DOWN
 +60   up DOWN
-+3000ms log trunk
++3000ms log hood
 +0    tap O
-+8000ms log hood
++7000ms log trunk
 +0    tap O
-+8000ms log doors
++7000ms log doors
 +0    tap O
-+16000ms log drive_off
++7000ms log all
++0    tap O
++10000ms log drive_off
 +0    down UP
 +120  up UP
 +0    down DOWN
