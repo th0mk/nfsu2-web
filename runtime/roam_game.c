@@ -1393,7 +1393,11 @@ static void park_all(CPU *c){
 static void release(CPU *c, int k, const char *why){
     Slot *s = &g_sl[k];
     if (s->st == SL_FREE || s->st == SL_PARKED) return;
-    rlog("[roam] f=%ld slot %d: %s's car removed (%s)\n", rh_frame(), k, s->name, why);
+    /* where it went, for the logs of cars that vanished (a shown car: where it was last drawn) */
+    float dx = s->drawn[0] - g_lp[0], dy = s->drawn[1] - g_lp[1];
+    if (s->st == SL_ACTIVE && !s->hidden)
+        rlog("[roam] f=%ld slot %d: %s's car removed (%s), %.0f m away\n", rh_frame(), k, s->name, why, (double)rc_sqrtf(dx * dx + dy * dy));
+    else rlog("[roam] f=%ld slot %d: %s's car removed (%s)\n", rh_frame(), k, s->name, why);
     g_releases++;
     if (s->h_new){ unload_later(s->h_new); s->h_new = 0; s->pending_cfg = 0; }
     /* not made yet: forget it.  A car made whose first look cannot load now
@@ -7951,6 +7955,7 @@ static void cost_add(uint64_t t0){
     g_cost_sum += ns; g_cost_n++; if (ns > g_cost_max) g_cost_max = ns;
     g_cost_win_sum += ns; g_cost_win_n++; if (ns > g_cost_win_max) g_cost_win_max = ns;
 }
+static struct { uint64_t frames, calls, us; } g_lsv;   /* load_service: frames it ran in, its calls, its time */
 static void periodic_log(int64_t host){
     if (!g_cost_win_t0) g_cost_win_t0 = host;
     if (host - g_cost_win_t0 < 30000000) return;
@@ -7966,6 +7971,11 @@ static void periodic_log(int64_t host){
         rlog("[roam]   the server's hub: %s, %u lists, %u HELLOs of players it did not list ignored\n",
                 g_s.hub_was == 2 ? "answering (it picks the players near us)" : g_s.hub_was == 1 ? "no answer yet" : "silent (broadcast discovery)",
                 g_s.hub_lists, g_s.rx_unlisted);
+    if (g_lsv.frames){
+        rlog("[roam]   friends' cars' reads served again in %llu frame(s), %llu time(s), %.1f ms in all\n", (unsigned long long)g_lsv.frames,
+             (unsigned long long)g_lsv.calls, g_lsv.us / 1e3);
+        memset(&g_lsv, 0, sizeof g_lsv);
+    }
     if (g_shold.n){
         rlog("[roam]   friends' cars waited for the city's sections %d time(s), %.1f s in all, the longest %.0f ms%s\n", g_shold.n,
              g_shold.us / 1e6, g_shold.max / 1e3, g_shold.gone ? " (some went after 5 s)" : "");
@@ -7984,6 +7994,41 @@ static void periodic_log(int64_t host){
     }
     roam_plat_unlock();
     g_cost_win_t0 = host; g_cost_win_sum = g_cost_win_n = g_cost_win_max = 0;
+}
+
+/* Friends' cars load in fewer frames.  The game finishes at most one read
+ * a frame (0x57EF60, from the main loop at 0x5814C7: it starts the reads
+ * queued, then ends the first one under way and calls its callback), and a
+ * friend's car is some 30 to 50 reads one after another (GEOMETRY.BIN's,
+ * merged 16 at a time, TEXTURES.BIN's, the vinyls'), each one's callback
+ * asking for the next: 30 to 60 frames a car, 0.25 to 0.5 s at 120 fps and
+ * twice that at 60 (players' logs of 2026-11-03, 48 cars: median 270 to 290
+ * ms, p90 560 to 710 ms), so the cars of a busy place took 15 to 30 s to
+ * show.  In the browser a read is done when ReadFile returns (fileio.c: the
+ * I/O worker's pread, from the device's cache in well under a ms), so while
+ * a friend's car is in the loader and the city's sections have nothing to
+ * read, the service runs again, until the loader is done or LOAD_SERVICE_US
+ * went by.  (A block from the network holds the game up as long as it does
+ * at the main loop's own call.)  Not on Windows: there a read is the
+ * system's, under way for a while.  NFSU2_ROAM_LOAD_SERVICE=0 (test aid):
+ * once a frame, as the game does. */
+#define READ_SERVICE    0x0057ef60u
+#define LOAD_SERVICE_US 2000
+static void load_service(CPU *c){
+#ifndef ROAM_HOST_WIN
+    static int off = -1;
+    if (off < 0){ const char *e = rh_opt("NFSU2_ROAM_LOAD_SERVICE"); off = e && *e == '0'; }
+    if (off || !rd32(G_CARLOADER + LOADER_BUSY) || rd32(G_TRACKSTREAMER + 0x168u) || !loads_in_loader(c)) return;
+    int64_t t0 = roam_plat_now_us(), t = t0;
+    int n = 0;
+    for (; n < 64 && rd32(G_CARLOADER + LOADER_BUSY) && !rd32(G_TRACKSTREAMER + 0x168u) && t - t0 < LOAD_SERVICE_US; n++){
+        gcall0(c, READ_SERVICE, 0);
+        t = roam_plat_now_us();
+    }
+    g_lsv.frames++; g_lsv.calls += (uint64_t)n; g_lsv.us += (uint64_t)(t - t0);
+#else
+    (void)c;
+#endif
 }
 
 static int loads_waiting(void){
@@ -8147,6 +8192,38 @@ static void assign(CPU *c, int64_t host){
         rlog("[roam] f=%ld slot %d (%s) for %s, %.0f m away\n", rh_frame(), k,
                 k < NOPP ? "free-roam opponent car" : "car of our own", s->name, (double)v->dist);
     }
+}
+
+/* A test aid (NFSU2_ROAM_COUNTS=1, in a scripted run only): once a second,
+ * how many friends' cars show and why the others do not, for the car meet
+ * runs (tests/scripts/roam_crowd_meet.txt): cars shown, loading, parked;
+ * peers, the ones the hub lists, and the ones waiting for a slot (listed,
+ * in free roam, a record and a place known, no slot) */
+static void counts_log(int64_t host){
+    static int on = -1; static int64_t at;
+    if (on < 0){ const char *s = rh_opt("NFSU2_INPUT_SCRIPT"), *e = rh_opt("NFSU2_ROAM_COUNTS"); on = s && *s && e && *e == '1'; }
+    if (!on || host - at < 1000000) return;
+    at = host;
+    int shown = 0, loading = 0, parked = 0, listed = 0, waiting = 0, near = 0, near_shown = 0, mid = 0, mid_shown = 0, oneway = 0;
+    for (int k = 0; k < NSLOT; k++){
+        const Slot *s = &g_sl[k];
+        shown += s->st == SL_ACTIVE && !s->hidden;
+        loading += s->st == SL_LOADING || s->st == SL_CREATING || (s->st == SL_ACTIVE && s->h_new);
+        parked += s->st == SL_PARKED;
+    }
+    for (int i = 0; i < g_npv; i++){
+        const PeerView *v = &g_pv[i];
+        int slotted = 0;
+        for (int k = 0; k < NSLOT; k++)
+            if (g_sl[k].st != SL_FREE && g_sl[k].st != SL_PARKED && g_sl[k].peer == v->idx && g_sl[k].peer_id == v->id) slotted = 1 + (g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden);
+        listed += v->listed;
+        oneway += v->oneway && slotted == 2;
+        waiting += !slotted && v->visible && v->listed && v->has_cfg && v->have_pose;
+        if (v->visible && v->dist < 60.f){ near++; near_shown += slotted == 2; }
+        if (v->visible && v->dist < 150.f){ mid++; mid_shown += slotted == 2; }
+    }
+    rlog("[roam] f=%ld counts: t %.1f s, shown %d (%d one way), loading %d, parked %d; peers %d, listed %d, waiting %d; within 60 m %d, shown %d; "
+         "within 150 m %d, shown %d\n", rh_frame(), host / 1e6, shown, oneway, loading, parked, g_npv, listed, waiting, near, near_shown, mid, mid_shown);
 }
 
 /* a different world: every slot of the old one is gone */
@@ -8677,7 +8754,9 @@ void roam_game_frame(CPU *c){
             } else if (!s->hidden && !(g_du.st == DU_RACE && s->car == g_du.car)){ soft_park(c, s->car); s->hidden = 1; }
             /* (an outrun's opponent stays where it was: parked, the game would count it 120 km behind) */
         }
+        load_service(c);
         if (!g_photo_hold) cars_cut(c, w, host);
+        counts_log(host);
         arrows_update(c, w);
         arrow_colours(c, w);
         near_update(c, w, host, 1);
