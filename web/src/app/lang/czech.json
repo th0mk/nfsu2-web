@@ -568,6 +568,8 @@
   "Allow pop-ups for this site, then try again.": "Povol pro tento web vyskakovací okna a zkus to znovu.",
   "Your Last.fm stats in Discord": "Statistiky Last.fm na Discordu",
   "Add": "Přidat",
+  "Last.fm connected. You can close this window.": "Last.fm propojeno. Toto okno můžeš zavřít.",
+  "Last.fm didn't connect. Close this window and try again.": "Last.fm se nepropojilo. Zavři toto okno a zkus to znovu.",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "Skladby hrají i tam, jako v ostatních závodech. Vypnuto: jako v původní hře bez hudby, abys slyšel motor.",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "Vypnuto: hraješ v okně; celou obrazovku najdeš v menu. Pro odchod z ní podrž Esc.",
   "Its key (Controls, Site) switches it while you play.": "Během hraní ho přepíná jeho klávesa (Ovládání, Web).",

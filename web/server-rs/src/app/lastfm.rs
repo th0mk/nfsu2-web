@@ -145,10 +145,11 @@ impl Refused {
     }
 }
 
-/// a key or token as Last.fm makes them: letters and digits
+/// a key or token as Last.fm makes them: letters, digits, - and _ (a token has them now and then)
 fn key_like(v: Option<&Value>) -> Option<String> {
     let s = v?.as_str()?;
-    (!s.is_empty() && s.len() <= 64 && s.bytes().all(|c| c.is_ascii_alphanumeric())).then(|| s.to_string())
+    let ok = |c: u8| c.is_ascii_alphanumeric() || c == b'-' || c == b'_';
+    (!s.is_empty() && s.len() <= 128 && s.bytes().all(ok)).then(|| s.to_string())
 }
 
 /// a tag: trimmed, without control characters, at most MAX_TAG characters; None when it is empty and must not be
@@ -284,6 +285,8 @@ mod tests {
         assert_eq!(p.iter().find(|(k, _)| *k == "artist").unwrap().1, "Snoop Dogg");
         assert!(p.iter().all(|(k, _)| *k != "album"), "an empty album is left out");
         assert_eq!(call_of(&json!({ "op": "session", "token": "abc" }), now).unwrap().0, "auth.getSession");
+        // a token as Last.fm gives them, with - and _
+        assert_eq!(call_of(&json!({ "op": "session", "token": "Ab-3_x9Kq" }), now).unwrap().1, vec![("token", "Ab-3_x9Kq".to_string())]);
         for bad in [
             json!({ "op": "scrobble", "sk": "abc", "artist": "a", "track": "t" }), // no timestamp
             json!({ "op": "scrobble", "sk": "abc", "artist": "a", "track": "t", "timestamp": now - MAX_AGE_S - 1 }),

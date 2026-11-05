@@ -1331,6 +1331,8 @@
   "Allow pop-ups for this site, then try again.": "このサイトのポップアップを許可してから、もう一度お試しください。",
   "Your Last.fm stats in Discord": "Discord で見る Last.fm の統計",
   "Add": "追加",
+  "Last.fm connected. You can close this window.": "Last.fm と連携しました。このウィンドウは閉じてかまいません。",
+  "Last.fm didn't connect. Close this window and try again.": "Last.fm と連携できませんでした。このウィンドウを閉じて、もう一度お試しください。",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "他のレースと同じく、そこでも楽曲が流れます。オフ: オリジナルと同じく音楽なしで、エンジン音が聞こえます。",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "オフ: ウィンドウ内でプレイします。メニューから全画面表示にできます。全画面表示を終了するには、Escを長押しします。",
   "Its key (Controls, Site) switches it while you play.": "プレイ中はそのキー（操作方法、サイト）で切り替えます。",

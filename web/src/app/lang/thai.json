@@ -1331,6 +1331,8 @@
   "Allow pop-ups for this site, then try again.": "อนุญาตป๊อปอัปสำหรับเว็บไซต์นี้ แล้วลองอีกครั้ง",
   "Your Last.fm stats in Discord": "สถิติ Last.fm ของคุณใน Discord",
   "Add": "เพิ่ม",
+  "Last.fm connected. You can close this window.": "เชื่อมต่อ Last.fm แล้ว ปิดหน้าต่างนี้ได้เลย",
+  "Last.fm didn't connect. Close this window and try again.": "เชื่อมต่อ Last.fm ไม่สำเร็จ ปิดหน้าต่างนี้แล้วลองอีกครั้ง",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "เปิดเพลงในการแข่งเหล่านี้ด้วย เหมือนการแข่งแบบอื่น ปิด: ไม่มีเพลง เหมือนต้นฉบับ เพื่อให้ได้ยินเสียงเครื่องยนต์",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "ปิด: เล่นในหน้าต่าง เปิดเต็มจอได้จากเมนู กด Esc ค้างไว้เพื่อออกจากเต็มจอ",
   "Its key (Controls, Site) switches it while you play.": "กดคีย์ที่ตั้งไว้ (การควบคุม, เว็บไซต์) เพื่อสลับระหว่างเล่น",

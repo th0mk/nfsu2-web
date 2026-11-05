@@ -1435,6 +1435,8 @@
   "Allow pop-ups for this site, then try again.": "Consenti i pop-up per questo sito, poi riprova.",
   "Your Last.fm stats in Discord": "Statistiche Last.fm su Discord",
   "Add": "Aggiungi",
+  "Last.fm connected. You can close this window.": "Last.fm collegato. Puoi chiudere questa finestra.",
+  "Last.fm didn't connect. Close this window and try again.": "Last.fm non si è collegato. Chiudi questa finestra e riprova.",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "I brani suonano anche lì, come nelle altre gare. Disattivato: niente musica lì, come nell'originale, per sentire il motore.",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "Disattivato: si gioca nella finestra; il menu offre lo schermo intero. Tieni premuto Esc per uscirne.",
   "Its key (Controls, Site) switches it while you play.": "Il suo tasto (Controlli, Sito) cambia modalità mentre giochi.",

@@ -1409,6 +1409,8 @@
   "Allow pop-ups for this site, then try again.": "Tillad pop op-vinduer for dette websted, og prøv så igen.",
   "Your Last.fm stats in Discord": "Last.fm-statistik i Discord",
   "Add": "Tilføj",
+  "Last.fm connected. You can close this window.": "Last.fm forbundet. Du kan lukke dette vindue.",
+  "Last.fm didn't connect. Close this window and try again.": "Last.fm blev ikke forbundet. Luk dette vindue, og prøv igen.",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "Sangene spiller også der, som i de andre løb. Fra: ingen musik der, som i originalen, så du kan høre motoren.",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "Fra: spil i vinduet; menuen har fuld skærm. Hold Esc nede for at forlade den.",
   "Its key (Controls, Site) switches it while you play.": "Tasten (Kommandoer, Siden) skifter mellem tilstandene, mens du spiller.",

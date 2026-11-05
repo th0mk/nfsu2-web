@@ -1331,6 +1331,8 @@
   "Allow pop-ups for this site, then try again.": "이 사이트의 팝업을 허용한 다음 다시 시도하세요.",
   "Your Last.fm stats in Discord": "Discord에서 보는 내 Last.fm 통계",
   "Add": "추가",
+  "Last.fm connected. You can close this window.": "Last.fm에 연결됐어요. 이 창을 닫아도 돼요.",
+  "Last.fm didn't connect. Close this window and try again.": "Last.fm에 연결하지 못했어요. 이 창을 닫고 다시 시도하세요.",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "다른 레이스처럼 거기서도 노래가 나와요. 꺼짐: 원작처럼 음악 없이 엔진 소리를 들을 수 있어요.",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "꺼짐: 창에서 플레이해요. 메뉴에서 전체 화면으로 바꿀 수 있어요. 전체 화면에서 나가려면 Esc를 길게 누르세요.",
   "Its key (Controls, Site) switches it while you play.": "플레이 중에는 해당 키(조작법, 사이트)로 전환해요.",

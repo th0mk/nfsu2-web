@@ -1,8 +1,10 @@
 // /lastfm.html: where Last.fm's "allow access" page sends the player back, with a token, in the popup the start page opened
 // (app/lastfm.ts).  The token is traded for the session key (the server's /lastfm), which goes where the start page reads it; the
-// start page sees the change (a storage event) and says what came of it.  The popup then closes; a page that is no popup (a phone's
-// browser may open one as a tab) goes back to the start page's Game tab.
+// start page sees the change (a storage event) and says what came of it.  The popup then closes.  Last.fm's pages cut the popup's
+// link to the start page (window.opener is null by then), so this never loads the start page itself: a browser that keeps the
+// window open gets one line saying it can be closed.
 import { keepSession, RESULT_KEY } from './app/lastfm';
+import { lastLanguage, setLanguage, t } from './app/i18n';
 
 async function connect(): Promise<string> {
   const token = new URLSearchParams(location.search).get('token');
@@ -15,8 +17,11 @@ async function connect(): Promise<string> {
   } catch { return 'down'; }
 }
 
-void connect().then(result => {
+void connect().then(async result => {
   try { localStorage.setItem(RESULT_KEY, JSON.stringify({ result, at: Date.now() })); } catch { /* a private window keeps nothing */ }
-  if (window.opener) window.close();
-  location.replace('/#game');
+  window.close();
+  await setLanguage(lastLanguage()).catch(() => false);
+  const p = Object.assign(document.createElement('p'), { className: 'hint lastfm-closed',
+    textContent: result === 'ok' ? t('Last.fm connected. You can close this window.') : t('Last.fm didn\'t connect. Close this window and try again.') });
+  document.body.append(p);
 });

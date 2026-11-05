@@ -1461,6 +1461,8 @@
   "Allow pop-ups for this site, then try again.": "Разрешите всплывающие окна для этого сайта и попробуйте ещё раз.",
   "Your Last.fm stats in Discord": "Статистика Last.fm в Discord",
   "Add": "Добавить",
+  "Last.fm connected. You can close this window.": "Last.fm подключён. Это окно можно закрыть.",
+  "Last.fm didn't connect. Close this window and try again.": "Last.fm не подключился. Закройте это окно и попробуйте ещё раз.",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "Песни звучат и там, как в других гонках. «Откл.»: без музыки, как в оригинале, чтобы слышать мотор.",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "«Откл.»: игра в окне; полный экран есть в меню. Чтобы выйти из него, удерживайте Esc.",
   "Its key (Controls, Site) switches it while you play.": "Во время игры режимы переключает его клавиша (Управление, Сайт).",

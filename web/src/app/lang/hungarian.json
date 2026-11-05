@@ -1334,6 +1334,8 @@
   "Allow pop-ups for this site, then try again.": "Engedélyezd a felugró ablakokat ennél az oldalnál, aztán próbáld újra.",
   "Your Last.fm stats in Discord": "Last.fm-statisztika Discordon",
   "Add": "Hozzáadás",
+  "Last.fm connected. You can close this window.": "Last.fm összekapcsolva. Ezt az ablakot bezárhatod.",
+  "Last.fm didn't connect. Close this window and try again.": "Nem sikerült összekapcsolni a Last.fm-et. Zárd be ezt az ablakot, és próbáld újra.",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "A zenék ott is szólnak, ahogy a többi versenyen. Ki: ott nincs zene, mint az eredetiben, így hallod a motort.",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "Ki: ablakban játszol; a menüben van teljes képernyő. Kilépéshez tartsd lenyomva az Esc-et.",
   "Its key (Controls, Site) switches it while you play.": "Játék közben a billentyűje (Irányítás, Oldal) váltogatja.",

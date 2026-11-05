@@ -1331,6 +1331,8 @@
   "Allow pop-ups for this site, then try again.": "請允許此網站的彈出式視窗，然後再試一次。",
   "Your Last.fm stats in Discord": "在 Discord 查看你的 Last.fm 統計",
   "Add": "新增",
+  "Last.fm connected. You can close this window.": "已連結 Last.fm。你可以關閉這個視窗。",
+  "Last.fm didn't connect. Close this window and try again.": "Last.fm 未能連結。請關閉這個視窗，然後再試一次。",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "這些比賽也會播放歌曲，和其他比賽一樣。關閉：與原版相同，這些比賽沒有音樂，讓你聽得到引擎聲。",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "關閉：在視窗中遊玩；可從選單切換全螢幕。按住 Esc 即可離開全螢幕。",
   "Its key (Controls, Site) switches it while you play.": "遊玩時按其按鍵（操作方式、網站）可切換。",

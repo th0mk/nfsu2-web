@@ -1340,6 +1340,8 @@
   "Allow pop-ups for this site, then try again.": "Bu site için açılır pencerelere izin ver, sonra yeniden dene.",
   "Your Last.fm stats in Discord": "Discord'da Last.fm istatistiği",
   "Add": "Ekle",
+  "Last.fm connected. You can close this window.": "Last.fm bağlandı. Bu pencereyi kapatabilirsin.",
+  "Last.fm didn't connect. Close this window and try again.": "Last.fm bağlanamadı. Bu pencereyi kapat ve yeniden dene.",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "Şarkılar diğer yarışlardaki gibi orada da çalar. Kapalı: orijinal oyundaki gibi müzik yok, motoru duyarsın.",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "Kapalı: pencerede oyna; menüde tam ekran vardır. Çıkmak için Esc'ye basılı tut.",
   "Its key (Controls, Site) switches it while you play.": "Oynarken kendi tuşuyla (Kontroller, Site) değiştirilir.",

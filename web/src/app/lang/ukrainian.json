@@ -1461,6 +1461,8 @@
   "Allow pop-ups for this site, then try again.": "Дозвольте спливні вікна для цього сайту, а потім спробуйте ще раз.",
   "Your Last.fm stats in Discord": "Статистика Last.fm у Discord",
   "Add": "Додати",
+  "Last.fm connected. You can close this window.": "Last.fm під'єднано. Це вікно можна закрити.",
+  "Last.fm didn't connect. Close this window and try again.": "Не вдалося під'єднати Last.fm. Закрийте це вікно й спробуйте ще раз.",
   "The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.": "Пісні звучать і там, як в інших перегонах. «Вимк.»: без музики, як в оригіналі, щоб чути двигун.",
   "Off: play in the window; the menu has full screen. Hold Esc to leave it.": "«Вимк.»: гра у вікні; повний екран є в меню. Щоб вийти з нього, утримуйте Esc.",
   "Its key (Controls, Site) switches it while you play.": "Під час гри режими перемикає його клавіша (Керування, Сайт).",

@@ -1372,3 +1372,5 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .fmbot-go { color: #a9bbea; font-weight: 700; font-style: italic; text-decoration: underline; text-underline-offset: 4px; }
 .fmbot:hover { background: #28314d; }
 .fmbot:hover .fmbot-go { color: #fff; }
+/* /lastfm.html, the Last.fm popup's page, when the browser keeps the window open (lastfm-callback.ts) */
+.lastfm-closed { margin: 24px; }
