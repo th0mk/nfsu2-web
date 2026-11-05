@@ -46,7 +46,7 @@ not guessed.
 ## 2026-11-04 (af448e5)
 
 - **Races:** other players' cars come straight from their games every frame; close ones drive on the game's physics and bump back.
-- **Headlights:** G turns them off or on, hold it for high beam; friends see them.
+- **Headlights:** G turns them off or on, hold it for high beam; other players see them.
 - **Free roam:** a country flag before your name: pick yours on the start page, in Online, Your flag.
 - **Free roam:** up to 64 players' cars shown: Online, Players' cars shown.
 - **Quick Race:** up to 127 laps and 5 opponents.
