@@ -180,15 +180,27 @@ const note = (s: string) => (self as unknown as Worker).postMessage({ t: 'log', 
 // Blocks waiting for a turn go by priority: the track's stream file first (a section the game waits for in the world
 // is a "Loading" screen in the middle of a drive), then the game's other reads (a friend's car, music, speech), then
 // the reading ahead of the track (readAhead).  That one starts only while the game fetches nothing (on a slow line a
-// block read ahead would share it with the game's), FILL_FETCHES at most.
-const FETCHES = 8, STALL_MS = 20000, SLOW_MS = 5000;
+// block read ahead would share it with the game's), FILL_FETCHES at most, and only once the game has fetched nothing
+// for AHEAD_QUIET_MS: a friend's car is a read after another, each of them a block from the server with an empty
+// cache, and in each gap between them a block read ahead started and took a share of the line for its next ones (on
+// 20 Mbit/s, a meet's first 30 s: 77 blocks read ahead, about half of what the line carried, and 90 % of the cars
+// shown after 34 s).
+const FETCHES = 8, STALL_MS = 20000, SLOW_MS = 5000, AHEAD_QUIET_MS = 2000;
 const P_AHEAD = 0, P_GAME = 1, P_TRACK = 2, FILL_FETCHES = 2;
 interface Ticket { pri: number; ahead?: boolean }
 let fetching = 0, aheadFetching = 0, tries = 0, fault: { fail: number; hang: number; stall: number; deny: number; full: number; open: number } | null = null;
 const fetchWait: { t: Ticket; go: () => void }[] = [];
+// the game's last block from the server started or came in then, and a look again at the waiting ones once
+// AHEAD_QUIET_MS has passed since
+let gameAt = -1e9, quietTimer: ReturnType<typeof setTimeout> | 0 = 0;
+function quiet(): boolean {
+  const w = gameAt + AHEAD_QUIET_MS - performance.now();
+  if (w > 0 && !quietTimer) quietTimer = setTimeout(() => { quietTimer = 0; fetchNext(); }, w + 1);
+  return w <= 0;
+}
 const mayFetch = (t: Ticket) => fetching < FETCHES &&
-  (t.pri > P_AHEAD || fetching === aheadFetching && aheadFetching < FILL_FETCHES);
-function fetchStart(t: Ticket) { fetching++; if ((t.ahead = t.pri === P_AHEAD)) aheadFetching++; }
+  (t.pri > P_AHEAD || fetching === aheadFetching && aheadFetching < FILL_FETCHES && quiet());
+function fetchStart(t: Ticket) { fetching++; if ((t.ahead = t.pri === P_AHEAD)) aheadFetching++; else gameAt = performance.now(); }
 // the waiting blocks that may go now, the most urgent (the earliest of those) first
 function fetchNext() {
   for (;;) {
@@ -281,7 +293,7 @@ async function fetchBlock(n: DNode, bi: number, start: number, len: number, t: T
       if (k <= 3 || k % 10 === 0) note(`[data] ${what}: ${r.why}${by}; again in ${wait / 1000} s (try ${k + 1})`);
       await new Promise(res => setTimeout(res, wait));
     }
-  } finally { clearTimeout(slow); fetching--; if (t.ahead) aheadFetching--; fetchNext(); }
+  } finally { clearTimeout(slow); fetching--; if (t.ahead) aheadFetching--; else gameAt = performance.now(); fetchNext(); }
 }
 // A block this PC has no room to keep (a full disk, or the browser's share of it used up: "No space available for
 // this operation") ends the keeping for this game, not the read: the game has the bytes either way.  (Thrown into

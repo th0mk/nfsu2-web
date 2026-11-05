@@ -203,7 +203,7 @@ fn run(scene: &Scene, way: &Way) {
             next_tick += way.tick_ms / 1000.0;
             k.clear();
             k.hub.tick();
-            for (key, list) in k.lists() {
+            for (key, list) in k.lists_in() {
                 let me = (key.split(':').next().unwrap().parse::<u32>().unwrap() - vip(0)) as usize;
                 last_list[me] = t;
                 for e in list {
@@ -400,7 +400,11 @@ fn popin() {
         way("now, nobody away", RoamOptions { away_m: off, ..new.clone() }, true),
         way("now, keep 0.7", RoamOptions { keep: 0.7, ..new.clone() }, true),
         Way { core: 14, links: 32, ..way("now, core 14", new.clone(), true) },
-        Way { core: 15, links: 32, ..way("now, one-way (core 15)", new.clone(), true) },
+        Way { core: 15, links: 32, ..way("now, one-way (core 15)", RoamOptions { near_m: off, ..new.clone() }, true) },
+        Way { core: 15, links: 32, ..way("one-way, near first", new.clone(), true) },
+        Way { core: 15, links: 32, ..way("one-way, near 100 m", RoamOptions { near_m: 100.0, ..new.clone() }, true) },
+        Way { core: 15, links: 32, ..way("one-way, near hold 15 s", RoamOptions { near_hold_ms: 15_000.0, ..new.clone() }, true) },
+        Way { core: 15, links: 32, ..way("one-way, near first at any speed", RoamOptions { near_fast: 1e9, ..new.clone() }, true) },
     ];
     let only = std::env::var("POPIN_ONLY").unwrap_or_default();
     let ways: Vec<&Way> = ways.iter().filter(|w| only.is_empty() || only.split('|').any(|o| w.name == o)).collect();

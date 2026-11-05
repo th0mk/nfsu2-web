@@ -499,6 +499,7 @@ typedef struct {
     int      seats;
     int      ghost2, soft_r, soft2;
     int      friend;                          /* a friend (in a crew of ours or not): photo mode's Friends */
+    int64_t  acq_us;                          /* the slot was given to this friend then (host time): for the logs */
 } Slot;
 static Slot g_sl[NSLOT];
 /* Co-op free roam online (coop.c): player 2 is a second endpoint of this browser, a session of its own (roam_web.c
@@ -563,6 +564,10 @@ static uint32_t g_gc_n;                           /* the drive camera's tests wi
                                                     (roam_game_camera_cars) */
 static uint64_t g_gp_ns;                          /* ...and the time that took */
 static int64_t g_ready_at;                    /* the last friend's car in (roam_plat_now_us) */
+/* the last 4 friends' cars' loads, a bit each (the newest bit 0): it took over SLOW_LOAD_US, waiting for the
+ * server's data (an empty cache on a slow line; a car of a type in already takes 6 frames) -- LOADS_AHEAD */
+static uint8_t g_slow_loads;
+#define SLOW_LOAD_US    500000
 /* test aid: per-frame pose log */
 static rh_file *g_poselog;
 /* a script command that calls guest code waits for the main-loop hook */
@@ -1477,6 +1482,29 @@ static void park_all(CPU *c){
         if (s->st == SL_ACTIVE && ok(s->car, 0x9e0) && !s->hidden){ soft_park(c, s->car); s->hidden = 1; }
     }
 }
+/* why the server's hub let a car near us go, as its list said (a hub of core 16; "" none said) */
+static const char *hub_gone_text(uint32_t id, int64_t now){
+    static const char *const t[] = { "", ": the server: we get as many cars, all as near or nearer",
+        ": the server: its player sends its car to as many players, nearer ones",
+        ": the server: a list was full", ": the server: its player is off free roam",
+        ": the server: its player left our room", ": the server: its links changed" };
+    int w = rc_hub_gone(&g_s, id, now);
+    return w > 0 && w < (int)(sizeof t / sizeof t[0]) ? t[w] : "";
+}
+/* a shown car whose friend's states stopped (2 s: PeerView.visible) is hidden in its slot, and comes back with them:
+ * where it was, and why, for the logs of cars that vanished (the hub may link us one way only now: it gets our car,
+ * we none of its) */
+static void hide_log(int k, int peer, int64_t host){
+    Slot *s = &g_sl[k];
+    float dx = s->drawn[0] - g_lp[0], dy = s->drawn[1] - g_lp[1];
+    const rc_peer *p = peer >= 0 && peer < RC_TABLE ? &g_s.peer[peer] : 0;
+    const char *why = !p ? "gone" : p->status != RC_ST_ROAM && p->status != RC_ST_PAUSED ? "its player is off free roam" :
+                      (rc_peer_way(&g_s, peer) & RC_MARK_TXONLY) ? "the server links us one way: we send ours, get none of its" :
+                      "no states from it for 2 s";
+    rlog("[roam] f=%ld slot %d: %s's car hidden (%s%s), %.0f m away, %.1f s in the slot\n", rh_frame(), k, s->name, why,
+         p && (rc_peer_way(&g_s, peer) & RC_MARK_TXONLY) ? hub_gone_text(s->peer_id, host) : "", (double)rc_sqrtf(dx * dx + dy * dy),
+         s->acq_us ? (double)(host - s->acq_us) / 1e6 : 0.0);
+}
 /* the friend is gone (left, timed out, or away too long): the car is
  * hidden but keeps the friend's ride for a while (SL_PARKED) */
 static void release(CPU *c, int k, const char *why){
@@ -1484,8 +1512,12 @@ static void release(CPU *c, int k, const char *why){
     if (s->st == SL_FREE || s->st == SL_PARKED) return;
     /* where it went, for the logs of cars that vanished (a shown car: where it was last drawn) */
     float dx = s->drawn[0] - g_lp[0], dy = s->drawn[1] - g_lp[1];
-    if (s->st == SL_ACTIVE && !s->hidden)
-        rlog("[roam] f=%ld slot %d: %s's car removed (%s), %.0f m away\n", rh_frame(), k, s->name, why, (double)rc_sqrtf(dx * dx + dy * dy));
+    if (s->st == SL_ACTIVE && !s->hidden){
+        /* and why the server's hub let it go, as its list said (a hub of core 16, for one near us) */
+        int64_t now = roam_plat_now_us();
+        rlog("[roam] f=%ld slot %d: %s's car removed (%s%s), %.0f m away, %.1f s in the slot\n", rh_frame(), k, s->name, why,
+             hub_gone_text(s->peer_id, now), (double)rc_sqrtf(dx * dx + dy * dy), s->acq_us ? (double)(now - s->acq_us) / 1e6 : 0.0);
+    }
     else rlog("[roam] f=%ld slot %d: %s's car removed (%s)\n", rh_frame(), k, s->name, why);
     g_releases++;
     if (s->h_new){ unload_later(s->h_new); s->h_new = 0; s->pending_cfg = 0; }
@@ -2035,6 +2067,7 @@ static int finish_load(CPU *c, int k){
             (double)s->com[0], (double)s->com[1], (double)s->com[2]);
     pool_log("after load");
     g_ready_at = roam_plat_now_us();
+    g_slow_loads = (uint8_t)(g_slow_loads << 1 | (g_ready_at - s->load_t0 > SLOW_LOAD_US)) & 0xf;
     return 1;
 }
 /* sin and cos of a in [-pi, pi] (Taylor to the x^15 / x^14 term, < 1e-5),
@@ -8054,7 +8087,11 @@ static void init_once(CPU *c){
  * most.  A car held STREAM_HOLD_US goes anyway, should the streamer never
  * get done.  NFSU2_ROAM_STREAM_FIRST=0 (test aid): the cars as before. */
 #define G_TRACKSTREAMER 0x0088eb00u   /* +0x168 its phase: 0 nothing to do, 1-6 room made and sections read */
-#define LOADS_AHEAD     2
+/* (4 for a player who shows 32 cars or more while 2 of its last 4 loads waited for data: a car's reads one after
+ * another, each a block from the server, leave a slow line mostly idle, and 4 at once got 90 % of a meet's cars in
+ * the first time on 20 Mbit/s with an empty cache after 28 s, not 34; with the data in, 4 at once made a meet of 31
+ * car types slower to show (each load 2 to 3 times as long): 2 then, and always on a phone or a tablet) */
+#define LOADS_AHEAD     (O.max_cars >= 32 && __builtin_popcount(g_slow_loads) >= 2 ? 4 : 2)
 #define STREAM_HOLD_US  5000000
 static struct { int64_t t0, us, max; int n, gone; } g_shold;    /* cars held for the streamer: since, in all, the longest, times, let go */
 static int loads_in_loader(CPU *c){
@@ -8322,6 +8359,7 @@ static void assign(CPU *c, int64_t host){
         int was = s->st;
         s->peer = v->idx; s->peer_id = v->id; s->unseen_since = 0; s->near_since = 0; s->idle_since = 0; s->soft = 0; s->crew = v->crew;
         s->seats = v->seats; s->ghost2 = 1; s->soft2 = s->soft_r = 0;
+        s->acq_us = roam_plat_now_us();
         snprintf(s->name, sizeof s->name, "%s", v->name);
         memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode);
         if (reuse){
@@ -8385,8 +8423,17 @@ static void counts_log(int64_t host){
         if (v->visible && v->dist < 60.f){ near++; near_shown += slotted == 2; }
         if (v->visible && v->dist < 150.f){ mid++; mid_shown += slotted == 2; }
     }
+    /* ...and the players near us whose cars we do not get, as the minimap has them from the hub (its NEARD leaves out
+     * only the ones we get): with those, every player near us */
+    int o60 = 0, o150 = 0;
+    for (int i = 0; i < g_nr_n && g_lp_ok; i++){
+        float x, y; nr_where(i, host, &x, &y);
+        float d2 = (x - g_lp[0]) * (x - g_lp[0]) + (y - g_lp[1]) * (y - g_lp[1]);
+        o60 += d2 < 60.f * 60.f; o150 += d2 < 150.f * 150.f;
+    }
     rlog("[roam] f=%ld counts: t %.1f s, shown %d (%d one way), loading %d, parked %d; peers %d, listed %d, waiting %d; within 60 m %d, shown %d; "
-         "within 150 m %d, shown %d\n", rh_frame(), host / 1e6, shown, oneway, loading, parked, g_npv, listed, waiting, near, near_shown, mid, mid_shown);
+         "within 150 m %d, shown %d; others (not ours, the minimap's) within 60 m %d, 150 m %d\n", rh_frame(), host / 1e6, shown, oneway, loading,
+         parked, g_npv, listed, waiting, near, near_shown, mid, mid_shown, o60, o150);
 }
 
 /* a different world: every slot of the old one is gone */
@@ -9149,7 +9196,7 @@ void roam_game_frame(CPU *c){
                             (double)v->pose.p[0], (double)v->pose.p[1], (double)v->pose.p[2], (double)v->pose.speed, v->pose.mode, (double)v->err,
                             (double)MRF32(s->car + 0x90u), (double)MRF32(s->car + 0x94u), (double)MRF32(s->car + 0x98u), (double)MRF32(s->car + 0xb8u),
                             (double)MRF32(s->car + 0x50u), (double)MRF32(s->car + 0x54u), (double)MRF32(s->car + 0x58u));
-            } else if (!s->hidden && !(g_du.st == DU_RACE && s->car == g_du.car)){ soft_park(c, s->car); s->hidden = 1; }
+            } else if (!s->hidden && !(g_du.st == DU_RACE && s->car == g_du.car)){ hide_log(k, s->peer, host); soft_park(c, s->car); s->hidden = 1; }
             /* (an outrun's opponent stays where it was: parked, the game would count it 120 km behind) */
         }
         load_service(c);

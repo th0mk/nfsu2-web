@@ -486,9 +486,10 @@ Good to know:
   offline (or, the first time, says so in its free-roam question). The server pairs each player with the players
   nearest to them, as many as their game shows cars (fewer while it is busy, 8 at the least): 32 on computers, 24 on
   tablets and 16 on phones, or what you pick (Online: Players' cars shown: 16, 24, 32, 48 or 64; more cars can lower
-  the frame rate). Since 5 November (pending release) you get the cars of your nearest players even where they show
-  fewer than you: their game sends you their car without showing yours, and their car lets yours through (no outrun
-  or race invite between the two). Their names show
+  the frame rate). You get the cars of your nearest players even where they show fewer than you: their game sends
+  you their car without showing yours, and their car lets yours through (no outrun or race invite between the two).
+  Standing or rolling slowly (a car meet), you get the cars within 60 m first, and one that came that near stays at
+  least 30 s; driving faster, the ones ahead of you first. Their names show
   over the cars within 100 m, and each gets an arrow on the minimap when it is near and a marker on the world map (M),
   in the game's orange. The game's own outrun challengers are grey on both (the legend's Opponent Car too), so you can
   tell them from players. The minimap also has an arrow, the same as a car's, for the players near you whose cars

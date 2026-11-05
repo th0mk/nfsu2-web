@@ -289,6 +289,18 @@ pub fn crew_marks(f: &[u8]) -> Option<(Vec<u32>, Vec<u8>)> {
     Some((mine, d[o + 1 + 4 * k..o + 1 + 4 * k + n].to_vec()))
 }
 
+/// the PEERS lists out of the hub's frames to the browsers, by `vip:port`, without the players who only get the
+/// receiver's car (one-way links, roam_core.h RC_MARK_TXONLY): the ones whose cars the receiver gets
+pub fn lists_in(sent: &[(u32, Bytes)]) -> HashMap<String, Vec<PeerEntry>> {
+    sent.iter()
+        .map(|(vip, f)| {
+            let marks = crew_marks(f).map(|m| m.1);
+            let list = peers_of(f).into_iter().enumerate().filter(|(i, _)| marks.as_ref().is_none_or(|m| m[*i] & 0x40 == 0)).map(|e| e.1);
+            (format!("{vip}:{}", u16::from_be_bytes([f[14], f[15]])), list.collect())
+        })
+        .collect()
+}
+
 /// the PEERS lists out of the hub's frames to the browsers, by `vip:port`
 pub fn lists(sent: &[(u32, Bytes)]) -> HashMap<String, Vec<PeerEntry>> {
     sent.iter().map(|(vip, f)| (format!("{vip}:{}", u16::from_be_bytes([f[14], f[15]])), peers_of(f))).collect()
@@ -329,6 +341,9 @@ impl Kit {
     }
     pub fn lists(&self) -> HashMap<String, Vec<PeerEntry>> {
         lists(&self.sent.lock())
+    }
+    pub fn lists_in(&self) -> HashMap<String, Vec<PeerEntry>> {
+        lists_in(&self.sent.lock())
     }
     pub fn clear(&self) {
         self.sent.lock().clear();

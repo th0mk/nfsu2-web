@@ -60,7 +60,14 @@ struct Scene {
     mix: bool,
     /// the links of the ones measured (64; with mix: 16 a phone's, 32 a computer's default)
     watch_links: u8,
+    /// a meet as players hold one: the parked ones now and then do a donut or move to another spot, go into a shop or
+    /// pause for a while, and some drivers circle the meet (FIDGET_S, LOOPERS)
+    real: bool,
 }
+/// in a real meet (`Scene::real`): a parked player's next donut, move or stop comes this often (s, on average), and
+/// this share of the drivers circle the meet instead of driving through
+const FIDGET_S: f64 = 25.0;
+const LOOPERS: f64 = 0.35;
 const JUMP_N: usize = 6;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -73,6 +80,12 @@ enum Doing {
     City,
     /// a jumper far off until then
     Away { until: f64 },
+    /// a parked player's donut or move (yaw rate w, speed sp) until then, then parked again until park
+    Fidget { until: f64, w: f64, sp: f64, park: f64 },
+    /// a parked player in a shop (status 4) or paused (5) until then, then parked again until park
+    Stop { until: f64, park: f64 },
+    /// circling the meet's middle at radius rr, angle a0 at t0, angular speed w (rad/s), until then (then a line)
+    Loop { rr: f64, a0: f64, t0: f64, w: f64, until: f64 },
 }
 
 #[derive(Clone, Copy)]
@@ -86,6 +99,8 @@ struct Car {
     doing: Doing,
     /// parked since (for the measure)
     since: f64,
+    /// a real meet's next donut, move or stop (`Scene::real`)
+    next_fidget: f64,
 }
 
 impl Car {
@@ -174,6 +189,8 @@ struct Tally {
     /// for the players parked at the meet: how long each car showed that went, and how many came back within 30 s
     lives: Vec<f64>,
     back30: u64,
+    /// ...and of the ones that went within NEAR_M, how long each showed
+    near_lives: Vec<f64>,
 }
 
 fn pct(v: &mut [f64], q: f64) -> f64 {
@@ -219,6 +236,7 @@ fn run(sc: &Scene, way: &Way) {
             next_snap: r.unit() * 0.5,
             doing: Doing::City,
             since: 0.0,
+            next_fidget: if sc.real && i < sc.meet { r.range(0.0, 2.0 * FIDGET_S) } else { f64::INFINITY },
         };
         if i < MEET_N {
             if r.unit() < 0.55 {
@@ -271,12 +289,69 @@ fn run(sc: &Scene, way: &Way) {
     let mut games: Vec<Game> = (0..n).map(|i| Game { slots: vec![SlotSt::Free; links_of[i]], ..Default::default() }).collect();
     let mut last_list = vec![f64::NEG_INFINITY; n];
     let (warm, end) = (60.0, 420.0);
-    let mut tally = Tally::default();
+    // the players measured: parked at the meet (20 s and more, 0), and driving round it or through it (1)
+    let mut tallies = [Tally::default(), Tally::default()];
+    let observed = |me: usize, a: &Car, t: f64| -> Option<usize> {
+        if !watched(me) || me >= MEET_N || t < warm {
+            return None;
+        }
+        let rr = (a.p[0] * a.p[0] + a.p[1] * a.p[1]).sqrt();
+        match a.doing {
+            Doing::Parked { .. } | Doing::Fidget { .. } if t - a.since >= 20.0 && rr < 70.0 => Some(0),
+            Doing::Loop { .. } => Some(1),
+            Doing::Leg { .. } if rr < 150.0 => Some(1),
+            _ => None,
+        }
+    };
     let (mut next_tick, mut t, mut step_no) = (0.0, 0.0, 0u64);
     while t < end {
         // the cars move
         for c in cars.iter_mut() {
             match c.doing {
+                Doing::Parked { until } if t >= c.next_fidget && t < until => {
+                    c.next_fidget = t - FIDGET_S * (1.0 - r.unit()).ln();
+                    let u = r.unit();
+                    c.doing = if u < 0.45 {
+                        // a donut: 6 to 12 m/s round a circle of 4 to 8 m, 3 to 8 s
+                        let sp = r.range(6.0, 12.0);
+                        let w = sp / r.range(4.0, 8.0) * if r.unit() < 0.5 { -1.0 } else { 1.0 };
+                        Doing::Fidget { until: t + r.range(3.0, 8.0), w, sp, park: until }
+                    } else if u < 0.75 {
+                        // to another spot near: 4 to 8 m/s for 2 to 6 s, turning a little
+                        Doing::Fidget { until: t + r.range(2.0, 6.0), w: r.range(-0.4, 0.4), sp: r.range(4.0, 8.0), park: until }
+                    } else {
+                        // a shop or the pause menu, 10 to 60 s
+                        c.status = if r.unit() < 0.5 { 4 } else { 5 };
+                        Doing::Stop { until: t + r.range(10.0, 60.0), park: until }
+                    };
+                }
+                Doing::Fidget { until, w, sp, park } => {
+                    c.h += w * STEP;
+                    c.v = [c.h.cos() * sp, c.h.sin() * sp, 0.0];
+                    c.p[0] += c.v[0] * STEP;
+                    c.p[1] += c.v[1] * STEP;
+                    if t >= until {
+                        c.v = [0.0; 3];
+                        c.doing = Doing::Parked { until: park.max(t + 5.0) };
+                    }
+                }
+                Doing::Stop { until, park } => {
+                    c.v = [0.0; 3];
+                    if t >= until {
+                        c.status = 2;
+                        c.doing = Doing::Parked { until: park.max(t + 5.0) };
+                    }
+                }
+                Doing::Loop { rr, a0, t0, w, until } => {
+                    let a = a0 + w * (t - t0);
+                    c.p = [rr * a.cos(), rr * a.sin(), 0.0];
+                    let sp = w * rr;
+                    c.v = [-a.sin() * sp, a.cos() * sp, 0.0];
+                    c.h = c.v[1].atan2(c.v[0]);
+                    if t >= until {
+                        c.doing = line(&mut r, t);
+                    }
+                }
                 Doing::Parked { until } => {
                     c.v = [0.0; 3];
                     if t >= until {
@@ -299,6 +374,11 @@ fn run(sc: &Scene, way: &Way) {
                             c.v = [0.0; 3];
                             c.doing = Doing::Parked { until: t + r.range(90.0, 360.0) };
                             c.since = t;
+                        } else if sc.real && r.unit() < LOOPERS {
+                            // round the meet, 40 to 150 m out at 10 to 25 m/s, for 20 to 90 s
+                            let rr = r.range(40.0, 150.0);
+                            let w = r.range(10.0, 25.0) / rr * if r.unit() < 0.5 { -1.0 } else { 1.0 };
+                            c.doing = Doing::Loop { rr, a0: r.unit() * std::f64::consts::TAU, t0: t, w, until: t + r.range(20.0, 90.0) };
                         } else if r.unit() < 0.4 {
                             // in to a spot, from 500 m
                             let sp = spot(&mut r);
@@ -367,7 +447,7 @@ fn run(sc: &Scene, way: &Way) {
             k.clear();
             k.hub.tick();
             let lists: Vec<(usize, Vec<usize>)> = k
-                .lists()
+                .lists_in()
                 .into_iter()
                 .map(|(key, list)| {
                     let me = (key.split(':').next().unwrap().parse::<u32>().unwrap() - vip(0)) as usize;
@@ -380,7 +460,7 @@ fn run(sc: &Scene, way: &Way) {
                     let g = &mut games[me];
                     let p = g.peers.entry(q).or_insert_with(|| {
                         if t >= warm && me < MEET_N {
-                            tally.links_made += 1;
+                            tallies[0].links_made += 1;
                         }
                         Peer { listed: t, first: t }
                     });
@@ -399,12 +479,9 @@ fn run(sc: &Scene, way: &Way) {
         for me in (0..MEET_N).chain(MEET_N + CITY_N..n) {
             let a = cars[me];
             let ll = last_list[me];
-            let observer = watched(me)
-                && me < MEET_N
-                && t >= warm
-                && matches!(a.doing, Doing::Parked { .. })
-                && t - a.since >= 20.0
-                && (a.p[0] * a.p[0] + a.p[1] * a.p[1]).sqrt() < 70.0;
+            let class = observed(me, &a, t);
+            let observer = class.is_some();
+            let tally = &mut tallies[class.unwrap_or(0)];
             let g = &mut games[me];
             // peers gone
             let mut gone = Vec::new();
@@ -419,13 +496,17 @@ fn run(sc: &Scene, way: &Way) {
             for sl in g.slots.iter_mut() {
                 match *sl {
                     SlotSt::Active(q) | SlotSt::Loading(q, _) if gone.contains(&q) => {
-                        if observer && matches!(*sl, SlotSt::Active(_)) && near(q) && cars[q].status == 2 {
+                        let went_near = observer && matches!(*sl, SlotSt::Active(_)) && near(q) && cars[q].status == 2;
+                        if went_near {
                             tally.gone_near += 1;
                         }
                         if let Some(t0) = g.shown_at.remove(&q)
                             && observer
                         {
                             tally.lives.push(t - t0);
+                            if went_near {
+                                tally.near_lives.push(t - t0);
+                            }
                         }
                         g.gone_at.insert(q, t);
                         *sl = if matches!(*sl, SlotSt::Active(_)) { SlotSt::Parked(q) } else { SlotSt::Free };
@@ -490,13 +571,17 @@ fn run(sc: &Scene, way: &Way) {
                     }
                     let Some((_, jj)) = out else { break };
                     if let SlotSt::Active(x) = g.slots[jj] {
-                        if observer && near(x) && cars[x].status == 2 {
+                        let went_near = observer && near(x) && cars[x].status == 2;
+                        if went_near {
                             tally.gone_near += 1;
                         }
                         if let Some(t0) = g.shown_at.remove(&x)
                             && observer
                         {
                             tally.lives.push(t - t0);
+                            if went_near {
+                                tally.near_lives.push(t - t0);
+                            }
                         }
                         g.gone_at.insert(x, t);
                     }
@@ -535,6 +620,7 @@ fn run(sc: &Scene, way: &Way) {
                 let kk = others.len().min(links_of[me]);
                 let kj = others.iter().take_while(|e| e.0 < 100.0).count().min(SLOTS);
                 if let Some(t0) = g.jumped {
+                    let tally = &mut tallies[0];
                     let ll = last_list[me];
                     let linked = others[..kj].iter().filter(|e| g.peers.get(&e.1).is_some_and(|p| p.listed == ll)).count();
                     if linked as f64 >= 0.9 * kj as f64 && !g.linked90 {
@@ -553,12 +639,9 @@ fn run(sc: &Scene, way: &Way) {
                     }
                 }
                 let g = &games[me];
-                let observer = watched(me)
-                    && me < MEET_N
-                    && matches!(a.doing, Doing::Parked { .. })
-                    && t - a.since >= 20.0
-                    && (a.p[0] * a.p[0] + a.p[1] * a.p[1]).sqrt() < 70.0;
-                if observer {
+                let class = observed(me, &a, t);
+                if let Some(c) = class {
+                    let tally = &mut tallies[c];
                     tally.samples += 1;
                     tally.shown += shown.len() as u64;
                     tally.nearest += kk as u64;
@@ -571,6 +654,7 @@ fn run(sc: &Scene, way: &Way) {
                 // a driver going by the meet: the cars within 100 m
                 if watched(me) && me < MEET_N && matches!(a.doing, Doing::Leg { .. }) && (a.p[0] * a.p[0] + a.p[1] * a.p[1]).sqrt() < 150.0
                 {
+                    let tally = &mut tallies[0];
                     tally.drive_samples += 1;
                     for e in others.iter().take_while(|e| e.0 < 100.0) {
                         tally.drive_near += 1;
@@ -585,28 +669,38 @@ fn run(sc: &Scene, way: &Way) {
         step_no += 1;
     }
     let pc = |a: u64, b: u64| 100.0 * a as f64 / b.max(1) as f64;
-    let mins = tally.observer_s / 60.0;
-    println!(
-        "{:<5} {:<30} parked: shown {:>4.1}, nearest N {:>4.1} %, <60 m {:>4.1} %, loads {:>5.1}/min, gone <60 m {:>5.2}/min, \
-         shown <10 s {:>3.0} % (median {:>4.1} s), back within 30 s {:>4.1}/min | driving by: <100 m {:>4.1} % | jump in: 90 % linked {:>4.1} s, \
-         shown {:>4.1} s (p90 {:>4.1}, {} never) | links {:.2}/s",
-        sc.name,
-        way.name,
-        tally.shown as f64 / tally.samples.max(1) as f64,
-        pc(tally.nearest_shown, tally.nearest),
-        pc(tally.near60_shown, tally.near60),
-        tally.loads as f64 / mins,
-        tally.gone_near as f64 / mins,
-        pc(tally.lives.iter().filter(|&&x| x < 10.0).count() as u64, tally.lives.len() as u64),
-        pct(&mut tally.lives.clone(), 0.5),
-        tally.back30 as f64 / mins,
-        pc(tally.drive_near_shown, tally.drive_near),
-        pct(&mut tally.jump_links, 0.5),
-        pct(&mut tally.jump_fill.clone(), 0.5),
-        pct(&mut tally.jump_fill, 0.9),
-        tally.jump_miss,
-        tally.links_made as f64 / (MEET_N as f64 * (end - warm)),
-    );
+    let jumps = {
+        let t0 = &mut tallies[0];
+        format!(
+            "jump in: 90 % linked {:>4.1} s, shown {:>4.1} s (p90 {:>4.1}, {} never) | links {:.2}/s | driving by: <100 m {:>4.1} %",
+            pct(&mut t0.jump_links, 0.5),
+            pct(&mut t0.jump_fill.clone(), 0.5),
+            pct(&mut t0.jump_fill, 0.9),
+            t0.jump_miss,
+            t0.links_made as f64 / (MEET_N as f64 * (end - warm)),
+            pc(t0.drive_near_shown, t0.drive_near),
+        )
+    };
+    for (c, tally) in tallies.iter_mut().enumerate() {
+        let mins = tally.observer_s / 60.0;
+        println!(
+            "{:<6} {:<26} {}: shown {:>4.1}, nearest N {:>4.1} %, <60 m {:>4.1} %, loads {:>5.1}/min, gone <60 m {:>5.2}/min (shown {:>4.1} s, median), \
+             all gone: shown <10 s {:>3.0} % (median {:>4.1} s), back within 30 s {:>4.1}/min{}",
+            sc.name,
+            way.name,
+            if c == 0 { "parked " } else { "driving" },
+            tally.shown as f64 / tally.samples.max(1) as f64,
+            pc(tally.nearest_shown, tally.nearest),
+            pc(tally.near60_shown, tally.near60),
+            tally.loads as f64 / mins,
+            tally.gone_near as f64 / mins,
+            pct(&mut tally.near_lives, 0.5),
+            pc(tally.lives.iter().filter(|&&x| x < 10.0).count() as u64, tally.lives.len() as u64),
+            pct(&mut tally.lives.clone(), 0.5),
+            tally.back30 as f64 / mins,
+            if c == 1 { format!(" | {jumps} | the hub's near links gone, why: {}", k.hub.info()["nearGone"]) } else { String::new() },
+        );
+    }
 }
 
 #[test]
@@ -617,17 +711,29 @@ fn meet() {
     let way = |name, o: RoamOptions, core| Way { name, rank: game(&o), o, load: 0.12, core };
     let only = std::env::var("MEET_ONLY").unwrap_or_default();
     // the hub of before (links both ways: a game of core 14) and one-way links (core 15)
-    let ways = [way("now", now.clone(), 14), way("one-way links (core 15)", now.clone(), 15)];
+    let before = RoamOptions { near_m: 1e-9, ..now.clone() };
+    let ways = [
+        way("links both ways (core 14)", now.clone(), 14),
+        way("one-way (15, released)", before, 15),
+        way("one-way, near first", now.clone(), 15),
+        way("one-way, near first at any speed", RoamOptions { near_fast: 1e9, ..now.clone() }, 15),
+    ];
     let scenes = [
-        Scene { name: "meet", meet: 90, city: 300, side: 3000.0, jump: JUMP_N, mix: false, watch_links: 64 },
-        Scene { name: "busy", meet: 45, city: 3000, side: 4000.0, jump: JUMP_N, mix: false, watch_links: 64 },
-        Scene { name: "mixed", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 64 },
-        Scene { name: "mix32", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 32 },
-        Scene { name: "mix16", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 16 },
+        Scene { name: "meet", meet: 90, city: 300, side: 3000.0, jump: JUMP_N, mix: false, watch_links: 64, real: false },
+        Scene { name: "busy", meet: 45, city: 3000, side: 4000.0, jump: JUMP_N, mix: false, watch_links: 64, real: false },
+        Scene { name: "mixed", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 64, real: false },
+        Scene { name: "mix32", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 32, real: false },
+        Scene { name: "mix16", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 16, real: false },
+        Scene { name: "real", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 64, real: true },
+        Scene { name: "real32", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 32, real: true },
+        Scene { name: "real16", meet: 90, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 16, real: true },
+        // as dense as the player's meet of 2026-11-05 (60 and more within 60 m)
+        Scene { name: "dense", meet: 160, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 64, real: true },
+        Scene { name: "dense32", meet: 160, city: 3000, side: 4000.0, jump: JUMP_N, mix: true, watch_links: 32, real: true },
     ];
     let scene = std::env::var("MEET_SCENE").unwrap_or_default();
     for sc in scenes.iter().filter(|s| scene.is_empty() || s.name == scene) {
-        for w in ways.iter().filter(|w| only.is_empty() || w.name == only) {
+        for w in ways.iter().filter(|w| only.is_empty() || only.split('|').any(|o| w.name == o)) {
             run(sc, w);
         }
     }

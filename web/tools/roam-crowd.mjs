@@ -6,7 +6,7 @@
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
 //        [--race 1-3:60:120] [--paused 1-3] [--prefix Bot] [--links 64] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
-//        [--flags nl,br,gb-eng] [--meet x,y,z] [--seed n]
+//        [--flags nl,br,gb-eng] [--meet x,y,z] [--city side[,x,y]] [--seed n]
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
 //          one tick or one received message made them send goes as one message, a snapshot to several friends once
@@ -45,6 +45,14 @@
 //          15 to 35 m/s), now driving in to a spot (from 500 m) or off from one; about 55 % stand at a time, so --n 90
 //          is about 50 standing and 40 driving by, a number that changes as they come and go (tests/meet.rs of the
 //          roam crate simulates the same).  --seed: its random numbers (by default a new one each run, logged).
+//          --fidget: as players hold a meet (meet.rs scene "real"): a standing one now and then (every 25 s on average)
+//          does a donut or moves to another spot near, or goes into a shop or its pause menu for 10 to 60 s, and a
+//          third of the drivers circle the meet 40 to 150 m out for 20 to 90 s.
+// --city   a city round this place (the new career's start without x,y): each player somewhere in a square of side m,
+//          55 % driving at 15 to 50 m/s on straight lines with a turn now and then (back off the square's edges), the
+//          others parked (tests/popin.rs of the roam crate simulates the same city); with --meet, the players past the
+//          meet's first --meet-n (90) are the city round it.  Each player's place and moves come from --seed and its
+//          number, so several of these at once (--first) make one city.
 // Each player is its own client address for the server's per-address limits (X-Forwarded-For, which the
 // server takes from this machine, its trusted proxy).  Every 10 s one line: players on the switch, their peers
 // (min, mean, max: the hub gives each at most 32), datagrams a second in and out, joins and "out of range"
@@ -72,6 +80,7 @@ const ALL_CARS = ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUG
 const CARS = opt('cars', '') === 'all' ? ALL_CARS : opt('cars', '') ? opt('cars', '').split(',') : [CAR];
 const LOBBIES = (opt('lobbies', '').match(/^(\d+):(.+)$/) ?? []).slice(1);
 const MEET = opt('meet', '') ? opt('meet', '').split(',').map(Number) : null, SEED = +opt('seed', String(Date.now() % 1e9 | 0));
+const CITY = opt('city', '') ? opt('city', '').split(',').map(Number) : null, MEET_N = +opt('meet-n', 90), FIDGET = argv.includes('--fidget');
 const HUB = 0x0A4D00FD, PORT = 47210;
 
 // the core for wasm: no C library (wasip1 for its headers: names.h's <string.h>), bulk memory for the copies
@@ -130,10 +139,31 @@ if (MEET) {
     return { leg: { a: [cx + n[0] * b - d[0] * 600, cy + n[1] * b - d[1] * 600], b: [cx + n[0] * b + d[0] * 600, cy + n[1] * b + d[1] * 600], t0: t, s: range(15, 35), park: false } };
   };
   const bots = [];
-  const start = () => unit() < 0.55 ? { p: spot(), h: unit() * TAU, until: range(10, 360) } : line(-range(0, 40));
+  const start = () => unit() < 0.55 ? { p: spot(), h: unit() * TAU, until: range(10, 360), fid: FIDGET ? range(0, 50) : Infinity } : line(-range(0, 40));
   let parked = 0;
   track = (t, i) => {
     const b = bots[i] ??= start();
+    // a standing one's donut, move or stop (--fidget)
+    if (b.until !== undefined && b.fx) {
+      const f = b.fx, dt = Math.min(0.5, t - f.t); f.t = t;
+      if (t >= f.end) { b.fx = null; if (f.stop) b.status = 2; b.fid = t - 25 * Math.log(1 - unit()); return { p: [b.p[0], b.p[1], cz], v: [0, 0, 0], h: b.h, status: b.status }; }
+      if (f.stop) return { p: [b.p[0], b.p[1], cz], v: [0, 0, 0], h: b.h, status: b.status };
+      b.h += f.w * dt; const v = [Math.cos(b.h) * f.sp, Math.sin(b.h) * f.sp];
+      b.p = [b.p[0] + v[0] * dt, b.p[1] + v[1] * dt];
+      return { p: [b.p[0], b.p[1], cz], v: [v[0], v[1], 0], h: b.h };
+    }
+    if (b.until !== undefined && t >= (b.fid ?? Infinity) && t < b.until) {
+      const u = unit();
+      if (u < 0.45) { const sp = range(6, 12); b.fx = { t, end: t + range(3, 8), sp, w: sp / range(4, 8) * (unit() < 0.5 ? -1 : 1) }; }
+      else if (u < 0.75) b.fx = { t, end: t + range(2, 6), sp: range(4, 8), w: range(-0.4, 0.4) };
+      else { b.fx = { t, end: t + range(10, 60), stop: true }; b.status = unit() < 0.5 ? 4 : 5; }
+      return { p: [b.p[0], b.p[1], cz], v: [0, 0, 0], h: b.h, status: b.status };
+    }
+    if (b.loop) {
+      const { rr, a0, t0, w, end } = b.loop, a = a0 + w * (t - t0), sp = w * rr;
+      if (t < end) { const v = [-Math.sin(a) * sp, Math.cos(a) * sp]; b.p = [cx + rr * Math.cos(a), cy + rr * Math.sin(a)]; b.h = Math.atan2(v[1], v[0]); return { p: [b.p[0], b.p[1], cz], v: [v[0], v[1], 0], h: b.h }; }
+      b.loop = null; b.leg = line(t).leg;
+    }
     if (b.until !== undefined && t >= b.until) {
       const d = [Math.cos(b.h), Math.sin(b.h)];
       Object.assign(b, { until: undefined, leg: { a: b.p, b: [b.p[0] + d[0] * 600, b.p[1] + d[1] * 600], t0: t, s: range(15, 25), park: false } });
@@ -143,14 +173,53 @@ if (MEET) {
       const d = [dx / len, dy / len];
       b.p = [p0[0] + d[0] * u, p0[1] + d[1] * u]; b.h = Math.atan2(d[1], d[0]);
       if (u < len) return { p: [b.p[0], b.p[1], cz], v: [d[0] * s, d[1] * s, 0], h: b.h };
-      if (b.leg.park) { b.leg = null; b.until = t + range(90, 360); parked++; }
+      if (b.leg.park) { b.leg = null; b.until = t + range(90, 360); b.fid = FIDGET ? t + range(0, 50) : Infinity; parked++; }
+      else if (FIDGET && unit() < 0.35) {
+        const rr = range(40, 150), w = range(10, 25) / rr * (unit() < 0.5 ? -1 : 1);
+        b.leg = null; b.loop = { rr, a0: Math.atan2(b.p[1] - cy, b.p[0] - cx), t0: t, w, end: t + range(20, 90) };
+        return { p: [b.p[0], b.p[1], cz], v: [0, 0, 0], h: b.h };
+      }
       else if (unit() < 0.4) { const sp = spot(), w = unit() * TAU; b.leg = { a: [sp[0] - Math.cos(w) * 500, sp[1] - Math.sin(w) * 500], b: sp, t0: t, s: range(12, 20), park: true }; }
       else b.leg = line(t).leg;
     }
     return { p: [b.p[0], b.p[1], cz], v: [0, 0, 0], h: b.h };
   };
-  track.standing = () => bots.filter(b => b && !b.leg).length;
+  track.standing = () => bots.filter(b => b && !b.leg && !b.loop).length;
   console.log(`roam-crowd: a car meet at ${cx} ${cy} ${cz}, seed ${SEED}`);
+}
+
+if (CITY) {
+  const [side, cx = 1695, cy = -884] = CITY, half = side / 2, meet = MEET ? track : null;
+  const cars = new Map();
+  const city = (t, i) => {
+    let c = cars.get(i);
+    if (!c) {
+      // mulberry32 of the seed and the player's number: the same city from every process
+      let a = (SEED ^ Math.imul(i + 1, 0x9E3779B1)) >>> 0;
+      const unit = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      const h = unit() * 2 * Math.PI, sp = unit() < 0.55 ? 15 + 35 * unit() : 0;
+      c = { unit, p: [cx - half + side * unit(), cy - half + side * unit()], v: [Math.cos(h) * sp, Math.sin(h) * sp], h, turn: 0, t };
+      cars.set(i, c);
+    }
+    const dt = Math.min(0.5, Math.max(0, t - c.t)); c.t = t;
+    if (c.v[0] || c.v[1]) {
+      if (!c.turn && c.unit() < dt / 6) c.turn = (c.unit() - 0.5) * Math.PI;
+      if (c.turn) {
+        const w = Math.max(-1.047 * dt, Math.min(1.047 * dt, c.turn)); c.turn = Math.abs(c.turn - w) < 1e-9 ? 0 : c.turn - w;
+        const [sn, co] = [Math.sin(w), Math.cos(w)]; c.v = [c.v[0] * co - c.v[1] * sn, c.v[0] * sn + c.v[1] * co];
+      }
+      for (const k of [0, 1]) {
+        c.p[k] += c.v[k] * dt;
+        const lo = (k ? cy : cx) - half, hi = (k ? cy : cx) + half;
+        if (c.p[k] < lo || c.p[k] > hi) { c.p[k] = Math.max(lo, Math.min(hi, c.p[k])); c.v[k] = -c.v[k]; }
+      }
+      c.h = Math.atan2(c.v[1], c.v[0]);
+    }
+    return { p: [c.p[0], c.p[1], 24.1], v: [c.v[0], c.v[1], 0], h: c.h };
+  };
+  track = meet ? (t, i) => (i < MEET_N ? meet(t, i) : city(t, i)) : city;
+  if (meet) track.standing = meet.standing;
+  console.log(`roam-crowd: a city of ${side} m round ${cx} ${cy}${meet ? `, a meet's ${MEET_N} in it` : ''}, seed ${SEED}`);
 }
 
 const st = { inDg: 0, outDg: 0, inB: 0, outB: 0, inMsg: 0, outMsg: 0, joins: 0, outOfRange: 0, otherLeaves: 0, notes: 0 }, why = {};
@@ -274,7 +343,11 @@ class Bot {
     }
     if (paused && !this.paused) { this.paused = true; this.x.crowd_status(5); }
     if (racing || !snap) { this.x.crowd_wait(nowUs()); this.flush(); return; }
-    const { p, v, h } = track(t, this.i);
+    const { p, v, h, status } = track(t, this.i);
+    // (a meet's --fidget: a shop or the pause menu a while; in a shop the game sends no car)
+    const want = status ?? 2;
+    if (want !== (this.tstatus ?? 2)) { this.tstatus = want; this.x.crowd_status(want); }
+    if (want === 4) { this.x.crowd_wait(nowUs()); this.flush(); return; }
     this.x.crowd_tick(nowUs(), p[0], p[1], p[2], v[0], v[1], v[2], h ?? Math.atan2(v[1], v[0]));
     if (LOBBIES.length && this.i % +LOBBIES[0] === 0 && t - (this.advT ?? -9) >= 1) {
       const races = LOBBIES[1].split(',');
