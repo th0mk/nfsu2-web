@@ -1821,7 +1821,8 @@ void rc_set_status(rc_session *s, uint8_t st){
     for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state == RC_PS_EST){ rc_msg m; fill_hello(s, &m, &s->peer[i], s->peer[i].reads_crews); tx(s, &s->peer[i], &m); }
     if (s->conf.hub_ip){ rc_msg m; fill_hello(s, &m, 0, 1); tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m); }
 }
-void rc_bump_epoch(rc_session *s){ s->epoch++; s->nlast = 0; }
+/* (and the hub hears where we are at the next snapshot, not up to T_HUB_SNAP later: a jump's list comes sooner) */
+void rc_bump_epoch(rc_session *s){ s->epoch++; s->nlast = 0; s->hub_snap_tx = INT64_MIN / 4; }
 void rc_bump_clock(rc_session *s){ s->clock++; s->nlast = 0; }
 void rc_set_cfg(rc_session *s, const uint8_t *rec, int len, int64_t now){
     (void)now;

@@ -516,6 +516,10 @@ static uint32_t g_gc_n;                           /* the drive camera's tests wi
                                                     (roam_game_camera_cars) */
 static uint64_t g_gp_ns;                          /* ...and the time that took */
 static int64_t g_ready_at;                    /* the last friend's car in (roam_plat_now_us) */
+/* the last 4 friends' cars' loads, a bit each (the newest bit 0): it took over SLOW_LOAD_US, waiting for the
+ * server's data (an empty cache on a slow line; a car of a type in already takes 6 frames) -- LOADS_AHEAD */
+static uint8_t g_slow_loads;
+#define SLOW_LOAD_US    500000
 /* test aid: per-frame pose log */
 static rh_file *g_poselog;
 /* a script command that calls guest code waits for the main-loop hook */
@@ -1974,6 +1978,7 @@ static int finish_load(CPU *c, int k){
             (double)s->com[0], (double)s->com[1], (double)s->com[2]);
     pool_log("after load");
     g_ready_at = roam_plat_now_us();
+    g_slow_loads = (uint8_t)(g_slow_loads << 1 | (g_ready_at - s->load_t0 > SLOW_LOAD_US)) & 0xf;
     return 1;
 }
 /* sin and cos of a in [-pi, pi] (Taylor to the x^15 / x^14 term, < 1e-5),
@@ -7925,7 +7930,11 @@ static void init_once(CPU *c){
  * most.  A car held STREAM_HOLD_US goes anyway, should the streamer never
  * get done.  NFSU2_ROAM_STREAM_FIRST=0 (test aid): the cars as before. */
 #define G_TRACKSTREAMER 0x0088eb00u   /* +0x168 its phase: 0 nothing to do, 1-6 room made and sections read */
-#define LOADS_AHEAD     2
+/* (4 for a player who shows 32 cars or more while 2 of its last 4 loads waited for data: a car's reads one after
+ * another, each a block from the server, leave a slow line mostly idle, and 4 at once got 90 % of a meet's cars in
+ * the first time on 20 Mbit/s with an empty cache after 28 s, not 34; with the data in, 4 at once made a meet of 31
+ * car types slower to show (each load 2 to 3 times as long): 2 then, and always on a phone or a tablet) */
+#define LOADS_AHEAD     (O.max_cars >= 32 && __builtin_popcount(g_slow_loads) >= 2 ? 4 : 2)
 #define STREAM_HOLD_US  5000000
 static struct { int64_t t0, us, max; int n, gone; } g_shold;    /* cars held for the streamer: since, in all, the longest, times, let go */
 static int loads_in_loader(CPU *c){

@@ -841,6 +841,14 @@ static void t_hints(void){
     memset(g_snap_tx, 0, sizeof g_snap_tx);
     drive(3, g_now + 5000000);
     CHECK(g_n[1].peer[k10].hub_far == 0 && g_snap_tx[1][0] >= 95, "hints: none from the hub, every one as before (%d)", g_snap_tx[1][0]);
+    /* a teleport (rc_bump_epoch): the hub hears where we are with the next snapshot, not up to T_HUB_SNAP later */
+    drive(3, g_now + 1000000);
+    int hs = g_hub_snap[0];
+    rc_state ts; memset(&ts, 0, sizeof ts); ts.q[3] = 1; ts.t_us = (uint32_t)g_now; ts.p[0] = 2000.f;
+    g_n[0].next_snap_us = 0; rc_push_state(&g_n[0], &ts, g_now);
+    int before = g_hub_snap[0] - hs;
+    rc_bump_epoch(&g_n[0]); g_n[0].next_snap_us = 0; rc_push_state(&g_n[0], &ts, g_now + 1000);
+    CHECK(g_hub_snap[0] - hs == before + 1, "hints: a jump's first snapshot goes to the hub at once (%d, %d)", before, g_hub_snap[0] - hs);
     g_hub_on = 0; for (int i = 0; i < 3; i++) g_n[i].conf.hub_ip = 0;
     memset(g_hub_way, 0, sizeof g_hub_way); memset(g_hub_far, 0, sizeof g_hub_far);
 }
