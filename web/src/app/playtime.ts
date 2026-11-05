@@ -1,5 +1,6 @@
 // After two hours of play, a text message of ours on the game's phone (runtime/sms.c): "Enjoying the game?", with the
-// Discord, crews and Ko-fi; once.  Play counts while a game runs, the tab is in sight and the player gave some input
+// Discord, crews and Ko-fi; once.  After a hundred hours a second one, "100 hours!", a thank-you (2026-11-05), in a
+// later game than the first.  Play counts while a game runs, the tab is in sight and the player gave some input
 // in the last few minutes (input/index.ts lastInput), over all the games in this browser (localStorage).  From two
 // hours on, each game asks the game for the message (IEV_SMS) until its status "sms" says the inbox has it: the game
 // waits for career free roam, the only place with a phone, and a profile that has it already counts.  The count goes
@@ -15,8 +16,10 @@ import type { GameSession } from './game';
 import { t } from './i18n';
 
 export const SMS_AFTER_MS = 2 * 3600_000;
+/** the second message's play, as a multiple of the first's (a test page's playtime= scales both) */
+const HUNDRED_TIMES = 50;
 const PLAYED = 'nfsu2.play.ms', SENT = 'nfsu2.play.sms', GAMES = 'nfsu2.play.games', LAST = 'nfsu2.play.last', FROM = 'nfsu2.play.from';
-const MSG = 1;                          /* sms.c: "Enjoying the game?" */
+const HELLO = 1, HUNDRED = 2;           /* sms.c: "Enjoying the game?", "100 hours!" */
 const IDLE_MS = 5 * 60_000, TICK_MS = 5000;
 
 const read = (key: string): string | null => { try { return localStorage.getItem(key); } catch { return null; } };
@@ -50,12 +53,15 @@ export class PlayTime {
   /** this game's */
   private game = 0;
   private last = performance.now();
-  private asked = false;
-  /** the message is in the game's inbox: only the count goes on */
-  private sent = read(SENT) === String(MSG);
+  /** the message asked for in this game, 0: none */
+  private asked = 0;
+  /** the last message in the game's inbox (SENT: 1 before 2026-11-05 too): after the last, only the count goes on */
+  private sent = Math.max(0, Math.floor(Number(read(SENT)) || 0));
+  /** the second message only in a game after the first's (not both at once) */
+  private readonly sentBefore = this.sent;
 
-  /** a game started (counted); afterMs: the play before the message (SMS_AFTER_MS; a test page's address may give
-   *  less) */
+  /** a game started (counted); afterMs: the play before the first message (SMS_AFTER_MS; a test page's address may
+   *  give less), the second's HUNDRED_TIMES that */
   constructor(private s: GameSession, private afterMs: number, private log: (line: string) => void) {
     playedAtLeast();                      // (decided before this game counts)
     write(GAMES, String(gamesStarted() + 1));
@@ -71,15 +77,17 @@ export class PlayTime {
       write(PLAYED, String(Math.round(this.played)));
       write(LAST, String(Math.round(this.game)));
     }
-    if (this.sent) return;
-    if (!this.asked && this.played >= this.afterMs && this.s.input?.sms?.(MSG)) {
-      this.asked = true;
-      this.log(`[app] played ${Math.round(this.played / 60_000)} min: the game's phone gets our message once the player drives in career free roam`);
+    if (this.sent >= HUNDRED) return;
+    const due = this.sent < HELLO ? (this.played >= this.afterMs ? HELLO : 0)
+      : this.sentBefore >= HELLO && this.played >= this.afterMs * HUNDRED_TIMES ? HUNDRED : 0;
+    if (due && this.asked !== due && this.s.input?.sms?.(due)) {
+      this.asked = due;
+      this.log(`[app] played ${Math.round(this.played / 60_000)} min: the game's phone gets our message ${due} once the player drives in career free roam`);
     }
-    if (this.asked && this.s.status?.read()?.get('sms') === MSG) {
-      write(SENT, String(MSG));
-      this.sent = true;
-      this.log('[app] our message is in the game\'s inbox: not asked for again');
+    if (this.asked && this.s.status?.read()?.get('sms') === this.asked) {
+      write(SENT, String(this.asked));
+      this.sent = this.asked;
+      this.log(`[app] our message ${this.asked} is in the game's inbox: not asked for again`);
     }
   }
 

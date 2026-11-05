@@ -63,6 +63,38 @@ test('two hours over two games ask for the message, until the inbox has it; then
   assert.deepEqual(d.asked, [], 'never again');
 });
 
+test('a hundred hours ask for the second message, in a game after the first; then never again', () => {
+  store.clear();
+  store.set('nfsu2.play.ms', String(100 * 60 * MIN - 2 * MIN));     // the first message not had yet
+  const a = game();
+  a.play(5 * MIN);
+  a.sms = 1;
+  a.play(5 * MIN);
+  a.end();
+  assert.deepEqual(a.asked, [1], 'past 100 h without the first: the first only, not both in one game');
+  const b = game();
+  b.play(5000);
+  assert.deepEqual(b.asked, [2], 'the next game: the second');
+  b.sms = 2;
+  b.play(5000);
+  assert.ok(b.logs.some(l => /message 2 is in the game's inbox/.test(l)));
+  b.end();
+  assert.equal(store.get('nfsu2.play.sms'), '2');
+  const c = game();
+  c.play(60 * MIN);
+  c.end();
+  assert.deepEqual(c.asked, [], 'never again');
+  store.clear();
+  store.set('nfsu2.play.ms', String(100 * 60 * MIN - 2 * MIN));
+  store.set('nfsu2.play.sms', '1');                                  // as kept before the second message
+  const d = game();
+  d.play(MIN);
+  assert.deepEqual(d.asked, [], 'not before 100 h');
+  d.play(MIN);
+  assert.deepEqual(d.asked, [2], 'at 100 h');
+  d.end();
+});
+
 test('idle and hidden time does not count', () => {
   store.clear();
   const a = game();

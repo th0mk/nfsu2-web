@@ -808,7 +808,7 @@
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "PC-spillets egen kode, genkompileret til Chrome og Firefox: op til 120 fps i widescreen, udforsknings-mode og Online-løb med venner, og controllere, rat og touchknapper.",
   "About this project": "Om projektet",
   "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "Min bror og jeg spillede dette spil sammen for omkring 20 år siden. Derfor prøvede jeg at porte det til browseren, så vi kunne spille sammen igen. Det virkede overraskende godt, og det tog lidt overhånd. Det er fantastisk at se så mange spille det.",
-  "To help with hosting and development costs, you can <0>buy me a coffee</0>. No perks, apart from a Discord role.": "For at hjælpe med udgifterne til hosting og udvikling kan du <0>give mig en kop kaffe</0>. Ingen fordele, bortset fra en rolle på Discord.",
+  "To help with hosting and development costs, you can <0>buy me a coffee</0>. Everyone gets the same game, with no microtransactions or paid perks. Supporters just get a Discord role.": "For at hjælpe med udgifterne til hosting og udvikling kan du <0>give mig en kop kaffe</0>. Alle får det samme spil, uden mikrotransaktioner eller betalte fordele. Støtter får bare en rolle på Discord.",
   "Help, bugs and questions: <0>our Discord</0>. Rights holders: legal (at) nfsu2.xyz.": "Hjælp, fejl og spørgsmål: <0>vores Discord</0>. Rettighedshavere: legal (at) nfsu2.xyz.",
   "Credits": "Krediteringer",
   "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "Kildekode på <0>GitHub</0>. Bygger på <1>NFSU2Recomp</1> af Talha Müderrisoğlu, den oprindelige statiske x86 → C-recompiler til NFSU2, efter forbillede af <2>N64: Recompiled</2> og <3>XenonRecomp</3>. Projektet er en fork af <4>den MIT-licenserede version af NFSU2Recomp fra 16. oktober 2026</4> og bruger kun kode fra den version.",
@@ -1244,7 +1244,7 @@
   "The other tab did not answer. Close it: this tab joins when it takes over.": "Den anden fane svarede ikke. Luk den: du kommer med, når denne fane tager over.",
   "Donate": "Donér",
   "Support the project": "Støt projektet",
-  "To help with hosting and development costs, you can buy me a coffee on Ko-fi. No perks, apart from a Discord role.": "For at hjælpe med udgifterne til hosting og udvikling kan du give mig en kop kaffe på Ko-fi. Ingen fordele, bortset fra en rolle på Discord.",
+  "To help with hosting and development costs, you can buy me a coffee on Ko-fi. Everyone gets the same game, with no microtransactions or paid perks. Supporters just get a Discord role.": "For at hjælpe med udgifterne til hosting og udvikling kan du give mig en kop kaffe på Ko-fi. Alle får det samme spil, uden mikrotransaktioner eller betalte fordele. Støtter får bare en rolle på Discord.",
   "Donate on Ko-fi": "Donér på Ko-fi",
   "Your browser may also offer to save it with your passwords: choose Save.": "Din browser tilbyder måske også at gemme den sammen med dine adgangskoder: vælg Gem.",
   "{n} hours played": {

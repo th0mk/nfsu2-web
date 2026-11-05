@@ -850,7 +850,7 @@
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "Власний код ПК-версії гри, перекомпільований для Chrome і Firefox: до 120 FPS у широкоекранному режимі, вільна їзда й онлайн-перегони з друзями, а також геймпади, керма та сенсорне керування.",
   "About this project": "Про цей проєкт",
   "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "Ми з братом грали в цю гру разом близько 20 років тому. Тож я спробував перенести її в браузер, щоб ми знову могли грати разом. Це вдалося напрочуд добре, і все трохи вийшло з-під контролю. Чудово бачити, як багато людей у неї грає.",
-  "To help with hosting and development costs, you can <0>buy me a coffee</0>. No perks, apart from a Discord role.": "Щоб допомогти з витратами на хостинг і розробку, можна <0>пригостити мене кавою</0>. Жодних бонусів, окрім ролі в Discord.",
+  "To help with hosting and development costs, you can <0>buy me a coffee</0>. Everyone gets the same game, with no microtransactions or paid perks. Supporters just get a Discord role.": "Щоб допомогти з витратами на хостинг і розробку, можна <0>пригостити мене кавою</0>. У всіх та сама гра, без мікротранзакцій і платних бонусів. Ті, хто підтримав, отримують лише роль у Discord.",
   "Help, bugs and questions: <0>our Discord</0>. Rights holders: legal (at) nfsu2.xyz.": "Допомога, помилки й питання: <0>наш Discord</0>. Правовласникам: legal (at) nfsu2.xyz.",
   "Credits": "Подяки",
   "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "Вихідний код на <0>GitHub</0>. В основі порту — <1>NFSU2Recomp</1> від Talha Müderrisoğlu, оригінальний статичний рекомпілятор x86 → C для NFSU2, створений за зразком <2>N64: Recompiled</2> і <3>XenonRecomp</3>. Цей проєкт — форк <4>версії NFSU2Recomp під ліцензією MIT від 16 жовтня 2026 року</4>; у ньому використано лише код із цієї версії.",
@@ -1290,7 +1290,7 @@
   "The other tab did not answer. Close it: this tab joins when it takes over.": "Інша вкладка не відповіла. Закрийте її: ця вкладка приєднається, коли перейме керування.",
   "Donate": "Підтримати",
   "Support the project": "Підтримати проєкт",
-  "To help with hosting and development costs, you can buy me a coffee on Ko-fi. No perks, apart from a Discord role.": "Щоб допомогти з витратами на хостинг і розробку, можна пригостити мене кавою на Ko-fi. Жодних бонусів, окрім ролі в Discord.",
+  "To help with hosting and development costs, you can buy me a coffee on Ko-fi. Everyone gets the same game, with no microtransactions or paid perks. Supporters just get a Discord role.": "Щоб допомогти з витратами на хостинг і розробку, можна пригостити мене кавою на Ko-fi. У всіх та сама гра, без мікротранзакцій і платних бонусів. Ті, хто підтримав, отримують лише роль у Discord.",
   "Donate on Ko-fi": "Підтримати на Ko-fi",
   "Your browser may also offer to save it with your passwords: choose Save.": "Браузер може також запропонувати зберегти її разом із вашими паролями: оберіть «Зберегти».",
   "{n} hours played": {
