@@ -514,6 +514,21 @@ Room set, the Room row says how many are in that room.
   game. They are kept with your saves (`achievements.json` in the save folder), so a backup and the cloud saves carry
   them, and nothing about them goes to the server. They count from the first race after this update: races raced
   before are not in them.
+- **Treasure hunt:** every day (by UTC) 15 diamonds are hidden in the career's free roam, in the same places for every
+  player: on the roads by the career's events and shops. One behind a wall your career has not opened yet is moved to
+  a road you can drive to, so all 15 can be found at any stage, and it goes back to its place when that part of the
+  city opens. Drive through one to find it (a chime and a flash). At the top of the screen: how many are found, and an
+  arrow and the distance to the nearest; from 60 m it floats over the street, bigger as you come near. The minimap and
+  the world map (M) mark the ones not found within 1 km with a light blue star; the nearest within 500 m stays on the
+  minimap's edge, pointing the way. One day in three, one of the 15 is golden: it pays what a race of your stage pays
+  for a win. Finding all 15 pays twice that into your career's bank, once a day: a day's hunt is played once (a
+  profile's progress is kept in `achievements.json`, with the achievements). Your time is free roam's while the page
+  is seen, from the first diamond to the last; the last one's message says it, and the Achievements tab has your
+  quickest, Treasure hunter (1, 10 and 50 days) and Daily driver (3, 7 and 30 days in a row). Your time goes to the
+  server: the Achievements tab shows how many players found all 15 that day and the 5 quickest, by their claimed names
+  (**Online, Your name**: a claim needs cloud saves, see section 5); a player without one is counted, not listed. The server keeps a player's first
+  time of the day, of the last 7 days. The minimap's and the world map's stars need **Free roam with others** on
+  (section 6); the rest works without it.
 
 ## 6. Free roam with other players
 
