@@ -478,6 +478,7 @@ static void lifecycle_poll(void){
 int mprace_owns_input(void);
 void sms_request(int id);
 void photo_input(int cmd, int a, int b);                 /* photo.c */
+void roam_game_race_ghost_traffic(int on);               /* roam_game.c: the page menu's ghost traffic in career races */
 void roam_plat_name_piece(int off, int total, const char *b, int n);    /* roam_web.c */
 void roam_plat_name2_piece(int off, int total, const char *b, int n);   /* ...player 2's (co-op) */
 void roam_plat_lobby_input(int act, uint32_t host, uint32_t lobby, uint32_t race);   /* roam_web.c */
@@ -525,6 +526,7 @@ static void handle(const InEv *e){
         roam_plat_lobby_input(e->dik, (uint32_t)e->a, (uint32_t)e->b,
                               (uint32_t)e->vk | (uint32_t)e->flags << 8 | (uint32_t)e->ch[0] << 16 | (uint32_t)e->ch[1] << 24);
         break;
+    case IEV_GHOST_TRAFFIC: roam_game_race_ghost_traffic(e->a != 0); break;
     case IEV_NAME: {
         char b[11];
         memcpy(b, e->ch, 3); memcpy(b + 3, &e->a, 4); memcpy(b + 7, &e->b, 4);   /* (wasm is little-endian) */

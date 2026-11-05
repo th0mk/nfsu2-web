@@ -94,6 +94,7 @@ const GROUPS: Group[] = [
     { key: 'roam_block', label: N('Blocked players'), help: N('Names, separated by commas: you never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not a tuner you race in an outrun.'),
       c: { t: 'seg', opts: [['on', N('Off')], ['off', N('Players')], ['none', N('Everything')]] } },
+    { key: 'race_ghost_traffic', label: N('Ghost traffic in career races'), help: N('Traffic drives through your car in career races, online or not. The other racers stay solid.'), c: { t: 'switch' } },
     { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['48', '48'], ['64', '64']] },
       deviceOpt: { value: 'auto', label: N('Auto'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.') } },
     { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).'), c: { t: 'switch' } },

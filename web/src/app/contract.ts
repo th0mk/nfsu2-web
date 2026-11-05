@@ -142,6 +142,9 @@ export interface InputSubsystem extends Subsystem {
   /** free roam's race lobby (runtime/roam_game.c mp_act): what (input proto.ts LB_*), and for an invite's Join the
    *  lobby's host's id, the lobby's id and its race's hash; false: it cannot reach the game */
   lobby?(what: number, host?: number, lobby?: number, race?: number): boolean;
+  /** ghost traffic in career races, switched in the page menu (runtime/roam_game.c roam_game_race_ghost_traffic); false: it
+   *  cannot reach the game */
+  ghostTraffic?(on: boolean): boolean;
   /** a new name for free roam and Online mode, now (the operator took the old one away), or (seat2) for co-op's player 2
    *  in free roam; false: it cannot reach the game */
   name?(name: string, seat2?: boolean): boolean;

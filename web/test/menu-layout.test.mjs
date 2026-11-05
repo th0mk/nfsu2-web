@@ -1,6 +1,6 @@
 // The page's menu (F9) in a short window (#44): its buttons take as many columns as the dialog's width gives them, and
 // every label is whole, where the two fixed columns cut "Contador de FPS: desactivad…" and left the radio's "R…"; the
-// menu of the report's picture (a game, no free roam) is in sight without scrolling on a phone on its side, and the
+// menu of the report's picture (a game, no free roam, with Ghost in career since) is in sight without scrolling on a phone on its side, and the
 // free roam menu's own rows (Ghost mode, Crews, Friends, a friend's room) are whole too, scrolling if they must.
 //   node --test web/test/menu-layout.test.mjs
 // Chrome (or Playwright's Chromium: web/tools/browser.mjs) on this checkout's page (web/dist: node web/build.mjs) with
@@ -21,7 +21,7 @@ const SKIP = !fs.existsSync(path.join(DIST, 'main.js')) ? 'no page built (node w
 /** the sizes measured: [width, height, the least columns, the whole menu in sight] */
 const SIZES = [[820, 344, 2, true], [844, 390, 2, true], [1000, 450, 2, true], [450, 1000, 1, true], [320, 568, 1, false]];
 /** the menu of the report's picture, and the rows a game in free roam adds (hidden there) */
-const REPORT = ['resume', 'fullscreen', 'fps', 'radio', 'help', 'log', 'quit'];
+const REPORT = ['resume', 'fullscreen', 'fps', 'ghost-traffic', 'radio', 'help', 'log', 'quit'];
 const ROAM = ['solid', 'crews', 'friends', 'friend', 'offline'];
 
 /** the page, its scripts out, beside the built stylesheet */
@@ -47,6 +47,7 @@ async function openMenu(page, roam) {
     set('resume', 'Volver al juego');
     set('fullscreen', 'Salir de pantalla completa');
     set('fps', 'Contador de FPS: desactivado');
+    set('ghost-traffic', 'Fantasma en la trayectoria: desactivado');
     set('solid', 'Modo fantasma: desactivado');
     set('crews', 'Equipos: ninguno');
     set('friends', 'Amigos');

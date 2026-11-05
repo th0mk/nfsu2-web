@@ -66,6 +66,8 @@ export const IEV_PHOTO = 14;
 /** a new name for free roam and Online mode, in pieces of 11 bytes: dik = where the piece starts, vk = the whole
  *  length, chars[3] then a and b (little-endian) its bytes (runtime/web/input_proto.h) */
 export const IEV_NAME = 15;
+/** ghost traffic in career races, switched in the page menu (runtime/roam_game.c roam_game_race_ghost_traffic): a = 1 on, 0 off */
+export const IEV_GHOST_TRAFFIC = 18;
 export const INAME_SEAT2 = 1;                 // IEV_NAME's flags: co-op player 2's name (runtime/web/input_proto.h)
 /** free roam's race lobby (runtime/web/roam_web.c roam_plat_lobby_input): dik = what (LB_*); LB_JOIN: a = the lobby's
  *  host's id, b = the lobby's id, its race's hash in vk, flags and chars[0..1] (little-endian) */

@@ -170,6 +170,9 @@ export const KEYS: readonly KeyDef[] = [
   // the songs in drag and drift races too (runtime/drift.c race_music; off: none there, as in the original).  Not in
   // bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_RACE_MUSIC all the same
   { key: 'race_music', env: 'NFSU2_RACE_MUSIC', kind: 'bool', scope: 'web' },
+  // traffic passes through the player's car in career races (runtime/roam_game.c race_ghost_traffic; off: solid, as in
+  // the original).  Not in bundle.m's table either: NFSU2_RACE_GHOST_TRAFFIC there all the same
+  { key: 'race_ghost_traffic', env: 'NFSU2_RACE_GHOST_TRAFFIC', kind: 'bool', scope: 'web' },
   // the player's horn, which the others hear too (runtime/horn.c).  Not in bundle.m's table either: NFSU2_HORN there
   { key: 'horn', env: 'NFSU2_HORN', kind: 'enum', vals: HORNS.join('|'), scope: 'web' },
   // the menus', HUD's and maps' textures: texture packs in place of the game's (runtime/web/texrep_web.c; the page
@@ -284,6 +287,12 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # off = as in the original game, which has none there, so you hear the
 # engine for shifting.  [NFSU2_RACE_MUSIC]
 #race_music = off
+
+# Ghost traffic in career races: on = traffic drives through your car while
+# a career race runs, as with Ghost mode on Everything in free roam; the
+# race's other racers stay solid.  off = as in the original game.
+# [NFSU2_RACE_GHOST_TRAFFIC]
+#race_ghost_traffic = off
 
 # Sound output.  [NOSOUND, inverted]
 #sound = on
