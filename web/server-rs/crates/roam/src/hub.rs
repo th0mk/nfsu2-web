@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use bytes::{Bytes, BytesMut};
 use nfsu2_util::json::num;
-use nfsu2_util::{js, vip_str};
+use nfsu2_util::{IdMap, js, vip_str};
 use serde_json::{Value, json};
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -833,7 +833,7 @@ struct Pair {
 /// What one tick needs, kept from tick to tick so that a tick allocates (almost) nothing.
 #[derive(Default)]
 struct Scratch {
-    room_of: HashMap<u32, usize>,
+    room_of: IdMap<u32, usize>,
     rooms: Vec<Vec<u32>>,
     /// each slot's new links
     fresh: Vec<Vec<Link>>,
@@ -879,7 +879,7 @@ struct Scratch {
     /// the race lobbies' pairs (`lobby_pairs`), places in the room, the host first; the room's ids to places; the
     /// players asking to join a lobby (its id, their place); the players near a lobby's start
     lpairs: Vec<(u32, u32)>,
-    lids: HashMap<u32, u32>,
+    lids: IdMap<u32, u32>,
     ljoin: Vec<(u32, u32)>,
     lnear: Vec<(f64, u32)>,
     /// each lobby's host and its players there, as places (`lobby_pairs`)
@@ -982,13 +982,13 @@ pub struct Hub {
     holes: usize,
     by_key: HashMap<u64, u32>,
     /// per browser (virtual address), the players its page blocks (`blocks`), until it leaves the switch
-    blocks: HashMap<u32, Block>,
+    blocks: IdMap<u32, Block>,
     /// per browser, its page's name on the switch (`page_name`), until it leaves the switch
-    pages: HashMap<u32, Page>,
+    pages: IdMap<u32, Page>,
     /// per browser, its keyphrase's friends (their owners: `friends`), and the name of the room its page plays in
     /// (`room_name`: for its friends' Join), until it leaves the switch
-    friends: HashMap<u32, Vec<Arc<str>>>,
-    room_names: HashMap<u32, String>,
+    friends: IdMap<u32, Vec<Arc<str>>>,
+    room_names: IdMap<u32, String>,
     /// the players in free roam by their keyphrase (made at each tick): `whereabouts`
     owners_at: HashMap<Arc<str>, u32>,
     /// the pairs of players kept apart at the last tick (`block_pairs`), as slots, the lower first, sorted: the world
@@ -996,7 +996,7 @@ pub struct Hub {
     apart: Vec<(u32, u32)>,
     /// the endpoints of each virtual address, their slots in the order they came (`max_per_vip`; co-op's second player
     /// beside its first one: `beside_own`)
-    per_vip: HashMap<u32, Vec<u32>>,
+    per_vip: IdMap<u32, Vec<u32>>,
     /// the players whose last HELLO named a crew: with none, a tick does not look for crews at all
     crewed: usize,
     /// the cheat watches of players gone without a BYE, by endpoint, for WATCH_KEEP_MS (at most max_players of them)
@@ -1006,9 +1006,9 @@ pub struct Hub {
     results: Results,
     /// the lobbies' races' honest times, an edited car's compared with them (`edited_car_line`)
     times: Times,
-    joined: HashMap<u32, Joined>,
+    joined: IdMap<u32, Joined>,
     /// each browser's lobbies in `joined`, oldest first; when `joined` was last pruned
-    joined_by_vip: HashMap<u32, Vec<u32>>,
+    joined_by_vip: IdMap<u32, Vec<u32>>,
     joined_pruned: f64,
     /// the near links gone (`OneWay::gone`) as of the last `[roam] cars within ... that went` line, and when it was
     near_said: [u64; GONE_N],
@@ -1017,17 +1017,17 @@ pub struct Hub {
     /// another port) make a new player, and when a player's own time was the limit, a new player's first answer came
     /// at once (the second security audit, 2026-10-22: a map walks every player on the hub's one thread, and a few
     /// clients asking that way kept it busy); dropped at each tick once past
-    map_at: HashMap<u32, f64>,
+    map_at: IdMap<u32, f64>,
     /// MAPD: each browser's map as it holds it (`MapHeld`), and when its next race lobbies go
-    maps: HashMap<u32, MapHeld>,
-    lobbies_at: HashMap<u32, f64>,
+    maps: IdMap<u32, MapHeld>,
+    lobbies_at: IdMap<u32, f64>,
     /// MAPD: each room's players the map shows, by slot, where they are at the time with it (made at the first
     /// question of a tick)
-    map_cands: HashMap<u32, (f64, Vec<MapCand>)>,
+    map_cands: IdMap<u32, (f64, Vec<MapCand>)>,
     /// NEARD (the minimap): as map_at and maps, for each browser's minimap; and every room's players the maps show by
     /// room and cell (`near_grid_of`), made at the first minimap question of a tick
-    near_at: HashMap<u32, f64>,
-    nears: HashMap<u32, MapHeld>,
+    near_at: IdMap<u32, f64>,
+    nears: IdMap<u32, MapHeld>,
     near_grid: Option<NearGrid>,
     /// the grids made so far (`NearGrid::nth`)
     near_gens: u64,
@@ -1077,28 +1077,28 @@ impl Hub {
             order: Vec::new(),
             holes: 0,
             by_key: HashMap::new(),
-            blocks: HashMap::new(),
-            pages: HashMap::new(),
-            friends: HashMap::new(),
-            room_names: HashMap::new(),
+            blocks: IdMap::default(),
+            pages: IdMap::default(),
+            friends: IdMap::default(),
+            room_names: IdMap::default(),
             owners_at: HashMap::new(),
             apart: Vec::new(),
-            per_vip: HashMap::new(),
+            per_vip: IdMap::default(),
             crewed: 0,
             kept: HashMap::new(),
             results: Results::default(),
             times: Times::default(),
-            joined: HashMap::new(),
-            joined_by_vip: HashMap::new(),
+            joined: IdMap::default(),
+            joined_by_vip: IdMap::default(),
             joined_pruned: 0.0,
             near_said: [0; GONE_N],
             near_said_at: 0.0,
-            map_at: HashMap::new(),
-            maps: HashMap::new(),
-            lobbies_at: HashMap::new(),
-            map_cands: HashMap::new(),
-            near_at: HashMap::new(),
-            nears: HashMap::new(),
+            map_at: IdMap::default(),
+            maps: IdMap::default(),
+            lobbies_at: IdMap::default(),
+            map_cands: IdMap::default(),
+            near_at: IdMap::default(),
+            nears: IdMap::default(),
             near_grid: None,
             near_gens: 0,
             near_found: Vec::new(),
@@ -2895,7 +2895,7 @@ fn lobby_pairs(slots: &[Option<Player>], list: &[u32], now: f64, s: &mut Scratch
 /// other.  The link functions make no link of a pair, and the world map and the lobby list leave each out for the
 /// other (`Hub::apart`).  Two who join one lobby within a tick of each other are both in it.  Only a room with a
 /// blocker in it looks: at each of its players once, then up each blocker's names and keyphrases.
-fn block_pairs(slots: &[Option<Player>], list: &[u32], blocks: &HashMap<u32, Block>, s: &mut Scratch) {
+fn block_pairs(slots: &[Option<Player>], list: &[u32], blocks: &IdMap<u32, Block>, s: &mut Scratch) {
     let Scratch { bpairs, bstart, bnext, bfrom, lmembers, .. } = s;
     bpairs.clear();
     bstart.clear();
@@ -4144,7 +4144,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
 }
 
 /// whether one of the two players' browsers blocks the other (`Hub::blocks`)
-fn blocked(blocks: &HashMap<u32, Block>, a: &Player, b: &Player) -> bool {
+fn blocked(blocks: &IdMap<u32, Block>, a: &Player, b: &Player) -> bool {
     blocks.get(&a.vip).is_some_and(|k| k.has(b)) || blocks.get(&b.vip).is_some_and(|k| k.has(a))
 }
 

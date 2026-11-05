@@ -186,6 +186,9 @@ impl Hasher for KeyHash {
             self.write_u32(x as u32);
         }
     }
+    fn write_u16(&mut self, k: u16) {
+        self.write_u32(k as u32);
+    }
     fn write_u32(&mut self, k: u32) {
         let x = (self.0 ^ k as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
         self.0 = x ^ x >> 32;

@@ -78,6 +78,17 @@ const fn width(i: usize) -> u32 {
     }
 }
 
+/// each field's `width` as the shift there and back that wraps a difference to it (`signed`); 0 for one that does not
+const SHIFT: [u32; NF] = {
+    let mut s = [0; NF];
+    let mut i = 0;
+    while i < NF {
+        s[i] = if width(i) == 0 { 0 } else { 64 - width(i) };
+        i += 1;
+    }
+    s
+};
+
 /// a car state's fields (`NF`), as integers
 pub type Fields = [i64; NF];
 
@@ -103,6 +114,14 @@ fn rdf(b: &[u8], o: usize) -> f32 {
     f32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
 }
 
+/// x to the nearest whole number, halves away from zero (`f64::round`), for the x `fields` rounds: an f32 times 1000 or
+/// 100, within 1e9.  Such an x has at most 31 significant bits, so x ± 0.5 is exact and the cast's truncation is the
+/// rounding.  `f64::round` is a call into the C library on the x86-64 the image is built for (no SSE4.1): six for every
+/// car state to every friend took 1.7 % of the switch's own work on nfsu2.xyz (2026-11-05).
+fn round(x: f64) -> i64 {
+    (x + 0.5f64.copysign(x)) as i64
+}
+
 /// The fields of a SNAP's body (the datagram from its sender's id on, without its CRC: what a compact entry carries),
 /// rounded as they go; None when it is not a SNAP of one state of this layout, or a float is not a finite one this
 /// can carry.
@@ -125,8 +144,8 @@ pub fn fields(body: &[u8]) -> Option<Fields> {
         if !p.is_finite() || p.abs() > 1e6 || !s.is_finite() || s.abs() > 1e6 {
             return None;
         }
-        v[P + i] = (p as f64 * 1000.0).round() as i64;
-        v[V + i] = (s as f64 * 100.0).round() as i64;
+        v[P + i] = round(p as f64 * 1000.0);
+        v[V + i] = round(s as f64 * 100.0);
     }
     for i in 0..4 {
         v[Q + i] = rds16(body, 42 + 2 * i);
@@ -299,12 +318,15 @@ fn apply(i: usize, want: i64, d: i64) -> i64 {
     }
 }
 
-fn put_varint(buf: &mut Vec<u8>, mut u: u64) {
+/// u as a LEB128 varint into e at n: where it ends (e holds the 10 bytes of the longest)
+fn put_varint_at(e: &mut [u8], mut n: usize, mut u: u64) -> usize {
     while u >= 0x80 {
-        buf.push(u as u8 | 0x80);
+        e[n] = u as u8 | 0x80;
         u >>= 7;
+        n += 1;
     }
-    buf.push(u as u8);
+    e[n] = u as u8;
+    n + 1
 }
 
 fn get_varint(b: &[u8], at: &mut usize) -> Option<u64> {
@@ -340,32 +362,65 @@ impl Fpred {
     }
 
     /// The entry of a state from `src` into `buf`; false when it would be longer than 255 (nothing written, nothing
-    /// kept: it goes as before)
+    /// kept: it goes as before).
+    ///
+    /// What `predict` makes, without making it: each field against its last value, and then the time, the sequence
+    /// number and the position against theirs; the source looked up once and its last state brought up to date where it
+    /// is.  The switch's writers do this for every car state to every friend, and the whole prediction's copies (three
+    /// of 424 bytes and a second lookup) were most of it (nfsu2.xyz, 2026-11-05: a fifth of the switch's own work).
+    /// The same bytes as `predict`'s way (the tests' `encode_by_predict`).
     pub fn encode(&mut self, buf: &mut Vec<u8>, src: u16, cur: &Fields) -> bool {
-        let want = predict(self.last.get(&src), Some(cur[T]));
-        let start = buf.len();
-        buf.push(F_FPRED);
-        buf.extend_from_slice(&src.to_be_bytes());
-        buf.push(0);
+        let last = self.last.get_mut(&src);
         let mut d = [0i64; NF];
         let mut mask = 0u64;
-        for i in 0..NF {
-            d[i] = diff(i, cur[i], want[i]);
-            if d[i] != 0 {
-                mask |= 1 << i;
+        match last.as_deref() {
+            None => {
+                for i in 0..NF {
+                    d[i] = (cur[i] << SHIFT[i]) >> SHIFT[i];
+                }
+            }
+            Some(l) => {
+                for i in 0..NF {
+                    d[i] = ((cur[i] - l.v[i]) << SHIFT[i]) >> SHIFT[i];
+                }
+                if l.two {
+                    d[T] = diff(T, cur[T], (2 * l.v[T] - l.t2) & 0xFF_FFFF);
+                    d[SEQ] = diff(SEQ, cur[SEQ], (2 * l.v[SEQ] - l.seq2) & 0xFFFF);
+                }
+                let dt = signed(cur[T] - l.v[T], 24);
+                if (0..=4096).contains(&dt) {
+                    for i in P..P + 3 {
+                        d[i] = diff(i, cur[i], l.v[i] + (l.v[i + V - P] * dt * 16 + 3125).div_euclid(6250));
+                    }
+                }
             }
         }
-        put_varint(buf, mask);
-        for &x in d.iter().filter(|&&x| x != 0) {
-            put_varint(buf, ((x << 1) ^ (x >> 63)) as u64);
+        for (i, &x) in d.iter().enumerate() {
+            mask |= ((x != 0) as u64) << i;
         }
-        let len = buf.len() - start - 4;
-        if len > 255 {
-            buf.truncate(start);
+        // the entry made on the stack (its head, the bitmap and up to NF varints of 10 bytes at most), then added at once
+        let mut e = [0u8; 4 + 10 * (NF + 1)];
+        let [s0, s1] = src.to_be_bytes();
+        (e[0], e[1], e[2]) = (F_FPRED, s0, s1);
+        let mut n = put_varint_at(&mut e, 4, mask);
+        let mut m = mask;
+        while m != 0 {
+            let x = d[m.trailing_zeros() as usize];
+            m &= m - 1;
+            n = put_varint_at(&mut e, n, ((x << 1) ^ (x >> 63)) as u64);
+        }
+        if n - 4 > 255 {
             return false;
         }
-        buf[start + 3] = len as u8;
-        self.keep(src, cur);
+        e[3] = (n - 4) as u8;
+        buf.extend_from_slice(&e[..n]);
+        match last {
+            Some(l) => {
+                (l.t2, l.seq2, l.two) = (l.v[T], l.v[SEQ], true);
+                l.v = *cur;
+            }
+            None => self.keep(src, cur),
+        }
         true
     }
 
@@ -603,5 +658,156 @@ pub(crate) mod tests {
         more.push(0);
         assert!(Fpred::default().decode(3, &more).is_none(), "one too many");
         assert!(Fpred::default().decode(3, &[0xFF; 9]).is_none(), "a bitmap past the fields");
+    }
+
+    fn put_varint(buf: &mut Vec<u8>, mut u: u64) {
+        while u >= 0x80 {
+            buf.push(u as u8 | 0x80);
+            u >>= 7;
+        }
+        buf.push(u as u8);
+    }
+
+    /// `encode` as it was until 2026-11-05: the whole prediction (`predict`), then the differences, then `keep`
+    fn encode_by_predict(f: &mut Fpred, buf: &mut Vec<u8>, src: u16, cur: &Fields) -> bool {
+        let want = predict(f.last.get(&src), Some(cur[T]));
+        let start = buf.len();
+        buf.push(F_FPRED);
+        buf.extend_from_slice(&src.to_be_bytes());
+        buf.push(0);
+        let mut d = [0i64; NF];
+        let mut mask = 0u64;
+        for i in 0..NF {
+            d[i] = diff(i, cur[i], want[i]);
+            if d[i] != 0 {
+                mask |= 1 << i;
+            }
+        }
+        put_varint(buf, mask);
+        for &x in d.iter().filter(|&&x| x != 0) {
+            put_varint(buf, ((x << 1) ^ (x >> 63)) as u64);
+        }
+        let len = buf.len() - start - 4;
+        if len > 255 {
+            buf.truncate(start);
+            return false;
+        }
+        buf[start + 3] = len as u8;
+        f.keep(src, cur);
+        true
+    }
+
+    /// xorshift64*, for the tests' made-up states
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    // the encoder and `predict`'s way give the same bytes, the same answer and keep the same: over states that drive,
+    // stand, jump in time (back, past a second), wrap their time and sequence, change any field, come from more
+    // sources than REFS_MAX, and now and then cannot go in 255 bytes
+    #[test]
+    fn the_encoder_is_predicts_way_byte_for_byte() {
+        let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
+        let (mut a, mut b) = (Fpred::default(), Fpred::default());
+        let mut state: HashMap<u16, Fields> = HashMap::new();
+        let (mut said, mut long) = (0, 0);
+        for k in 0..400_000u32 {
+            // most from a few sources; some from many (forgetting them all past REFS_MAX)
+            let src = if rng.below(10) < 8 { rng.below(24) as u16 } else { rng.below(600) as u16 };
+            let mut v = *state.entry(src).or_insert_with(|| {
+                let mut v = [0i64; NF];
+                v[N] = 1;
+                v
+            });
+            let step = match rng.below(20) {
+                0 => rng.below(1 << 24) as i64,
+                1 => -(rng.below(300) as i64),
+                2 => 4096 + rng.below(3) as i64,
+                _ => 190 + rng.below(30) as i64,
+            };
+            v[T] = (v[T] + step) & 0xFF_FFFF;
+            v[SEQ] = (v[SEQ] + 1 + (rng.below(8) == 0) as i64 * rng.below(5) as i64) & 0xFFFF;
+            if rng.below(4) != 0 {
+                for i in 0..3 {
+                    v[V + i] = (v[V + i] + rng.below(201) as i64 - 100).clamp(-100_000_000, 100_000_000);
+                    v[P + i] = (v[P + i] + v[V + i] / 20 + rng.below(9) as i64 - 4).clamp(-1_000_000_000, 1_000_000_000);
+                }
+            }
+            // any field, within what `fields` makes of it (a position within 1e9 mm, a velocity 1e8 cm/s, an i16)
+            for _ in 0..rng.below(6) {
+                let i = rng.below(NF as u64) as usize;
+                let within = |r: &mut Rng, m: i64| r.below(2 * m as u64 + 1) as i64 - m;
+                v[i] = match (width(i), i) {
+                    (0, P..=7) if i < V => within(&mut rng, 1_000_000_000),
+                    (0, V..=7) => within(&mut rng, 100_000_000),
+                    (0, _) => within(&mut rng, 32768),
+                    (w, _) => rng.below(1 << w) as i64,
+                };
+            }
+            // now and then one with every field at its widest, mostly too long for an entry (then nothing is kept: the
+            // next goes against the last as before)
+            if rng.below(5000) == 0 {
+                for (i, x) in v.iter_mut().enumerate() {
+                    *x = match (width(i), i) {
+                        (0, V..=7) => 100_000_000,
+                        (0, _) => 1 << 62,
+                        (w, _) => (1 << w) / 2 - 1,
+                    };
+                }
+            } else {
+                state.insert(src, v);
+            }
+            let (mut x, mut y) = (vec![k as u8], vec![k as u8]);
+            let (ok_a, ok_b) = (a.encode(&mut x, src, &v), encode_by_predict(&mut b, &mut y, src, &v));
+            assert_eq!((ok_a, &x), (ok_b, &y), "state {k} from {src}");
+            said += ok_a as u32;
+            long += !ok_a as u32;
+            if k % 997 == 0 {
+                assert_eq!(a.last.len(), b.last.len());
+                for (s, l) in &a.last {
+                    let m = &b.last[s];
+                    assert!(l.v == m.v && (l.t2, l.seq2, l.two) == (m.t2, m.seq2, m.two), "source {s} kept the same");
+                }
+            }
+        }
+        assert!(said > 390_000 && long > 0, "{said} written, {long} too long");
+    }
+
+    // `round` is `f64::round` for what `fields` rounds: positions and velocities of every 61st f32 within 1e6 (of every
+    // one with `cargo test -- --ignored`), and the halves (n ± 0.5) within 1e9
+    fn rounds_like_f64(step: usize) {
+        for bits in (0..=u32::MAX).step_by(step) {
+            let p = f32::from_bits(bits);
+            if p.is_finite() && p.abs() <= 1e6 {
+                for x in [p as f64 * 1000.0, p as f64 * 100.0] {
+                    assert_eq!(round(x), x.round() as i64, "{p}: {x}");
+                }
+            }
+        }
+        for n in (-1_000_000_000i64..=1_000_000_000).step_by(step * 7919).chain(-3..=3) {
+            for x in [n as f64 - 0.5, n as f64 + 0.5] {
+                assert_eq!(round(x), x.round() as i64, "{x}");
+            }
+        }
+    }
+
+    #[test]
+    fn round_is_f64_round() {
+        rounds_like_f64(61);
+    }
+
+    #[test]
+    #[ignore]
+    fn round_is_f64_round_for_every_f32() {
+        rounds_like_f64(1);
     }
 }
