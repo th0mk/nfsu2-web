@@ -1304,6 +1304,7 @@ int rc_set_room(rc_session *s, uint32_t room){
         n += s->peer[i].state == RC_PS_EST;
         drop_peer(s, i, "the room changed", RC_DGONE_SAID);
     }
+    s->meet_n = 0; s->meet_gen++; s->meet_req++; s->meet_asked_us = INT64_MIN / 4;
     s->map_n = 0; s->map_total = 0; s->map_held = 0; s->map_gen++;
     s->near_n = 0; s->near_total = 0; s->near_held = 0; s->near_gen++;
     s->lobbies_n = 0; s->lobbies_gen++;
@@ -1499,6 +1500,56 @@ static int rate_ok(rc_peer *p, int len, int64_t now){
     p->rl_n++; p->rl_bytes += len;
     return p->rl_n <= RL_DGRAMS && p->rl_bytes <= RL_BYTES;
 }
+/* Optional hub extension: MTP3 includes up to 32 NPCs for nearby meets.
+ * MTP2 includes up to eight NPCs per meet; both carry stable IDs and layouts.
+ * MTP1 is still readable (markers only). Validate the complete snapshot before
+ * replacing any cached state; only the configured hub/current request may do so. */
+static void meet_answer(rc_session *s, const uint8_t *buf, int len, int64_t now){
+    if (s->closed || len < 13 || len > 1077 || !s->meet_req || (s->status != RC_ST_ROAM && s->status != RC_ST_PAUSED)) return;
+    rc_r r; rc_r_init(&r, buf + 4, (uint32_t)len - 4);
+    if (rc_get32(&r) != s->conf.room || rc_get32(&r) != s->meet_req) return;
+    int n = (int)rc_get8(&r), crowds = buf[3] != '1';
+    if (n > 8) return;
+    rc_meet list[8] = {0};
+    int consumed = 13;
+    for (int i = 0; i < n; i++) {
+        if (len-consumed < (crowds ? 13 : 8)) return;
+        rc_meet *m = &list[i];
+        m->x = (int16_t)rc_get16(&r); m->y = (int16_t)rc_get16(&r);
+        m->z = (int16_t)rc_get16(&r); m->cars = (uint16_t)rc_get16(&r);
+        consumed += 8;
+        if (m->cars < 20) return;
+        if (crowds) {
+            m->id = rc_get32(&r); m->n_spectators = (uint8_t)rc_get8(&r); consumed += 5;
+            if (!m->id || m->n_spectators > (buf[3] == '3' ? 32 : 8) || len-consumed < m->n_spectators*15) return;
+            for (int k = 0; k < i; k++) if (list[k].id == m->id) return;
+            for (int j = 0; j < m->n_spectators; j++) {
+                rc_spectator *p = &m->spectators[j];
+                for (int k = 0; k < 3; k++) {
+                    p->p[k] = (int32_t)rc_get32(&r);
+                    if (p->p[k] < -3276700 || p->p[k] > 3276700) return;
+                }
+                p->heading = (uint16_t)rc_get16(&r); p->variant = (uint8_t)rc_get8(&r);
+                if (p->variant > (buf[3] == '3' ? 5 : 3)) return;
+            }
+            consumed += m->n_spectators*15;
+        }
+    }
+    if (consumed != len) return;
+    memcpy(s->meet, list, sizeof list);
+    s->meet_n = n; s->meet_received_us = now; s->meet_gen++;
+}
+static void meet_tick(rc_session *s, int hub, int64_t now){
+    int on = hub && s->hub_heard_us && (s->status == RC_ST_ROAM || s->status == RC_ST_PAUSED);
+    if ((!on || now - s->meet_received_us > 30000000) && s->meet_n) { s->meet_n = 0; s->meet_gen++; }
+    if (!on || !s->io.send || (s->meet_req && now - s->meet_asked_us < 10000000)) return;
+    uint8_t b[12]; rc_w w; rc_w_init(&w, b, sizeof b);
+    rc_putb(&w, "MTQ3", 4); rc_put32(&w, s->conf.room);
+    if (!++s->meet_req) ++s->meet_req;
+    rc_put32(&w, s->meet_req); s->meet_asked_us = now;
+    s->io.send(s->io.user, s->conf.hub_ip, s->conf.hub_port, b, sizeof b);
+    s->tx++; s->tx_bytes += sizeof b;
+}
 void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, int len, int64_t now){
     s->rx++;
     if (!allowed(s, ip)){
@@ -1506,6 +1557,10 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
          * overlay address, say) is heard */
         int k = find(s, ip, port);
         if (k < 0 || !s->peer[k].configured){ s->rx_policy++; return; }
+    }
+    if (len >= 4 && (!memcmp(buf, "MTP1", 4) || !memcmp(buf, "MTP2", 4) || !memcmp(buf, "MTP3", 4))) {
+        if (s->conf.hub_ip && ip == s->conf.hub_ip && port == s->conf.hub_port) meet_answer(s, buf, len, now);
+        return;
     }
     rc_msg m; int e = rc_decode(buf, len, &m);
     if (e == RC_E_VERSION){
@@ -1752,6 +1807,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
 void rc_tick(rc_session *s, int64_t now){
     if (s->closed) return;
     int hub = hub_mode(s, now);
+    meet_tick(s, hub, now);
     if (s->conf.hub_ip){
         if (!s->hub_since) s->hub_since = now ? now : 1;
         if (now - s->hub_hello_tx >= T_HUB_HELLO){ rc_msg m; fill_hello(s, &m, 0, 1); tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m); s->hub_hello_tx = now; }
@@ -1912,5 +1968,6 @@ void rc_shutdown(rc_session *s, uint8_t reason){
             rc_msg m; hdr(s, &m, RC_MSG_BYE); m.u.bye.reason = reason; tx(s, p, &m);
         }
     if (s->conf.hub_ip){ rc_msg m; hdr(s, &m, RC_MSG_BYE); m.u.bye.reason = reason; tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m); }
+    s->meet_n = 0; s->meet_gen++;
     s->closed = 1;
 }

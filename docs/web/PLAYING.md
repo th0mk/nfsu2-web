@@ -522,7 +522,16 @@ Good to know:
   Up or Down and Enter crosses it out, as with the game's own rows: the map then leaves out the other players' markers
   (a crew-mate's stays), the players' race lobbies (yours stays) or the meets until you tick it again, and the game
   remembers it. A spot where 20 or more players have been parked for a minute is a car meet: a green star and "Meet:"
-  with its number of cars on the world map (the new career's start doesn't count). Picking the Car meets row picks
+  with its number of cars on the world map (the new career's start doesn't count). The server updates meets
+  every ten seconds; games poll that cached list every ten seconds during free roam, even with the map closed. Up to eight meets
+  appear per room, with players within 50 m horizontally and less than 10 m vertically of each meet's centre. Nearby meets have up to 24 animated
+  spectators in compact, irregular groups of six distinct character models, with varied spacing and facing, using the game's own characters and the roughly one-metre spacing of its race-start crowds. The server chooses their positions, facing and appearance and
+  keeps that layout while the meet lasts, so everyone sees the same crowd. Clients render only the nearest
+  crowd (within 120 m, retained to 140 m), even with the map closed; characters disappear when the meet ends
+  or you leave free roam. Clients check collision surfaces at the assigned positions, including the footprint and headroom,
+  and choose a surface near the meet’s road level. Missing geometry, ledges and steep or obstructed positions
+  are skipped and retried every five seconds; clients never move a character to another X/Y position. They are decorative, without collision. The game's Crowd setting applies.
+  Picking the Car meets row picks
   the nearest meet, Left or Right the next, and C starts the GPS there; it stops when you arrive. A player in a
   race, a shop or the menus is not in your free roam: no car, no arrow, no marker until they are back. A player farther than 300 m
   sends you their car 5 times a second instead of 20 (past 1 km, twice), which saves traffic and doesn't show at that

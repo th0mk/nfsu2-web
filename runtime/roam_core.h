@@ -653,6 +653,15 @@ typedef struct {
     rc_interp mo;                  /* motion: jitter buffer and smoothing */
 } rc_peer;
 
+/* MTP2: layout is authoritative, shared by everyone in the room. */
+typedef struct { int32_t p[3]; uint16_t heading; uint8_t variant; } rc_spectator;
+typedef struct {
+    int16_t x, y, z; uint16_t cars;
+    uint32_t id;
+    uint8_t n_spectators;
+    rc_spectator spectators[32];
+} rc_meet;
+
 typedef struct {
     rc_config conf;
     rc_io     io;
@@ -698,6 +707,11 @@ typedef struct {
      * answer's parts so far (part j at j * RC_MAPD_BYTES), and the players
      * as of the last complete answer (map_held its question; map_gen +1 for
      * each), by id */
+    /* Server-computed meets, polled independently of the world map. */
+    uint32_t meet_req, meet_gen;
+    int64_t meet_asked_us, meet_received_us;
+    int meet_n;
+    rc_meet meet[8];
     uint16_t  map_req;  int64_t map_asked_us;
     uint16_t  map_want, map_flags;    /* the flags to ask with (the game's: RC_MAPREQ_PARKED | RC_MAPREQ_WIDE), and our last question's */
     uint64_t  map_mask;  uint8_t map_nparts;  uint8_t map_part_n[RC_MAPD_PARTS];  uint16_t map_part_len[RC_MAPD_PARTS];
