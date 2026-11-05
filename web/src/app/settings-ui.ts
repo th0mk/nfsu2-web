@@ -13,6 +13,7 @@
 import { checkSetting, DEFAULTS, keyDef, resolveEnv, settingsPut, TEMPLATE, type Resolved } from './settings';
 import { NO_SAVE, readText, UNREADABLE, writeFile, writesAreOff } from './savefs';
 import { playHorn, stopHorn } from './horn-preview';
+import { plateInput } from './plates';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
 import { roomHash } from './players';
 import { checkRoom, inviteLink } from './invite';
@@ -84,6 +85,7 @@ const GROUPS: Group[] = [
   { title: N('Online'), more: N('More online settings'), own: true, items: [
     { key: 'roam', label: N('Free roam with others'), help: N('See other players\' cars in career free roam, and they see yours.'), c: { t: 'switch' } },
     { key: 'roam_name', label: N('Your name'), help: N('Shown over your car and in the Online menu: 3 to 15 letters, digits, - or _.'), c: { t: 'text', placeholder: N('profile name') } },
+    { key: 'license_plate', label: N('License plate'), help: N('Up to 8 letters or digits. Leave empty for the original plate.'), c: { t: 'text', placeholder: N('Original plate') } },
     { key: 'roam_flag', label: N('Your flag'), help: N('Shown before your name over your car in free roam.'), c: { t: 'flag' } },
     { key: 'horn', label: N('Your horn'), help: N('With other players. Its key and button: Controls, Site.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
@@ -377,7 +379,7 @@ export function putKey(text: string, key: string, value: string | null): { text:
 
 /** What "Reset all settings" keeps: the name and flag the other players know you by, your crews, and the language (this
  *  page's too). */
-const RESET_KEEPS = ['roam_name', 'roam_flag', 'roam_crew', 'roam_crew_colours', 'language'];
+const RESET_KEEPS = ['license_plate', 'roam_name', 'roam_flag', 'roam_crew', 'roam_crew_colours', 'language'];
 
 /** "Reset all settings": the template, with the kept settings as the file has them (by their own key, also where
  *  the file sets the variable by its name, if the key reads the value the same).  One the file does not set, or
@@ -785,7 +787,8 @@ export class SettingsPanel {
       if (c.t === 'num') { if (c.min !== undefined) inp.min = String(c.min); if (c.max !== undefined) inp.max = String(c.max); if (c.step !== undefined) inp.step = String(c.step); }
       else if (c.placeholder) inp.placeholder = t(c.placeholder);
       inp.value = cur;
-      inp.onchange = () => {
+      if (it.key === 'license_plate') plateInput(inp);
+      const commit = () => {
         let v = inp.value.trim();
         // Your name in the form the Online menu and free roam both use (claim.ts)
         if (it.key === 'roam_name' && v) v = onlineName(v) ?? v;
@@ -809,6 +812,8 @@ export class SettingsPanel {
         }
         void this.put(it.key, v);
       };
+      // Sanitizing input assigns .value, which can suppress the browser's change event.
+      if (it.key === 'license_plate') inp.onblur = commit; else inp.onchange = commit;
       if (c.t === 'text' && c.invite) {
         // the value box with the link button in it, as the cloud saves' passphrase box has its own (index.html .keybox):
         // the link is to the name in the box (also before it is saved), shown while it holds one

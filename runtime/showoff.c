@@ -482,15 +482,22 @@ static uint32_t trunk_rec(const Car *k){
 
 /* photo.c: a car photo mode does not draw (its Cars list); none where photo mode is not built in */
 __attribute__((weak)) int photo_hides(uint32_t ri){ (void)ri; return 0; }
+__attribute__((weak)) uint32_t roam_game_plate_begin(CPU *c, uint32_t ri){ (void)c; (void)ri; return 0; }
+__attribute__((weak)) void roam_game_plate_end(uint32_t previous){ (void)previous; }
 void sub_00620ae0_orig(CPU *c);
+static void plate_draw(CPU *c){
+    uint32_t previous = roam_game_plate_begin(c, c->ecx);
+    sub_00620ae0_orig(c);
+    roam_game_plate_end(previous);
+}
 void sub_00620ae0(CPU *c){                       /* the car's drawing */
     if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0x30u; return; }   /* (thiscall, ret 0x30) */
     uint32_t b = 0, keep[2]; Car *k = drawn(c->ecx, &b);
-    if (!k){ sub_00620ae0_orig(c); return; }
+    if (!k){ plate_draw(c); return; }
     put_on(k, b, keep);
     uint32_t rec = trunk_rec(k), kind = 0; uint8_t shoot = 0;
     if (rec){ shoot = MR8(G_SHOWCASE); kind = MR32(rec + 4u); MR8(G_SHOWCASE) = 1; MR32(rec + 4u) = 1u; }
-    sub_00620ae0_orig(c);
+    plate_draw(c);
     if (rec){ MR8(G_SHOWCASE) = shoot; MR32(rec + 4u) = kind; }
     take_off(b, keep);
 }

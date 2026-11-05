@@ -1,6 +1,7 @@
 /* roam_core.c -- free-roam multiplayer: the portable core (see roam_core.h).
  * No OS headers, no libm. */
 #include "roam_core.h"
+#include "plate_pixels.h"
 #include "names.h"
 /* No <string.h>: the compiler's builtins (inline, or the freestanding
  * memcpy/memset/memmove/memcmp every C platform provides) */
@@ -412,15 +413,19 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put8(&w, nl); rc_putb(&w, m->u.hello.name, nl);
         rc_put8(&w, m->u.hello.n_seen);
         for (int i = 0; i < m->u.hello.n_seen; i++) rc_put32(&w, m->u.hello.seen[i]);
+        uint32_t pl = 0; while (pl <= RC_PLATE_MAX && m->u.hello.plate[pl]) pl++;
+        if (!plate_valid(m->u.hello.plate, pl)) return -1;
+        int plates = (m->h.flags & RC_HF_PLATE) != 0;
         uint32_t fl = flag_len(m->u.hello.flag);
         if (fl > RC_FLAG_MAX || !flag_ok(m->u.hello.flag, fl)) return -1;
-        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel || fl){
+        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel || fl || plates){
             if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX || m->u.hello.links > RC_MAX_PEERS) return -1;
             rc_put8(&w, m->u.hello.n_crews);
             for (int i = 0; i < m->u.hello.n_crews; i++){ if (!m->u.hello.crews[i]) return -1; rc_put32(&w, m->u.hello.crews[i]); }
-            if (m->u.hello.links || m->u.hello.duel || fl) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
-            if (m->u.hello.duel || fl) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
-            if (fl){ rc_put8(&w, fl); rc_putb(&w, m->u.hello.flag, fl); }                  /* (...before version 13 this) */
+            if (m->u.hello.links || m->u.hello.duel || fl || plates) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
+            if (m->u.hello.duel || fl || plates) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
+            if (fl || plates){ rc_put8(&w, fl); rc_putb(&w, m->u.hello.flag, fl); }                  /* (...before version 13 this) */
+            if (plates){ rc_put8(&w, pl); rc_putb(&w, m->u.hello.plate, pl); }                  /* (...before version 17 this) */
         }
         break; }
     case RC_MSG_PEERS:
@@ -560,20 +565,30 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         if (m->u.hello.n_seen > RC_MAX_PEERS) return RC_E_FIELD;
         for (int i = 0; i < m->u.hello.n_seen; i++) m->u.hello.seen[i] = rc_get32(&r);
         if (m->u.hello.status >= RC_ST__N) return RC_E_FIELD;
+        if ((m->h.flags & RC_HF_PLATE) && (!(m->h.flags & RC_HF_CREW) || r.err || r.n >= r.len)) return RC_E_FIELD;
         if ((m->h.flags & RC_HF_CREW) && !r.err && r.n < r.len){
             m->u.hello.n_crews = (uint8_t)rc_get8(&r);
             if (m->u.hello.n_crews > RC_CREW_MAX) return RC_E_FIELD;
             for (int i = 0; i < m->u.hello.n_crews; i++) m->u.hello.crews[i] = rc_get32(&r);
             if (r.err) return RC_E_SHORT;
             for (int i = 0; i < m->u.hello.n_crews; i++) if (!m->u.hello.crews[i]) return RC_E_FIELD;
+            if ((m->h.flags & RC_HF_PLATE) && r.n + 6 > r.len) return RC_E_FIELD;
             if (r.n < r.len) m->u.hello.links = (uint8_t)rc_get8(&r);
             if (r.n + 4 <= r.len) m->u.hello.duel = rc_get32(&r);
             if (r.n < r.len){                                         /* the flag (core 13): one that is not a code, none */
                 uint32_t fl = rc_get8(&r);
+                if ((m->h.flags & RC_HF_PLATE) && (fl > RC_FLAG_MAX || r.n + fl + 1 > r.len)) return RC_E_FIELD;
                 if (fl <= RC_FLAG_MAX && r.n + fl <= r.len){
                     rc_getb(&r, m->u.hello.flag, fl); m->u.hello.flag[fl] = 0;
                     if (!flag_ok(m->u.hello.flag, fl)) m->u.hello.flag[0] = 0;
                 }
+            }
+            if (m->h.flags & RC_HF_PLATE) {
+                uint32_t pl = rc_get8(&r);
+                if (pl > RC_PLATE_MAX || r.n + pl > r.len) return RC_E_FIELD;
+                rc_getb(&r, m->u.hello.plate, pl);
+                if (!plate_valid(m->u.hello.plate, pl)) return RC_E_FIELD;
+                m->u.hello.plate[pl] = 0;
             }
             r.n = r.len;                                              /* (a newer core's additions) */
         }
@@ -1402,6 +1417,7 @@ int rc_add_peer(rc_session *s, uint32_t ip, uint16_t port, int configured, int64
 static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
     hdr(s, m, RC_MSG_HELLO);
     m->h.flags = RC_HF_STATEX | RC_HF_CREW | RC_HF_HUBCREW;
+    if (!to || to->core_ver >= 17) m->h.flags |= RC_HF_PLATE;
     if (crews && (!to || !s->conf.hub_ip)){
         int n = s->conf.n_crews < 0 ? 0 : s->conf.n_crews > RC_CREW_MAX ? RC_CREW_MAX : s->conf.n_crews;
         for (int i = 0; i < n; i++) if (s->conf.crews[i]) m->u.hello.crews[m->u.hello.n_crews++] = s->conf.crews[i];
@@ -1420,6 +1436,7 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
     m->u.hello.core_ver = RC_CORE_VER; m->u.hello.platform = s->conf.platform; m->u.hello.status = s->status;
     m->u.hello.listen_port = s->conf.port; m->u.hello.cfg_rev = s->cfg_rev; m->u.hello.room = s->conf.room;
     memcpy(m->u.hello.name, s->conf.name, sizeof m->u.hello.name);
+    memcpy(m->u.hello.plate, s->conf.plate, sizeof m->u.hello.plate);
     /* our flag to each peer (with no hub, the beacon's too); the hub reads none */
     if (to || !s->conf.hub_ip){
         uint32_t fl = flag_len(s->conf.flag);
@@ -1611,6 +1628,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         int first = !p->name[0];
         memcpy(p->name, m.u.hello.name, sizeof p->name);
         memcpy(p->flag, m.u.hello.flag, sizeof p->flag);
+        memcpy(p->plate, m.u.hello.plate, sizeof p->plate);
         p->platform = m.u.hello.platform; p->status = m.u.hello.status; p->cfg_rev_seen = m.u.hello.cfg_rev;
         p->core_ver = m.u.hello.core_ver; p->duels = (m.h.flags & RC_HF_DUELS) != 0;
         p->drifts = p->duels && (m.h.flags & RC_HF_DRIFT) != 0;

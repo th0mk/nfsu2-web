@@ -1502,5 +1502,10 @@
   "Next race lobby at a start, then a new one (in free roam)": "Bir başlangıç noktasında sonraki yarış lobisi, ardından yeni bir tane (serbest sürüşte)",
   "Your race lobby: only your friends and crew can see and join it": "Yarış lobin: yalnızca arkadaşların ve ekibin görüp katılabilir",
   "Invite to a race": "Yarışa davet et",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Arkadaşlarını yarış lobine davet et, bir arkadaşının davetini kabul et, uzaktan katıldığın bir yarıştan ayrıl"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Arkadaşlarını yarış lobine davet et, bir arkadaşının davetini kabul et, uzaktan katıldığın bir yarıştan ayrıl",
+  "License plate": "Plaka",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "En fazla 8 harf veya rakam. Orijinal plaka için boş bırakın.",
+  "Original plate": "Orijinal plaka",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "\"{value}\" geçerli bir plaka değil (en fazla 8 ASCII harfi veya rakam)",
+  "Save": "Kaydet"
 }

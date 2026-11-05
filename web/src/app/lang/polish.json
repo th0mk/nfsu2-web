@@ -1635,5 +1635,10 @@
   "Next race lobby at a start, then a new one (in free roam)": "Następna poczekalnia wyścigu na starcie, potem nowa (na przejażdżce)",
   "Your race lobby: only your friends and crew can see and join it": "Twoja poczekalnia wyścigu: widzą ją i mogą do niej dołączyć tylko twoi znajomi i ekipa",
   "Invite to a race": "Zaproś do wyścigu",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Zaproś znajomych do swojej poczekalni wyścigu, przyjmij zaproszenie znajomego, opuść wyścig, do którego dołączasz z daleka"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Zaproś znajomych do swojej poczekalni wyścigu, przyjmij zaproszenie znajomego, opuść wyścig, do którego dołączasz z daleka",
+  "License plate": "Tablica rejestracyjna",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Do 8 liter lub cyfr. Pozostaw puste, aby użyć oryginalnej tablicy.",
+  "Original plate": "Oryginalna tablica",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "„{value}” nie jest prawidłową tablicą (do 8 liter ASCII lub cyfr)",
+  "Save": "Zapisz"
 }

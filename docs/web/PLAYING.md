@@ -30,6 +30,11 @@ On the Mac itself, open **http://localhost:8080/** and press **Play** (or Enter)
 The start page shows the download, then **Ready**. Play is on once the game module has loaded, which takes a second
 or two. The page shows a problem only when there is one, with what to do about it.
 
+**License plates:** set up to eight letters or digits under **Online → License plate** before Play,
+or use **F9 → License plate** while playing. Lowercase letters become uppercase; clearing the field restores
+the original plate. The setting follows this browser's cars, including both local players in split-screen.
+Other updated clients see it in free roam. Only the text is saved and sent; each client builds and caches the image locally.
+
 ## 2. Other PCs
 
 The browser runs the game only on a secure page (`https://`, or `localhost` on the machine itself), so friends play

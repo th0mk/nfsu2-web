@@ -144,6 +144,7 @@ export interface InputSubsystem extends Subsystem {
   lobby?(what: number, host?: number, lobby?: number, race?: number): boolean;
   /** a new name for free roam and Online mode, now (the operator took the old one away), or (seat2) for co-op's player 2
    *  in free roam; false: it cannot reach the game */
+  plate?(text: string): boolean;
   name?(name: string, seat2?: boolean): boolean;
   /** every key and button the game holds goes up (photo mode takes the keys) */
   releaseAll?(): void;

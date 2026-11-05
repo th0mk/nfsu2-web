@@ -1635,5 +1635,10 @@
   "Next race lobby at a start, then a new one (in free roam)": "Следующее лобби гонки на старте, затем новое (в свободной езде)",
   "Your race lobby: only your friends and crew can see and join it": "Ваше лобби гонки: видеть его и присоединяться могут только ваши друзья и команда",
   "Invite to a race": "Пригласить в гонку",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Пригласить друзей в своё лобби гонки, принять приглашение друга, выйти из гонки, к которой вы присоединились издалека"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Пригласить друзей в своё лобби гонки, принять приглашение друга, выйти из гонки, к которой вы присоединились издалека",
+  "License plate": "Номерной знак",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "До 8 букв или цифр. Оставьте пустым для исходного номера.",
+  "Original plate": "Исходный номер",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "«{value}» — недопустимый номер (до 8 букв ASCII или цифр)",
+  "Save": "Сохранить"
 }

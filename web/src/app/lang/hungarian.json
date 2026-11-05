@@ -1496,5 +1496,10 @@
   "Next race lobby at a start, then a new one (in free roam)": "Következő versenylobbi egy rajtnál, utána egy új (Felfedező módban)",
   "Your race lobby: only your friends and crew can see and join it": "A versenylobbid: csak a barátaid és csapattársaid láthatják és csatlakozhatnak hozzá",
   "Invite to a race": "Meghívás versenyre",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Barátok meghívása a versenylobbidba, egy barát meghívásának elfogadása, kilépés a versenyből, amelyhez távolról csatlakoztál"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Barátok meghívása a versenylobbidba, egy barát meghívásának elfogadása, kilépés a versenyből, amelyhez távolról csatlakoztál",
+  "License plate": "Rendszám",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Legfeljebb 8 betű vagy számjegy. Az eredeti rendszámhoz hagyd üresen.",
+  "Original plate": "Eredeti rendszám",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "A(z) „{value}” nem érvényes rendszám (legfeljebb 8 ASCII-betű vagy számjegy)",
+  "Save": "Mentés"
 }

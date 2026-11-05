@@ -517,8 +517,14 @@ static void net_send(void *u, uint32_t ip, uint16_t port, const uint8_t *buf, in
             p->b[14] &= (uint8_t)~RC_HF_STATEX; uint32_t c = rc_crc32(p->b, (uint32_t)len - 4);
             for (int k = 0; k < 4; k++) p->b[len - 4 + k] = (uint8_t)(c >> (8 * k)); }
         if (from == g_nocrew_from && len > 15 && buf[5] == RC_MSG_HELLO){
-            p->b[15] &= (uint8_t)~(RC_HF_CREW >> 8); uint32_t c = rc_crc32(p->b, (uint32_t)len - 4);
-            for (int k = 0; k < 4; k++) p->b[len - 4 + k] = (uint8_t)(c >> (8 * k)); }
+            /* Serialize a real pre-crew HELLO, without newer extensions. */
+            rc_msg old;
+            if (rc_decode(buf,len,&old)==RC_OK) {
+                old.h.flags &= ~(RC_HF_CREW | RC_HF_PLATE); old.u.hello.core_ver=6;
+                old.u.hello.n_crews=old.u.hello.links=0;old.u.hello.duel=0;
+                old.u.hello.flag[0]=old.u.hello.plate[0]=0;
+                p->len=rc_encode(&old,p->b,sizeof p->b);
+            } }
         if (from == g_twoaddr_from && len > 5 && buf[5] == RC_MSG_HELLO && g_qn < 20000){
             g_q[g_qn] = *p; g_q[g_qn].ip = 0x7f000002u; g_qn++; }
     }

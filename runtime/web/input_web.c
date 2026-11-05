@@ -528,7 +528,8 @@ static void handle(const InEv *e){
     case IEV_NAME: {
         char b[11];
         memcpy(b, e->ch, 3); memcpy(b + 3, &e->a, 4); memcpy(b + 7, &e->b, 4);   /* (wasm is little-endian) */
-        if (e->flags & INAME_SEAT2) roam_plat_name2_piece(e->dik, e->vk, b, (int)sizeof b);
+        if (e->flags & INAME_PLATE) { void roam_plat_plate_input(const char *,int); roam_plat_plate_input(b,e->vk); }
+        else if (e->flags & INAME_SEAT2) roam_plat_name2_piece(e->dik, e->vk, b, (int)sizeof b);
         else roam_plat_name_piece(e->dik, e->vk, b, (int)sizeof b);
         break; }
     default: break;

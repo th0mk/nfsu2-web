@@ -229,9 +229,9 @@ fn the_wire_a_sessions_hello_to_the_hub_names_its_outruns_other_player() {
     let Some(run) = hubwire("roam_hubwire_duel.wasm") else { return };
     let h = unhex(&run(&["hellocrew", "40", "a1"]));
     let none = unhex(&run(&["hellocrew", "40"]));
-    assert_eq!(h.len(), none.len() + 4, "four bytes more: {}", hex(&h));
-    assert_eq!(&h[h.len() - 8..h.len() - 4], &0xA1u32.to_le_bytes(), "the id last, before the CRC: {}", hex(&h));
-    assert_eq!(h[h.len() - 9], 40, "after the links it wants");
+    assert_eq!(h.len(), none.len(), "plate-capable HELLO reserves the duel field even when empty");
+    assert_eq!(&h[h.len() - 10..h.len() - 6], &0xA1u32.to_le_bytes(), "the id before flag and plate lengths: {}", hex(&h));
+    assert_eq!(h[h.len() - 11], 40, "after the links it wants");
     for back in [0, 0x1234ABCD] {
         let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
         k.from(V(0), &h);

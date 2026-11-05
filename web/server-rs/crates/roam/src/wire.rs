@@ -409,6 +409,7 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
     }
     let m = match kind {
         MSG_HELLO => {
+            if !nfsu2_util::plates::valid_hello(d) { return None; }
             if end < 29 {
                 return None;
             }

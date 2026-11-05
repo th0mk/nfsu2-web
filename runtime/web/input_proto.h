@@ -160,3 +160,5 @@ _Static_assert(offsetof(HostMailbox, local_pad) == IM_OFF_LOCAL_PADS, "local pad
 _Static_assert(sizeof(HostMailbox) == IM_BYTES, "mailbox layout");
 _Static_assert(IM_TEXT + INPUT_TEXT_BYTES / 4 <= IM_HDR_WORDS, "the text entry fits the header");
 #endif
+
+#define INAME_PLATE 2 /* IEV_NAME: complete plate, vk length 0..8 */

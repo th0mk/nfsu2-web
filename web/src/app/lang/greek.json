@@ -1517,5 +1517,10 @@
   "Next race lobby at a start, then a new one (in free roam)": "Επόμενη αίθουσα αγώνα σε μια αφετηρία και μετά νέα αίθουσα (στην ελεύθερη οδήγηση)",
   "Your race lobby: only your friends and crew can see and join it": "Η αίθουσα αγώνα σου: μόνο οι φίλοι σου και η ομάδα σου μπορούν να τη δουν και να μπουν",
   "Invite to a race": "Πρόσκληση σε αγώνα",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Πρόσκληση φίλων στην αίθουσα αγώνα σου, αποδοχή πρόσκλησης φίλου, αποχώρηση από αγώνα στον οποίο μπήκες από μακριά"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Πρόσκληση φίλων στην αίθουσα αγώνα σου, αποδοχή πρόσκλησης φίλου, αποχώρηση από αγώνα στον οποίο μπήκες από μακριά",
+  "License plate": "Πινακίδα κυκλοφορίας",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Έως 8 γράμματα ή ψηφία. Αφήστε κενό για την αρχική πινακίδα.",
+  "Original plate": "Αρχική πινακίδα",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "Το «{value}» δεν είναι έγκυρη πινακίδα (έως 8 γράμματα ASCII ή ψηφία)",
+  "Save": "Αποθήκευση"
 }

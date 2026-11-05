@@ -1635,5 +1635,10 @@
   "Next race lobby at a start, then a new one (in free roam)": "Další závodní lobby na startu, pak nové (ve volné jízdě)",
   "Your race lobby: only your friends and crew can see and join it": "Tvoje závodní lobby: vidět ho a připojit se můžou jen tvoji přátelé a parta",
   "Invite to a race": "Pozvat do závodu",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvat přátele do svého závodního lobby, přijmout pozvánku přítele, opustit závod, ke kterému ses připojil na dálku"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvat přátele do svého závodního lobby, přijmout pozvánku přítele, opustit závod, ke kterému ses připojil na dálku",
+  "License plate": "Registrační značka",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Až 8 písmen nebo číslic. Pro původní značku nechte prázdné.",
+  "Original plate": "Původní značka",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "„{value}“ není platná značka (až 8 písmen ASCII nebo číslic)",
+  "Save": "Uložit"
 }

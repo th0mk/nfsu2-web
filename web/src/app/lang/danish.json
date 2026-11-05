@@ -1577,5 +1577,10 @@
   "Next race lobby at a start, then a new one (in free roam)": "Næste løbslobby ved en start, derefter en ny (i udforsknings-mode)",
   "Your race lobby: only your friends and crew can see and join it": "Din løbslobby: kun dine venner og dit crew kan se og deltage i den",
   "Invite to a race": "Invitér til et løb",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Invitér venner til din løbslobby, tag imod en vens invitation, forlad et løb, du deltog i på afstand"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Invitér venner til din løbslobby, tag imod en vens invitation, forlad et løb, du deltog i på afstand",
+  "License plate": "Nummerplade",
+  "Up to 8 letters or digits. Leave empty for the original plate.": "Op til 8 bogstaver eller cifre. Lad feltet være tomt for den oprindelige nummerplade.",
+  "Original plate": "Oprindelig nummerplade",
+  "\"{value}\" is not a plate (up to 8 ASCII letters or digits)": "\"{value}\" er ikke en gyldig nummerplade (op til 8 ASCII-bogstaver eller cifre)",
+  "Save": "Gem"
 }
