@@ -1,5 +1,5 @@
 // Controllers the browser gives no standard mapping whose layout the page knows, for the game's virtual pad
-// (gamepad.ts reads any other as if it had the standard mapping): 8BitDo's.
+// (gamepad.ts reads any other as if it had the standard mapping): 8BitDo's and pads with their layout (SAME_AS_8BITDO).
 //
 // In D-input mode, and in their Android and Bluetooth modes, 8BitDo's controllers show up as plain HID gamepads of
 // vendor 2dc8.  Chrome maps two of them (the Ultimate 2C's and the Ultimate 2's Bluetooth, on macOS), Firefox none
@@ -45,10 +45,16 @@ const XBOX_BUTTONS = [PAD_A, PAD_B, -1, PAD_X, PAD_Y, -1, PAD_LB, PAD_RB, -1, -1
   PAD_LS, PAD_RS];
 const L2 = 8, R2 = 9;
 
-/** an 8BitDo controller's face buttons (its model's), from Gamepad.id; null: not 8BitDo's */
+// other makers' HID pads with the same report, as vendor:product, and their face labels: the Zikway HID gamepad (a
+// GameSir-made pad; read on Linux: A, B, -, X, Y, -, LB, RB, LT, RT, Select, Start, -, LS, RS, the triggers on
+// ABS_GAS and ABS_BRAKE; read as the standard mapping its RB was the right trigger, the throttle)
+const SAME_AS_8BITDO: Record<string, Face> = { '3537:1041': 'xbox' };
+
+/** an 8BitDo controller's face buttons (its model's), or another with 8BitDo's layout, from Gamepad.id; null: neither */
 export function eightBitDoFace(id: string): Face | null {
   const u = usbIds(id);
-  return u?.vendor !== '2dc8' ? null : XBOX_FACE.has(u.product) ? 'xbox' : 'nintendo';
+  if (u?.vendor !== '2dc8') return SAME_AS_8BITDO[`${u?.vendor}:${u?.product}`] ?? null;
+  return XBOX_FACE.has(u.product) ? 'xbox' : 'nintendo';
 }
 
 /** where a pad's axes are: the sticks, the triggers (-1: none), the D-pad as one axis (-1: none) or two */

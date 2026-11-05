@@ -32,6 +32,8 @@ test('8BitDo\'s controllers by vendor, in Chrome\'s and Firefox\'s ids, and how 
   assert.equal(D.eightBitDoFace('8BitDo Ultimate 2C (STANDARD GAMEPAD Vendor: 2dc8 Product: 310a)'), 'xbox');
   assert.equal(D.eightBitDoFace('Xbox 360 Controller (XInput STANDARD GAMEPAD)'), null);      // its X-input mode
   assert.equal(D.eightBitDoFace('Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)'), null);   // Switch mode
+  assert.equal(D.eightBitDoFace('Zikway HID gamepad (Vendor: 3537 Product: 1041)'), 'xbox');   // another maker's, same report
+  assert.equal(D.eightBitDoFace('3537-1041-Zikway HID gamepad'), 'xbox');
   assert.equal(G.familyOf(PRO2).family, P.PADF_NINTENDO);
   assert.equal(G.familyOf(ULTIMATE).family, P.PADF_XBOX);
   assert.equal(G.familyOf(PRO2).name, '8BitDo Pro 2');
