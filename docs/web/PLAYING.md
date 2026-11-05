@@ -39,8 +39,8 @@ Docker setup). Each player then opens that `https://` address in the latest **Go
 
 The first start on a PC downloads about 7 MB of game code and, while playing, the game data it needs, compressed on
 the way. That PC keeps the data, so later starts are quick. To load it up front, press **Preload the game data** in
-Game data on this device, in the start page's Other tab (the button shows the size): about 2 GB (all but the movies),
-a little over 1 GB over the network.
+Game data on this device, at the end of the start page's Game tab (the button shows the size): about 2 GB (all but
+the movies), a little over 1 GB over the network.
 After that no loading screen waits on the network, which matters on a slow line to a remote server. The movies
 stream from the server as they play; with Movies off (Game, Movies) the game never asks for them.
 
@@ -154,8 +154,8 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   drift races' (C still goes through all of them), and drifts score as there: the drift races' panel (Best, the
   multiplier with the points its next level needs, Total) shows under Bank, and DRIFT counts a drift's points up
   while you drift, as in the races: lime when it banks, red when a wall loses it. Free roam's
-  music plays on (the drift races have none, unless Music in drag and drift races is on in Settings). Just for fun:
-  the points never go into the bank or the career. X again turns it off and gives your camera back. It is off in
+  music plays on (the drift races have none, unless Music in drag and drift races is on in the start page's Game).
+  Just for fun: the points never go into the bank or the career. X again turns it off and gives your camera back. It is off in
   races and outruns and comes back in free roam after them.
   With it on, challenging another player is a drift battle (see section 6, Drift battles).
 - **Photo mode (F12, or Photo Mode in the pause menu):** while you drive (a race, free roam, an outrun) the world
@@ -229,7 +229,8 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Split screen:** the main menu's item after Quick Race. Pick 2, 3 or 4 players and the race, then each player
   presses START on their own controller and picks a car. Every player gets their own view, HUD, minimap and camera;
   player 1's controller works the results and Post Race menu. Each view is a whole scene, so 3 or 4 players need a
-  fast computer.
+  fast computer. It is BirdSentinel (Zack)'s port of mihaits'
+  [NFSU2-SplitScreen](https://github.com/mihaits/NFSU2-SplitScreen).
 - **Two players on one keyboard** (split screen): one presses Enter to join, the other Space. Alone on the keyboard,
   a player has all of it (arrows or WASD, Shift nitrous, Space handbrake, E and Q gears, C camera, B look back).
   With two, the keyboard is shared:
@@ -270,19 +271,20 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 
 ## 4. Settings
 
-The start page's big panel has six tabs: **Saves**, **Online**, **Friends & crews**, **Game**, **Controls** and
-**Other**. Online, the crews, Game and the Controller part of Controls hold this browser's `settings.ini`, the same
-file and keys as the Mac app; Other has the file as text and Reset all settings. Each change is saved at once and
-applies the next time you press Play. Under Play, **Playing now** shows how many play on this server now: in total, in
-free roam, and in the game's Online mode (its races and lobbies); with a Room set, the Room row says how many are in
-that room.
+The start page's big panel has six tabs: **Saves**, **Online**, **Friends & crews**, **Game**, **Mods** and
+**Controls**. Online, the crews, Game, Mods and the Controller part of Controls hold this browser's `settings.ini`,
+the same file and keys as the Mac app; Game ends with the game data on this device, the file as text and Reset all
+settings. Each change is saved at once and applies the next time you press Play. Under Play, **Playing now** shows how
+many play on this server now: in total, in free roam, and in the game's Online mode (its races and lobbies); with a
+Room set, the Room row says how many are in that room.
 
 | Where | Settings |
 |---|---|
 | Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
-| Game, Game | language, movies, subtitles, songs (uncensored or original), music in drag and drift races, autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
-| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original, map only or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
+| Game, Game | language, movies, music in drag and drift races, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
+| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
+| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -300,32 +302,43 @@ that room.
   pick another.
   Its problems and errors carry a short code (`GPU-ADAPTER-WIN`), the same in every language, to quote when you ask
   for help; the log stays English.
-- **Subtitles:** on by default: the movies' lines as text (the PSA, the tutorials and the story) in every language
-  but French, German, Italian and Spanish, whose movies are dubbed. English's are VileStuff's
-  [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), with who says each line, where the server has its
-  language pack (without it English has none: the game's own English lines stop at their first
-  apostrophe).
-- **Songs:** the EA Trax songs. Uncensored (the default) plays them unedited, some in longer versions than the
-  game's, as a soundtrack mod has them. Original plays the versions the game
-  shipped with, where the server has them. F7 skips to the next song while you play.
-- **Music in drag and drift races:** off by default: as in the original game, those races have no music, so you hear
-  the engine for the shifts. On, the EA Trax songs (or the Radio's tracks) play there too, as in the other races, at
-  the game's music volume, in every drag and drift race: the career's, Quick Race, LAN and Online.
-- **Show hidden races:** off by default. The career has 33 hidden races (one in the prologue, then 4, 8, 10 and 10
-  in the later stages) that are not on the map or the radar: in the original game one shows only when you drive near it,
-  and once all the others are won the map looks empty. On, as MaxHwoy's
-  [Show Hidden Races Mod](https://nfsmods.xyz/mod/1583) has them, they are on the map and the radar like the others
-  (the GPS takes you there), and the map offers up to 8 races of each kind at once instead of 1 to 4, so they take no
-  others off it. Turned off again, a career is as it was: the races open stay open.
-- **Menus, HUD and maps:** Original (the default) is the game's own. Upscaled shows LunicAura106's [Upscaled
-  HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the server has
-  their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times their size,
-  and the minimap's, world map's and race menus' maps at 2048x2048, with the missing shortcuts, and shortcuts and
-  off-road in their own colour. Map only shows the Detailed Map alone, with the game's own menus and HUD. The game's
-  layout stays as it is. Your browser fetches the packs only with Map only (about 20 MB) or Upscaled (about 25 MB in
-  all; the maps as the game loads them). A language with fonts of its own (Russian,
-  Polish, Turkish, Chinese, Japanese, Thai) keeps them. Most phones decode the larger textures into four times the
-  memory.
+- **Mods:** the Mods tab lists the community mods this game carries, under On your screen, Seen by others and Game
+  rules, each with its makers as its mod page names them, then Our changes, where this site differs from the original
+  game. A row with a setting has its switch or choice. The (i) after a row's name opens what the mod does, who sees it,
+  where it is set, what this game takes from it and its pages; Our changes has a row per group (Driving, Free roam,
+  Photos and screen, Career and garage, Controls, Saves), whose (i) lists every change in it, with its key.
+- **Subtitles** (Mods, English Subtitles Fixed): on by default: the movies' lines as text (the PSA, the tutorials and
+  the story) in every language but French, German, Italian and Spanish, whose movies are dubbed. English's are
+  VileStuff's [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), with who says each line, where the server has
+  its language pack (without it English has none: the game's own English lines stop at their first apostrophe). Off,
+  no language has subtitles.
+- **Songs** (Mods, Uncensored & Restored Soundtrack): the EA Trax songs. Uncensored (the default) plays them unedited,
+  some in longer versions than the game's, as xGMVx's [Uncensored & Restored Soundtrack](https://nfsmods.xyz/mod/3649)
+  has them. Original plays the versions the game shipped with, where the server has them. F7 skips to the next song
+  while you play.
+- **Music in drag and drift races** (Game): off by default: as in the original game, those races have no
+  music, so you hear the engine for the shifts. On, the EA Trax songs (or the Radio's tracks) play there too, as in
+  the other races, at the game's music volume, in every drag and drift race: the career's, Quick Race, LAN and Online.
+- **Show Hidden Races Mod** (Mods): off by default. The career has 33 hidden races (one in the prologue, then 4, 8, 10
+  and 10 in the later stages) that are not on the map or the radar: in the original game one shows only when you drive
+  near it, and once all the others are won the map looks empty. On, as MaxHwoy's [Show Hidden Races
+  Mod](https://nfsmods.xyz/mod/1583) has them, they are on the map and the radar like the others (the GPS takes you
+  there), and the map offers up to 8 races of each kind at once instead of 1 to 4, so they take no others off it.
+  Turned off again, a career is as it was: the races open stay open.
+- **Visual Reputation Remover** (Mods): off by default. In the original game a stage's DVD cover shoots come only once
+  your car's visual parts rate enough stars, and a shoot pays more for more stars. On, as thelink2012's [Visual
+  Reputation Remover](https://nfsmods.xyz/mod/2773) has it, the rating is the stage's (none in the prologue, 1, 3, 5.5
+  and 8 stars in stages 1 to 4, 10 from stage 5), so every cover shoot of the stage is offered the next time free roam
+  loads, and pays by that rating. The shops show no Visual Rating box. Turned off again, the next free-roam load
+  offers the shoots by your car's own rating; the ones shot and paid stay.
+- **Upscaled HUD and Detailed Map** (Mods): Original (the default) is the game's own. Upscaled shows LunicAura106's
+  [Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the
+  server has their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times
+  their size, and the minimap's, world map's and race menus' maps at 2048x2048, with the missing shortcuts, and
+  shortcuts and off-road in their own colour. Map only shows the Detailed Map alone, with the game's own menus and
+  HUD. The game's layout stays as it is. Your browser fetches the packs only with Map only (about 20 MB) or Upscaled
+  (about 25 MB in all; the maps as the game loads them). A language with fonts of its own (Russian, Polish, Turkish,
+  Chinese, Japanese, Thai) keeps them. Most phones decode the larger textures into four times the memory.
 - **Radio:** the menu (F9) has a Radio line. It plays the music files of a folder on your device in place of the
   game's EA Trax songs. The folder icon picks the folder, its subfolders included; the list icon opens the Playlist:
   each track is Menu, Race, All or Off, and **Shuffle** plays them in random order. A new song starts with the next
@@ -346,10 +359,11 @@ that room.
   On yours a link cannot change your game; the start page says so when an address carries them.
 - **The look:** the game looks as it did originally. Any graphics enhancement will be a separate setting, off
   unless you turn it on. One fix is always on: a car's shadow lies 1.5 cm above the road instead of 4, so its edge
-  no longer cuts into the bottom of the tyres (TerminatorVasya's [Shadow Fix](https://nfsmods.xyz/mod/7328)).
+  no longer cuts into the bottom of the tyres (TerminatorVasya's [NFSU2 Shadow Fix](https://nfsmods.xyz/mod/7328)).
 - **The European cars:** the Peugeot 106 and the Vauxhall Corsa 1.8, which only the European release sold, are in the
   car lot and on every car select (Quick Race, Customize, LAN and Online), and AI racers drive them too. The North
-  American game has their files but hid them.
+  American game has their files but hid them. This, the Special vinyls and Quick Race below, the drift camera (C) and
+  high beam (G) follow the ExOpts Team's [NFSU2 Extra Options](https://nfsmods.xyz/mod/290).
 - **The garage:** the career keeps up to 10 cars, not 5. A new career opens 2 slots and each stage 2 more (10 from
   stage 5); a career from before, or from the PC game, gets 2 for each stage it has reached when it loads. Trade Car
   on the crib's car list (C, or tap it) takes a car away for 80 % of what you spent on it, as the game's own trade-in
@@ -429,8 +443,8 @@ that room.
     magazine covers (a cover is a picture of 1 MB: another browser's crib lists it, but the game says it cannot load
     it), the game's graphics options, the record of the LAN games and free-roam races this browser hosted
     (`gamefile.bin`), and of the settings full screen, the resolution scale, render size and pixel limit,
-    menus, HUD and maps, the frame rate and its counter, the output latency, the controller's settings and how many
-    players' cars free roam shows. A phone keeps its own and a PC its own.
+    Upscaled HUD and Detailed Map, the frame rate and its counter, the output latency, the controller's settings and
+    how many players' cars free roam shows. A phone keeps its own and a PC its own.
   - The server keeps the copy of an earlier day too: "Go back to ..." brings it back when a day went wrong.
   - Your passphrase can also claim your name (**Online, Your name**: no one else plays under it; see "Your name is
     yours" under Online), so in another browser your name comes back with your saves.
@@ -965,7 +979,7 @@ Good to know:
 | "A new version of the game is on the server" | Press **Reload** or **Play**: the page loads the new version, and your saves and settings stay. Download the log first if you want to keep it: after the reload, Download log has only a shorter copy of that game's. Before any game the page reloads by itself; during a game it says so over the game, and the start page offers it when you quit. |
 | "Open elsewhere" | The game runs in another tab of this browser. Switch to it, or close it. |
 | "Not loading": "Your antivirus or network is probably blocking the game" | The page's own script never started, 15 seconds after the page opened: an antivirus (Kaspersky flagged the site in November 2026) or a network filter blocks it. Allow `nfsu2.xyz` in it, or try mobile data, then **Reload**. |
-| "The game's files didn't load properly" (error code 1 in the first minute) | The game's program file did not load: the browser's copy is damaged, or the network blocks it (the log shows `no PE signature`, or `HTTP 403` for it). **Other**, **Delete game data**, then **Play**; your saves stay. If it happens again, try another network. |
+| "The game's files didn't load properly" (error code 1 in the first minute) | The game's program file did not load: the browser's copy is damaged, or the network blocks it (the log shows `no PE signature`, or `HTTP 403` for it). **Game**, **Delete game data** (at the tab's end), then **Play**; your saves stay. If it happens again, try another network. |
 | `GAME-START`: "Did not start", "The game couldn't start" | Press **Play** again; if it happens again, **Download log** (on the start page) and post the log with the message. "This device doesn't have enough free memory for the game" (the log: "could not allocate memory" in Chrome, "Out of memory" in Safari): the browser would not set aside the game's 1 GB, most often on phones with 2 to 4 GB (a 32-bit Chrome, an iPhone's Home Screen app). Close other apps and reload the page; the log's `[memory]` line says what the browser refused. |
 | `STORAGE-NONE`: "This browser window cannot store files" | A guest or private window cannot keep saves: open the page in a normal window. |
 | `STORAGE-OLD`: "This browser is too old for the game" | Safari before 26 (iOS 18 with Safari's WebGPU feature flag on, for one) cannot write the game's files. Update to iOS 26, iPadOS 26 or macOS with Safari 26 (Settings, General, Software Update). |

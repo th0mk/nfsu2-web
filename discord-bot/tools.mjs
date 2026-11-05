@@ -69,11 +69,11 @@ export const TOOL_DEFS = [
 
 // the page's labels replies name most (start page tabs, buttons, settings), for `labels`: a language's file has ~1,400
 // texts, too many to read for a few, and replies in Spanish, Hungarian and Portuguese named them in English
-const LABELS = ['Saves', 'Online', 'Friends & crews', 'Game', 'Display', 'Controls', 'Other', 'Play', 'Quit game', 'Download log',
+const LABELS = ['Saves', 'Online', 'Friends & crews', 'Game', 'Display', 'Mods', 'Controls', 'Play', 'Quit game', 'Download log',
   'Cloud saves', 'Turn on', 'Load', 'Stop syncing', "Keep this browser's", 'Put back', 'Download backup', 'Restore', 'Screenshots',
   'Free roam with others', 'Your name', 'Claim', 'Room', 'Ghost mode', "Players' cars shown", 'Frame rate', 'Auto',
-  'Resolution scale', 'Full screen on Play', 'More display settings', 'Menus, HUD and maps', 'More game settings',
-  'Show hidden races', 'Controller', 'More controller settings', 'Hotplug', 'Off', 'Rumble', 'Trigger full press',
+  'Resolution scale', 'Full screen on Play', 'More display settings', 'More game settings',
+  'Controller', 'More controller settings', 'Hotplug', 'Off', 'Rumble', 'Trigger full press',
   'Delete game data'];
 const LANG_FILES = { pt: 'portuguese', es: 'spanish', pl: 'polish', ru: 'russian', tr: 'turkish', hu: 'hungarian', uk: 'ukrainian',
   cs: 'czech', sk: 'slovak', el: 'greek', fr: 'french', de: 'german', it: 'italian', nl: 'dutch', sv: 'swedish', da: 'danish',

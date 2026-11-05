@@ -31,7 +31,7 @@ The start page says what is wrong, with a code. The most common:
 - `PAGE-NOT-ISOLATED`: an extension changes the page. Try a guest window; if it starts there, turn your extensions off one by one.
 - `GPU-ADAPTER-WIN`: your graphics have no Direct3D 12 driver. Update the graphics driver; older graphics (Intel HD 4000, 4400, 4600 and older) can't run it.
 - `GPU-ADAPTER-ANDROID`: update Android and Chrome. Then turn on `chrome://flags/#enable-unsafe-webgpu` and restart Chrome.
-- `Error code 1` right after Play: on the start page, Other, **Delete game data**, then reload and Play. Your saves stay.
+- `Error code 1` right after Play: on the start page, Game, **Delete game data** (at the tab's end), then reload and Play. Your saves stay.
 - `MODULE-LOAD` with "Wasm SIMD unsupported": the processor is too old (no SSE4.1, such as an AMD Phenom II). No browser can run the game on it.
 It worked yesterday? Reload the page (Ctrl+F5 on a PC). Something else: post a screenshot of the message in #bug-reports.
 
@@ -85,7 +85,7 @@ label: No races left
 <!-- for: problems -->
 1. Press **T** or **F4** (D-pad Down on a controller): Career Status says what the stage still needs.
 2. Most often it is your car's stars. A sponsor's DVD shoot only shows once your car has enough: add body kits, paint, vinyls, rims, neons, tint, hydraulics or audio.
-3. Still nothing? The game's hidden races only show on the street when you drive near. On the start page, Game, More game settings, **Show hidden races** puts them on the map.
+3. Still nothing? The game's hidden races only show on the street when you drive near. On the start page, Mods, **Show Hidden Races Mod** puts them on the map.
 
 ### How do I get wide body kits?
 label: Wide body kits
@@ -142,8 +142,8 @@ label: Keys
 ### Can I add mods or my own music?
 label: Mods and music
 - **Music:** F9, **Radio** plays a folder of your own songs in place of the game's (not on iPhone or iPad).
-- **The game's songs:** start page, Game, **Songs**: Uncensored (the default, some in longer versions) or Original, as the game shipped them. **F7** plays the next song.
-- **Mods:** you can't add your own. A few come built in: Upscaled HUD and Detailed Map (start page, Game, Display: Upscaled), English Subtitles Fixed and Show hidden races (start page, Game).
+- **The game's songs:** start page, Mods, **Uncensored & Restored Soundtrack**: Uncensored (the default, some in longer versions) or Original, as the game shipped them. **F7** plays the next song.
+- **Mods:** you can't add your own. The ones built in are in the start page's **Mods** tab, with their makers and settings.
 - **Other games:** this project is Underground 2. Nothing else has been announced.
 
 ### How do I report a bug?
@@ -194,4 +194,4 @@ A controller's right stick looks round the car while you drive. A keyboard and t
 
 ### The game's data doesn't fit on my drive
 label: Game data space
-The browser keeps the game's data in its own folder, so it can't go on another drive. Preloading is optional: the game loads what it needs as you play. Start page, Other, **Delete game data** frees the space; your saves stay.
+The browser keeps the game's data in its own folder, so it can't go on another drive. Preloading is optional: the game loads what it needs as you play. Start page, Game, **Delete game data** (at the tab's end) frees the space; your saves stay.

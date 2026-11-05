@@ -15,7 +15,7 @@ known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
   the game is on the server", and Reload or Play loads it. A tab left open runs the old version until then. When a fix
   is live, the answer is when it was fixed, since when it is live, and "reload the page (Ctrl+F5 on a PC)".
 - The page's own settings are on the start page, in its tabs (Online; Game, with its Game and Display parts;
-  Controls; Other), not in the game's Options. Players who can't find one are looking in the game: say "on the start
+  Mods; Controls), not in the game's Options. Players who can't find one are looking in the game: say "on the start
   page", and that it applies at the next Play (F9, Quit game first).
 - The FAQ's answers come in the reader's Discord language (Discord's own Settings, Language), and in #help the bot
   replies with one line from the FAQ's answer when a question asks exactly that.
@@ -77,13 +77,22 @@ The log is the most useful thing in a bug report. Say exactly how:
 Replies named settings that don't exist ("Settings, Display", "Resolution scale 50% or lower"), left a step out, or
 misread the log's numbers:
 
-- Tabs: **Saves, Online, Friends & crews, Game, Controls, Other**. There is no "Settings" tab, and the game's own
-  Options hold none of the page's settings. Game has two parts, Game and Display; Controls has Keyboard (Touch on a
-  touch screen), Controller and Site.
+- Tabs: **Saves, Online, Friends & crews, Game, Mods, Controls**. There is no "Settings" tab, and the game's own
+  Options hold none of the page's settings. Game has two parts, Game and Display, and at its end Game data on this
+  device (Delete game data) and Edit settings.ini as text; Mods lists every built-in mod with its makers (the mods'
+  credits are there, not in the About), its switch or choice where it has a setting, and right after each row's name an (i)
+  that opens what it does, who sees it, where it is set and its pages, then Our changes, a row per group (Driving, Free
+  roam, Photos and screen, Career and garage, Controls, Saves) whose (i) lists every change in it; Controls has Keyboard
+  (Touch on a touch screen), Controller and Site. A page older than the Mods tab has an Other tab with what
+  is now Game's end, and the mods' settings in Game.
 - A setting behind its part's "More … settings" button needs that step said. Controller (On, Hotplug, Off), the dead
-  zones and Trigger full press: Controls, Controller, More controller settings. Show hidden races, sound output
-  latency: Game, More game settings. Menus, HUD and maps, Race HUD, the frame-rate counter: Game, Display, More display
-  settings. The Controller part shows the buttons' layout, not the pad's name.
+  zones and Trigger full press: Controls, Controller, More controller settings. Sound output latency: Game, More game
+  settings. Race HUD, the frame-rate counter: Game, Display, More display settings. The Controller part shows the
+  buttons' layout, not the pad's name.
+- The mods' settings are on their rows in Mods, named by the mod (no "More" step): Upscaled HUD and Detailed Map
+  (Original, Map only, Upscaled), English Subtitles Fixed (off: no movie subtitles in any language), Uncensored &
+  Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover. Music in drag
+  and drift races is the site's own setting: Game.
 - Resolution scale: 50%, 75%, 100%, 150%, 200%. 50% is the lowest (a quarter of the pixels); phones start at 75%.
 - Frame rate: Auto, 30, 60, 120, 240. Auto picks one of those from the screen's refresh rate (240 from 239 Hz, 120
   from 119 Hz, 30 at 31 Hz or less, else 60; runtime/framerate.c). A 75 Hz screen gets 60 and a 144-165 Hz one 120,
@@ -181,8 +190,9 @@ Checked against the guide or the code, and confirmed by players in threads:
   and Robust add delay and are for crackling or dropouts. Never suggest Robust for late sound. Bluetooth headphones
   add their own delay.
 - The EA Trax songs differ from the original game's (other versions, longer intros, "covers", swear words): they are
-  the uncensored versions on purpose: unedited, some in longer album versions. Since 32540c78, start page, Game, Songs,
-  Original plays them as the game shipped them, and F7 (keyboard only) plays the next song.
+  the uncensored versions on purpose: unedited, some in longer album versions (xGMVx's Uncensored & Restored
+  Soundtrack). Since 32540c78, start page, Mods, Uncensored & Restored Soundtrack, Original plays them as the game
+  shipped them, and F7 (keyboard only) plays the next song.
 - A laptop with a graphics card that plays badly or shows a black picture, while its log names the Intel or AMD
   integrated chip: Chrome runs on the wrong one. Windows Settings, System, Display, Graphics: add Chrome, set High
   performance, then quit Chrome completely and start it again. Players confirmed it.
@@ -221,9 +231,12 @@ Checked against the guide or the code, and confirmed by players in threads:
      stars come from visual parts: body kits, paint and vinyls, rims, and the specialties (neons, tint, hydraulics,
      audio). Players who did this got their next races ("upgraded my car to 3 stars and got invited for a special
      event, then a URL race showed"). A shop not found yet is not on the map: drive around the city, the newer areas
-     too. Parts and cars unlock as the stage's races are won.
+     too. Parts and cars unlock as the stage's races are won. A player who asks for a way round the stars: since
+     ad7e4171, start page, Mods, Visual Reputation Remover (off by default, thelink2012's mod) sets the rating by the
+     stage, so every DVD cover shoot of the stage is offered at the next free-roam load and pays by that rating; the
+     shops then show no Visual Rating box. Offer it as their choice, after the parts.
   3. Only then the original game's hidden races: they never show on the map or the radar, only a marker on the street
-     when you drive near. Start page, Game, More game settings, Show hidden races (off by default) puts them on the map
+     when you drive near. Start page, Mods, Show Hidden Races Mod (off by default) puts them on the map
      and the radar from the next Play.
   Saves (Saves, Download backup) and escalating only when all three are done and still nothing shows.
 - Wide body kits, the most asked question of all (how to get them, locked after finishing the game, more than one
@@ -240,7 +253,7 @@ Checked against the guide or the code, and confirmed by players in threads:
   message still arrives at the 6th and 11th stage-5 outrun win. Since 2970e8e, beating Caleb puts every unique visual
   part in the shops for every car (above), so that is the answer; the stage-5 unique performance part is only on an
   earlier save (cloud saves' earlier copy, or a backup). The wide body star never shows while driving an SUV (Hummer,
-  Navigator, Escalade): switch cars. Show hidden races does not change any of this (stars are not races).
+  Navigator, Escalade): switch cars. Show Hidden Races Mod does not change any of this (stars are not races).
 - The game's outrun challengers (the tuners, grey arrows on the minimap) gone from the whole city, online or not: the
   original game's limit, not a bug. Each stage offers only so many outruns: none once the stage's outrun wins reach 10
   in stage 2, 15 in stage 3 and 20 in stages 4 and 5 (checked in the game's code), and none while a unique part's
@@ -273,7 +286,8 @@ Checked against the guide or the code, and confirmed by players in threads:
   noticed: other apps' music (Apple Music, Spotify) pauses while the game plays; no setting lets both play.
 - "Error code 1" seconds after Play: the game's program file did not load, and the log says why. `HTTP 403` for it:
   a network or filter blocks it (another network, or allow nfsu2.xyz). `no PE signature`: the browser's copy is
-  damaged: start page, Other, Delete game data, reload (Ctrl+F5), Play; saves stay (a poster confirmed it).
+  damaged: start page, Game, Delete game data (at the tab's end), reload (Ctrl+F5), Play; saves stay (a poster
+  confirmed it).
 - A profile's name is the game's: up to 7 letters and digits. Other players see Online, Your name (3 to 15 letters,
   digits, - or _), or the profile's name when that is empty. Saves, Rename renames a profile; the game's main menu,
   Profile Manager, Delete deletes one; to start over, a new profile, or Career, Start New Career.
@@ -299,8 +313,8 @@ Checked against the guide or the code, and confirmed by players in threads:
 - A player in a bus, fire truck, ambulance or another traffic car: a save editor changed their profile; the game sells
   none. Other cars drive through it. Don't say how.
 - The game's data can't go on another drive: the browser keeps it in its own folder for the site. Preloading it is
-  optional; start page, Other, Delete game data frees the space, and saves stay. "No more room" is the browser's
-  limit for the site.
+  optional; start page, Game, Delete game data (at the tab's end) frees the space, and saves stay. "No more room" is
+  the browser's limit for the site.
 - A profile left out of a restore because "the name inside … is not one the game makes": since a530a5a0 (2 November,
   live that evening) it comes in renamed. Reload, then restore again.
 
@@ -461,7 +475,8 @@ The developer said these in public; repeat them briefly and kindly when a post a
 The game plays as the original did. Additions and improvements around it are welcome: multiplayer features, quality of
 life, controls, the page, languages, optional graphics settings (off by default: the original look stays the default),
 fixes of the original game's crashes and glitches. Changing its core gameplay mechanics is not done: handling and physics, car
-performance and tuning, AI and traffic, the career's progression, races and rewards, the economy.
+performance and tuning, AI and traffic, the career's progression, races and rewards, the economy. The Mods tab's mods
+that change the career (Show Hidden Races Mod, Visual Reputation Remover) are off by default: the player's choice.
 
 - A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
   (Power Units in Options, Gameplay; Show Player Names there too since 31cc3384 (also in the pause menu's Options, Gameplay): Off
@@ -477,7 +492,7 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   ghost mode in F9 or the start page's Online: Players lets other players' cars pass through, and Everything (since
   6f7bb374) also the game's traffic and its tuners, in free roam with others: the answer to "ghost mode for traffic"
   and to disabling or removing the traffic or the tuners (NPCs) in free roam, which stay in the world as in the game
-  but no longer get in the way; Upscaled HUD in the start page's Game, Display, more: Menus, HUD and maps (Upscaled),
+  but no longer get in the way; Upscaled HUD in the start page's Mods: Upscaled HUD and Detailed Map (Upscaled),
   which since 09e907f1
   also shows JeansBig's Detailed Map: the minimap's, world map's and race menus' maps sharp, with the missing
   shortcuts, and since 5988eb2a Map only in the same row shows the Detailed Map alone, with the game's own menus and HUD; the time
@@ -487,15 +502,17 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   Online, Your flag, since 5988eb2a; photo mode with F12 or the pause menu's
   Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and
   Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for the eyes, in
-  the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in the start page's Game, more:
-  Show hidden races, since dec0e11; wide body kits and the other unique visual parts for every car once Caleb is beaten,
+  the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in the start page's Mods:
+  Show Hidden Races Mod, since dec0e11; DVD cover shoots without the visual rating's stars, in the start page's Mods:
+  Visual Reputation Remover (the rating by the stage; the shops show no Visual Rating box), since ad7e4171; wide body
+  kits and the other unique visual parts for every car once Caleb is beaten,
   since 2970e8e; opening the trunk, hood and doors parked in free roam, O or a controller's D-pad down held a second,
   other players see them, they close when the car drives off, since 1ccb47ac (the open trunk showed no trunk audio:
   empty boxes on the player's own car, nothing on others'; since 68128859 it shows the layout, speakers and amps on
   every car); since 1c0af43d one part at a time: O the hood, again the trunk alone, the doors alone, all of them, all closed (the
   answer to "open only the hood" or "only the doors", threads 1567568582660071586, 1567034148458205255); car meets on
-  the world map, with the GPS to them, since 109bdcc4; Songs in the start page's Game (Uncensored or the game's
-  Original versions) and F7 for the next song,
+  the world map, with the GPS to them, since 109bdcc4; the songs in the start page's Mods: Uncensored & Restored
+  Soundtrack (Uncensored or the game's Original versions) and F7 for the next song,
   since 32540c78; drift battles between players (drift mode on, then the challenge offered as for an outrun: 90 s,
   most drift points win $100 out of the loser's bank, no nitrous, the cars drive through each other), since 19dc8394;
   a picture that looks stretched, cars too wide, wheels oval: the original game draws everything about 10 % too wide
@@ -515,7 +532,7 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
-- A "bug" that is how the original game behaves (drag and drift races have no music, unless Settings, Game, Music in
+- A "bug" that is how the original game behaves (drag and drift races have no music, unless the start page's Game, Music in
   drag and drift races is on, since 0dc17b5d; a part's info screen; hidden races): say so when you are sure, or when the guide or the
   code shows it; otherwise none.
 
