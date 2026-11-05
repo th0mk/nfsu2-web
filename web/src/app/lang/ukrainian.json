@@ -378,6 +378,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Пункт «Гра через Інтернет» у грі пропускає вхід у систему EA: лобі, чат і гонки з усіма на цьому сервері.",
   "Players' cars shown": "Видимі машини гравців",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Скільки машин найближчих гравців видно у вільній їзді. Що більше, то нижчою може бути частота кадрів.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "Скільки машин найближчих гравців видно у вільній їзді. Що більше, то нижчою може бути частота кадрів; «Авто» додає їх, лише поки гра йде плавно.",
   "Game": "Гра",
   "More game settings": "Додаткові налаштування гри",
   "Language": "Мова",

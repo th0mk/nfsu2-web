@@ -146,7 +146,8 @@ void app_local_network_notice(void){
  * that prefix and a number); a list with "on" and "off" also takes the other
  * boolean spellings.  K_NUM: a number.  K_ID: decimal digits only (at most
  * 31).  K_TOKEN: printable ASCII without spaces, under 300 bytes (an asset
- * key or a URL).  K_INT: a whole decimal number in the range "lo..hi".
+ * key or a URL).  K_INT: a whole decimal number in the range "lo..hi" (and
+ * auto with "auto|lo..hi").
  * K_NAME: printable ASCII, 1 to 24 characters, not one that reads as a
  * slur (names.h).  K_PEERS: IPv4 literals a.b.c.d or a.b.c.d:port,
  * separated by commas, ';' or blanks (no host names).  Anything else is
@@ -225,7 +226,7 @@ static const struct { const char *key, *env; int kind; const char *vals; } g_key
     { "roam_crew",                "NFSU2_ROAM_CREW",            K_CREWS | K_IC },
     { "roam_crew_colours",        "NFSU2_ROAM_CREW_RGB",        K_RGBS  | K_IC },
     { "roam_max_players",         "NFSU2_ROAM_MAX_PLAYERS",     K_INT   | K_IC, "2..65" },
-    { "roam_max_cars",            "NFSU2_ROAM_MAX_CARS",        K_INT   | K_IC, "0..64" },
+    { "roam_max_cars",            "NFSU2_ROAM_MAX_CARS",        K_INT   | K_IC, "auto|0..64" },
     { "roam_collide",             "NFSU2_ROAM_COLLIDE",         K_ENUM  | K_IC, "on|off|none" },
     { "roam_rate",                "NFSU2_ROAM_RATE",            K_INT   | K_IC, "10..30" },
     { "roam_delay",               "NFSU2_ROAM_DELAY",           K_INT   | K_IC, "0..1000" },
@@ -442,7 +443,8 @@ static const char *const k_template =
 "# Look for friends with a network broadcast every 2 s.  [NFSU2_ROAM_DISCOVERY]\n"
 "#roam_discovery = on\n"
 "# Largest group, you included (2 to 65), and friends' cars shown at once\n"
-"# (0 to 64, the nearest).  [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]\n"
+"# (0 to 64, the nearest; auto: 32, more in the browser while the frame rate\n"
+"# has room).  [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]\n"
 "#roam_max_players = 65\n"
 "#roam_max_cars = 32\n"
 "# on = friends' cars are solid: drawn where they are now, and one that\n"
@@ -567,9 +569,10 @@ static int enum_value(const char *vals, const char *val, char *out, size_t outsz
     if (has_off && falsy(val)){ snprintf(out, outsz, "off"); return 1; }
     return 0;
 }
-/* K_INT: a whole decimal number within "lo..hi" */
+/* K_INT: a whole decimal number within "lo..hi", or auto where the range is "auto|lo..hi" */
 static int int_in(const char *range, const char *v){
     long lo = 0, hi = 0; char *e = 0;
+    if (!strncmp(range, "auto|", 5)){ if (!strcasecmp(v, "auto")) return 1; range += 5; }
     if (sscanf(range, "%ld..%ld", &lo, &hi) != 2) return 0;
     if (!*v) return 0;
     long x = strtol(v, &e, 10);
@@ -719,6 +722,8 @@ static void apply_setting(const char *key, const char *val, int line){
     } else if (kind == K_INT && !int_in(g_keys[k].vals, val)){
         set_note("settings.ini:%d: %s = \"%s\" is not a whole number in %s, ignored\n", line, key, val, g_keys[k].vals);
         return;
+    } else if (kind == K_INT && !strcasecmp(val, "auto")){
+        out = "auto";
     } else if (kind == K_NAME){
         size_t n = strlen(val); int ok = n >= 1 && n <= 24;
         for (const char *p = val; *p && ok; p++) ok = *p >= ' ' && *p <= '~';

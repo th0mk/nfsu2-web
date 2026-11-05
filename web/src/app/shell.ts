@@ -697,9 +697,9 @@ async function startGame() {
   const firstName = profiles.length || r.source.NFSU2_ROAM_NAME !== 'settings.ini' ? '' : newProfileName(r.env.NFSU2_ROAM_NAME ?? '');
   if (firstName) r.env.NFSU2_NEW_PROFILE_NAME = firstName;
   if (playAs) r.env.NFSU2_ROAM_NAME = playAs;
-  // Players' cars shown by this device's default, not the player's pick: the game shows 32 after all once its frames
-  // are slow with more (roam_game.c cars_cut)
-  if (r.source.NFSU2_ROAM_MAX_CARS === 'device') r.env.NFSU2_ROAM_CARS_AUTO = '1';
+  // Players' cars shown: Auto is a computer's (roam_game.c cars_auto: more cars while the frames have room); a phone or
+  // tablet whose file says auto gets its own number, as more cars loading at once stopped iPhones for memory
+  if (r.env.NFSU2_ROAM_MAX_CARS?.toLowerCase() === 'auto' && DEVICE.roam_max_cars !== 'auto') r.env.NFSU2_ROAM_MAX_CARS = DEVICE.roam_max_cars ?? '32';
   // a computer's game gets the guest heap's window (device.ts heapWindow; process.ts asks for the memory, the game's
   // log says whether it got it); a settings.ini line NFSU2_HEAP_WINDOW = 0 or 1 decides instead
   if (!('NFSU2_HEAP_WINDOW' in r.env) && heapWindow()) r.env.NFSU2_HEAP_WINDOW = '1';

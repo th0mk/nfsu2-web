@@ -327,6 +327,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Oyunun Çevrimiçi menüsü EA girişini atlar: lobi, sohbet ve bu sunucudaki herkesle yarışlar.",
   "Players' cars shown": "Gösterilen oyuncu arabaları",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Serbest sürüşte en yakın kaç oyuncu arabasının görüneceği. Daha fazlası kare hızını düşürebilir.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "Serbest sürüşte en yakın kaç oyuncu arabasının görüneceği. Daha fazlası kare hızını düşürebilir; Otomatik, yalnızca oyun akıcı kaldıkça daha fazlasını ekler.",
   "Game": "Oyun",
   "More game settings": "Diğer oyun ayarları",
   "Language": "Dil",

@@ -321,6 +321,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "게임의 온라인 메뉴에서 EA 로그인을 건너뛰어요. 이 서버의 모두와 로비, 채팅, 레이스를 즐길 수 있어요.",
   "Players' cars shown": "표시할 플레이어 차",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "자유 주행에서 가까운 플레이어 차를 몇 대까지 보여 줄지 정해요. 많을수록 프레임 레이트가 떨어질 수 있어요.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "자유 주행에서 가까운 플레이어 차를 몇 대까지 보여 줄지 정해요. 많을수록 프레임 레이트가 떨어질 수 있어요. '자동'은 게임이 부드럽게 돌아가는 동안에만 차를 더 보여 줘요.",
   "Game": "게임",
   "More game settings": "게임 설정 더 보기",
   "Language": "언어",

@@ -360,6 +360,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Das Online-Menü des Spiels überspringt den EA-Log-in: Lobby, Chat und Rennen mit allen auf diesem Server.",
   "Players' cars shown": "Angezeigte Spielerwagen",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Wie viele der nächsten Spielerwagen die freie Fahrt zeigt. Mehr kann die Bildrate senken.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "Wie viele der nächsten Spielerwagen die freie Fahrt zeigt. Mehr kann die Bildrate senken; Auto fügt nur weitere hinzu, solange das Spiel flüssig läuft.",
   "Game": "Spiel",
   "More game settings": "Weitere Spieleinstellungen",
   "Language": "Sprache",

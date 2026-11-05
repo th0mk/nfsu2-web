@@ -66,10 +66,15 @@ static double dist_pct(const Dist *d, double p){
     return d->max;
 }
 
+static double g_frame_ms = -1;
+/* the last frame's busy time (ms), -1 before the second Present: roam_game.c's Players' cars shown, Auto */
+double gcpu_frame_ms(void){ return g_frame_ms; }
+
 void gcpu_frame(void){
     double b = win32_thread_busy_ms();
     if (g_last >= 0){
         double ms = b - g_last;
+        g_frame_ms = ms;
         uint32_t flow = mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u;
         dist_add(&g_flow[flow & 7], ms);
         if (g_nwin < (int)(sizeof g_win / sizeof g_win[0])) g_win[g_nwin++] = (float)ms;

@@ -100,6 +100,9 @@
 #include "roam_plat.h"
 #include "carsfx.h"
 #include "names.h"
+#ifdef __wasm__
+#include "guest_span.h"               /* g_gwin_hi: the guest heap's window (Players' cars shown: Auto's top step) */
+#endif
 /* co-op free roam (coop.c, the browser's only): player 2 is a second endpoint online (c2_*) */
 #if !defined(ROAM_HOST_WIN) && defined(__wasm__)
 #define COOP            1
@@ -400,9 +403,8 @@ static struct {
                                                  (near_update; 0: none) */
     int map_max;                              /* NFSU2_ROAM_MAP_MAX: the hub's players on the world map, at most (map_update;
                                                  0: none; the page's phones 2048: each marker costs the open map's frames) */
-    int cars_auto;                            /* NFSU2_ROAM_CARS_AUTO: max_cars is the device's default (the page's), not the
-                                                 player's pick: fewer once the frames are slow with more (cars_cut) */
-    int cut_us;                               /* ...a frame this long or more is slow (NFSU2_ROAM_CUT_MS; 0: never cut) */
+    int cars_auto;                            /* NFSU2_ROAM_MAX_CARS=auto: max_cars starts at DEF_CARS and follows the frames
+                                                 (cars_auto) */
     char name[RC_NAME_MAX + 1], room[64];
     int flag;                                 /* NFSU2_ROAM_FLAG: the flag before our name (flags.bin's, -1 none: flag_*) */
     char crew[RC_CREW_MAX][100]; int ncrew;   /* NFSU2_ROAM_CREW: the crews' names, in the player's order (crews_parse; the
@@ -3995,43 +3997,108 @@ typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; char flag[RC_
 static PeerView g_pv[PV_MAX]; static int g_npv;
 static struct { uint32_t id, gen; int horn; } g_phorn[PV_MAX];   /* each peer's horn, as its record (cfg_gen) has it */
 
-/* ---- fewer cars on a slow machine -------------------------------------------------------------- */
-/* Each friend's car shown costs the game's thread about 0.28 ms a frame (a Ryzen 5900X at 1080p, all of them in
- * view: 32 cars 14 ms, 48 cars 18.5 ms), a laptop's several times that.  The page's device default was more than 32
- * on a computer with 8 cores and 8 GB or more (48, then 40) until 2026-11-02; now none is.  So while more than DEF_CARS of them are shown in free
- * roam, the frames are timed: after CUT_WINDOW_US of it with CUT_SHARE of them slow (O.cut_us: 40 fps or a frame and a
- * half of the display), the cars shown go down to DEF_CARS for the rest of the game, the hub hears it (rc_set_links),
- * and the cars past it are parked, as for a friend gone (the players they were show on the minimap: near_update).
- * Only for a device's default (O.cars_auto): a player who picked 48 or 64 keeps it.  A gap over CUT_GAP_US (a load, a
- * pause, the tab away) counts as no frame, and so does an outrun between players (du_on): its friend's car may be one
- * past DEF_CARS, and parked it would end the outrun. */
-#define CUT_FRAME_US    25000
-#define CUT_WINDOW_US   10000000
-#define CUT_SHARE       0.6f
-#define CUT_GAP_US      250000
-static struct { int64_t last, since; int n, slow, done; } g_cut;
+/* ---- Players' cars shown: Auto ----------------------------------------------------------------- */
+/* NFSU2_ROAM_MAX_CARS=auto (the page's default on a computer): DEF_CARS friends' cars shown, and more while this
+ * machine's frames have room for them.  Each car shown costs the game's thread about 0.28 ms a frame on a Ryzen 5900X
+ * with all of them in view (32 cars 14 ms, 48 cars 18.5 ms), a laptop's several times that, so no device gets more
+ * up front: the page's 48, then 40, on fast computers (until 2026-11-02) cost players on fast displays a fifth of
+ * their frames, as the drop back to 32 then waited for 40 fps.  Here each AUTO_WINDOW_US of free roam is judged by
+ * the player's own frame rate (framerate.c's content rate: a 144 Hz display plays at 120, and 120 it stays):
+ *   up a step (DEF_CARS, 48, 64: the last only with the guest heap's window, mem.c) when, on most of the window's
+ *   frames (AUTO_FULL), every slot was taken and the hub had players past our cars within AUTO_NEAR_M of us
+ *   (near_update), at most AUTO_LATE_UP of the frames missed their slot, and the game's thread (gcpu.c) was busy so
+ *   little on the median frame that the step's cars leave it within AUTO_ROOM of a frame: the step's share of more
+ *   cars adds AUTO_GROW of it to the busy time (an M-series Mac at 120 fps among 80 players: 32 cars p50 5.25 ms,
+ *   p95 8.25; 48 cars 6.0 and 10.25, so 32 cars at 5.3 ms or less go to 48, 48 at 5.7 or less to 64; at 60 fps 10.7
+ *   and 11.4).  48 cars with a frame over the period now and then beat 32 smooth ones (the owner's pick, 2026-11-05);
+ *   down a step when more than AUTO_LATE_DOWN of the frames missed their slot with more than DEF_CARS shown, and
+ *   never up again this game (each step loads cars or takes them away: no going up and down).
+ * Not during an outrun between players (du_on: its friend's car may be past the step), a pause or a cutscene (the
+ * game's own 30 fps); a gap over AUTO_GAP_US (a load, the tab away) is no frame.  A number the player picked stays as
+ * picked (O.cars_auto 0).  The car pool has room for the top step from the start (init_once).  Only in the browser:
+ * elsewhere there is no busy time (gcpu.c) and Auto stays at DEF_CARS. */
+#define AUTO_STEP       16
+#define AUTO_TOP_NOWIN  48            /* the top step without the guest heap's window (64 cars there: too little heap) */
+#define AUTO_WINDOW_US  10000000
+#define AUTO_GAP_US     250000
+#define AUTO_FULL       0.5f
+#define AUTO_NEAR_M     250.f
+#define AUTO_LATE       1.25f         /* a frame this many periods long or more missed its slot */
+#define AUTO_LATE_UP    0.05f
+#define AUTO_LATE_DOWN  0.10f
+#define AUTO_ROOM       0.8f          /* the median frame's busy time after the step, of the period at most */
+#define AUTO_GROW       0.5f          /* ...predicted: busy x (1 + AUTO_GROW x the step's cars / the cars now) */
+#define AUTO_OVER       0.5f          /* the frames busier than that (before the step) at most: the median */
+#define AUTO_SAY_US     120000000     /* "not more" said at most this often */
+static struct {
+    int top;                          /* the most Auto shows (DEF_CARS: no more) */
+    int wait;                         /* the hub's players past our cars within AUTO_NEAR_M (near_update, last frame) */
+    int64_t last, since, said;
+    int n, m, late, over, full, down;  /* frames, those without a car's heavy step (judged), ... */
+    int heavy;                        /* the last frame's heavy steps (g_heavy) */
+    int64_t window_us;                /* NFSU2_ROAM_TEST_AUTO_S (scripted runs): the window's length */
+    int test_late;                    /* NFSU2_ROAM_TEST_AUTO_LATE (scripted runs): every frame late once above DEF_CARS */
+} g_auto;
+static int g_heavy;                   /* a car's heavy steps this frame (load_service; the frame's work) */
+#ifdef __wasm__
+int hfr_rate_now(void), hfr_mode_rate(void);
+double gcpu_frame_ms(void);
+#endif
 static void c2_links_set(void);
 static int du_on(void);
-static void cars_cut(CPU *c, uint32_t w, int64_t host){
-    int64_t dt = g_cut.last ? host - g_cut.last : 0;
-    g_cut.last = host;
-    if (g_cut.done || !O.cars_auto || O.max_cars <= DEF_CARS || g_sync_paused || du_on()) { g_cut.since = 0; return; }
-    int shown = 0;
-    for (int k = 0; k < NSLOT; k++) shown += g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden && g_sl[k].world == w;
-    if (shown <= DEF_CARS || dt <= 0 || dt > CUT_GAP_US){ if (shown <= DEF_CARS) g_cut.since = 0; return; }
-    if (!g_cut.since){ g_cut.since = host; g_cut.n = g_cut.slow = 0; }
-    g_cut.n++; g_cut.slow += dt >= O.cut_us;
-    if (host - g_cut.since < CUT_WINDOW_US) return;
-    float share = (float)g_cut.slow / (float)g_cut.n;
-    rlog("[roam] f=%ld %d friends' cars shown: %d of %d frames in %.0f s took %d ms or more%s\n", rh_frame(), shown, g_cut.slow, g_cut.n,
-         (double)(host - g_cut.since) / 1e6, O.cut_us / 1000, share > CUT_SHARE ? "" : ": as many as before");
-    g_cut.since = 0;
-    if (share <= CUT_SHARE) return;
-    rlog("[roam] f=%ld the frames are slow with %d cars: %d friends' cars shown from now on (this device's default was %d)\n",
-         rh_frame(), shown, DEF_CARS, O.max_cars);
-    O.max_cars = DEF_CARS; g_cut.done = 1;
-    for (int k = DEF_CARS; k < NSLOT; k++) release(c, k, "fewer cars shown");
-    roam_plat_lock(); c2_links_set(); roam_plat_unlock();
+static void cars_auto(CPU *c, uint32_t w, int64_t host){
+    (void)w;
+    int64_t dt = g_auto.last ? host - g_auto.last : 0;
+    g_auto.last = host;
+#ifdef __wasm__
+    /* (the game's own 30 fps for a cutscene, the new career's intro too: not free roam's frames) */
+    int rate = hfr_rate_now();
+    if (!O.cars_auto || g_sync_paused || du_on() || rate <= 0 || rate < hfr_mode_rate()){ g_auto.since = 0; return; }
+    if (dt <= 0 || dt > AUTO_GAP_US) return;
+    double per = 1e6 / rate;
+    int cars = O.max_cars, next = !g_auto.down && cars + AUTO_STEP <= g_auto.top ? cars + AUTO_STEP : cars;
+    double room = cars > 0 ? AUTO_ROOM * per / (1.0 + AUTO_GROW * (next - cars) / cars) : 0;   /* us */
+    int used = 0;
+    for (int k = 0; k < cars; k++) used += g_sl[k].st != SL_FREE && g_sl[k].st != SL_PARKED;
+    if (!g_auto.since){ g_auto.since = host; g_auto.n = g_auto.m = g_auto.late = g_auto.over = g_auto.full = 0; }
+    double busy = gcpu_frame_ms();
+    /* a frame with a car's heavy step (its creation, a new look: a load's one-off cost) or after one is not judged */
+    int heavy = g_heavy || g_auto.heavy;
+    g_auto.heavy = g_heavy;
+    g_auto.n++;
+    g_auto.full += used >= cars && g_auto.wait > 0;
+    if (!heavy){
+        g_auto.m++;
+        g_auto.late += (g_auto.test_late && cars > DEF_CARS) || (double)dt >= AUTO_LATE * per;
+        g_auto.over += next > cars && (busy < 0 || busy * 1e3 > room);
+    }
+    if (host - g_auto.since < g_auto.window_us) return;
+    g_auto.since = 0;
+    if (g_auto.m < g_auto.n / 2) return;                     /* mostly loads: not judged */
+    float m = (float)g_auto.m, late = g_auto.late / m, over = g_auto.over / m, full = g_auto.full / (float)g_auto.n;
+    if (cars > DEF_CARS && late > AUTO_LATE_DOWN){
+        int to = cars - AUTO_STEP > DEF_CARS ? cars - AUTO_STEP : DEF_CARS;
+        rlog("[roam] f=%ld cars shown (Auto): %d of %d frames missed their slot at %d fps with %d friends' cars: %d from now on\n",
+             rh_frame(), g_auto.late, g_auto.m, rate, cars, to);
+        O.max_cars = to; g_auto.down = 1;
+        for (int k = to; k < NSLOT; k++) release(c, k, "fewer cars shown");
+        roam_plat_lock(); c2_links_set(); roam_plat_unlock();
+    } else if (next > cars && full >= AUTO_FULL && late <= AUTO_LATE_UP && over <= AUTO_OVER){
+        rlog("[roam] f=%ld cars shown (Auto): every slot taken and players waiting on %d of %d frames; of %d judged, %d late at %d fps "
+             "and %d busy over %.1f ms (now %.1f): %d friends' cars from now on\n", rh_frame(), g_auto.full, g_auto.n, g_auto.m, g_auto.late,
+             rate, g_auto.over, room / 1e3, busy, next);
+        O.max_cars = next;
+        roam_plat_lock(); c2_links_set(); roam_plat_unlock();
+        g_auto.said = host;
+    } else if (next > cars && full >= AUTO_FULL && (!g_auto.said || host - g_auto.said >= AUTO_SAY_US)){
+        rlog("[roam] f=%ld cars shown (Auto): %d, players waiting on %d of %d frames, but of %d judged %d late at %d fps and %d busy "
+             "over %.1f ms (now %.1f): no more\n", rh_frame(), cars, g_auto.full, g_auto.n, g_auto.m, g_auto.late, rate, g_auto.over,
+             room / 1e3, busy);
+        g_auto.said = host;
+    }
+#else
+    (void)c; (void)dt;
+#endif
 }
 
 /* ---- the minimap's other players --------------------------------------------------------------- */
@@ -4192,6 +4259,7 @@ static int nr_put(CPU *c, uint32_t icons, int *k, float x, float y, uint16_t hea
     return 1;
 }
 static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
+    g_auto.wait = 0;
     uint32_t pl = rd32(G_PLAYER1), hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0, icons = rd32(G_MM_ICONS);
     if (hud != g_nr.hud){                                               /* our copies, visuals and icons went with the old HUD */
         uint32_t blk = g_nr.blk;
@@ -4283,6 +4351,17 @@ static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
         if (fl != want) MR32(g_nr.icon[j] + 0x18u) = want;
     }
     g_nr.hub = hub; g_nr.peers = peers; g_nr.used = k;
+    /* the hub's players near us with no car of ours (Players' cars shown: Auto, cars_auto) */
+    uint32_t me = player_car();
+    if (ok(me, 0x58)){
+        float mx = MRF32(me + 0x50u), my = MRF32(me + 0x54u);
+        for (int i = 0; i < g_nr_n; i++){
+            float x, y; nr_where(i, host, &x, &y);
+            int same = 0;
+            for (int j = 0; j < nc && !same; j++) same = (cx[j] - x) * (cx[j] - x) + (cy[j] - y) * (cy[j] - y) < NEAR_SAME_M * NEAR_SAME_M;
+            g_auto.wait += !same && (x - mx) * (x - mx) + (y - my) * (y - my) < AUTO_NEAR_M * AUTO_NEAR_M;
+        }
+    }
 }
 
 /* ---- horns, friends' engines, nitrous and hydraulics ----------------------------------------------- */
@@ -7997,15 +8076,20 @@ static void init_once(CPU *c){
         O.test_c2_seat1 = scr && *scr ? env_int("NFSU2_ROAM_TEST_C2_SEAT1", 0, 0, 1) : 0; }
     O.test_owncars = env_int("NFSU2_ROAM_TEST_OWNCARS", 0, 0, 1);
     O.test_outside = env_int("NFSU2_ROAM_TEST_OUTSIDE", 0, 0, 1);
-    O.max_cars = env_int("NFSU2_ROAM_MAX_CARS", DEF_CARS, 0, MAX_CARS);
+    {   const char *mc = opt("NFSU2_ROAM_MAX_CARS");
+        O.cars_auto = mc && !strcasecmp(mc, "auto");
+        O.max_cars = O.cars_auto ? DEF_CARS : env_int("NFSU2_ROAM_MAX_CARS", DEF_CARS, 0, MAX_CARS);
+        g_auto.top = DEF_CARS;
+#ifdef __wasm__
+        if (O.cars_auto) g_auto.top = g_gwin_hi ? MAX_CARS : AUTO_TOP_NOWIN;
+#endif
+        const char *scr = rh_opt("NFSU2_INPUT_SCRIPT");               /* test knobs: an input script's run only */
+        g_auto.window_us = (int64_t)(scr && *scr ? env_int("NFSU2_ROAM_TEST_AUTO_S", AUTO_WINDOW_US / 1000000, 1, 600) : AUTO_WINDOW_US / 1000000) * 1000000;
+        g_auto.test_late = scr && *scr ? env_int("NFSU2_ROAM_TEST_AUTO_LATE", 0, 0, 1) : 0;
+        if (O.cars_auto) rlog("[roam] players' cars shown: Auto, %d and up to %d while the frames have room\n", DEF_CARS, g_auto.top);
+    }
     O.near_max = env_int("NFSU2_ROAM_NEAR", NEAR_DEF, 0, NEAR_SLOTS);
     O.map_max = env_int("NFSU2_ROAM_MAP_MAX", RC_MAP_MAX, 0, RC_MAP_MAX);
-    O.cars_auto = env_int("NFSU2_ROAM_CARS_AUTO", 0, 0, 1);
-    {   /* 40 fps, or a frame and a half of a display slower than 60 Hz (a phone's Low Power Mode is 30 Hz) */
-        int hz = env_int("NFSU2_DISPLAY_HZ", 60, 1, 1000), us = 1500000 / hz;
-        O.cut_us = env_int("NFSU2_ROAM_CUT_MS", 0, 0, 1000) * 1000;
-        if (!O.cut_us) O.cut_us = us > CUT_FRAME_US ? us : CUT_FRAME_US;
-    }
 #if MPRACES
     g_mp.alone_us = (int64_t)env_int("NFSU2_ROAM_LOBBY_ALONE_S", (int)(MP_ALONE_US / 1000000), 5, 3600) * 1000000;
     g_mp.idle_us = (int64_t)env_int("NFSU2_ROAM_LOBBY_IDLE_S", (int)(MP_IDLE_US / 1000000), 10, 3600) * 1000000;
@@ -8018,8 +8102,9 @@ static void init_once(CPU *c){
     O.extrap_ms = env_int("NFSU2_ROAM_EXTRAP", 250, 0, 1000);
     /* friends' solid cars carried on along their curve (roam_core.c); 0: in a straight line, as before (A/B tests) */
     rc_extrap_arc = env_int("NFSU2_ROAM_ARC", 1, 0, 2);
-    /* (more cars shown than DEF_CARS: room for each of them) */
-    int carpool = CARPOOL_KB + (O.max_cars > DEF_CARS ? (O.max_cars - DEF_CARS) * CARPOOL_KB_CAR : 0);
+    /* (more cars shown than DEF_CARS: room for each of them; Auto: for its top step) */
+    int most = O.cars_auto ? g_auto.top : O.max_cars;
+    int carpool = CARPOOL_KB + (most > DEF_CARS ? (most - DEF_CARS) * CARPOOL_KB_CAR : 0);
 #ifdef __wasm__
     /* In the browser the pool comes out of the guest heap's 512 MB (heap.c GH_BASE..GH_LIMIT), with the world and
      * everything else: 128000 KB left too little for the load back into free roam after a save (issue #68; 48 cars
@@ -8281,7 +8366,7 @@ static int loads_waiting(void){
  * in a crowd coming and going (roam_crowd_busy.txt) 116 frames of 3,600
  * took 3 to 6 of them */
 #define HEAVY_PER_FRAME 2
-static int g_heavy;
+/* (g_heavy: with Players' cars shown, Auto: its frames are not judged) */
 static int heavy_take(void){
     if (g_heavy >= HEAVY_PER_FRAME) return 0;
     g_heavy++;
@@ -9243,7 +9328,7 @@ void roam_game_frame(CPU *c){
             /* (an outrun's opponent stays where it was: parked, the game would count it 120 km behind) */
         }
         load_service(c);
-        if (!g_photo_hold) cars_cut(c, w, host);
+        if (!g_photo_hold) cars_auto(c, w, host);
         counts_log(host);
         arrows_update(c, w);
         arrow_colours(c, w);

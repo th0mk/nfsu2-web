@@ -41,7 +41,9 @@ type Control =
 
 /** link: the words of help that link to a page (a mod's, say), opened in a new tab; several for help that names several */
 interface Link { text: string; href: string }
-interface Item { key: string; label: string; help: string; link?: Link | Link[]; c: Control; more?: boolean }
+/** deviceOpt: a choice offered first, and with its own help, only where it is this device's default (device.ts):
+ *  Players' cars shown's Auto, a computer's */
+interface Item { key: string; label: string; help: string; link?: Link | Link[]; c: Control; more?: boolean; deviceOpt?: { value: string; label: string; help: string } }
 /** own: the group has no heading of its own, its tab's name says it (Online; Friends & crews' Crews); at: the id of the
  *  element it goes in (Crews in Friends & crews, the Controls tab's Controller part), else the Online tab's (own) or the
  *  Game tab's; head: its heading, else its title; more: the title of its "more" part.  The texts are English (N),
@@ -71,7 +73,8 @@ const GROUPS: Group[] = [
     { key: 'roam_block', label: N('Blocked players'), help: N('Names, separated by commas: you never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not a tuner you race in an outrun.'),
       c: { t: 'seg', opts: [['on', N('Off')], ['off', N('Players')], ['none', N('Everything')]] } },
-    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['48', '48'], ['64', '64']] } },
+    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['48', '48'], ['64', '64']] },
+      deviceOpt: { value: 'auto', label: N('Auto'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.') } },
     { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Four groups of four. Others read them in their own language.'), c: { t: 'phrases' } },
     { key: 'online', label: N('Online mode'), help: N('The game\'s Online menu skips the EA login: lobby, chat and races with everyone on this server.'), c: { t: 'switch' }, more: true },
@@ -320,7 +323,11 @@ function optLabel(it: Item, value: string, label: string): string {
 function shown(it: Item, v: string): string {
   const c = it.c;
   if (c.t === 'switch') return v === 'on' ? t('on') : t('off');
-  if (c.t === 'seg' || c.t === 'select') { const o = c.opts.find(([x]) => x.toLowerCase() === v.toLowerCase()); return o ? optLabel(it, o[0], o[1]) : v; }
+  if (c.t === 'seg' || c.t === 'select') {
+    const opts: [string, string][] = it.deviceOpt ? [[it.deviceOpt.value, it.deviceOpt.label], ...c.opts] : c.opts;
+    const o = opts.find(([x]) => x.toLowerCase() === v.toLowerCase());
+    return o ? optLabel(it, o[0], o[1]) : v;
+  }
   if (c.t === 'phrases') return phrasesOf(v).map(p => t(PHRASES[p].text)).join(', ');
   if (c.t === 'flag') { const f = flagCode(v); return f ? flagName(f) : t('No flag'); }
   if (v === '') return t('empty');
@@ -637,7 +644,8 @@ export class SettingsPanel {
     if (label instanceof HTMLLabelElement) label.htmlFor = id;
     const help = document.createElement('p'); help.className = 'set-help'; help.id = `${id}-help`;
     // each link on its words where they first stand in the help (in this language's text), in their order there
-    const helpText = t(it.help);
+    const devOpt = it.deviceOpt && this.deps.defaults?.[it.key] === it.deviceOpt.value ? it.deviceOpt : undefined;
+    const helpText = t(devOpt ? devOpt.help : it.help);
     const links = (it.link ? Array.isArray(it.link) ? it.link : [it.link] : [])
       .map(l => ({ href: l.href, text: t(l.text), at: helpText.indexOf(t(l.text)) })).filter(l => l.text && l.at >= 0)
       .sort((x, y) => x.at - y.at);
@@ -663,7 +671,7 @@ export class SettingsPanel {
     } else if (c.t === 'seg') {
       const seg = document.createElement('div'); seg.className = 'seg';
       seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-labelledby', label.id);
-      const opts = [...c.opts];
+      const opts: [string, string][] = [...(devOpt ? [[devOpt.value, devOpt.label] as [string, string]] : []), ...c.opts];
       if (cur && !opts.some(([v]) => v.toLowerCase() === cur.toLowerCase())) opts.push([cur, cur]);   // a value set in the file
       opts.forEach(([v, l], i) => {
         const o = document.createElement('label'); o.className = 'opt';

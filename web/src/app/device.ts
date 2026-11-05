@@ -28,17 +28,17 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  over the game), and the game's 4:3 HUD: on a phone's long screen the wide one puts the minimap under the touch
  *  controls' steering and the speedometer under Brake, the 4:3 one between the thumbs.  Players' cars shown in free
  *  roam: 16 on phones, 24 on tablets (an iPhone was stopped for memory as 22 friends' cars loaded at once at the new
- *  career's start, 2026-10-25), the file's 32 on computers.  48 and 64 only when the player picks them: each car past
- *  32 costs the game's thread about 0.28 ms a frame on a Ryzen 5900X (14 -> 18.5 ms with 48 in view), a laptop's
- *  several times that, and the game's own drop back to 32 (roam_game.c cars_cut) waits for frames under ~40 fps: it
- *  never helps a player who went from 144 to 100 fps (fast computers started at 48, then 40, until 2026-11-02).  The
+ *  career's start, 2026-10-25), Auto on computers: 32, and 48 or 64 while the game's own frames show room for them
+ *  with more players near (roam_game.c cars_auto: each car costs the game's thread about 0.28 ms a frame on a Ryzen
+ *  5900X, a laptop's several times that, so no computer gets more up front: fast computers started at 48, then 40,
+ *  until 2026-11-02, and lost a fifth of their frames on fast displays).  The
  *  world map's other players: 2048 on phones, the file's 4096 elsewhere (each marker costs the open map's frames,
  *  about 7 us a frame on a busy Ryzen 5900X, a phone's several times that). */
 export function deviceDefaults(): Record<string, string> {
   const kind = deviceKind();
   if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off' };
   if (kind === 'tablet') return { roam_max_cars: '24', coop: 'off' };
-  return {};
+  return { roam_max_cars: 'auto' };
 }
 
 /** the device as its defaults see it: a phone, a touch-first one that is not a phone (a tablet), or a computer */

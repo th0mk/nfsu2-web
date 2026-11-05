@@ -321,6 +321,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "遊戲的「線上」選單會略過 EA 登入：可與此伺服器上的所有人使用大廳、聊天與比賽。",
   "Players' cars shown": "顯示的玩家車輛數",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "自由漫遊中顯示多少輛最近的玩家車輛。數量越多，影格率可能越低。",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "自由漫遊中顯示多少輛最近的玩家車輛。數量越多，影格率可能越低；「自動」只在畫面保持流暢時才增加車輛。",
   "Game": "遊戲",
   "More game settings": "更多遊戲設定",
   "Language": "語言",

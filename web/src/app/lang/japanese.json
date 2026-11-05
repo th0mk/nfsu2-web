@@ -321,6 +321,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "ゲームの「オンライン」メニューでEAログインを省略します。このサーバーの全員と、ロビー、チャット、レースを楽しめます。",
   "Players' cars shown": "表示するプレイヤーの車",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "フリーロームで表示する近くのプレイヤーの車の台数です。多いとフレームレートが下がることがあります。",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "フリーロームで表示する近くのプレイヤーの車の台数です。多いとフレームレートが下がることがあります。「自動」は動作が滑らかなあいだだけ台数を増やします。",
   "Game": "ゲーム",
   "More game settings": "その他のゲーム設定",
   "Language": "言語",

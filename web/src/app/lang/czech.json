@@ -782,6 +782,7 @@
   "Everything": "Vše",
   "Players' cars shown": "Zobrazená auta hráčů",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Kolik aut nejbližších hráčů volná jízda ukazuje. Víc může snížit počet snímků za sekundu.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "Kolik aut nejbližších hráčů volná jízda ukazuje. Víc může snížit počet snímků za sekundu; Auto je přidává, jen dokud hra běží plynule.",
   "Your phrases": "Tvoje fráze",
   "Four groups of four. Others read them in their own language.": "Čtyři skupiny po čtyřech. Ostatní je čtou ve svém jazyce.",
   "Online mode": "Režim Online",

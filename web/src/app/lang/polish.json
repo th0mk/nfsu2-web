@@ -386,6 +386,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Menu Sieć w grze pomija logowanie EA: poczekalnia, czat i wyścigi ze wszystkimi na tym serwerze.",
   "Players' cars shown": "Widoczne samochody graczy",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Ile najbliższych samochodów graczy widać na przejażdżce. Więcej może obniżyć liczbę klatek.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "Ile najbliższych samochodów graczy widać na przejażdżce. Więcej może obniżyć liczbę klatek; „Auto” dodaje je tylko wtedy, gdy gra działa płynnie.",
   "Game": "Gra",
   "More game settings": "Więcej ustawień gry",
   "Language": "Język",

@@ -330,6 +330,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Το μενού διαδικτυακού παιχνιδιού παρακάμπτει τη σύνδεση στην EA: αίθουσα, συνομιλία και αγώνες με όλους σε αυτόν τον διακομιστή.",
   "Players' cars shown": "Εμφανιζόμενα αυτοκίνητα παικτών",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Πόσα από τα κοντινότερα αυτοκίνητα παικτών εμφανίζει η ελεύθερη οδήγηση. Περισσότερα αυτοκίνητα μπορεί να μειώσουν τον ρυθμό καρέ.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "Πόσα από τα κοντινότερα αυτοκίνητα παικτών εμφανίζει η ελεύθερη οδήγηση. Περισσότερα αυτοκίνητα μπορεί να μειώσουν τον ρυθμό καρέ· το «Αυτόματα» προσθέτει κι άλλα μόνο όσο το παιχνίδι παραμένει ομαλό.",
   "Game": "Παιχνίδι",
   "More game settings": "Περισσότερες ρυθμίσεις παιχνιδιού",
   "Language": "Γλώσσα",

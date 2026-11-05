@@ -321,6 +321,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "เมนูออนไลน์ของเกมจะข้ามการล็อกอิน EA: มีล็อบบี้ แชต และการแข่งกับทุกคนบนเซิร์ฟเวอร์นี้",
   "Players' cars shown": "จำนวนรถผู้เล่นที่แสดง",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "จำนวนรถของผู้เล่นที่ใกล้ที่สุดที่แสดงขณะขับอิสระ ยิ่งมากเฟรมเรตอาจยิ่งลดลง",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "จำนวนรถของผู้เล่นที่ใกล้ที่สุดที่แสดงขณะขับอิสระ ยิ่งมากเฟรมเรตอาจยิ่งลดลง อัตโนมัติจะเพิ่มรถก็ต่อเมื่อเกมยังลื่นไหลอยู่",
   "Game": "เกม",
   "More game settings": "การตั้งค่าเกมเพิ่มเติม",
   "Language": "ภาษา",

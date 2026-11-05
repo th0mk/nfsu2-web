@@ -360,6 +360,7 @@
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Spelets Online-meny hoppar över EA-inloggningen: lobby, chatt och race med alla på den här servern.",
   "Players' cars shown": "Spelarbilar som visas",
   "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Hur många av de närmaste spelarbilarna läget Utforska visar. Fler kan sänka bildfrekvensen.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.": "Hur många av de närmaste spelarbilarna läget Utforska visar. Fler kan sänka bildfrekvensen; Auto lägger bara till fler så länge spelet går jämnt.",
   "Game": "Spel",
   "More game settings": "Fler spelinställningar",
   "Language": "Språk",
