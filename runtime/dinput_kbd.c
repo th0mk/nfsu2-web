@@ -371,11 +371,13 @@ int dikbd_ours(unsigned dik, const char *what){
     return 0;
 }
 /* the page's controls with their keys: the status "keys" has a bit for each, in this order (web/src/app/gamekeys.ts);
- * the first two the player may move (env, 0: off) */
+ * those with an env the player may move (0: off) */
 static struct { uint8_t dik; const char *what, *env; } PAGE_KEYS[] = {
     { 0x17, "Message a friend", "NFSU2_KEY_MESSAGE" }, { 0x21, "Add friend", "NFSU2_KEY_FRIEND" },
     { 0x02, "quick chat", 0 }, { 0x03, "quick chat", 0 }, { 0x04, "quick chat", 0 }, { 0x05, "quick chat", 0 },     /* 1-4 */
     { 0x4F, "quick chat", 0 }, { 0x50, "quick chat", 0 }, { 0x51, "quick chat", 0 }, { 0x4B, "quick chat", 0 },     /* Numpad */
+    { 0x12, "Next race lobby", "NFSU2_KEY_LOBBY" }, { 0x2F, "Friends & crew only", "NFSU2_KEY_LOBBY_PRIVATE" },   /* E, V */
+    { 0x2C, "Invite to a race", "NFSU2_KEY_LOBBY_INVITE" }, { 0x30, "New race lobby", "NFSU2_KEY_LOBBY_NEW" },       /* Z, B */
 };
 static void page_keys(const KDev *d){
     static int slot = -2, set;

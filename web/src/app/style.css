@@ -689,6 +689,8 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .touch[data-alone] :is([data-ctl="horn"], [data-ctl="chat"]),
 .touch[data-no-chat] [data-ctl="chat"],
 .touch:not([data-hyd]) .hyd { display: none; }
+/* away for now in its place (touch.ts stow: Reset at speed, Pressurize and Bounce too fast to start them) */
+.touch .tc.stowed { visibility: hidden; }
 /* a race between players (touch.ts netrace): Quick chat in the first row after Reset while driving (after Pressurize
  * and Bounce in landscape when the car has hydraulics; upright those are in the second row), beside the menu's button
  * on the results (the menus' controls).  Upright, right: auto over the second row's inline start, which a Position on
@@ -1164,40 +1166,64 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
 }
 .msg-card .msg-send { min-height: 40px; padding: 4px 16px; font-size: 16px; }
 .msg-card[data-mode="touch"] .msg-foot { margin-top: 8px; }
-/* free roam: the race lobby (lobby.ts): a card on the right under the game's Bank box, a little wider than it and its
- * text about the size of the HUD's (--u: one HUD unit), and over the trip to the race and back a cover of the whole
+/* free roam: the race lobby (lobby.ts): a card on the right under the game's Bank box, a little wider than it, its text
+ * about the size of the HUD's (--u: one HUD unit); one face in two sizes (the small one only for what qualifies a
+ * line) and two weights, its lines an even gap apart.  Over the trip to the race and back a cover of the whole
  * picture with the lobby in the middle, in the same step */
 .lobby {
   --u: 1px;
   position: absolute; left: 0; top: 0; z-index: 3; transform: translateX(-100%);
+  display: flex; flex-direction: column;
   width: calc(190 * var(--u)); min-width: 220px; padding: calc(10 * var(--u)) calc(12 * var(--u));
-  border-left: 3px solid var(--lime); border-radius: 4px; background: rgba(13, 13, 13, 0.78);
-  font: 400 max(13px, calc(11 * var(--u))) / 1.35 var(--font); color: var(--text); pointer-events: none;
+  border-radius: 4px; background: rgba(13, 13, 13, 0.78);
+  font: 400 max(13px, calc(11 * var(--u))) / 1.4 var(--font); color: var(--text); pointer-events: none;
 }
-.lobby-title { font-size: 1.1em; font-weight: 700; font-style: italic; text-transform: uppercase; letter-spacing: 0.02em; color: var(--lime); }
-.lobby-sub, .lobby-hint { color: var(--muted); font-size: 0.85em; }
-.lobby-why { margin-top: 0.4em; color: var(--muted); }
-/* its host made no input lately: the seconds until the lobby closes (lobby.ts away); a lobby whose race's stage
- * usually has much faster cars than ours (outpaced) */
-.lobby-warn { margin-top: 0.3em; font-size: 0.85em; font-weight: 700; color: var(--warn); }
-.lobby-places { list-style: none; margin: 0.5em 0 0; padding: 0; }
-.lobby-places li { display: flex; gap: 0.6em; align-items: baseline; padding: 0.12em 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
-.lobby-places li.open { color: rgba(255, 255, 255, 0.35); font-style: italic; }
-.lobby-places.dim li.taken { opacity: 0.6; }
-.lobby-n { width: 1em; text-align: right; color: var(--muted); }
-.lobby-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lobby-tag { font-size: 0.75em; text-transform: uppercase; color: var(--lime); }
-/* a race that counts in a player's career (lobby.ts places, career) */
+/* its blocks (lobby.ts block): the race; its members; the host's settings; this lobby or the next */
+.lobby-block { display: flex; flex-direction: column; gap: 0.3em; padding-block: 0.5em; }
+.lobby-block:first-child { padding-top: 0; }
+.lobby-block:last-child { padding-bottom: 0; }
+.lobby-block + .lobby-block { border-top: 1px solid var(--line); }
+/* the race and how full it is, then where it is (lobby.ts head) */
+.lobby-top { display: flex; justify-content: space-between; gap: 0.6em; font-weight: 700; }
+.lobby-race { display: inline-block; color: var(--lime); }
+.lobby-race::first-letter { text-transform: uppercase; }
+.lobby-count { font-weight: 400; font-variant-numeric: tabular-nums; color: var(--muted); }
+.lobby-small { font-size: 0.85em; color: var(--muted); }
+/* the players, the host first: friends and crew-mates in lime, ours bold (lobby.ts players) */
+.lobby-players { list-style: none; margin: 0; padding: 0; }
+.lobby-players li { display: flex; gap: 0.5em; align-items: baseline; }
+.lobby-pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-players li.me .lobby-pname { font-weight: 700; }
+.lobby-players li.mate .lobby-pname { color: var(--lime); }
+.lobby-players li.open { color: rgba(255, 255, 255, 0.35); }
+.lobby-players.dim li { opacity: 0.6; }
+/* a win counts in this player's career (lobby.ts players, head) */
 .lobby-star { color: var(--lime); }
 /* quick chat: what a player of the lobby said lately, beside their name (lobby.ts say) */
-.lobby-said { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9em; font-weight: 700; font-style: italic; color: var(--lime); }
-.lobby-act { display: flex; gap: 0.5em; align-items: center; margin-top: 0.6em; }
+.lobby-said { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--lime); }
+/* the fastest other car against ours: a small speedometer beside its words (lobby.ts speedometer) */
+.lobby-speed { display: flex; justify-content: center; align-items: center; gap: 0.4em; font-size: 0.85em; color: var(--muted); }
+.lobby-gauge { flex: none; width: 1.9em; height: 1.1em; }
+.lobby-gauge path { fill: none; stroke-linecap: round; stroke-width: 2; }
+.lobby-gauge .track { stroke: var(--edge); }
+.lobby-gauge .red { stroke: var(--bad); }
+.lobby-gauge .needle { stroke: var(--text); }
+/* what is going on: waiting (dim), a lobby about to close (warn), starting (go) */
+.lobby-dim { color: var(--muted); }
+.lobby-warn { color: var(--warn); }
+.lobby-go { font-weight: 700; color: var(--lime); }
+/* a key and what it does */
+.lobby-act { display: flex; gap: 0.5em; align-items: center; }
 .lobby-act kbd {
-  padding: 0 0.4em; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
-  font: 700 0.85em/1.5 var(--font); color: var(--text);
+  min-width: 1.7em; padding: 0 0.35em; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
+  font: 400 0.85em/1.5 var(--font); text-align: center; color: var(--text);
 }
-.lobby-count { margin-top: 0.5em; font-size: 1.5em; font-weight: 700; font-style: italic; color: var(--lime); }
-.lobby-note { color: var(--text); }
+/* the card's own buttons (lobby.ts act with a click: the next lobby, who can join, invite, leave a race joined from
+ * afar): the card lets clicks through, these take them */
+.lobby-act.tap { pointer-events: auto; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.lobby-act.tap:hover > span { text-decoration: underline; }
+.lobby-act.tap:active { color: var(--lime); }
+html[data-touch] .lobby-act.tap { min-height: 32px; }
 .lobby-cover {
   --u: 1px;
   position: absolute; inset: 0; z-index: 4; display: grid; place-items: center;
@@ -1205,17 +1231,21 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
   font: 400 max(16px, calc(14.5 * var(--u))) / 1.4 var(--font); color: var(--text);
 }
 .lobby-cover[hidden] { display: none; }
-.lobby-card { width: min(calc(400 * var(--u)), calc(100% - 32px)); min-width: min(300px, calc(100% - 32px)); }
-.lobby-card .lobby-title { font-size: 1.4em; }
-/* the race's results on the way back (lobby.ts results) */
-.lobby-results { margin-top: 0.8em; }
+.lobby-card { display: flex; flex-direction: column; width: min(calc(400 * var(--u)), calc(100% - 32px)); min-width: min(300px, calc(100% - 32px)); }
+/* the race's results on the way back (lobby.ts results, standings): place, name, time or points */
+.lobby-results { margin: 0; }
+.lobby-places { list-style: none; margin: 0; padding: 0; }
+.lobby-places li { display: flex; gap: 0.6em; align-items: baseline; }
+.lobby-n { width: 1em; text-align: right; color: var(--muted); }
+.lobby-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-tag { font-size: 0.85em; color: var(--lime); }
 .lobby-head { font-size: 0.75em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .lobby-results .lobby-places { margin-top: 0.25em; }
 .lobby-places li.mine .lobby-name { font-weight: 700; }
 .lobby-time { font-variant-numeric: tabular-nums; color: var(--muted); }
 .lobby-places li.mine .lobby-time { color: var(--text); }
 .lobby-prize { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--lime); }
-.lobby-step { display: flex; gap: 0.6em; align-items: center; margin-top: 1em; color: var(--muted); }
+.lobby-step { display: flex; gap: 0.6em; align-items: center; color: var(--muted); }
 .lobby-spin {
   width: 1em; height: 1em; border: 2px solid rgba(255, 255, 255, 0.2); border-top-color: var(--lime); border-radius: 50%;
   animation: lobby-spin 0.9s linear infinite;

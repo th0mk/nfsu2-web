@@ -1,6 +1,7 @@
 // The touch controls' Pressurize and Bounce (web/src/app/touch.ts) on a fake page and clock: the one on holds its key
 // (H, J), let go and pressed again HOLD_MS after the car gets slow enough (the game's status "hydraulics" 2), and a
-// tap off always lets go of it in the game, however the taps, the status and that press again fall.
+// tap off always lets go of it in the game, however the taps, the status and that press again fall; both stowed a
+// second after the car is too fast to start them (1) unless one is on, and Reset while the car is fast.
 //   node --test web/test/touch.test.mjs
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
@@ -51,10 +52,10 @@ const { TouchControls } = await import('data:text/javascript;base64,' + Buffer.f
 
 const H = 'KeyH', J = 'KeyJ';
 
-// a game in free roam (drive 2) with a car with hydraulics, too fast to start them (1) until the test says
+// a game in free roam (drive 2) with a car with hydraulics, slow enough to start them (2) until the test says
 function setup() {
   mock.timers.enable({ apis: ['setTimeout'] });
-  const status = new Map([['drive', 2], ['frames', 100], ['hydraulics', 1]]);
+  const status = new Map([['drive', 2], ['frames', 100], ['hydraulics', 2], ['fast', 0]]);
   const sent = [];
   const session = () => ({
     status: { read: () => status },
@@ -69,8 +70,8 @@ function setup() {
   const until = (fn, late = false) => {
     for (let k = 0; !fn(); k += 17) { assert.ok(k < 1000, 'the controls read the status'); frame(late); }
   };
-  // the game's status changes ('drive', 'hydraulics'), and the controls have read it: anything next happens within
-  // HOLD_MS of that
+  // the game's status changes ('drive', 'hydraulics', 'fast'), and the controls have read it: anything next happens
+  // within HOLD_MS of that
   const set = (k, v, late = false) => { status.set(k, v); until(() => tc.state()[k] === v, late); };
   // a tap on a control: a finger down and up on it
   const tap = id => {
@@ -93,11 +94,14 @@ test('the key is pressed again once the car is slow enough, and a tap off lets g
   try {
     x.tap('lift');
     assert.ok(x.held(H), 'Pressurize on holds H');
+    x.set('hydraulics', 1);                   // (the car rolled faster)
+    assert.ok(x.held(H), 'still held');
     x.set('hydraulics', 2);
     assert.ok(!x.held(H), 'let go as the car got slow enough');
     x.run(200);
     assert.ok(x.held(H), 'and pressed again HOLD_MS later');
     assert.deepEqual(x.sent.filter(([c]) => c === H).map(([, d]) => d), [true, false, true]);
+    assert.deepEqual(x.tc.state().stowed, [], 'nothing stowed while one is on');
 
     // off and on again within HOLD_MS of the status going to 2: the press again waiting is dropped
     x.set('hydraulics', 1);
@@ -127,6 +131,7 @@ test('the status back at 2 before the press again ran (a busy page) holds the ke
   const x = setup();
   try {
     x.tap('lift');
+    x.set('hydraulics', 1, true);
     x.set('hydraulics', 2, true);
     x.set('hydraulics', 1, true);
     x.set('hydraulics', 2, true);
@@ -148,6 +153,7 @@ for (const [way, leave] of Object.entries(LEAVE)) {
     const x = setup();
     try {
       x.tap('lift');
+      x.set('hydraulics', 1, true);
       x.set('hydraulics', 2, true);           // H let go, its press again waiting
       leave(x);
       assert.equal(x.tc.state().hyd, '', 'Pressurize off');
@@ -160,3 +166,45 @@ for (const [way, leave] of Object.entries(LEAVE)) {
     } finally { done(x); }
   });
 }
+
+test('Pressurize and Bounce stowed a second after the car is too fast, unless one is on; Reset while the car is fast', () => {
+  const x = setup();
+  const stowed = id => x.tc.state().stowed.includes(id);
+  try {
+    x.set('hydraulics', 1);
+    assert.ok(!stowed('lift') && !stowed('bounce'), 'still there just after');
+    x.run(1100);
+    assert.ok(stowed('lift') && stowed('bounce'), 'stowed a second after');
+    x.tap('lift');
+    assert.ok(!x.held(H) && x.tc.state().hyd === '', 'a tap there does nothing');
+    x.set('hydraulics', 2);
+    assert.ok(!stowed('lift') && !stowed('bounce'), 'back at once once the car is slow enough');
+    x.tap('bounce');
+    x.set('hydraulics', 1);
+    x.run(1500);
+    assert.ok(!stowed('lift') && !stowed('bounce') && x.held(J), 'there while Bounce is on');
+    x.tap('bounce');
+    assert.ok(!x.held(J), 'a tap off lets go of J');
+    x.run(1100);
+    assert.ok(stowed('lift') && stowed('bounce'), 'stowed a second after it went off');
+
+    assert.ok(!stowed('reset'), 'Reset there while the car is slow');
+    const reset = x.tc.ctls.get('reset').el;
+    for (const f of x.tc.root.listeners.pointerdown) f({ type: 'pointerdown', target: reset, pointerId: 9, pointerType: 'touch', isPrimary: true, clientX: 0, clientY: 0, preventDefault() {} });
+    x.run(200);
+    assert.ok(x.held('KeyR'), 'a finger on Reset holds R');
+    x.set('fast', 1);
+    assert.ok(stowed('reset') && !x.held('KeyR') && !x.counted('KeyR'), 'stowed while fast, its finger let go');
+    x.set('fast', 0);
+    assert.ok(!stowed('reset'), 'back once slow');
+  } finally { done(x); }
+});
+
+test('a game that does not say how fast the car goes keeps Reset', () => {
+  const x = setup();
+  try {
+    x.status.delete('fast');
+    x.until(() => x.tc.state().fast === undefined);
+    assert.ok(!x.tc.state().stowed.includes('reset'), 'Reset there');
+  } finally { done(x); }
+});

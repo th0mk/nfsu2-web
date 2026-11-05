@@ -84,7 +84,8 @@ While you drive:
   Nitro and the handbrake trade places.
 - **Gears:** with a manual gearbox (the race's Transmission choice, and always in a drag race), gear down and gear up
   above the steering.
-- **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages,
+- **Small buttons** along the top: pause, camera (held: look back), reset (only while the car goes slower than about
+  30 km/h, as when it is stuck or after a crash; its place stays empty at speed); in free roam also the map, messages,
   **Drift** (drift mode, the game's drift icon, lit while it is on), the career status (the game's Career Status, as
   D-pad Down on a controller, T or F4 on a keyboard), and the horn and quick chat (not with quick chat off)
   while another player's car is within a horn's reach. In a race with other players quick chat shows after reset
@@ -94,8 +95,9 @@ While you drive:
 - **Hydraulics:** with a car that has them (the Hydraulics part, Car Specialties), **Pressurize** and **Bounce** join
   the small buttons (in free roam after the career status, upright in the second row; in a race after reset). A tap
   turns one on (lit, as H or J held on a keyboard), another tap turns it off, or the other one on. While one is on,
-  the steering and Gas and Brake pick the corners instead of driving, under 10 mph as with H and J; turned on faster,
-  it starts working once the car is that slow.
+  the steering and Gas and Brake pick the corners instead of driving, under 10 mph as with H and J. Both show only
+  while the car is that slow (or one is on): a second after it goes faster their places are empty, so the other
+  buttons stay where they are.
 - **HUD:** a phone starts with the game's 4:3 HUD layout (Game, Display, HUD layout), which keeps the minimap and
   the speedometer between the thumbs instead of under the steering and Brake.
 - **Sizes**, in the Controls sheet's Touch tab and kept in this browser: **Control size** for the touch controls, and
@@ -405,6 +407,10 @@ Room set, the Room row says how many are in that room.
   say: for 20 s after your bank changes (a race's or an outrun's prize, a purchase, a money icon), for 10 s when free
   roam starts, and for 8 s after the pause menu, the map or a shop. In the original game it is always there. The
   magazine and DVD cover rewards show as before.
+- **The box at the top left in free roam:** the box with the D-pad and its icons (the envelope of an SMS waiting,
+  Engage, an outrun) shows the same way: for 20 s after a new message, while your car is at a race marker, a shop's
+  door or an outrun's tuner, for 10 s when free roam starts, and for 8 s after the pause menu, the map or a shop. In the
+  original game it is always there.
 - **Exposure and White Level:** for eyes that a bright picture tires. The game's Options, Display (also the pause
   menu's) has two sliders after Level Of Detail. Exposure makes the whole picture darker or brighter, from half to
   twice as bright (the middle, the default, is the game's own). White Level is the brightest the picture gets, from
@@ -520,7 +526,7 @@ or use a Room to keep to a group.
 
 Good to know:
 
-- **How many:** up to 14000 players on a server set up with `web/deploy/` (2000 with the older Node server), 128 on
+- **How many:** up to 16000 players on a server set up with `web/deploy/` (2000 with the older Node server), 128 on
   one started by hand (its owner can change that). Only free roam and the LAN and Online screens take a place;
   single-player takes none. When it is full, you wait in line for a place, first come first served: the top of the
   screen shows your place and, once a few went in, about how long it takes. You play alone meanwhile and join the
@@ -687,8 +693,9 @@ Good to know:
   joined from your career's free roam only: in Quick Race's Free Run the panel says so too.
   - **An open race** (its marker in the street): its card asks Accept or Decline as always, and Accept asks once more:
     **Multiplayer** or **Solo** (the career race, as before). Solo has the focus, so Enter at once races it Solo as
-    the game always did; but with another player's lobby waiting there that you can join, the question names them and
-    **Join** has the focus. A win counts in your career either way (below).
+    the game always did; but with another player's lobby waiting there that you can join, the panel shows it (E for
+    the next one, as below), the question names its host and **Join** has the focus. A win counts in your career
+    either way (below).
   - **A race that is not open** in your career has no marker of the game's. Within about 50 m its start shows
     "Circuit (multiplayer)" or the like, and at the start a panel on the right (under Bank) says it is multiplayer
     only there and why (you won it in your career, your sponsor's contract has no place for it, a URL race before
@@ -698,17 +705,46 @@ Good to know:
     none while a story task runs, and none where the game has something of its own to enter at the same place (a race
     open in your career there, a cover shoot): Enter is the game's there, and an open race's card asks Solo or
     Multiplayer as above.
-  - **Multiplayer opens a lobby** at the start: the panel shows it, its race, career stage, track and laps and its six
-    places (drag 4, 3 on the three-lane track) with the players in them, the host first and yours marked. The players
-    near see "Ann's circuit (1/6)" over the start (from about 250 m); everyone in free roam sees its race's icon on
-    the world map (M), and the nearest four lobbies their words beside it ("Circuit 1/6") where these cover no other
-    icon (the legend's Players' races row hides them). They join at the start:
-    within 15 m of it the panel shows the lobby and Enter joins (at an open race: its card's Accept, then **Join**).
-    Up to 6 players; at a full one the panel says so, and Enter starts another. Drive more than 40 m from the start to
-    leave a lobby; the host leaving calls it off, and a lobby nobody joins closes after 5 minutes. A host who seems
+  - **Multiplayer opens a lobby** at the start. Its panel has four parts, a line between them: the race ("Sprint",
+    "Lobby 3/6"), its stage, track and laps, and ★ when a win counts in your career; its players, the host first
+    and marked, ★ beside each player a win counts for, friends and crew-mates in lime, you in bold, then its open
+    places (6; drag 4, 3 on the three-lane track), and under them a small speedometer: the fastest other car against
+    yours (straight up: rated as yours; in the red from 1.25 times, where a car wins well over its share even with the
+    engines evened out); the host's settings (who can join, invite friends); then this lobby or the next (the keys,
+    what is going on, how to leave). The players near see "Ann's circuit (1/6)" over the start (from about 250 m;
+    several lobbies at one start stack there, a line each, the fuller first, at most four and then "+2 more");
+    everyone in free roam sees its race's icon on the world map (M), and the nearest four lobbies their words beside it
+    ("Circuit 1/6") where these cover no other icon (the legend's Players' races row hides them). They join at the
+    start: within 15 m of it the panel shows the lobby and Enter joins (at an open race: its card's Accept, then
+    **Join**).
+    **Several lobbies at one start:** the panel shows one at a time, **E** (or a click or tap on "Lobby 2 of 3") the
+    next, and **B** ("New lobby") opens one of your own beside them, from any of them. It starts on the lobby Enter
+    would pick for you: one a friend or crew-mate of yours is in first, then a race that counts in your career, then
+    one on your side of the race's stage (its host past that stage if you are, or not if you are not), then the one
+    whose cars are nearest yours, then the fullest. Up to 6 players. A lobby you can't join is not shown to you
+    anywhere (at the start, over it, on the world map): a full one, one on its way to the race, one that keeps you
+    out (below); Enter there opens a lobby of your own. Drive more than 40 m from the start to leave a lobby; the host leaving calls it off, and a lobby nobody joins closes after 5 minutes. A host who seems
     away (none of the game's keys or controller buttons and no driving for 2 minutes while others wait) gets a
     30-second countdown on every panel of the lobby, then it closes; one of those keys keeps it. A lobby is within
     your Room, as everything in free roam. At a race's start Enter is for the race: no outrun is offered there.
+  - **On a controller** the panel shows the D-pad in place of the keys: up (the game's Engage) joins, starts the race
+    or opens a lobby; left held a second opens a new lobby beside the others, goes round who can join (the host) or
+    leaves a lobby joined from afar; right held is the next lobby. A short press of left or right stays the game's
+    (World Map, SMS), as with D-pad down's hold; a direction you put another of the game's controls on stays the
+    game's. Invites are in the menu's Friends.
+  - **Who can join:** the host's **V** (or a click or tap on its line in the panel) goes round its choices while the
+    lobby waits. **Stage 2 and below can join** (the host's own stage; the default) keeps out players past it, but
+    the host's friends and crew-mates. **Friends & crew can join:** only the host's friends and crew-mates see it,
+    at the start, over it and on the world map, and only they can join; the players already in it stay. **Everyone
+    can join.** A
+    lobby whose race counts in its host's career has no Everyone.
+  - **Inviting friends:** the host's **Z** (or "Invite friends" in the panel) opens the menu's Friends, where each
+    friend in free roam in your Room has an Invite (a flag) while your lobby has room. The friend gets a line over
+    the game, "Ann invites you to a circuit (2/6)", for 20 seconds; their **Z**, a click or a tap joins from wherever
+    they are, without driving to the start (a lobby they were in is left for it). Their race leaves from where they
+    are and brings them back there; driving away does not take them out, their **Z** ("Leave" in the panel) does.
+    Crew-mates who are not friends cannot be invited: the server does not know crews by name. E, V and Z can be set
+    on the start page (Controls, Site); a key of the game's own controls stays the game's.
   - **The host presses Enter** to start once another player is in. Every panel of the lobby says "Starting the race…"
     for 2 seconds, then every game in the lobby goes to the race by itself, behind a screen with the lobby on it and
     where the trip is ("Loading the race"). The race's LAN server starts in the host's game as soon as a player joins,
@@ -755,10 +791,10 @@ Good to know:
     for you too, when you finish the race; any other place than 1st leaves the race to win ("Only a win counts in your
     career", after the race). The panel marks each player the race counts for with ★ ("A win counts in your career"), and the
     words over such a lobby or spot and beside its world-map icon end in "- career". A lobby whose race counts for the
-    player who opened it takes players up to that race's stage and the opener's friends and crew-mates: a car of a later stage would
-    win it most of the time, however the cars are evened out. Past that stage you see why at the spot ("A career race
-    for players up to stage 2 and ...'s friends and crew"), and while it waits there no other lobby opens at that start (one
-    race at a start; at a race open in your career its card's Accept races it Solo). Solo stays as it always was.
+    player who opened it always takes players up to that race's stage and the opener's friends and crew-mates (any
+    other lobby does unless its host picks Everyone): a car of a later stage would win it most of the time, however
+    the cars are evened out. Past that stage you don't see such a lobby (at the
+    start, over it, on the world map), and Enter opens a lobby of your own beside it. Solo stays as it always was.
   - **Any other race** pays only prize money: 1st gets what a normal race of your stage pays (stages 1 to 3 $400,
     stage 4 $1,200, stage 5 $2,000), 2nd to 4th three quarters, half and a quarter of that (never less than $300, $200
     and $100), 5th and 6th nothing. **Quitting the race**

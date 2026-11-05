@@ -152,7 +152,7 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 #define G_LANG      0x008383d8u
 #define G_LANG_N    0x008383d0u
 #define FN_NEW      0x00575620u    /* cdecl (size): operator new */
-#define OWN_MAX     32         /* roam_game.c 4, sms.c 3, mpcredit.c 2, photo.c 1, vinylcat.c 1 */
+#define OWN_MAX     32         /* roam_game.c 4, sms.c 5, mpcredit.c 2, photo.c 1, vinylcat.c 1 */
 static struct { uint32_t hash; char text[1024]; } g_own[OWN_MAX];
 static int g_nown, g_own_merged;            /* texts named; how many of them the copy has */
 static uint32_t g_own_copy, g_own_from, g_own_from_n;   /* the copy, while the game points at it; the game's array */

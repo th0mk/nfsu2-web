@@ -1,0 +1,26 @@
+# A career lobby keeps out players past its race's stage, and the side kept out does not see it (with
+# mprace_keptout_a.txt; a stage 3 career): not over its start, not on the card there, not on the world map
+# (roam_game.c mp_shown; the hub's list marks a career lobby, RC_LOBBIES_CAREER), and nothing to join at its start.
+#   node web/tools/roam-pair.mjs --seed <stage 2 save> --seed-for Bob:<stage 3 save>
+#        --a Ann:mprace_keptout_a.txt --b Bob:mprace_keptout_map_b.txt --env MP_RACE=S2_DRIFT_2 --env MP_WAIT=3000 --env MP_PLAYERS=2
+# Bob's log: "Ann's lobby ...: kept out 2, shown 0", "the card here: 0 lobbies", "world map: 0 race lobbies marked"
+# twice (its own and the hub's, "the hub's 1"), "mp join: nothing to join here"; its JOIN anyway: Ann's log "a JOIN from a
+# stage 3 player, past stage 2, not a friend or crew-mate: kept out", Bob's "The race is full".
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    log LOBBY at the start
++600  tap M                                   # the world map (the first M of a while is ignored)
++90   tap M
++300  roam mp lobby
++0    tap ESCAPE
++300  roam mp join
++60   roam mp farjoin Ann                     # a JOIN anyway (as an older game's): its host keeps it out by the stage it says (3)
++300  roam mp lobby
++0    log LOBBY DONE
++600  quit

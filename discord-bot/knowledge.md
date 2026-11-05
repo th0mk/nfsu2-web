@@ -484,7 +484,9 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   (Power Units in Options, Gameplay; Show Player Names there too since 31cc3384 (also in the pause menu's Options, Gameplay): Off
   hides the names over other players' cars, in free roam and LAN races; the Bank box in career free roam shows only
   for 20 s after the bank changes, 10 s when free roam starts and 8 s after the pause menu, the map or a shop, the
-  answer to "hide the Bank"; Jump Camera Off in Options, Gameplay (also the pause menu's; it may take the next race
+  answer to "hide the Bank"; the box at the top left with the D-pad and its icons (SMS envelope, Engage, outrun) the
+  same way, for 20 s after a new message and while the car is at a race marker, a shop's door or an outrun's tuner,
+  in the release after d4efa0a7; Jump Camera Off in Options, Gameplay (also the pause menu's; it may take the next race
   or free roam to apply) turns off both the jump camera and the slow-motion camera after a crash, the answer to
   "disable the jump and crash cutscenes" (thread 1567563824121249905); drift mode with X, and since 19f84c9 with the drift races' handling and the car's
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
@@ -588,9 +590,16 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   still has it); since 8027226 the note after such a race says "Only a win counts in your career". The lobby panel marks with a star whom
   it counts for ("A win counts in your career"); the words over a lobby and on the world map end in "- career". A
   lobby whose race counts for the player who opened it takes only players up to that race's stage and the opener's
-  friends (and crew-mates since 8027226; a later stage's car would win it most of the time); the others see why at the spot, and since 85c39ac no
-  other lobby opens at that start while it waits (before that they could open their own beside it; a full lobby still
-  lets them). A
+  friends (and crew-mates since 8027226; a later stage's car would win it most of the time). Since 0d543f8 the others
+  don't see such a lobby at all (not at the start, over it or on the world map), nor a full lobby or one already on
+  its way to the race, and Enter at that start opens a lobby of their own beside it (before that they saw it with the
+  reason, "A career race for players up to stage 2 ..."; from 85c39ac to fc56fdd it even stopped them opening their
+  own there). Since 0e56c9b every lobby keeps out players past its host's stage by default, friends and crew-mates aside:
+  the host's V goes round "Stage 2 and below can join", "Friends & crew can join" and "Everyone can join" (a career
+  lobby has no Everyone). At a start, B
+  opens a new lobby beside the others and E goes to the next one; the card shows a speedometer of the fastest other
+  car against yours. On a controller: D-pad up joins, starts or opens; left held a second is a new lobby, who can
+  join or leave; right held the next lobby; invites are in the menu's Friends. A
   URL event of 2 or 3 heats races them all in one trip, with the career's points. A race that does not count pays
   by the player's stage (1st what a normal race of the stage pays, at least $400; 2nd to 4th three quarters, half,
   a quarter of that, at least $300/$200/$100). A race that counts pays the career's prize or that, whichever is more. Where the game would offer sponsors, the crib asks on the way back

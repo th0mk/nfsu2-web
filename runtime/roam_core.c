@@ -380,7 +380,7 @@ static int in(float f, float lo, float hi){ return f_finite(f) && f >= lo && f <
 static int racerep_ok(const rc_racerep *r){
     if (!r->lobby || !r->race || r->players < 1 || r->players > RC_LOBBY_MAX || r->place > r->players) return 0;
     if (r->cls < -1 || r->cls > 3 || r->flags & ~(RC_RR_HOST | RC_RR_QUIT | RC_RR_EDITED)) return 0;
-    if (r->credit > 2) return 0;
+    if (r->credit > 2 || r->stage > 9 || r->lobby_bits & ~(RC_RL_STAGED | RC_RL_MATE_PAST | RC_RL_HOST_PAST)) return 0;
     if (!in(r->rating, 0.f, 5000.f) || !in(r->field, 0.f, 5000.f) || !in(r->factor, 0.01f, 100.f) || !in(r->kw, 0.f, 10000.f)
         || !in(r->kg, 0.f, 50000.f) || !in(r->kmh, 0.f, 2000.f) || !in(r->time, 0.f, 100000.f)) return 0;
     uint32_t n = 0; while (n < RC_RACEREP_NAME && r->name[n]) n++;
@@ -502,7 +502,7 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         if (!racerep_ok(r)) return -1;
         rc_put32(&w, r->lobby); rc_put32(&w, r->race); rc_put8(&w, r->mode); rc_put8(&w, r->laps); rc_put16(&w, r->track);
         rc_put8(&w, r->place); rc_put8(&w, r->players); rc_put8(&w, r->flags); rc_put8(&w, r->type); rc_put8(&w, (uint8_t)r->cls);
-        rc_put8(&w, r->credit); rc_put8(&w, 0); rc_put8(&w, 0);
+        rc_put8(&w, r->credit); rc_put8(&w, r->stage); rc_put8(&w, r->lobby_bits);
         rc_putf(&w, r->rating); rc_putf(&w, r->field); rc_putf(&w, r->factor); rc_putf(&w, r->kw); rc_putf(&w, r->kg);
         rc_putf(&w, r->kmh); rc_putf(&w, r->time);
         uint8_t nm[RC_RACEREP_NAME] = {0};
@@ -702,7 +702,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         q->lobby = rc_get32(&r); q->race = rc_get32(&r); q->mode = (uint8_t)rc_get8(&r); q->laps = (uint8_t)rc_get8(&r);
         q->track = (uint16_t)rc_get16(&r); q->place = (uint8_t)rc_get8(&r); q->players = (uint8_t)rc_get8(&r);
         q->flags = (uint8_t)rc_get8(&r); q->type = (uint8_t)rc_get8(&r); q->cls = (int8_t)rc_get8(&r);
-        q->credit = (uint8_t)rc_get8(&r); (void)rc_get8(&r); (void)rc_get8(&r);
+        q->credit = (uint8_t)rc_get8(&r); q->stage = (uint8_t)rc_get8(&r); q->lobby_bits = (uint8_t)rc_get8(&r);
         q->rating = rc_getf(&r); q->field = rc_getf(&r); q->factor = rc_getf(&r); q->kw = rc_getf(&r); q->kg = rc_getf(&r);
         q->kmh = rc_getf(&r); q->time = rc_getf(&r);
         rc_getb(&r, q->name, RC_RACEREP_NAME); q->name[RC_RACEREP_NAME] = 0;
@@ -747,9 +747,10 @@ int rc_carcfg_encode(const rc_carcfg *c, uint8_t *out, int cap){
     for (int i = 0; i < c->n_parts; i++){ rc_put8(&w, c->part[i].slot); rc_put32(&w, c->part[i].key); rc_put32(&w, c->part[i].owner); }
     /* extensions: count, then {u8 tag, u8 length, bytes}; unknown tags are
      * skipped by the reader */
-    rc_put8(&w, (c->has_perf ? 1u : 0u) + (c->has_horn ? 1u : 0u));
+    rc_put8(&w, (c->has_perf ? 1u : 0u) + (c->has_horn ? 1u : 0u) + (c->has_rating ? 1u : 0u));
     if (c->has_perf){ rc_put8(&w, RC_EXT_PERF); rc_put8(&w, RC_PERF_BYTES); rc_putb(&w, c->perf, RC_PERF_BYTES); }
     if (c->has_horn){ rc_put8(&w, RC_EXT_HORN); rc_put8(&w, 1); rc_put8(&w, c->horn); }
+    if (c->has_rating){ rc_put8(&w, RC_EXT_RATING); rc_put8(&w, 3); rc_put8(&w, (uint8_t)c->rating_cls); rc_put16(&w, c->rating); }
     return w.err ? -1 : (int)w.n;
 }
 int rc_carcfg_decode(const uint8_t *p, int len, rc_carcfg *c){
@@ -780,6 +781,10 @@ int rc_carcfg_decode(const uint8_t *p, int len, rc_carcfg *c){
         uint32_t tag = rc_get8(&r), l = rc_get8(&r);
         if (tag == RC_EXT_PERF && l == RC_PERF_BYTES){ rc_getb(&r, c->perf, RC_PERF_BYTES); c->has_perf = !r.err; }
         else if (tag == RC_EXT_HORN && l == 1){ c->horn = (uint8_t)rc_get8(&r); c->has_horn = !r.err; }
+        else if (tag == RC_EXT_RATING && l == 3){
+            c->rating_cls = (int8_t)rc_get8(&r); c->rating = (uint16_t)rc_get16(&r);
+            c->has_rating = !r.err && c->rating_cls >= -1 && c->rating_cls <= 3 && c->rating <= 5000;
+        }
         else if (r_have(&r, l)) r.n += l;
     }
     if (r.err) return RC_E_SHORT;
@@ -1170,9 +1175,11 @@ static void lobbies_from_hub(rc_session *s, const rc_msg *m){
     for (int k = 0; k < m->u.lobbies.n; k++){
         const uint8_t *e = m->u.lobbies.data + (size_t)k * RC_LOBBIES_ENTRY;
         uint32_t race = (uint32_t)e[4] | (uint32_t)e[5] << 8 | (uint32_t)e[6] << 16 | (uint32_t)e[7] << 24;
-        if (!race || e[9] < 2 || e[9] > RC_LOBBY_MAX || e[8] > e[9] || e[10] >= RC_LS__N) continue;
+        uint8_t st = e[10] & 3u;
+        if (!race || e[9] < 2 || e[9] > RC_LOBBY_MAX || e[8] > e[9] || st >= RC_LS__N) continue;
         s->lobbies_e[n].x = (int16_t)(e[0] | e[1] << 8); s->lobbies_e[n].y = (int16_t)(e[2] | e[3] << 8);
-        s->lobbies_e[n].race = race; s->lobbies_e[n].n = e[8]; s->lobbies_e[n].max = e[9]; s->lobbies_e[n].state = e[10];
+        s->lobbies_e[n].race = race; s->lobbies_e[n].n = e[8]; s->lobbies_e[n].max = e[9]; s->lobbies_e[n].state = st;
+        s->lobbies_e[n].flags = e[10] & (RC_LOBBIES_STAGED | RC_LOBBIES_MATE); s->lobbies_e[n].hstage = e[10] >> RC_LOBBIES_HSTAGE & 7u;
         n++;
     }
     s->lobbies_n = n; s->lobbies_gen++;

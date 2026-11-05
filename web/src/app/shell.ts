@@ -64,7 +64,7 @@ import { groupsOf, phrasesOf } from './phrases';
 import { FriendPrompt, FriendsApi, FriendsPanel } from './friends';
 import { ChatDialog, FriendMessages, MSG_ICON, MessageStore } from './messages';
 import { applySiteKeys, keyName, menuKeyOf, siteButton, siteKey, siteKeyList, SiteKeysView } from './sitekeys';
-import { PAD_LS, PAD_RS } from '../input/proto';
+import { LB_JOIN, PAD_LS, PAD_RS } from '../input/proto';
 import { GameSession } from './game';
 import { AwayCheck, AWAY_LIMITS, type AwayLimits } from './away';
 import { changelog } from './changelog';
@@ -1629,6 +1629,12 @@ function drawPopFriends() {
   friendPrompt.drawPlaced(box, room => void joinFriend(room));
   if (had) ($('#friends-pop-box').querySelector<HTMLElement>('button') ?? $('#friends-pop').querySelector<HTMLElement>('[data-act="friends-done"]'))?.focus();
 }
+/** the race lobby card's Invite (its key, a click or a tap): the menu's Friends popup, whose friends in this room each
+ *  get an Invite while the player hosts a lobby with room in it */
+function inviteToRace() {
+  if (friendPrompt.hasFriends()) { openFriends(); return; }
+  toast(t('Add friends first: front bumpers touching for 3 s, or by name on the start page'), 5000);
+}
 /** a Join in the menu's Friends: that friend's room, at once, and back to the game */
 async function joinFriend(room: string) {
   for (const id of ['#friends-pop', '#menu']) { const d = $<HTMLDialogElement>(id); if (d.open) d.close(); }
@@ -2187,7 +2193,9 @@ export async function boot() {
     if (playedText(ms)) { live($('#lastgame'), () => t('Last game: {time}', { time: playedText(ms) })); $('#lastgame').hidden = false; }
   }
   fps = new FpsOverlay($('#fps'));
-  lobbyPanel = new LobbyPanel($('#lobby'), $('#lobby-cover'), logLine);
+  lobbyPanel = new LobbyPanel($('#lobby'), $('#lobby-cover'), logLine, {
+    act: what => { session?.input?.lobby?.(what); }, invite: inviteToRace, session: () => session,
+  });
   // made here once: a closure made per game (in startGame) would keep that game's scope reachable
   fps.extra = () => session?.stats() ?? {};
   // the language this browser showed last, at once (settings.ini says which it is: applyLanguage, once it is read)
@@ -2352,6 +2360,7 @@ export async function boot() {
   friendPrompt = new FriendPrompt($('#stage'), {
     send: m => session?.net?.friend?.(m) ?? false, room: () => roamRoom ?? '', toast: s => toast(s, 5000), log: logLine,
     notice: friendNotice, menu: menuName, placed: () => { if ($<HTMLDialogElement>('#friends-pop').open) drawPopFriends(); },
+    hosted: () => lobbyPanel.hosted(), joinLobby: (host, lobby, race) => session?.input?.lobby?.(LB_JOIN, host, lobby, race) ?? false,
   });
   friendMessages = new FriendMessages($('#stage'), msgStore, {
     send: m => session?.net?.friend?.(m) ?? false, driving: () => quickChat.driving(), line: msgLine, hint: msgHint,

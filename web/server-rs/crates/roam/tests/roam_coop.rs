@@ -391,9 +391,9 @@ fn a_second_player_counts_as_its_browser() {
     assert_eq!(k.info("coopSeats"), 0.0);
 }
 
-// a full hub (15360 endpoints: the switch's 14000 places and co-op's second players), 2000 coming as others go: the
-// 15361st is refused, and every player keeps a slot under 16384, the most a parked world map's key names (a slot past
-// it read as another one's, parked); the new ones' map shows each of them once
+// a full hub (15360 endpoints: the free-roam share of the switch's 16000 places and co-op's second players), 2000
+// coming as others go: the 15361st is refused, and every player keeps a slot under 16384, the most a parked world
+// map's key names (a slot past it read as another one's, parked); the new ones' map shows each of them once
 #[test]
 fn a_full_hub_keeps_every_slot_a_maps_key_names() {
     let mut k = Kit::new(RoamOptions::default());

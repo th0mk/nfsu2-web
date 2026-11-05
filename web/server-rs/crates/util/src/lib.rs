@@ -13,12 +13,14 @@
 //! - [`host`]: the switch's hosts (the Online host at 10.77.0.1, the free-roam hub at 10.77.0.253): how the switch
 //!   hands them frames and how they send through it
 //! - [`rand`]: random bytes and integers from the OS (Node's `crypto.randomBytes`, `crypto.randomInt`)
+//! - [`idhash`]: a fast hasher for maps by the server's own numbers (virtual addresses, slots, player ids)
 
 pub mod bucket;
 pub mod clock;
 pub mod counter;
 pub mod cpu;
 pub mod host;
+pub mod idhash;
 pub mod js;
 pub mod json;
 pub mod log;
@@ -29,6 +31,7 @@ pub use bucket::{Bucket, Budget, Rate};
 pub use clock::{mono_ms, now_ms};
 pub use counter::{Counter, Counters};
 pub use host::{Charge, FrameCtx, Host, SendResult, SwitchSend, Tap};
+pub use idhash::{IdMap, IdSet};
 
 /// "10.77.0.1" for 0x0A4D0001
 pub fn vip_str(v: u32) -> String {

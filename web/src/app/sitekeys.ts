@@ -1,5 +1,5 @@
 // This site's own controls beside the game's: drift mode, the hood, trunk and doors, the horn, the headlights, the
-// controller's free look, quick chat, Message a friend, Add friend, photo mode, hiding the HUD, the page's menu, the
+// controller's free look, quick chat, Message a friend, Add friend, the race lobby card's three, photo mode, hiding the HUD, the page's menu, the
 // next song and the frame-rate counter.  Each has a key and, where one goes, a controller button, which the player sets
 // on the start page (Controls, Site) by pressing it, or turns off.  settings.ini keeps them (key_*, button_*:
 // settings.ts, this device's); the runtime reads the ones it handles (runtime/dinput_kbd.c dikbd_site_key: drift mode,
@@ -23,7 +23,8 @@ import { CODE_OF_DIK, CODES } from '../input/keymap';
 import { allPads } from '../input/steampad';
 import { N, t } from './i18n';
 
-export type OurId = 'drift' | 'showoff' | 'horn' | 'lights' | 'look' | 'chat' | 'message' | 'friend' | 'photo' | 'hud' | 'menu' | 'song' | 'fps';
+export type OurId = 'drift' | 'showoff' | 'horn' | 'lights' | 'look' | 'chat' | 'message' | 'friend' | 'lobby' | 'lobbyNew' | 'lobbyPrivate' | 'lobbyInvite' |
+  'photo' | 'hud' | 'menu' | 'song' | 'fps';
 export type ButtonKey = 'button_hold' | 'button_horn' | 'button_chat' | 'button_look';
 
 export interface Our {
@@ -57,6 +58,12 @@ export const OURS: readonly Our[] = [
   { id: 'chat', name: N('Quick chat'), line: N('Quick chat (with other players): group, then phrase'), fixed: '1–4', button: 'button_chat' },
   { id: 'message', name: N('Message a friend'), line: N('Message a friend (in free roam)'), key: 'key_message', def: 'KeyI' },
   { id: 'friend', name: N('Add friend'), line: N('Add a friend (front bumpers touching)'), key: 'key_friend', def: 'KeyF' },
+  { id: 'lobby', name: N('Next race lobby'), line: N('Next race lobby at a start (in free roam)'), key: 'key_lobby', def: 'KeyE' },
+  { id: 'lobbyNew', name: N('New race lobby'), line: N('A race lobby of your own beside the others at a start (in free roam)'), key: 'key_lobby_new', def: 'KeyB' },
+  { id: 'lobbyPrivate', name: N('Who can join'), line: N('Your race lobby: who can join it (your stage and below, friends & crew, or everyone)'),
+    key: 'key_lobby_private', def: 'KeyV' },
+  { id: 'lobbyInvite', name: N('Invite to a race'), line: N('Invite friends to your race lobby, join a friend\'s invite, leave a race you joined from afar'),
+    key: 'key_lobby_invite', def: 'KeyZ' },
   { id: 'photo', name: N('Photo mode'), line: N('Photo mode, then the photo'), key: 'key_photo', def: 'F12', menus: true },
   { id: 'hud', name: N('Hide HUD'), line: N('Hide or show the HUD while driving (names and chat over cars too)'), key: 'key_hud', def: 'F10' },
   { id: 'menu', name: N('Menu'), line: N('Menu: full screen, controls, log, quit'), key: 'key_menu', def: 'F9', menus: true, always: true },

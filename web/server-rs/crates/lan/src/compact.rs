@@ -3,7 +3,8 @@
 //! quarter less (a free-roam snapshot of 90 bytes cost 110 in a bundle, 84 here).  On nfsu2.xyz the port is the
 //! limit (486 Mbit/s of 1000 at 2,960 players, 2026-10-22), and almost all of it is these snapshots.
 //!
-//! A bundle: [0] 33, [1..3] reserved, then entries of
+//! A bundle: [0] 33, [1] 0x01 when a probe's stamp of 8 bytes follows [3] (`F_STAMPED`: only to a page whose hello
+//! said "echo":1, which echoes it in its own next bundle: lib.rs `probe`), [2..3] reserved, then entries of
 //!   [0] flags: bits 0-2 the frame's kind (1-7); 0x08 to the broadcast address (else to the page's own); 0x10 the
 //!       ports follow (else both are RC_DEFAULT_PORT, free roam's 47210); 0x20 a free-roam datagram without its
 //!       "N2FR", version, length and CRC (the page writes them back, the CRC computed again: the switch checked it
@@ -44,6 +45,9 @@ use crate::{BASE, BROADCAST};
 
 /// a compact bundle (page and switch only: the switch never routes one from a client)
 pub(crate) const KIND_COMPACT: u8 = 33;
+/// a bundle's [1]: a probe's stamp of 8 bytes follows the header (a compact bundle's from the switch; a page's bundle
+/// echoes it: reader.rs)
+pub(crate) const F_STAMPED: u8 = 0x01;
 /// runtime/roam_core.h RC_DEFAULT_PORT
 const ROAM_PORT: u16 = 47210;
 const F_BCAST: u8 = 0x08;
@@ -185,6 +189,9 @@ impl Hasher for KeyHash {
         for &x in b {
             self.write_u32(x as u32);
         }
+    }
+    fn write_u16(&mut self, k: u16) {
+        self.write_u32(k as u32);
     }
     fn write_u32(&mut self, k: u32) {
         let x = (self.0 ^ k as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);

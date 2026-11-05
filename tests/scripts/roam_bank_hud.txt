@@ -1,30 +1,46 @@
-# The Bank in career free roam's HUD (runtime/hudbank.c) only when it says something, from a career save in free roam
-# (run-suite's NFSU2_SAVE_SEED, roam-pair's --seed; e.g. work/seed/career/s4_outrun): shown when free roam starts
-# ("[bank] shown (free roam, ...)"), hidden 10 s later ("[bank] hidden (time's up, ...)"); shown 20 s after the bank
-# changed (a poke here), and 8 s after the pause menu, the world map (M) and the crib ("back"); the reward pop-up
+# The Bank and the box at the top left of career free roam's HUD (runtime/hudbank.c) only when they say something, from
+# a career save in free roam (run-suite's NFSU2_SAVE_SEED, roam-pair's --seed; e.g. work/seed/career/s4_outrun): both
+# shown when free roam starts ("[bank] shown (free roam, ...)", "[box] shown (free roam)"), hidden 10 s later ("time's
+# up"); the Bank shown 20 s after the bank changed (a poke here), the box not; the box 20 s after a message came (a note
+# posted in its last slot, as 0x4C9170 posts one), the Bank not; both 8 s after the pause menu, the world map (M) and
+# the crib ("back"); the box while the car is at the crib's door ("here") and hidden once it left; the reward pop-up
 # (Cash_Reward: a magazine's, its setter's values poked, 0x4AC170) shows with the Bank hidden.  The HUD gives the Bank's
-# part (the HUD's +0x80) its bits at +0x1C: 0x80000 (524288) while it shows.  roam-pair --page app saves the page at
-# each "log SHOT <name>":
+# part (the HUD's +0x80) its bits at +0x1C: 0x80000 (524288) while it shows; the box's part (the HUD's +0x58) at its
+# +0x1C too, their low byte 0x82 (130) while it shows, 0x80 (128) while not (0x80: the reward pop-up's, always on in
+# free roam).  roam-pair --page app saves the page at each "log SHOT <name>":
 #   roam-pair --page app --solo --a Ban:roam_bank_hud.txt --seed <save tree> --env NFSU2_ROAM=0 --out <dir>
 0     bot on
 +0    waitroam 6000
 +0    bot off
 +60   expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown: free roam started
++0    expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 130       # the box too
 +0    log SHOT bank_start
 +10000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288   # hidden 10 s after
++0    expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 128       # the box too
 +0    log SHOT bank_hidden
 +0    poke 0x861e74 123456                                  # the bank changes
 +30   expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown
++0    expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 128       # the box not
 +0    log SHOT bank_changed
 +18000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288  # still, 18.5 s after
 +3000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288    # hidden 20 s after
++0    poke [[[0x8900ac]+0x9a4]+0x58]+0xfc 2                 # a note in the box's last slot: new for 2 s,
++0    poke [[[0x8900ac]+0x9a4]+0x58]+0xed 20 byte           # the note's kind (0x14),
++0    poke [[[0x8900ac]+0x9a4]+0x58]+0xec 1 byte            # posted
++30   expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 130       # the box shown
++0    expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288     # the Bank not
++0    log SHOT box_note
++18000ms expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 130    # still, 18.5 s after
++6000ms expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 128     # hidden 20 s after (it came, or its 2 s new ended)
 +0    tap ESCAPE
 +0    waitfng UI_Pause.fng 600
 +120  log SHOT pause
 +0    tap ESCAPE                                            # back to the game
 +30   expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown after the pause menu
++0    expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 130       # the box too
 +0    log SHOT bank_back
 +9000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288    # hidden 8 s after
++0    expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 128       # the box too
 +0    poke 0x8364a8 1                                       # a magazine's reward pop-up, as 0x4AC170 sets it
 +0    poke 0x8364a0 5000
 +0    poke 0x8364a4 0
@@ -38,15 +54,24 @@
 +120  log SHOT map
 +0    tap ESCAPE                                            # back to the game
 +30   expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown after the map
++0    expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 130       # the box too
 +0    log SHOT bank_after_map
 +9000ms expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c < 524288   # hidden 8 s after
++0    expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 128       # the box too
 +0    shopgo CRIB_1                                         # the crib, the career's garage (as coop_shop.txt)
-+300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++300  expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 130       # the box: the car at the crib's door
++0    log SHOT box_door
++12000ms expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 130    # still, while it stands there
++0    tapfe RETURN UI_EngageShopDialog.fng 120 2400
 +120  tap LEFT
 +30   tap RETURN
 +0    waitfe UI_CareerCrib.fng 3000
 +300  roam fe2roam 14000                                    # Return to Explore Mode
 +0    waitmem 0x8654a4 6 6000
 +120  expect i:[[[0x8900ac]+0x9a4]+0x80]+0x1c >= 524288    # shown after the crib
++0    expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 130       # the box too
 +0    log SHOT bank_after_crib
++0    teleport 1695.0 -845.0 24.6 0xb82e                    # away from the door (the airport's car park)
++14000ms expect b:[[[0x8900ac]+0x9a4]+0x58]+0x1c == 128    # the box hidden (8 s after the teleport's stall: back)
++0    log SHOT box_left
 +60   quit

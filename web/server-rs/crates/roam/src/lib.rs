@@ -72,9 +72,9 @@
 //! way (fewer for far ones), so a crowd costs its players times their links, all through the switch; a switch that
 //! cannot keep up delays every snapshot, and the cars stutter for everyone (nfsu2.xyz at 855 players, 2026-10-20:
 //! 180-600 ms for a /players answer on Node's one thread).  While the server worked more than `busy_high` of the last
-//! tick (of its CPU quota: of the last `QUOTA_WINDOW`) the cap on the links goes down by a quarter, at most every
-//! `cap_down_ms`, to `min_degree` at the least; once it has room again (under `busy_low`) the cap goes back up by 2
-//! every `cap_up_ms`.  The nearest links stay.  While
+//! `BUSY_WINDOW` (10 s; of its workers' time, or of its CPU quota) the cap on the links goes down by a quarter, at
+//! most every `cap_down_ms`, to `min_degree` at the least; once it has room again (under `busy_low`) the cap goes back
+//! up by 2 every `cap_up_ms`.  The nearest links stay.  While
 //! the cap is under `ask_cap` (24) free roam counts as busy (the server's /players roamBusy): until 2026-11-05 the start
 //! page did not ask its question (Free roam with others?) at a Play then, so fewer new players joined a crowd that
 //! already got fewer cars (free roam is on by default since).  /players also says how many drive in free roam, or are paused
@@ -119,7 +119,7 @@
 //!   the runtime's workers, which run the switch, spent working (nfsu2_util::cpu::WorkersBusy): Node read its one
 //!   thread's event-loop use.  (The process's CPU time over every core, which it was, never passed `busy_high` once
 //!   the workers were half the cores: all of them busy was 50 %.)  Or, where it is higher, the share of a CPU quota
-//!   the server shares used (nfsu2_util::cpu::QuotaBusy), over the last `QUOTA_WINDOW` (a half second's share of a
+//!   the server shares used (nfsu2_util::cpu::QuotaBusy), both over the last `BUSY_WINDOW` (a half second's share of a
 //!   slice at 73 % went up to 88 %): the game's containers share nfsu2.slice's, and cloudflared pays for every
 //!   snapshot too, so a slice near its limit gets fewer links before its players get them late.
 
@@ -142,7 +142,7 @@ use nfsu2_util::cpu::{Busy, QuotaBusy, WorkersBusy};
 use nfsu2_util::{FrameCtx, Host, SwitchSend};
 use tokio::sync::oneshot;
 
-pub use hub::{Hub, Whereabouts};
+pub use hub::{Hosted, Hub, Whereabouts};
 pub use wire::{decode_roam, encode_peers, encode_peers_crews};
 
 /// 10.77.0.253, runtime/web/net_proto.h NET_ROAM_HUB
@@ -169,9 +169,10 @@ pub struct RoamOptions {
     /// port of its own, its HELLO flagged: hub.rs `Player::seat2`), and one more for a game started again while its
     /// last start's endpoint lingers (until `gone_ms`).  A browser's endpoints are never linked with each other.
     pub max_per_vip: usize,
-    /// The players (endpoints) on the hub at most, 15360: the switch's 14000 places (nfsu2-lan `ADDRS`, one browser
-    /// each) and 1360 more, a tenth of them in co-op (desktop pages only), each with its second player an endpoint
-    /// more (a restart's lingering endpoint is one too, for a few seconds).  At most 16384 (hub.rs SLOTS_MAX: a world
+    /// The players (endpoints) on the hub at most, 15360: of the switch's 16000 places (nfsu2-lan `ADDRS`, one browser
+    /// each) some two in five are in free roam at once (nfsu2.xyz, 2026-11-05: 4,968 of 13,163), a tenth of those in
+    /// co-op (desktop pages only), each with its second player an endpoint more (a restart's lingering endpoint is one
+    /// too, for a few seconds).  At most 16384 (hub.rs SLOTS_MAX: a world
     /// map's key names a slot under it), and that far under it that a full hub's new player purges the slots of the
     /// ones gone at most once in 1024 (else an eighth of the players, as before).  What grows with it: a player's
     /// slot (some 1.5 KB with its links), the kept watches (one each at most), the tick (each link; a second player
@@ -314,6 +315,7 @@ enum Cmd {
     Flew(u32, f64),
     Linked(u32, String, oneshot::Sender<Option<(u32, Option<Arc<str>>)>>),
     Where(Vec<Arc<str>>, oneshot::Sender<Vec<Option<hub::Whereabouts>>>),
+    Hosted(u32, oneshot::Sender<Option<hub::Hosted>>),
     Stop,
 }
 
@@ -325,9 +327,12 @@ enum Cmd {
 /// and keeps that block: 128 MiB at most (65,536 of them were 1 GiB).
 const MAX_PENDING: usize = 1 << 13;
 
-/// how far back the busy cap reads the CPU quota (`QuotaBusy::sample_over`): long enough that one busy half second
-/// cuts no one's links, short enough for a slice that fills up for good (the cap goes down at most every 5 s anyway)
-const QUOTA_WINDOW: Duration = Duration::from_secs(10);
+/// how far back the busy cap reads the workers and the CPU quota (`WorkersBusy::sample_over`, `QuotaBusy::sample_over`):
+/// long enough that one busy half second cuts no one's links, short enough for a server that fills up for good (the
+/// cap goes down at most every 5 s anyway).  The workers were read a tick at a time until 2026-11-05: at 13,400
+/// players on nfsu2.xyz, 65 % busy over minutes, a half second past 85 % every few minutes took every player from 54
+/// links to 40, and back up 2 at a time.
+const BUSY_WINDOW: Duration = Duration::from_secs(10);
 
 /// The hub on a thread of its own.
 pub struct RoamHub {
@@ -359,7 +364,7 @@ impl RoamHub {
             Ok(rt) => {
                 let mut b = WorkersBusy::new(&rt);
                 let mut q = QuotaBusy::find();
-                Box::new(move || b.sample().max(q.as_mut().map_or(0.0, |q| q.sample_over(QUOTA_WINDOW))))
+                Box::new(move || b.sample_over(BUSY_WINDOW).max(q.as_mut().map_or(0.0, |q| q.sample_over(BUSY_WINDOW))))
             }
             Err(_) => {
                 let mut b = Busy::new(std::thread::available_parallelism().map_or(1, |n| n.get()));
@@ -448,6 +453,13 @@ impl RoamHub {
     pub fn whereabouts(&self, owners: Vec<Arc<str>>) -> oneshot::Receiver<Vec<Option<hub::Whereabouts>>> {
         let (tx, rx) = oneshot::channel();
         let _ = self.tx.send(Cmd::Where(owners, tx));
+        rx
+    }
+
+    /// the race lobby browser `vip`'s player hosts, open now: `Hub::hosted`
+    pub fn hosted(&self, vip: u32) -> oneshot::Receiver<Option<hub::Hosted>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.tx.send(Cmd::Hosted(vip, tx));
         rx
     }
 }
@@ -544,6 +556,9 @@ fn run(
             }),
             Cmd::Where(owners, tx) => guard(|| {
                 let _ = tx.send(hub.whereabouts(&owners));
+            }),
+            Cmd::Hosted(vip, tx) => guard(|| {
+                let _ = tx.send(hub.hosted(vip));
             }),
             Cmd::Stop => {
                 // no more ticks, so no more lists: the switch's send goes too (it holds the switch, which holds
