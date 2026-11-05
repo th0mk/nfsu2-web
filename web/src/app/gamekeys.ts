@@ -10,7 +10,7 @@ import type { GameSession } from './game';
 /** the status "keys"' bits, in the order of runtime/dinput_kbd.c's PAGE_KEYS */
 export const KEY_MESSAGE = 0, KEY_FRIEND = 1;
 /** ...and the race lobby card's (lobby.ts): the next lobby, Friends & crew only, invite / Join an invite / leave */
-export const KEY_LOBBY = 10, KEY_LOBBY_PRIVATE = 11, KEY_LOBBY_INVITE = 12;
+export const KEY_LOBBY = 10, KEY_LOBBY_PRIVATE = 11, KEY_LOBBY_INVITE = 12, KEY_LOBBY_NEW = 13;
 const CHAT: Record<string, number> = { Digit1: 2, Digit2: 3, Digit3: 4, Digit4: 5, Numpad1: 6, Numpad2: 7, Numpad3: 8, Numpad4: 9 };
 /** quick chat's key code's bit (-1: not one of quick chat's keys) */
 export const chatBit = (code: string): number => CHAT[code] ?? -1;

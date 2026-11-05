@@ -24,7 +24,7 @@ const K = await import('data:text/javascript;base64,' + Buffer.from(await build(
 
 test('the keys and buttons from the environment', () => {
   K.applySiteKeys({});
-  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, null, 'KeyI', 'KeyF', 'KeyE', 'KeyV', 'KeyZ', 'F12', 'F10', 'F9', 'F7', 'F8']);
+  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, null, 'KeyI', 'KeyF', 'KeyE', 'KeyB', 'KeyV', 'KeyZ', 'F12', 'F10', 'F9', 'F7', 'F8']);
   assert.deepEqual(['button_hold', 'button_horn', 'button_chat', 'button_look'].map(K.siteButton), ['ddown', 'ls', 'rs', 'auto']);
   assert.ok(K.SITE_KEYS.includes('key_lights'), 'the headlights\' key is one of settings.ini\'s');
   assert.ok(K.SITE_KEYS.includes('key_hud') && K.SITE_KEYS.includes('button_look'), 'hiding the HUD\'s key and the free look\'s switch too');

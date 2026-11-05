@@ -542,6 +542,45 @@ int pad_horn_ours(int *button){
     return g_ours[OUR_HORN];
 }
 
+/* ---- the race lobby's card (roam_game.c mp_pad) ----------------------------------------------------
+ * While the card offers them, D-pad left and right held LB_HOLD_S do its keys: left a new lobby at a start (its B), who
+ * can join (V, hosting) or leave (Z, joined from afar), right the next lobby (E); let go before, the game's own press
+ * (World Map, SMS by default), as D-pad down's hold does (showoff_pad).  Not on a direction the player put another of
+ * the game's controls on (Joypad Configuration). */
+#define LB_HOLD_S       0.6
+#define LB_TAP_S        0.12
+static int g_lb_offer[2], g_lb_fired;                     /* left, right: what each does now (roam_plat.h ROAM_LB_*, 0 none) */
+static double g_lb_at;                                     /* ...said then: an offer not said again for LB_FRESH_S is none (the
+                                                              menus, a race: the game's D-pad as it always was) */
+#define LB_FRESH_S      0.25
+static struct { int held, fired; double t0, tap_until; } g_lbh[2];
+static double lb_now(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (double)t.tv_sec + (double)t.tv_nsec * 1e-9; }
+void pad_lobby_offer(int left, int right){ g_lb_offer[0] = left; g_lb_offer[1] = right; g_lb_at = lb_now(); }
+int pad_lobby_take(void){ int a = g_lb_fired; g_lb_fired = 0; return a; }
+static uint32_t lobby_pad(uint32_t b, uint32_t ch, int wheel){
+    static const int bit[2] = { PAD_DLEFT, PAD_DRIGHT }, idx[2] = { 18, 19 };
+    static const uint32_t tab[3] = {0x018u, 0x118u, 0x198u};
+    double t = lb_now();
+    if (t - g_lb_at > LB_FRESH_S) g_lb_offer[0] = g_lb_offer[1] = 0;
+    for (int k = 0; k < 2; k++){
+        uint32_t D = 1u << bit[k], def = (wheel ? g_prof_wheel : g_prof_game)[idx[k]];
+        int theirs = 0;
+        for (int i = 0; ch && i < 3 && !theirs; i++){ uint32_t a = MR32(ch + tab[i] + 4u * (uint32_t)idx[k]); theirs = a && a != def; }
+        int down = (b & D) != 0;
+        if (down && !g_lbh[k].held && g_lb_offer[k] && !theirs){ g_lbh[k].held = 1; g_lbh[k].fired = 0; g_lbh[k].t0 = t; }
+        if (g_lbh[k].held){
+            if (!down){ g_lbh[k].held = 0; if (!g_lbh[k].fired) g_lbh[k].tap_until = t + LB_TAP_S; }
+            else if (!g_lbh[k].fired && t - g_lbh[k].t0 >= LB_HOLD_S){
+                g_lbh[k].fired = 1;
+                if (g_lb_offer[k]){ g_lb_fired = g_lb_offer[k]; fprintf(stderr, "[pad] D-pad %s held: the race lobby's card (%d)\n", k ? "right" : "left", g_lb_fired); }
+            }
+            b &= ~D;
+        }
+        if (t < g_lbh[k].tap_until) b |= D;
+    }
+    return b;
+}
+
 static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
     uint8_t st[0x110];
     memset(st, 0, sizeof st);
@@ -558,6 +597,7 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
     else ours_config();
     uint32_t hold = k_ours[OUR_HOLD].idx >= 0 ? 1u << k_ours[OUR_HOLD].bit : 0u;
     uint32_t b = MR32(0x850078u) == 4 || !hold || g_ours[OUR_HOLD] == PAD_THEIRS ? s->buttons : showoff_pad(s->buttons, hold);
+    b = lobby_pad(b, ch, s->wheel);
     uint32_t pov[4] = { pov_of(!!(b & 1u << PAD_DUP), !!(b & 1u << PAD_DDOWN),
                                !!(b & 1u << PAD_DLEFT), !!(b & 1u << PAD_DRIGHT)),
                         stick_pov(d, s->axis[PAD_AXIS_LX], s->axis[PAD_AXIS_LY]),

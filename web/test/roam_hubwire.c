@@ -202,6 +202,7 @@ int main(int argc, char **argv){
         r->lobby = 0xA1B2C3D4u; r->race = 0x0BADF00Du; r->mode = 1; r->laps = 1; r->track = 4102; r->place = 2; r->players = 3;
         r->flags = RC_RR_HOST; r->type = 22; r->cls = 2; r->rating = 316.6f; r->field = 280.5f; r->factor = 1.25f;
         r->kw = 214.f; r->kg = 1450.f; r->kmh = 249.f; r->time = 95.5f; strcpy(r->name, "350Z");
+        r->stage = 3; r->lobby_bits = RC_RL_STAGED | RC_RL_MATE_PAST;
     } else if (!strcmp(argv[1], "bye")){
         m.h.type = RC_MSG_BYE; m.u.bye.reason = 0;
     } else return 2;

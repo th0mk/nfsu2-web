@@ -305,7 +305,7 @@ static struct { int act; uint32_t host, lobby, race; } g_lb[LB_RING];
 static unsigned g_lb_w, g_lb_r;
 static pthread_mutex_t g_lb_mu = PTHREAD_MUTEX_INITIALIZER;
 void roam_plat_lobby_input(int act, uint32_t host, uint32_t lobby, uint32_t race){
-    if (act <= ROAM_LB_NONE || act > ROAM_LB_JOIN) return;
+    if (act <= ROAM_LB_NONE || act > ROAM_LB_NEW) return;
     pthread_mutex_lock(&g_lb_mu);
     if (g_lb_w - g_lb_r >= LB_RING) g_lb_r++;
     g_lb[g_lb_w % LB_RING].act = act; g_lb[g_lb_w % LB_RING].host = host; g_lb[g_lb_w % LB_RING].lobby = lobby; g_lb[g_lb_w % LB_RING].race = race;

@@ -204,6 +204,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'key_message', env: 'NFSU2_KEY_MESSAGE', kind: 'key', scope: 'web', device: true },
   { key: 'key_friend', env: 'NFSU2_KEY_FRIEND', kind: 'key', scope: 'web', device: true },
   { key: 'key_lobby', env: 'NFSU2_KEY_LOBBY', kind: 'key', scope: 'web', device: true },
+  { key: 'key_lobby_new', env: 'NFSU2_KEY_LOBBY_NEW', kind: 'key', scope: 'web', device: true },
   { key: 'key_lobby_private', env: 'NFSU2_KEY_LOBBY_PRIVATE', kind: 'key', scope: 'web', device: true },
   { key: 'key_lobby_invite', env: 'NFSU2_KEY_LOBBY_INVITE', kind: 'key', scope: 'web', device: true },
   { key: 'key_photo', env: 'NFSU2_KEY_PHOTO', kind: 'key', scope: 'web', device: true },
@@ -452,7 +453,7 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # the frame-rate counter.  A key one of the game's controls is on (its
 # Options, Controls) stays the game's.
 # [NFSU2_KEY_DRIFT, NFSU2_KEY_SHOWOFF, NFSU2_KEY_HORN, NFSU2_KEY_LIGHTS,
-# NFSU2_KEY_MESSAGE, NFSU2_KEY_FRIEND, NFSU2_KEY_LOBBY,
+# NFSU2_KEY_MESSAGE, NFSU2_KEY_FRIEND, NFSU2_KEY_LOBBY, NFSU2_KEY_LOBBY_NEW,
 # NFSU2_KEY_LOBBY_PRIVATE, NFSU2_KEY_LOBBY_INVITE, NFSU2_KEY_PHOTO,
 # NFSU2_KEY_HUD, NFSU2_KEY_MENU, NFSU2_KEY_SONG, NFSU2_KEY_FPS]
 #key_drift = KeyX
@@ -462,6 +463,7 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #key_message = KeyI
 #key_friend = KeyF
 #key_lobby = KeyE
+#key_lobby_new = KeyB
 #key_lobby_private = KeyV
 #key_lobby_invite = KeyZ
 #key_photo = F12

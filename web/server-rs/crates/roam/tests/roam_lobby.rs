@@ -558,7 +558,8 @@ fn race_reports_on_the_wire_roam_core_and_the_hub_agree() {
     assert_eq!(
         k.lines.lock().as_slice(),
         ["[race] lobby a1b2c3d4, race 0badf00d (sprint, track 4102, 1 lap, 3 cars): Ann K. (host) 2nd of 3 in 95.50 s; 350Z (type 22), \
-          class 2, rating 316.6 (the cars' average 280.5), 214 kW, 1450 kg, 249 km/h, power x1.250"]
+          class 2, rating 316.6 (the cars' average 280.5), 214 kW, 1450 kg, 249 km/h, power x1.250; stage 3; its lobby's stage limit; \
+          past it as the host's friend or crew-mate"]
     );
 }
 
@@ -711,12 +712,14 @@ fn a_lobby_one_could_not_join_is_not_on_the_map() {
     };
     // carl's lobby with anna in it: (state, most players, players, t), what each of carl, anna, dave, bob, eve sees
     let (o, open) = (None, |st: u8| Some((2u8, st)));
-    let cases: [(u8, u8, &[u32], u16, [Option<(u8, u8)>; 5]); 5] = [
+    let cases: [(u8, u8, &[u32], u16, [Option<(u8, u8)>; 5]); 6] = [
         (0, 6, &[100, 101], 0x8000, [open(0), open(0), open(0), open(0), open(0)]),
         (1, 6, &[100, 101], 0x8000, [open(1), open(1), o, o, o]),
         (2, 6, &[100, 101], 0x8000, [open(2), open(2), o, o, o]),
         (0, 2, &[100, 101], 0x8000, [open(0), open(0), o, o, o]),
         (0, 6, &[100, 101], 0x8001, [open(0xC0), open(0x80), open(0xC0), open(0x80), open(0xC0)]),
+        // (its host's stage limit, a lobby that does not count for it: the same)
+        (0, 6, &[100, 101], 0x8080, [open(0xC0), open(0x80), open(0xC0), open(0x80), open(0xC0)]),
     ];
     for (state, max, ids, t, want) in cases {
         // (a browser's lobbies go with its map's answer once a second at most)

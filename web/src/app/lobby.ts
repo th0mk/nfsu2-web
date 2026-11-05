@@ -5,10 +5,11 @@
 
 import { language, N, t, tn } from './i18n';
 import { touchFirst } from './device';
-import { gameHas, KEY_LOBBY, KEY_LOBBY_INVITE, KEY_LOBBY_PRIVATE } from './gamekeys';
+import { drivingPad, PAD_DRIVER_EVENT } from '../input/gamepad';
+import { gameHas, KEY_LOBBY, KEY_LOBBY_INVITE, KEY_LOBBY_NEW, KEY_LOBBY_PRIVATE } from './gamekeys';
 import { keyName, siteKey, type OurId } from './sitekeys';
 import { pageDialog } from './padnav';
-import { LB_LEAVE, LB_NEXT, LB_PRIVATE } from '../input/proto';
+import { LB_LEAVE, LB_NEW, LB_NEXT, LB_PRIVATE } from '../input/proto';
 import type { GameSession } from './game';
 
 /** what the game sends (roam_game.c mp_panel) */
@@ -23,11 +24,9 @@ interface LobbyState {
   kind?: string; track?: string; laps?: number; stage?: number;
   /** the lobby's players, the host first; me: our place in it (-1: none); max: its places; t: the countdown's
    *  seconds; closes: the seconds left of a lobby nobody joined (its last minute); away: its host made no input
-   *  lately, the seconds until it closes; fee: what quitting the race costs; even: the race evens out the cars
-   *  (their engines); outpaced: our car's class is one the race's stage's cars usually leave far behind (runtime
-   *  mp_outpaced) */
-  names?: string[]; me?: number; max?: number; t?: number; closes?: number; away?: number; fee?: number; even?: number;
-  outpaced?: number;
+   *  lately, the seconds until it closes; fee: what quitting the race costs (the game also sends even, the race evens
+   *  out the engines, and outpaced, a warning by our car's class: the speedometer says it now) */
+  names?: string[]; me?: number; max?: number; t?: number; closes?: number; away?: number; fee?: number;
   why?: string; step?: string; text?: string;
   /** counts: 1 a win counts in our career (a race we could win with Solo here); c: each player's own (1 counts for
    *  them); fr: each player our friend (their win counts for us too); cr: each player a crew-mate, not a friend (the same) */
@@ -46,6 +45,14 @@ interface LobbyState {
   /** lobby: Friends & crew only (hosting: its switch); far: we joined it from afar (an invite), so driving away does
    *  not leave it */
   priv?: number; far?: number;
+  /** hosting: who can join (the card's V, runtime mp_act): stage, its race's stage (upto) and below and the host's
+   *  friends and crew; friends, Friends & crew only; all, everyone */
+  who?: 'stage' | 'friends' | 'all'; upto?: number;
+  /** join: its host is past the race's stage, we are not (the card says so) */
+  hpast?: number;
+  /** each player's car's type ("SKYLINE"; "" not known); vs: the fastest other car's rating over ours (the speedometer
+   *  under the players; none: not known) */
+  car?: string[]; vs?: number;
 }
 /** the lobby the player hosts, as an invite tells a friend of it (friends.ts) */
 export interface Hosted { kind: string; stage: number; n: number; max: number }
@@ -115,6 +122,24 @@ function noteText(s: string): string {
   return game(s) + engine;
 }
 
+/** the speedometer under the players (the fastest other car against ours, vs): its needle straight up for a car rated
+ *  as ours, at its ends for 1.6 times ours or more and as much less, in the red past 1.25 times, where a car won well
+ *  over its share of lobby races with the engines evened out (2026-10-31 .. 11-05) */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function speedometer(vs: number): SVGSVGElement {
+  const svg = document.createElementNS(SVGNS, 'svg'), cx = 12, cy = 12, r = 10;
+  svg.setAttribute('viewBox', '0 0 24 14'); svg.setAttribute('class', 'lobby-gauge'); svg.setAttribute('aria-hidden', 'true');
+  const pt = (k: number, rr: number) => {
+    const a = (90 - Math.max(-1, Math.min(1, Math.log(k) / Math.log(1.6))) * 80) * Math.PI / 180;
+    return `${(cx + rr * Math.cos(a)).toFixed(2)} ${(cy - rr * Math.sin(a)).toFixed(2)}`;
+  };
+  const path = (d: string, cls: string) => { const e = document.createElementNS(SVGNS, 'path'); e.setAttribute('d', d); e.setAttribute('class', cls); svg.append(e); };
+  path(`M${pt(1 / 1.6, r)} A${r} ${r} 0 0 1 ${pt(1.25, r)}`, 'track');
+  path(`M${pt(1.25, r)} A${r} ${r} 0 0 1 ${pt(1.6, r)}`, 'red');
+  path(`M${cx} ${cy} L${pt(vs, r - 2)}`, 'needle');
+  return svg;
+}
+
 /** quick chat: a phrase stays beside its player's name this long (ms) */
 const SAID_MS = 6000;
 
@@ -125,10 +150,14 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 };
 
+/** a block of the card (a line above all but the first) */
+const block = (...kids: HTMLElement[]) => { const b = el('div', 'lobby-block'); b.append(...kids); return b; };
+
 /** the card's keys: the player's for each (sitekeys.ts), and the status bit that says the game has one of its controls
  *  on it (then the key is the game's: gamekeys.ts) */
-const KEYS: Record<'next' | 'priv' | 'invite', { id: OurId; bit: number }> = {
-  next: { id: 'lobby', bit: KEY_LOBBY }, priv: { id: 'lobbyPrivate', bit: KEY_LOBBY_PRIVATE }, invite: { id: 'lobbyInvite', bit: KEY_LOBBY_INVITE },
+const KEYS: Record<'next' | 'fresh' | 'priv' | 'invite', { id: OurId; bit: number }> = {
+  next: { id: 'lobby', bit: KEY_LOBBY }, fresh: { id: 'lobbyNew', bit: KEY_LOBBY_NEW }, priv: { id: 'lobbyPrivate', bit: KEY_LOBBY_PRIVATE },
+  invite: { id: 'lobbyInvite', bit: KEY_LOBBY_INVITE },
 };
 
 export class LobbyPanel {
@@ -139,6 +168,8 @@ export class LobbyPanel {
     // (caught before the game's input, and only while the card offers it: E, V and Z are the game's for nothing in its
     // driving map, but a player may put one of its controls on them)
     window.addEventListener('keydown', e => this.key(e), { capture: true });
+    // (a controller that starts or stops driving: the keys' caps change, lobby.ts cap)
+    window.addEventListener(PAD_DRIVER_EVENT, () => { if (!this.panel.hidden) this.redraw(); });
   }
 
   /** the lobby the player hosts now with room in it (null: none) */
@@ -148,11 +179,14 @@ export class LobbyPanel {
     return { kind: s.kind ?? 'race', stage: s.stage ?? 0, n: s.names?.length ?? 1, max: s.max ?? 6 };
   }
 
-  /** what the card offers now, by its keys: the next page, Friends & crew only, invite (hosting) or leave (from afar) */
-  private offers(s: LobbyState): { next?: () => void; priv?: () => void; invite?: () => void } {
-    const d = this.deps, o: { next?: () => void; priv?: () => void; invite?: () => void } = {};
+  /** what the card offers now, by its keys: at a start the next lobby (two or more) and a new one beside them (where
+   *  the start takes one: the game's pages, pgs, are its lobbies, nl, and a new one's), who can join and invite
+   *  (hosting), leave (from afar) */
+  private offers(s: LobbyState): { next?: () => void; fresh?: () => void; priv?: () => void; invite?: () => void } {
+    const d = this.deps, o: { next?: () => void; fresh?: () => void; priv?: () => void; invite?: () => void } = {};
     if (!d) return o;
-    if ((s.pgs ?? 0) > 1 && (s.v === 'join' || s.v === 'spot')) o.next = () => d.act(LB_NEXT);
+    if (s.v === 'join' && (s.nl ?? 0) > 1) o.next = () => d.act(LB_NEXT);
+    if (s.v === 'join' && (s.pgs ?? 0) > (s.nl ?? 0)) o.fresh = () => d.act(LB_NEW);
     if (s.v === 'lobby' && s.st === 'host') {
       o.priv = () => d.act(LB_PRIVATE);
       if ((s.names?.length ?? 0) < (s.max ?? 6)) o.invite = () => d.invite();
@@ -221,11 +255,23 @@ export class LobbyPanel {
     this.cover.style.setProperty('--u', `${u}px`);
   }
 
-  private title(s: LobbyState, host?: string) {
-    const kind = game(s.kind ?? 'race');
-    const head = el('div', 'lobby-title', host ? t('{host}\'s {kind}', { host, kind }) : t('Multiplayer {kind}', { kind }));
-    const sub = [s.stage ? t('Stage {n}', { n: s.stage }) : '', this.heats(s), s.track, s.laps ? tn(s.laps, '{n} lap', '{n} laps') : ''].filter(Boolean).join(' · ');
-    return sub ? [head, el('div', 'lobby-sub', sub)] : [head];
+  /** the race and how full it is; where it is (its stage, track, laps), a win's worth in our career */
+  private head(s: LobbyState) {
+    const top = el('div', 'lobby-top');
+    top.append(el('span', 'lobby-race', game(s.kind ?? 'race')));
+    if (s.names?.length) top.append(el('span', 'lobby-count', t('Lobby {n}/{max}', { n: s.names.length, max: s.max ?? 6 })));
+    const where = [s.stage ? t('Stage {n}', { n: s.stage }) : '', this.heats(s), s.track, s.laps ? tn(s.laps, '{n} lap', '{n} laps') : ''].filter(Boolean).join(' · ');
+    const out = [top];
+    if (where) out.push(el('div', 'lobby-small', where));
+    if (s.counts) {
+      // (and a friend's or crew-mate's win, with such players in it: theirs counts for us too)
+      const fr = (s.fr ?? []).some(Boolean), cr = (s.cr ?? []).some(Boolean), d = el('div', 'lobby-small');
+      d.append(el('span', 'lobby-star', '★ '), fr && cr ? t('A win counts in your career, and so does a friend\'s or crew-mate\'s')
+        : fr ? t('A win counts in your career, and so does a friend\'s') : cr ? t('A win counts in your career, and so does a crew-mate\'s')
+        : t('A win counts in your career'));
+      out.push(d);
+    }
+    return out;
   }
 
   /** a URL race of heats: how many, or on the trip the heat raced now */
@@ -250,38 +296,30 @@ export class LobbyPanel {
     return box;
   }
 
-  /** the lobby's places: its players (the host marked, ours "you"), the rest open */
-  private places(s: LobbyState, dim = false) {
-    const ol = el('ol', 'lobby-places' + (dim ? ' dim' : ''));
-    const names = s.names ?? [], n = Math.max(2, Math.min(6, s.max ?? 6)), now = performance.now();
+  /** the lobby's places: its players, the host first and marked, ★ where a win counts in that player's career, our
+   *  friends and crew-mates in lime, ours bold (as over the cars in free roam); then the open ones */
+  private players(s: LobbyState) {
+    const ul = el('ul', s.st === 'asked' ? 'lobby-players dim' : 'lobby-players'), now = performance.now();
+    const names = s.names ?? [], open = Math.max(2, Math.min(6, s.max ?? 6)) - names.length;
     for (const [k, w] of this.said) if (w.until <= now) this.said.delete(k);
-    for (let i = 0; i < n; i++) {
-      const li = el('li', i < names.length ? 'taken' : 'open');
-      li.append(el('span', 'lobby-n', String(i + 1)));
-      li.append(el('span', 'lobby-name', i < names.length ? names[i] : t('open')));
-      if (i < names.length && s.fr?.[i] && i !== s.me) li.append(el('span', 'lobby-tag', t('friend')));
-      else if (i < names.length && s.cr?.[i] && i !== s.me) li.append(el('span', 'lobby-tag', t('crew')));
-      if (i < names.length && (i === 0 || i === s.me)) li.append(el('span', 'lobby-tag', i === 0 ? t('host') : t('you')));
-      if (i < names.length && s.c?.[i]) {
-        const star = el('span', 'lobby-star', '★');
-        star.title = i === s.me ? t('A win counts in your career') : t('A win counts in their career');
-        li.append(star);
-      }
-      const w = i < names.length ? this.said.get(names[i]) : undefined;
+    names.forEach((name, i) => {
+      const li = el('li', i === s.me ? 'me' : s.fr?.[i] || s.cr?.[i] ? 'mate' : '');
+      li.append(el('span', 'lobby-pname', name));
+      const w = this.said.get(name);
       if (w) li.append(el('span', 'lobby-said', w.text));
-      ol.append(li);
-    }
-    return ol;
+      if (i === 0) li.append(el('span', 'lobby-small', t('host')));
+      if (s.c?.[i]) li.append(el('span', 'lobby-star', '★'));
+      ul.append(li);
+    });
+    for (let i = 0; i < open; i++) ul.append(el('li', 'open', t('open')));
+    return ul;
   }
 
-  /** the race counts in our career: what a win does (and a friend's or crew-mate's, with such players in it) */
-  private career(s: LobbyState) {
-    if (!s.counts) return [];
-    const friends = (s.fr ?? []).some(Boolean), crew = (s.cr ?? []).some(Boolean);
-    const d = el('div', 'lobby-why');
-    d.append(el('span', 'lobby-star', '★ '), friends && crew ? t('A win counts in your career, and so does a friend\'s or crew-mate\'s')
-      : friends ? t('A win counts in your career, and so does a friend\'s')
-      : crew ? t('A win counts in your career, and so does a crew-mate\'s') : t('A win counts in your career'));
+  /** the fastest other car against ours, under the players */
+  private gauge(s: LobbyState) {
+    if (!(s.vs! > 0)) return [];
+    const d = el('div', 'lobby-speed');
+    d.append(speedometer(s.vs!), el('span', '', t('Speed compared to your car')));
     return [d];
   }
 
@@ -296,74 +334,68 @@ export class LobbyPanel {
     }
     return d;
   }
-  /** one of the card's own actions, with its key (on a touch screen none: a tap) */
-  private own(which: keyof typeof KEYS, what: string, f: () => void, extra?: HTMLElement) {
-    const k = touchFirst() ? null : this.keyOf(which), d = this.act(k ? keyName(k) : null, what, f);
-    if (extra) d.append(extra);
-    return d;
+  /** a card key's cap now: the keyboard's (none on a touch screen: a tap, or where the game has the key), or with a
+   *  controller driving its D-pad direction held (arrow: runtime dinput_pad.c lobby_pad), none where it has none */
+  private cap(which: keyof typeof KEYS, arrow?: string): string | null {
+    if (touchFirst()) return null;
+    if (drivingPad()) return arrow ? t('Hold {arrow}', { arrow }) : null;
+    const k = this.keyOf(which);
+    return k ? keyName(k) : null;
   }
-  /** the lobbies here, above the card's title: a lobby's page says which of how many (of two or more: the page to
-   *  open a new lobby is none of them, a page said "Lobby 1 of 2" with one lobby there), the new lobby's says so */
-  private pager(s: LobbyState) {
-    const d = el('div', 'lobby-pager'), nl = s.nl ?? 0;
-    if (s.v === 'spot') { d.append(el('span', 'lobby-head', t('New lobby'))); return d; }
-    d.append(el('span', 'lobby-head', t('Lobby {k} of {n}', { k: s.pg!, n: nl })));
-    const dots = el('span', 'lobby-dots');
-    for (let i = 1; i <= nl && i <= 8; i++) dots.append(el('span', i === s.pg ? 'on' : '', '●'));
-    d.append(dots);
-    return d;
+  /** Enter's cap: the game's Engage, D-pad up on a controller (the game's own layout) */
+  private enter() { return drivingPad() && !touchFirst() ? '↑' : 'Enter'; }
+  /** one of the card's own actions, with its key (on a touch screen none: a tap) */
+  private own(which: keyof typeof KEYS, what: string, f: () => void, arrow?: string) {
+    return this.act(this.cap(which, arrow), what, f);
+  }
+  /** where E goes at a start of several lobbies (this one pg of nl): the next one by its number */
+  private nextPage(s: LobbyState) {
+    const nl = s.nl ?? 1;
+    return t('Lobby {k} of {n}', { k: (s.pg ?? 1) % nl + 1, n: nl });
   }
 
+  /** The card, in blocks a line apart, a few lines each in one size (the small one only for what qualifies them):
+   *  the race; its members (and the speedometer); the host's settings; this lobby or the next: Enter, E, what is going
+   *  on and how to leave */
   private drawPanel(s: LobbyState) {
     const p = this.panel, names = s.names ?? [], host = names[0] ?? t('A player'), o = this.offers(s);
-    const kids: HTMLElement[] = [];
     p.dataset.v = s.v ?? '';
-    const nl = s.nl ?? 0, paged = (s.pgs ?? 0) > 1 && !!s.pg;
-    if (paged && (s.v === 'spot' || (s.v === 'join' && nl > 1))) kids.push(this.pager(s));
-    // (at an open race's start Enter brings the race's own card: its question joins or opens)
-    const card = (pick: string) => s.card ? [el('div', 'lobby-hint', pick)] : [];
-    switch (s.v) {
-      case 'spot':
-        kids.push(...this.title(s), ...(s.counts ? this.career(s) : s.card ? []
-          : [el('div', 'lobby-why', t('Multiplayer only here: {why}', { why: game(s.why ?? 'not open in your career') }))]),
-          this.act('Enter', t('Open a lobby')), ...card(t('On the race card, pick Multiplayer')));
-        break;
-      case 'join':
-        kids.push(...this.title(s, host), this.places(s), ...this.career(s));
-        // (a warning only: the player may join anyway)
-        if (s.outpaced && s.stage) kids.push(el('div', 'lobby-warn', t('Stage {n} race: the cars here are usually much faster than yours', { n: s.stage })));
-        kids.push(this.act('Enter', t('Join')), ...card(t('On the race card, pick Join')));
-        break;
-      case 'lobby': {
-        const mine = s.me === 0;
-        kids.push(...this.title(s, mine ? undefined : host), this.places(s, s.st === 'asked'), ...this.career(s));
-        // (every game of the lobby, the host's too, 2 s from the host's Enter: no numbers to count)
-        if (s.st === 'count') kids.push(el('div', 'lobby-count', t('Starting the race') + '…'));
-        else if (s.st === 'asked') kids.push(this.act(null, t('Joining {host}\'s {kind}…', { host, kind: game(s.kind ?? 'race') })));
-        else if (mine && names.length >= 2) kids.push(this.act('Enter', t('Start the race')), s.away
-          ? el('div', 'lobby-warn', t('You seem away: the lobby closes in {n} s unless you press a key', { n: s.away }))
-          : el('div', 'lobby-hint', t('Drive away to call it off')));
-        else if (mine) kids.push(this.act(null, t('Waiting for players to drive up and join…')),
-          el('div', 'lobby-hint', s.closes !== undefined ? t('Closes in {n} s if nobody joins', { n: s.closes }) : t('Drive away to call it off')));
-        else kids.push(this.act(null, t('Waiting for {host} to start', { host })), s.away
-          ? el('div', 'lobby-warn', t('{host} seems away: the lobby closes in {n} s', { host, n: s.away }))
-          : el('div', 'lobby-hint', s.far ? t('You joined from afar: the race leaves from where you are') : t('Drive away to leave')));
-        // the host's own: Friends & crew only (a switch), invite friends; from afar: leave
-        if (o.priv) kids.push(this.own('priv', t('Friends & crew only'), o.priv, el('span', s.priv ? 'lobby-onoff on' : 'lobby-onoff', s.priv ? t('On') : t('Off'))));
-        else if (s.priv) kids.push(el('div', 'lobby-hint', t('Friends & crew only')));
-        if (o.invite) kids.push(this.own('invite', mine ? t('Invite friends') : t('Leave'), o.invite));
-        break;
+    if (s.v === 'note') { p.replaceChildren(block(el('div', '', noteText(s.text ?? '')))); return; }
+    const settings: HTMLElement[] = [], go: HTMLElement[] = [];
+    const line = (cls: string, text: string) => go.push(el('div', cls, text));
+    if (s.v === 'spot') go.push(this.act(this.enter(), t('Open a lobby')));
+    else if (s.v === 'join') go.push(this.act(this.enter(), t('Join')));
+    else if (s.v === 'lobby') {
+      const mine = s.me === 0;
+      // (every game of the lobby, the host's too, 2 s from the host's Enter: no numbers to count)
+      if (s.st === 'count') line('lobby-go', t('Starting the race') + '…');
+      else if (s.st === 'asked') line('lobby-dim', t('Joining {host}\'s {kind}…', { host, kind: game(s.kind ?? 'race') }));
+      else {
+        if (s.away) line('lobby-warn', mine ? t('You seem away: the lobby closes in {n} s unless you press a key', { n: s.away })
+          : t('{host} seems away: the lobby closes in {n} s', { host, n: s.away }));
+        if (mine && names.length >= 2) go.push(this.act(this.enter(), t('Start the race')));
+        else if (!s.away) line('lobby-dim', !mine ? t('Waiting for {host} to start', { host })
+          : s.closes !== undefined ? t('Closes in {n} s if nobody joins', { n: s.closes }) : t('Waiting for players'));
       }
-      case 'note':
-        kids.push(el('div', 'lobby-note', noteText(s.text ?? '')));
-        break;
+      // the host's settings: who can join (V goes round its choices), invite friends; joined from afar: leave
+      if (o.priv) {
+        const who = s.who ?? (s.priv ? 'friends' : 'all');
+        settings.push(this.own('priv', who === 'stage' ? t('Stage {n} and below can join', { n: s.upto ?? 1 })
+          : who === 'friends' ? t('Friends & crew can join') : t('Everyone can join'), o.priv, '←'));
+      }
+      // (no invite on a controller's card: the menu's Friends has it)
+      if (o.invite && (!mine || !drivingPad() || touchFirst())) settings.push(this.own('invite', mine ? t('Invite friends') : t('Leave'), o.invite, mine ? undefined : '←'));
     }
-    // (what the evening out does, not that it makes the cars even: under the outpaced warning, none)
-    if (s.v === 'join' && s.even && !s.outpaced) kids.push(el('div', 'lobby-hint', t('Engine power is evened out: slower cars get more, faster ones a little less')));
-    if (s.v === 'join' && s.fee) kids.push(el('div', 'lobby-hint', t('Quitting the race costs ${fee}', { fee: s.fee })));
-    // (E says where it goes: from the last lobby to the page that opens a new one)
-    if (o.next) kids.push(this.own('next', s.v === 'join' && s.pg === nl && (s.pgs ?? 0) > nl ? t('New lobby') : t('Next lobby'), o.next));
-    p.replaceChildren(...kids);
+    if (o.fresh) go.push(this.own('fresh', t('New lobby'), o.fresh, '←'));
+    if (o.next) go.push(this.own('next', this.nextPage(s), o.next, '→'));
+    // (how to leave: drive away, but from a lobby joined from afar)
+    if (s.v === 'lobby' && s.st !== 'count' && s.st !== 'asked') go.push(el('div', 'lobby-small', s.me === 0 ? t('Drive away to call it off')
+      : s.far ? t('You joined from afar: the race leaves from where you are') : t('Drive away to leave')));
+    const blocks = [block(...this.head(s))];
+    if (s.v !== 'spot') blocks.push(block(this.players(s), ...this.gauge(s)));
+    if (settings.length) blocks.push(block(...settings));
+    if (go.length) blocks.push(block(...go));
+    p.replaceChildren(...blocks);
   }
 
   /** the race's results on the way back: place, name, time (or points), ours marked with its prize */
@@ -391,11 +423,11 @@ export class LobbyPanel {
 
   private drawCover(s: LobbyState) {
     const card = el('div', 'lobby-card');
-    card.append(...this.title(s, undefined), s.res?.length ? this.results(s) : this.places(s));
-    if (s.stand?.length && !s.fin) card.append(this.standings(s));
+    card.append(block(...this.head(s)), block(s.res?.length ? this.results(s) : this.players(s)));
+    if (s.stand?.length && !s.fin) card.append(block(this.standings(s)));
     const step = el('div', 'lobby-step');
     step.append(el('span', 'lobby-spin'), el('span', '', `${s.step ? game(s.step) : t('Loading')}…`));
-    card.append(step);
+    card.append(block(step));
     this.cover.replaceChildren(card);
   }
 }

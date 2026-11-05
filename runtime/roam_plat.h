@@ -119,7 +119,7 @@ uint32_t roam_plat_name(char out[33]);
 /* a race lobby action the player took on the page (web: its lobby card's keys and buttons, an invite's Join), one a
  * call, oldest first: ROAM_LB_* (0: none), with its values (ROAM_LB_JOIN: the lobby's host's id, the lobby's id and
  * its race's hash, as the invite named them).  On the game thread, without the lock */
-enum { ROAM_LB_NONE = 0, ROAM_LB_NEXT = 1, ROAM_LB_PRIVATE = 2, ROAM_LB_LEAVE = 3, ROAM_LB_JOIN = 4 };
+enum { ROAM_LB_NONE = 0, ROAM_LB_NEXT = 1, ROAM_LB_PRIVATE = 2, ROAM_LB_LEAVE = 3, ROAM_LB_JOIN = 4, ROAM_LB_NEW = 5 };
 int      roam_plat_lobby_act(uint32_t *host, uint32_t *lobby, uint32_t *race);
 const char *roam_ip_str(uint32_t ip, char *buf);   /* buf >= 16 */
 

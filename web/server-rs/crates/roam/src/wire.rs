@@ -88,17 +88,20 @@ pub(crate) const LOBBY_CLOSE: u8 = 5;
 pub(crate) const LOBBY_COUNTS_ON: u16 = 0x8000;
 pub(crate) const LOBBY_PRIVATE: u16 = 0x0040;
 /// ...and its lowest bit says the race counts in its host's career (a career lobby: it keeps out the players past the
-/// race's stage, but its host's friends and crew-mates)
+/// race's stage, but its host's friends and crew-mates), and LOBBY_STAGED that its host keeps them out (its Who can join,
+/// roam_game.c MP_STAGED; a career lobby does whatever it says)
 pub(crate) const LOBBY_COUNTS_HOST: u16 = 0x0001;
-/// a LOBBIES entry: x, y (i16 LE, m), race (u32 LE), players, most players, state (u8: with LOBBIES_CAREER and
+pub(crate) const LOBBY_STAGED: u16 = 0x0080;
+/// a LOBBIES entry: x, y (i16 LE, m), race (u32 LE), players, most players, state (u8: with LOBBIES_STAGED and
 /// LOBBIES_MATE); at most LOBBIES_MAX of them
 pub(crate) const LOBBIES_ENTRY: usize = 11;
 pub(crate) const LOBBIES_MAX: usize = 96;
-/// a LOBBIES entry's state, past the lobby's own: a career lobby (LOBBY_COUNTS_HOST), and its host a friend or
-/// crew-mate of the player told (roam_core.h RC_LOBBIES_CAREER, RC_LOBBIES_MATE): the game keeps a career lobby of a
-/// race of a stage it is past off its map unless its host is a mate.  Only a career lobby's entry has them (an older
-/// game drops such an entry: a state of 3 or more)
-pub(crate) const LOBBIES_CAREER: u8 = 0x80;
+/// a LOBBIES entry's state, past the lobby's own: the lobby keeps out the players past its race's stage (a career
+/// lobby, LOBBY_COUNTS_HOST, or its host's LOBBY_STAGED), and its host a friend or crew-mate of the player told
+/// (roam_core.h RC_LOBBIES_STAGED, RC_LOBBIES_MATE): the game keeps such a lobby of a race of a stage it is past off its
+/// map unless its host is a mate.  Only such a lobby's entry has them (an older game drops such an entry: a state of 3
+/// or more)
+pub(crate) const LOBBIES_STAGED: u8 = 0x80;
 pub(crate) const LOBBIES_MATE: u8 = 0x40;
 /// the most players a lobby takes (roam_core.h RC_LOBBY_MAX)
 pub(crate) const LOBBY_PLAYERS: usize = 6;
@@ -193,8 +196,8 @@ pub(crate) enum Msg<'a> {
         ids: [u32; LOBBY_PLAYERS],
         /// an ADVERT of a lobby for its host's friends and crew-mates only (LOBBY_PRIVATE)
         private: bool,
-        /// an ADVERT of a career lobby (LOBBY_COUNTS_HOST)
-        career: bool,
+        /// an ADVERT of a lobby that keeps out the players past its race's stage (LOBBY_COUNTS_HOST, LOBBY_STAGED)
+        staged: bool,
     },
     /// a player's report of a race it raced (roam_core.h rc_racerep), checked as roam_core.c's racerep_ok
     RaceRep(RaceRep<'a>),
@@ -224,6 +227,10 @@ pub(crate) struct RaceRep<'a> {
     /// the race in the reporter's career (roam_core.h rc_racerep credit, its first spare byte: 0 in older games): 0 not,
     /// 1 its own win, 2 a friend's win
     pub credit: u8,
+    /// the reporter's career stage (its second spare byte: 0 in older games, none)
+    pub stage: u8,
+    /// how its lobby was (its third spare byte, roam_core.h RC_RL_*: 0 in older games): LOBBY_BITS_*
+    pub lobby_bits: u8,
     pub car_type: u8,
     /// 0 fastest .. 3; -1 not rated
     pub class: i8,
@@ -277,6 +284,8 @@ fn racerep(d: &[u8], o: usize) -> Option<RaceRep<'_>> {
         quit: flags & 2 != 0,
         edited: flags & 4 != 0,
         credit: if d[o + 17] <= 2 { d[o + 17] } else { 0 },
+        stage: if d[o + 18] <= 9 { d[o + 18] } else { 0 },
+        lobby_bits: d[o + 19] & (RL_STAGED | RL_MATE_PAST | RL_HOST_PAST),
         car_type: d[o + 15],
         class,
         rating: nums[0],
@@ -289,6 +298,12 @@ fn racerep(d: &[u8], o: usize) -> Option<RaceRep<'_>> {
         name,
     })
 }
+
+/// a RACEREP's lobby bits (roam_core.h RC_RL_*): its lobby kept out the players past its race's stage; the reporter,
+/// past that stage, was in it as its host's friend or crew-mate; its host was past the race's stage
+pub(crate) const RL_STAGED: u8 = 0x01;
+pub(crate) const RL_MATE_PAST: u8 = 0x02;
+pub(crate) const RL_HOST_PAST: u8 = 0x04;
 
 /// roam_core.h rc_raceres: the race, and its results' rows in their order
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -522,9 +537,9 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             }
             let t = u16_le(d, 36);
             let private = op == LOBBY_ADVERT && t & LOBBY_COUNTS_ON != 0 && t & LOBBY_PRIVATE != 0;
-            let career = op == LOBBY_ADVERT && t & LOBBY_COUNTS_ON != 0 && t & LOBBY_COUNTS_HOST != 0;
+            let staged = op == LOBBY_ADVERT && t & LOBBY_COUNTS_ON != 0 && t & (LOBBY_COUNTS_HOST | LOBBY_STAGED) != 0;
             let (x, y) = (u16_le(d, 32) as i16, u16_le(d, 34) as i16);
-            Msg::Lobby { op, to: u32_le(d, 20), lobby, race, x, y, n: n as u8, max, state, ids, private, career }
+            Msg::Lobby { op, to: u32_le(d, 20), lobby, race, x, y, n: n as u8, max, state, ids, private, staged }
         }
         MSG_RACEREP if end == HDR + RACEREP_BYTES => Msg::RaceRep(racerep(d, HDR)?),
         MSG_RACERES => Msg::RaceRes(raceres(d, HDR, end - HDR)?),

@@ -23,7 +23,7 @@ import { CODE_OF_DIK, CODES } from '../input/keymap';
 import { allPads } from '../input/steampad';
 import { N, t } from './i18n';
 
-export type OurId = 'drift' | 'showoff' | 'horn' | 'lights' | 'look' | 'chat' | 'message' | 'friend' | 'lobby' | 'lobbyPrivate' | 'lobbyInvite' |
+export type OurId = 'drift' | 'showoff' | 'horn' | 'lights' | 'look' | 'chat' | 'message' | 'friend' | 'lobby' | 'lobbyNew' | 'lobbyPrivate' | 'lobbyInvite' |
   'photo' | 'hud' | 'menu' | 'song' | 'fps';
 export type ButtonKey = 'button_hold' | 'button_horn' | 'button_chat' | 'button_look';
 
@@ -58,8 +58,9 @@ export const OURS: readonly Our[] = [
   { id: 'chat', name: N('Quick chat'), line: N('Quick chat (with other players): group, then phrase'), fixed: '1–4', button: 'button_chat' },
   { id: 'message', name: N('Message a friend'), line: N('Message a friend (in free roam)'), key: 'key_message', def: 'KeyI' },
   { id: 'friend', name: N('Add friend'), line: N('Add a friend (front bumpers touching)'), key: 'key_friend', def: 'KeyF' },
-  { id: 'lobby', name: N('Next race lobby'), line: N('Next race lobby at a start, then a new one (in free roam)'), key: 'key_lobby', def: 'KeyE' },
-  { id: 'lobbyPrivate', name: N('Friends & crew only'), line: N('Your race lobby: only your friends and crew can see and join it'),
+  { id: 'lobby', name: N('Next race lobby'), line: N('Next race lobby at a start (in free roam)'), key: 'key_lobby', def: 'KeyE' },
+  { id: 'lobbyNew', name: N('New race lobby'), line: N('A race lobby of your own beside the others at a start (in free roam)'), key: 'key_lobby_new', def: 'KeyB' },
+  { id: 'lobbyPrivate', name: N('Who can join'), line: N('Your race lobby: who can join it (your stage and below, friends & crew, or everyone)'),
     key: 'key_lobby_private', def: 'KeyV' },
   { id: 'lobbyInvite', name: N('Invite to a race'), line: N('Invite friends to your race lobby, join a friend\'s invite, leave a race you joined from afar'),
     key: 'key_lobby_invite', def: 'KeyZ' },
