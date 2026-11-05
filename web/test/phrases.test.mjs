@@ -1,8 +1,9 @@
 // Quick chat's phrases and the player's sixteen (web/src/app/phrases.ts; settings.ts quick_chat_phrases,
 // quick_chat_groups):
 //   node --test web/test/phrases.test.mjs
-// - the numbers are the protocol: the phrases there were keep their numbers (a digest of the first 152 in order), a
-//   new one only goes at the end, and no text is there twice
+// - the numbers are the protocol: the phrases there were keep their numbers (a digest of the first 152 in order, the
+//   ones after by name), a new one only goes at the end, and no text is there twice
+// - the film quotes (Quotes) are in English in every language: no language file has them
 // - the two lines' values: sixteen numbers the library has, four of the categories; anything else refused at Play
 //   (the default instead), and the defaults the template shows are the first sixteen in Hi, Reply, Drive, Race, but
 //   the countdown (152, the special phrase) in One more?'s place
@@ -35,6 +36,20 @@ test('the phrases keep their numbers', () => {
   assert.equal(Q.COUNTDOWN, 152); assert.equal(texts[152], 'Countdown');
   assert.equal(Q.PHRASES[152].special, 'countdown', 'the countdown is the special one (roam_game.c SAY_COUNTDOWN 152)');
   assert.deepEqual(Q.PHRASES.filter(p => p.special).map(p => p.text), ['Countdown'], 'no other special phrase');
+  assert.deepEqual(texts.slice(153, 164), ['I need NOS!', 'Dude, I almost had you!', 'You almost had me?',
+    'Granny shifting, not double clutching like you should!', 'Nooo, Monica!', 'Ejecto seato, cuz!', 'Too soon, junior.',
+    'Don\'t leave town.', 'Forget about it, cuh.', 'Donkey Kong?', 'What you running under that, man?'], '153-163, as added');
+});
+
+test('the film quotes stay English in every language', async () => {
+  const fs = await import('node:fs');
+  const quotes = Q.PHRASES.filter(p => p.cat === 'quote').map(p => p.text), dir = path.join(ROOT, 'web/src/app/lang');
+  assert.equal(quotes.length, 10);
+  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.json'))) {
+    const d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    for (const q of quotes) assert.ok(!(q in d), `${f} translates "${q}"`);
+    assert.ok(d.Quotes && d['I need NOS!'], `${f}: the category's name and the NOS line translated`);
+  }
 });
 
 test('the player\'s sixteen', () => {

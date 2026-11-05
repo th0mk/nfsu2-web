@@ -541,7 +541,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #quick_chat = on
 # Your sixteen: the phrases' numbers (web/src/app/phrases.ts), four for each
 # of 1 to 4, and the four groups' names (hi, reply, thanks, nice, drive,
-# meet, race, react or help).  The start page's Your phrases picks them.
+# meet, race, react, help or quote).  The start page's Your phrases picks
+# them.
 # [NFSU2_ROAM_SAY_PHRASES, NFSU2_ROAM_SAY_GROUPS]
 #quick_chat_phrases = 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,152
 #quick_chat_groups = hi,reply,drive,race
@@ -702,7 +703,7 @@ const KIND_TEXT: Partial<Record<Kind, string>> = {
   names: N('a list of up to 32 player names, separated by commas'),
   rgbs: N('a list of up to 4 colours of 6 hex digits (rrggbb), separated by commas'),
   phrases: N('16 quick chat phrase numbers, separated by commas'),
-  sayGroups: N('4 of hi, reply, thanks, nice, drive, meet, race, react, help, separated by commas'),
+  sayGroups: N('4 of hi, reply, thanks, nice, drive, meet, race, react, help, quote, separated by commas'),
   key: N('a key by the browser\'s name for it (KeyX, Digit5, F6, Numpad7) or off'),
   flag: N('a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir'),
 };

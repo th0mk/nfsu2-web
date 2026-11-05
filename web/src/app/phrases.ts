@@ -17,6 +17,7 @@ export const CATS = [
   { id: 'race', name: N('Race') },
   { id: 'react', name: N('React') },
   { id: 'help', name: N('Help') },
+  { id: 'quote', name: N('Quotes') },
 ] as const;
 export type CatId = typeof CATS[number]['id'];
 
@@ -72,6 +73,14 @@ export const PHRASES: readonly { text: string; cat: CatId; special?: 'countdown'
   [N('On my phone!'), 'help'],
   // 152: special, a countdown for the players near (5 s, then GO!: quickchat.ts; roam_game.c SAY_COUNTDOWN)
   [N('Countdown'), 'race', 'countdown'],
+  // 153: asked for on Discord (2026-10-30)
+  [N('I need NOS!'), 'help'],
+  // 154-163: film quotes asked for on Discord (2026-10-29/30), in English in every language: not marked for
+  // translation, so no language file has them and t() shows the English
+  ['Dude, I almost had you!', 'quote'], ['You almost had me?', 'quote'],
+  ['Granny shifting, not double clutching like you should!', 'quote'], ['Nooo, Monica!', 'quote'],
+  ['Ejecto seato, cuz!', 'quote'], ['Too soon, junior.', 'quote'], ['Don\'t leave town.', 'quote'],
+  ['Forget about it, cuh.', 'quote'], ['Donkey Kong?', 'quote'], ['What you running under that, man?', 'quote'],
 ] as [string, CatId, 'countdown'?][]).map(([text, cat, special]) => special ? { text, cat, special } : { text, cat });
 
 /** the countdown's number */

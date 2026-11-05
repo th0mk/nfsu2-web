@@ -557,8 +557,9 @@ Good to know:
   | Thanks! | Sorry! | Let's go! | gg |
   | Bye! | lol | Nice! | Countdown (special) |
 
-  Online, Your phrases, Choose phrases puts any of about 150 phrases in each place (greetings, replies,
-  thanks and sorry, compliments, driving together, car meets, races, reactions, help) and names each group.
+  Online, Your phrases, Choose phrases puts any of about 160 phrases in each place (greetings, replies,
+  thanks and sorry, compliments, driving together, car meets, races, reactions, help, film quotes) and names each
+  group. The film quotes stay in English in every language.
 
   **Countdown** is a special phrase, with a stopwatch in the picker (in Choose phrases under Special; in the sixteen
   you start with in One more?'s place, since 2026-11-03): a start for the players lined up behind you in free roam.
