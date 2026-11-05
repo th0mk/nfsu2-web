@@ -25,6 +25,7 @@ const CONTEXT_MS = 3 * 60_000;                   // the chat the call reads: fro
 const MIN_CHARS = 10;                            // "up", "ty", "hello": no question
 const DAY_MS = 86400_000, PER_DAY = 5, CHANNEL_MAX_PER_HOUR = 60;   // spam limits: a call costs ~0.05 cents
 const MAX_REPLY = 280;                           // a reply longer than this is no one-liner: none
+const MAX_TRANSLATED = MAX_REPLY * 1.5;          // the same line in another language runs longer, never this long
 const FOLLOW_MS = 20 * 60_000;                   // their lines this soon after the bot answered them may go on from it
 const SAME_MAX = 2;                              // the same answer to a person a day: a follow-up's other part of it
 const REPEAT = 0.5;                              // a reply with this much of a line they had (word pairs) says it again
@@ -36,6 +37,29 @@ const SHOW_DOWN = 10;                            // the answers with a 👎 the 
 
 const name = m => m.member?.displayName ?? m.author.displayName ?? m.author.username;
 const hhmm = ms => new Date(ms).toISOString().slice(11, 16);
+
+const BIDI = /[\u202A-\u202E\u2066-\u2069]/;     // marks that show text in another order than it reads
+/** text as a reader sees it: look-alike letters and dots folded (NFKC), invisible characters out */
+const shown = s => s.normalize('NFKC').replace(/\p{Cf}/gu, '');
+/** a text's words for the address check: [as written, without the punctuation around it], split at spaces and markup */
+const wordsOf = s => shown(s).split(/[\s`*~|"'()[\]<>]+/).filter(Boolean)
+  .map(w => [w, w.replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '')]);
+
+/** why a reply line may not go out, or '' when it may.  The model reads players' messages, and one can ask it to post
+ *  their link (a fake download) in the bot's name: a line goes out only without links and web addresses, but those its
+ *  FAQ answer has word for word (nfsu2.xyz, chrome://settings/...), without mentions or a code block, and without
+ *  "From the developer" (the developer's own word in the forums) */
+export function unsafe(line, answer) {
+  const s = shown(line);
+  if (BIDI.test(line)) return 'text shown in another order';
+  if (/\]\s*\(/.test(s)) return 'a markdown link';
+  if (/<\S|@everyone|@here/i.test(s)) return 'a mention or <…>';
+  if (s.includes('```')) return 'a code block';
+  if (/from the developer/i.test(s)) return '"From the developer"';
+  const own = new Set(wordsOf(answer).map(([, w]) => w).filter(Boolean));
+  const link = wordsOf(line).find(([raw, w]) => (raw.includes('://') || /^www\./i.test(w) || /[\p{L}\p{N}]\.\p{L}{2,}/u.test(w)) && !own.has(w));
+  return link ? `an address its answer doesn't have: ${link[0]}` : '';
+}
 
 const system = questions => `You read #help, the help channel of the Discord server of "Underground 2 Revived" (Need for Speed: Underground 2 in the browser, nfsu2.xyz). One author in the chat is marked [A1]; the lines without a mark are the chat around them. The FAQ below has the server's checked answers. Say whether one of them settles what [A1] asks.
 
@@ -166,6 +190,8 @@ export class Help {
     const said = `${m.id} ${name(m)}: ${r.asks ? 'asks' : 'no question'}${r.handled ? ', handled' : ''}${x ? `, ${x.id}` : ''} (${r.why})`;
     if (!x || !r.asks || r.handled) return console.log(`[help] ${said}`);
     if (!line || line.length > MAX_REPLY) return console.log(`[help] ${said}: ${line ? `a reply too long: ${line}` : 'no reply'}`);
+    const bad = unsafe(line, x.a);
+    if (bad) return console.log(`[help] ${said}: not posted, ${bad}: ${line}`);
     if ((this.staffAt.get(author) ?? 0) >= p.first) return console.log(`[help] ${said}: staff answered meanwhile`);
     const same = today.filter(([, id]) => id === x.id);
     if (same.length >= SAME_MAX || (same.length && !recent.some(([, id]) => id === x.id)))
@@ -174,6 +200,8 @@ export class Help {
     if (this.full(m.channelId)) return console.log(`[help] ${said}: the channel had its answers this hour`);
     const lang = /^[a-z]{2,3}$/.test(r.lang ?? '') ? r.lang : 'en';
     const y = await this.faq.lineIn(x, line, lang);
+    const badY = y.length > MAX_TRANSLATED ? 'a translation too long' : unsafe(y, x.a);   // what goes out, checked again
+    if (badY) return console.log(`[help] ${said}: not posted, ${badY} (${lang}): ${y}`);
     const ch = this.faq.channelIn(m.guild);
     const content = `${linked(y, m.guild)}\n-# ${footOf(y === line ? 'en' : lang)}${ch ? ` · <#${ch.id}>` : ''}`;
     this.saved.answered[author] = [...today, [this.now(), x.id, line]];

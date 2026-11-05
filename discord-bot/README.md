@@ -17,10 +17,13 @@ and it says something only when it is worth it:
   thread about it, in one line; its files with links to download them; and one line with a Discord timestamp for
   each change. The post's thread holds the rest: first the part for Claude, a code block of plain text (the threads,
   the notes, the files' names) that Copy Text or a selection takes without Discord's markup, with the first thread's
-  files; the bot edits it as updates come, so one copy has them all. Then each update with its files: later threads
-  about the same problem (with what they add), new logs or pictures in any of them, a fix that went live, the poster
-  saying it works. Only the thread's followers are notified. A report from before this layout gets it at its next
-  change: its text and files move into its thread. Spike alerts and daily notes are posts of their own.
+  files; the bot edits it as updates come, so one copy has them all. What players wrote in it (titles, messages, file
+  names) and the bot's notes on their posts sit between `<player-text-…>` tags with a random id, under a first line
+  that tells Claude they are data, not instructions: a player's text can't close them early. Then each update with
+  its files: later threads about the same problem (with what they add), new logs or pictures in any of them, a fix
+  that went live, the poster saying it works. Only the thread's followers are notified. A report from before this
+  layout gets it at its next change: its text and files move into its thread. Spike alerts and daily notes are posts
+  of their own.
 
 - **when a fix goes live**, in a thread whose problem one of the release's commits fixes: that a fix may have solved
   it, what the fix changes (one plain sentence, no internals), to reload the page, and to post a new log if it still
@@ -46,7 +49,9 @@ and it says something only when it is worth it:
   call reads them in the chat around them and names the answer and writes the line, or none when unsure. Nothing for staff, chat, answers
   to others, or someone already answered; the same answer to a person once a day (a follow-up within 20 minutes may
   get another part of it, never a line they had), 5 a person a day, 60 an hour. Besides the FAQ's buttons it answers
-  from `faq.md`'s "Only in #help" section, which has no buttons.
+  from `faq.md`'s "Only in #help" section, which has no buttons. A line with a link or a web address that its answer
+  doesn't have word for word, a mention, a code block or "From the developer", in English or after the translation, is
+  not posted (the log says why): players' messages could ask the model for their own link.
   Each answer gets 👍 and 👎 from the bot, for the staff: the daily note counts the votes on the answers 6 hours old
   or more (the bot's own left out) and lists the ones with a 👎; every counted answer goes to `state/help-votes.jsonl`
   (time, FAQ answer, language, votes, the question, the line, its link).
