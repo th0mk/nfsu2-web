@@ -594,9 +594,9 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   don't see such a lobby at all (not at the start, over it or on the world map), nor a full lobby or one already on
   its way to the race, and Enter at that start opens a lobby of their own beside it (before that they saw it with the
   reason, "A career race for players up to stage 2 ..."; from 85c39ac to fc56fdd it even stopped them opening their
-  own there). Since d6306c7 every lobby whose host is at the race's stage keeps out later stages by default, friends
-  and crew-mates aside: the host's V goes round "Stage 2 and below can join", "Friends & crew can join" and
-  "Everyone can join" (a career lobby has no Everyone); a host past the race's stage has no limit. At a start, B
+  own there). Since 0e56c9b every lobby keeps out players past its host's stage by default, friends and crew-mates aside:
+  the host's V goes round "Stage 2 and below can join", "Friends & crew can join" and "Everyone can join" (a career
+  lobby has no Everyone). At a start, B
   opens a new lobby beside the others and E goes to the next one; the card shows a speedometer of the fastest other
   car against yours. On a controller: D-pad up joins, starts or opens; left held a second is a new lobby, who can
   join or leave; right held the next lobby; invites are in the menu's Friends. A
