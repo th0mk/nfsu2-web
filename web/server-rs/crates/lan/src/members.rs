@@ -201,7 +201,7 @@ impl LanSwitch {
         });
         if let Some(h) = &hello {
             peer.ctl.lock().texts.take_at(now, 1.0);
-            greet(&peer, h, self.o.fpred);
+            greet(&peer, h, self.o.fpred, self.o.probe_echo);
             self.hand_hub(&peer, h);
         }
         m.peers.insert(vip, peer.clone());
@@ -518,7 +518,7 @@ impl LanSwitch {
             return;
         }
         let was = peer.name().to_string();
-        greet(peer, msg, self.o.fpred);
+        greet(peer, msg, self.o.fpred, self.o.probe_echo);
         self.hand_hub(peer, msg);
         self.lan_changed(&mut m, peer);
         let list = self.list_for(&m, peer);
@@ -658,9 +658,9 @@ fn block_names(m: &Map<String, Value>) -> Vec<String> {
         .collect()
 }
 
-/// a connection's first hello: its player's name, whether it takes bundles (and which), and whether it has LAN play
-/// open
-fn greet(peer: &Peer, m: &Map<String, Value>, fpred: bool) {
+/// a connection's first hello: its player's name, whether it takes bundles (and which), whether it echoes their
+/// stamps, and whether it has LAN play open
+fn greet(peer: &Peer, m: &Map<String, Value>, fpred: bool, echo: bool) {
     use nfsu2_util::json::is_num;
     peer.hello.store(true, Relaxed);
     peer.bundle.store(is_num(m.get("bundle"), 1.0), Relaxed);
@@ -674,6 +674,7 @@ fn greet(peer: &Peer, m: &Map<String, Value>, fpred: bool) {
     let compact = if compact == FPRED && !fpred { DELTAS } else { compact };
     let compact = if compact >= DELTAS && is_num(m.get("ldelta"), 1.0) { compact | OTHERS } else { compact };
     peer.conn.compact.store(compact, Relaxed);
+    peer.conn.echo.store(echo && compact != PLAIN && is_num(m.get("echo"), 1.0), Relaxed);
     peer.lan.store(is_num(m.get("lan"), 1.0), Relaxed);
     peer.udp.store(crate::udp_of(m.get("udp")), Relaxed);
     if let Some(Value::String(name)) = m.get("name") {
@@ -707,7 +708,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn the_welcome_is_queued_before_anyone_can_send_to_the_newcomer() {
         const N: usize = 300;
-        let sw = LanSwitch::new(LanOptions { max_peers: 14000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 16000, ..LanOptions::default() }, "", None, None, None, None);
         // a sender on another core: it looks at each address the switch hands out next, as soon as it is taken
         let watcher = {
             let sw = sw.clone();
@@ -739,7 +740,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn what_full_costs() {
-        let sw = LanSwitch::new(LanOptions { max_peers: 14000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 16000, ..LanOptions::default() }, "", None, None, None, None);
         let peers: Vec<_> = (0..1000).map(|i| crate::route::tests::peer(&sw, &format!("g{i}"))).collect();
         let t = std::time::Instant::now();
         let mut n = 0;

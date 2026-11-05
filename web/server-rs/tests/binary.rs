@@ -1542,3 +1542,135 @@ async fn a_one_sided_friend_learns_nothing() {
     }
     assert_eq!(srv.stop().await, Some(0));
 }
+
+/// a race lobby's message to the hub (to 0) as roam_core.c lays it out (op arg state max, to, lobby, race, x y, t, n,
+/// away seconds, ids): the host's advert (op 1)
+fn roam_lobby(sender: u32, op: u8, lobby: u32, race: u32, state: u8, max: u8, ids: &[u32]) -> Vec<u8> {
+    let mut p = vec![0u8; 24 + 4 * ids.len()];
+    p[0] = op;
+    p[2] = state;
+    p[3] = max;
+    p[8..12].copy_from_slice(&lobby.to_le_bytes());
+    p[12..16].copy_from_slice(&race.to_le_bytes());
+    p[22] = ids.len() as u8;
+    for (i, v) in ids.iter().enumerate() {
+        p[24 + 4 * i..28 + 4 * i].copy_from_slice(&v.to_le_bytes());
+    }
+    dgram(12, sender, &p)
+}
+
+// An invite to a race lobby (src/app/friends.rs "invite"): a friend both ways, in free roam in the host's room, hears
+// it on its open page with the lobby as the hub has it (its host's id and its own, the race, its players), the race's
+// kind as one of the game's words and its stage 0 to 9; the host's page hears what became of it: "nolobby" while it
+// hosts none, "none" to a player not its friend, "full", "away" once the friend left free roam, "claim" without a
+// claimed name, and past six at once "rate"
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_friend_is_invited_to_a_race_lobby_through_the_server() {
+    use nfsu2_claims::{Claims, owner_of_token};
+    let tmp = tempfile::tempdir().unwrap();
+    let (data, wasm) = game_folder(tmp.path());
+    let state = tmp.path().join("state");
+    std::fs::create_dir_all(&state).unwrap();
+    let tok = |c: char| c.to_string().repeat(43);
+    let now = nfsu2_util::now_ms();
+    let claims = Claims::open(&state, now);
+    for (n, c) in [("Al", 'A'), ("Bo", 'B'), ("Cy", 'C')] {
+        claims.claim(n, &owner_of_token(&tok(c)).unwrap(), now).unwrap();
+    }
+    claims.save(now).unwrap();
+    let port = free_port();
+    let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--vault-gb", "1"]), port);
+    srv.ready().await;
+    let host = format!("localhost:{port}");
+    let page = |name: &'static str, key: Option<char>, id: u32, x: f32| {
+        let host = host.clone();
+        async move {
+            let b = Browser::open_at(&host, port, "", None).await;
+            let mut h = serde_json::json!({ "t": "hello", "name": name });
+            if let Some(k) = key {
+                h["claim"] = tok(k).into();
+            }
+            b.text(&h.to_string());
+            b.binary(to_hub(&roam_hello_named(id, name.as_bytes())));
+            b.binary(to_hub(&roam_snap(id, [x, 0.0, 0.0])));
+            b
+        }
+    };
+    let al = page("Al", Some('A'), 701, 0.0).await;
+    let bo = page("Bo", Some('B'), 702, 4.0).await;
+    let cy = page("Cy", Some('C'), 703, 2000.0).await;
+    let dee = page("Dee", None, 704, -4.0).await;
+    for x in [&al, &bo, &cy, &dee] {
+        x.text(r#"{"t":"friend","op":"list"}"#);
+    }
+    let n = |b: &Browser| friend_msgs(&b.got(), 0).len();
+    async fn first(b: &Browser, op: &'static str, from: usize) -> Value {
+        b.until_ms(4000, move |g| friend_msgs(g, from).into_iter().find(|m| m["op"] == op)).await
+    }
+    assert_eq!(first(&al, "list", 0).await["me"], "Al_");
+    // (the hub's ticks: linked) Al and Bo befriend each other
+    sleep(1500).await;
+    let ask = |b: &Browser, op: &str, name: &str| b.text(&serde_json::json!({ "t": "friend", "op": op, "name": name }).to_string());
+    let k = n(&al);
+    ask(&al, "add", "Bo");
+    assert_eq!(first(&al, "add", k).await["done"], "asked");
+    let k = n(&bo);
+    ask(&bo, "add", "Al");
+    assert_eq!(first(&bo, "add", k).await["done"], "friends");
+    let invite = |b: &Browser, name: &str, kind: &str, stage: Value| {
+        b.text(&serde_json::json!({ "t": "friend", "op": "invite", "name": name, "kind": kind, "stage": stage }).to_string())
+    };
+    // what became of each one: (the friend's name as listed, done), one at a time (each on its own task)
+    async fn done(b: &Browser, from: usize) -> (String, String) {
+        let m = b.until_ms(4000, move |g| friend_msgs(g, from).into_iter().find(|m| m["op"] == "invite" && m.get("done").is_some())).await;
+        (m["name"].as_str().unwrap_or("").to_string(), m["done"].as_str().unwrap_or("").to_string())
+    }
+    let k = n(&al);
+    invite(&al, "bo_", "drift", 3.into());
+    assert_eq!(done(&al, k).await, ("Bo_".into(), "nolobby".into()), "no lobby yet");
+    // Al opens a lobby (its advert to the hub)
+    al.binary(to_hub(&roam_lobby(701, 1, 0xA1, 0x1111, 0, 6, &[701])));
+    sleep(300).await;
+    let k = n(&al);
+    invite(&al, "Cy_", "drift", 3.into());
+    assert_eq!(done(&al, k).await, ("Cy_".into(), "none".into()), "not a friend");
+    let (ka, kb) = (n(&al), n(&bo));
+    invite(&al, "Bo_", "drift", 3.into());
+    assert_eq!(done(&al, ka).await, ("Bo_".into(), "sent".into()));
+    let m = bo.until_ms(4000, move |g| friend_msgs(g, kb).into_iter().find(|m| m["op"] == "invite")).await;
+    assert_eq!(
+        m,
+        serde_json::json!({ "t": "friend", "op": "invite", "name": "Al_", "host": 701, "lobby": 0xA1, "race": 0x1111, "n": 1, "max": 6,
+                            "kind": "drift", "stage": 3 })
+    );
+    let (ka, kb) = (n(&al), n(&bo));
+    invite(&al, "Bo_", "<b>", 99.into());
+    assert_eq!(done(&al, ka).await.1, "sent");
+    let m = bo.until_ms(4000, move |g| friend_msgs(g, kb).into_iter().find(|m| m["op"] == "invite")).await;
+    assert_eq!((m["kind"].as_str(), m["stage"].as_i64()), (Some("race"), Some(9)), "a kind not the game's, a stage past 9: {m}");
+    // full
+    al.binary(to_hub(&roam_lobby(701, 1, 0xA1, 0x1111, 0, 2, &[701, 703])));
+    sleep(300).await;
+    let k = n(&al);
+    invite(&al, "Bo_", "drift", 3.into());
+    assert_eq!(done(&al, k).await.1, "full");
+    // Bo leaves free roam: away
+    al.binary(to_hub(&roam_lobby(701, 1, 0xA1, 0x1111, 0, 6, &[701])));
+    bo.close().await;
+    sleep(1200).await;
+    let k = n(&al);
+    invite(&al, "Bo_", "drift", 3.into());
+    assert_eq!(done(&al, k).await.1, "away");
+    // six at once, then one every 5 s
+    let k = n(&al);
+    invite(&al, "Bo_", "drift", 3.into());
+    assert_eq!(done(&al, k).await.1, "rate");
+    // no claimed name
+    let k = n(&dee);
+    invite(&dee, "Al_", "drift", 3.into());
+    assert_eq!(done(&dee, k).await, ("Al_".into(), "claim".into()));
+    for x in [al, cy, dee] {
+        x.close().await;
+    }
+    assert_eq!(srv.stop().await, Some(0));
+}

@@ -1,0 +1,30 @@
+# A friend joins a Friends & crew only lobby from afar (roam_game.c mp_far_join: an invite's Join), host side, with
+# mprace_far_b.txt: A opens a lobby at MP_RACE's spot, makes it Friends & crew only (mp private: the page's V), takes
+# B's JOIN from wherever B is (B is a friend: NFSU2_MPRACE_TEST_FRIENDS=Bob here), starts the race: both trips go and
+# come back, B's to where B was.
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mprace_far_a.txt:NFSU2_MPRACE_TEST_FRIENDS=Bob
+#        --b Bob:mprace_far_b.txt:NFSU2_MPRACE_TEST_FRIENDS=Ann --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPRINT_3
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++60   roam mp private
++0    roam mp lobby
++0    roam mp waitlobby 2 15000               # B, from afar
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

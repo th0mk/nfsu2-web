@@ -257,6 +257,10 @@ const TX_HOLD_AWAY_MS = 500;
  *  own (web/tools/lan-pair.mjs, 4 players: the creator's page sent 74 messages a second for 178 datagrams, about a
  *  quarter fewer this way); the switch puts what comes for a page in 4 ms together (nfsu2-lan `lan_ms`) */
 const TX_HOLD_LAN_MS = 1;
+/** A stamp of the switch's (P.NET_BUNDLE_STAMPED, on a compact bundle) goes back in the page's next bundle with how long
+ *  the page held it, or alone this long after it came when nothing else went: the switch times the page's round trip
+ *  by it where it pinged before (a ping and its pong, two messages more a second for a page driving in free roam) */
+const ECHO_WAIT_MS = 100;
 /** runtime/roam_core.h: a datagram's type (header byte 5): HELLO, the car state, a ping and its answer */
 const RC_MSG_HELLO = 1, RC_MSG_SNAP = 3, RC_MSG_PING = 6, RC_MSG_PONG = 7;
 
@@ -308,15 +312,17 @@ class TxBundle {
     this.last.set(dst, this.e.length);
     this.e.push({ f, dst: [dst] });
   }
-  /** the messages: one frame alone as it is, else bundles of NET_BUNDLE_MAX bytes at most */
-  messages(): Frame[] {
-    if (this.e.length === 1 && this.e[0].dst.length === 1) return [this.e[0].f];
+  /** the messages: one frame alone as it is, else bundles of NET_BUNDLE_MAX bytes at most; with `echo` (a stamp and how
+   *  long the page held it: 12 bytes) the first is a bundle that carries it, one of nothing else when no frame goes */
+  messages(echo?: Uint8Array): Frame[] {
+    if (!echo && this.e.length === 1 && this.e[0].dst.length === 1) return [this.e[0].f];
     const out: Frame[] = [];
-    let part: { f: Frame; dst: number[] }[] = [], bytes = 4;
+    let part: { f: Frame; dst: number[] }[] = [], bytes = echo ? 16 : 4;
     const done = () => {
       const b = new Uint8Array(bytes), dv = new DataView(b.buffer);
       b[0] = P.NET_KIND_BUNDLE;
       let at = 4;
+      if (echo) { b[1] = P.NET_BUNDLE_STAMPED; b.set(echo, 4); at = 16; echo = undefined; }
       for (const { f, dst } of part) {
         const k = dst.length > 1 ? dst.length : 0;
         b[at] = k; dv.setUint16(at + 2, f.length);
@@ -331,7 +337,7 @@ class TxBundle {
       if (part.length && bytes + n > P.NET_BUNDLE_MAX) done();
       part.push(x); bytes += n;
     }
-    if (part.length) done();
+    if (part.length || echo) done();
     return out;
   }
 }
@@ -439,6 +445,9 @@ export class Link implements NetLink {
   private backoff = 250;
   private closed = false;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  /** the switch's last stamp (ECHO_WAIT_MS), when it came, and the wait for a message to carry it back */
+  private stamp: { p: Uint8Array; at: number } | null = null;
+  private stampTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -624,6 +633,7 @@ export class Link implements NetLink {
     for (const ep of this.eps()) this.drainTx(ep);                 // what C queued last (free roam's BYEs)
     if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
     this.lagStop();
+    this.stampStop();
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     const ws = this.ws; this.ws = null;
     if (ws) { ws.onopen = null; ws.onmessage = null; ws.onerror = null; ws.onclose = null; ws.close(1000, 'idle'); }
@@ -757,7 +767,7 @@ export class Link implements NetLink {
       // every other datagram (a race's) as what changed since its source's last one of its kind (`others`)
       this.lanSent = this.lanOpen();
       this.udpSent = this.lanSent ? this.lanPorts() : 0;
-      ws.send(JSON.stringify({ t: 'hello', name: this.o.name ?? 'player', lan: this.lanSent ? 1 : 0, ...(this.udpSent ? { udp: this.udpSent } : {}), bundle: 1, compact: 1, delta: 1, fpred: 1, ldelta: 1,
+      ws.send(JSON.stringify({ t: 'hello', name: this.o.name ?? 'player', lan: this.lanSent ? 1 : 0, ...(this.udpSent ? { udp: this.udpSent } : {}), bundle: 1, compact: 1, delta: 1, fpred: 1, ldelta: 1, echo: 1,
         ...(this.o.id ? { id: this.o.id } : {}), ...(this.o.id && this.o.was?.length ? { was: this.o.was } : {}),
         ...(this.o.claim ? { claim: this.o.claim } : {}), ...(this.o.block?.length ? { block: this.o.block } : {}),
         ...(this.vipNum && this.token ? { vip: P.ipStr(this.vipNum), token: this.token } : {}), ...(this.ticket ? { ticket: this.ticket } : {}) }));
@@ -773,6 +783,7 @@ export class Link implements NetLink {
       this.ws = null;
       if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
       this.lagStop();
+      this.stampStop();
       this.pings.clear();
       if (this.closed) return;
       if (e.code === CLOSE_KICKED || e.code === CLOSE_BANNED) {
@@ -1020,7 +1031,7 @@ export class Link implements NetLink {
       tail = (tail + 1) | 0;
       Atomics.store(i32, P.W_TX_TAIL, tail);
     }
-    if (open) for (const m of bundle.messages()) ws!.send(m);
+    if (open) for (const m of bundle.messages(this.echo())) ws!.send(m);
     if (open) ep.sent = performance.now();
     if (n) {
       ep.f64[P.D_TX_WAIT_MS_SUM] += waitSum; ep.f64[P.D_TX_WAIT_MS_MAX] = waitMax;
@@ -1039,6 +1050,10 @@ export class Link implements NetLink {
     const c0 = performance.now();
     const u = new Uint8Array(b);
     if (u.length >= 4 && u[0] === P.NET_KIND_COMPACT) {
+      if (u[1] & P.NET_BUNDLE_STAMPED && u.length >= 12) {
+        this.stamp = { p: u.slice(4, 12), at: c0 };
+        this.stampTimer ??= setTimeout(() => this.echoAlone(), ECHO_WAIT_MS);
+      }
       // each frame on its own, put together again first (proto.ts unpackCompact), C rung once for all of them
       const ring = this.ringLater = new Set();
       this.st.compactIn++;
@@ -1050,6 +1065,26 @@ export class Link implements NetLink {
   }
   /** C's network thread hears of what came: now, or once the bundle it came in is taken apart */
   private rang(ep: Endpoint) { if (this.ringLater) this.ringLater.add(ep); else ep.ring(); }
+  /** the switch's stamp to echo now, with how long the page held it (µs), and none waiting after it */
+  private echo(): Uint8Array | undefined {
+    const s = this.stamp;
+    if (!s) return undefined;
+    this.stamp = null;
+    if (this.stampTimer) { clearTimeout(this.stampTimer); this.stampTimer = null; }
+    const e = new Uint8Array(12);
+    e.set(s.p);
+    new DataView(e.buffer).setUint32(8, Math.min(0xFFFFFFFF, Math.max(0, Math.round((performance.now() - s.at) * 1000))));
+    return e;
+  }
+  /** a stamp nothing carried back within ECHO_WAIT_MS: alone */
+  private echoAlone() {
+    this.stampTimer = null;
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN || this.state !== 'online') { this.stamp = null; return; }
+    const e = this.echo();
+    if (e) for (const m of new TxBundle().messages(e)) ws.send(m);
+  }
+  private stampStop() { this.stamp = null; if (this.stampTimer) { clearTimeout(this.stampTimer); this.stampTimer = null; } }
   private rxFrame(b: ArrayBuffer) {
     if (b.byteLength < P.F_DATA) return;
     const kind = new Uint8Array(b, 0, 1)[0];

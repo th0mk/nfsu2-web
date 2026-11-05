@@ -1196,6 +1196,19 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
   padding: 0 0.4em; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
   font: 700 0.85em/1.5 var(--font); color: var(--text);
 }
+/* the card's own buttons (lobby.ts act with a click: the next lobby, Friends & crew only and its switch, invite,
+ * leave a race joined from afar): the card lets clicks through, these take them */
+.lobby-act.tap { pointer-events: auto; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.lobby-act.tap:hover > span:not(.lobby-onoff) { text-decoration: underline; }
+.lobby-act.tap:active { color: var(--lime); }
+html[data-touch] .lobby-act.tap { min-height: 32px; }
+.lobby-onoff { padding: 0 0.45em; border: 1px solid var(--line); border-radius: 3px; background: var(--field); font-size: 0.8em; font-weight: 700;
+  text-transform: uppercase; color: var(--muted); }
+.lobby-onoff.on { border-color: var(--lime); background: var(--lime); color: #000; }
+/* the lobbies at a start: this page of how many, above the title (lobby.ts pager) */
+.lobby-pager { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6em; margin-bottom: 0.3em; }
+.lobby-dots { letter-spacing: 0.2em; font-size: 0.7em; color: var(--muted); }
+.lobby-dots .on { color: var(--lime); }
 .lobby-count { margin-top: 0.5em; font-size: 1.5em; font-weight: 700; font-style: italic; color: var(--lime); }
 .lobby-note { color: var(--text); }
 .lobby-cover {

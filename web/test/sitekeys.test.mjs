@@ -24,7 +24,7 @@ const K = await import('data:text/javascript;base64,' + Buffer.from(await build(
 
 test('the keys and buttons from the environment', () => {
   K.applySiteKeys({});
-  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, null, 'KeyI', 'KeyF', 'F12', 'F10', 'F9', 'F7', 'F8']);
+  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, null, 'KeyI', 'KeyF', 'KeyE', 'KeyV', 'KeyZ', 'F12', 'F10', 'F9', 'F7', 'F8']);
   assert.deepEqual(['button_hold', 'button_horn', 'button_chat', 'button_look'].map(K.siteButton), ['ddown', 'ls', 'rs', 'auto']);
   assert.ok(K.SITE_KEYS.includes('key_lights'), 'the headlights\' key is one of settings.ini\'s');
   assert.ok(K.SITE_KEYS.includes('key_hud') && K.SITE_KEYS.includes('button_look'), 'hiding the HUD\'s key and the free look\'s switch too');
@@ -57,7 +57,8 @@ test('the keys and buttons from the environment', () => {
 
 test('what may be picked', () => {
   K.applySiteKeys({});
-  assert.equal(K.refusal('drift', 'KeyZ'), '');
+  assert.equal(K.refusal('drift', 'Digit7'), '');
+  assert.match(K.refusal('drift', 'KeyZ'), /Z is already Invite to a race/, 'the race lobby card\'s E, V and Z');
   assert.equal(K.refusal('drift', 'KeyX'), '', 'its own key');
   assert.match(K.refusal('drift', 'KeyW'), /W is one of the game's keys/);
   assert.match(K.refusal('drift', 'KeyG'), /one of the game's keys/, 'the debug camera\'s too');
@@ -72,7 +73,7 @@ test('what may be picked', () => {
   assert.match(K.refusal('drift', 'KeyO'), /O is already Hood, trunk, doors/);
   assert.match(K.refusal('drift', 'F10'), /F10 is already Hide HUD/);
   assert.match(K.refusal('menu', 'F10'), /F10 is already Hide HUD/);
-  assert.equal(K.refusal('hud', 'KeyZ'), '', 'hiding the HUD works only while driving: a letter may do');
+  assert.equal(K.refusal('hud', 'Digit7'), '', 'hiding the HUD works only while driving: a key that types may do');
   assert.equal(K.refusal('hud', 'F6'), '');
   assert.match(K.refusal('hud', 'F11'), /can't be used/);
   assert.match(K.refusal('hud', 'KeyW'), /one of the game's keys/);
@@ -139,13 +140,13 @@ test('the Site tab\'s rows', async () => {
     assert.match((await row('drift')).state, /W is one of the game's keys/);
     assert.equal(await p.evaluate(() => /** @type {any} */ (window).file.key_drift), undefined, 'not taken');
     await p.click('#box [data-our="drift"] dt > button >> nth=0');
-    await p.keyboard.press('KeyZ');
-    assert.equal(await p.evaluate(() => /** @type {any} */ (window).file.key_drift), 'KeyZ');
-    assert.deepEqual((await row('drift')).caps, ['Z', 'D-pad ↓']);
+    await p.keyboard.press('Digit7');
+    assert.equal(await p.evaluate(() => /** @type {any} */ (window).file.key_drift), 'Digit7');
+    assert.deepEqual((await row('drift')).caps, ['7', 'D-pad ↓']);
     // Esc: as it was; Off; back to the default: the line goes
     await p.click('#box [data-our="drift"] dt > button >> nth=0');
     await p.keyboard.press('Escape');
-    assert.deepEqual((await row('drift')).caps, ['Z', 'D-pad ↓']);
+    assert.deepEqual((await row('drift')).caps, ['7', 'D-pad ↓']);
     await p.click('#box [data-our="drift"] dt > button >> nth=0');
     await p.click('#box [data-our="drift"] .set-state .text-btn');
     assert.equal(await p.evaluate(() => /** @type {any} */ (window).file.key_drift), 'off');

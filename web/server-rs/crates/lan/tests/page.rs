@@ -132,3 +132,16 @@ async fn the_page_says_whom_it_blocks() {
     assert_eq!(names, vec![vec!["Bob".to_string(), "carl".to_string()]]);
     sw.close().await;
 }
+
+// a page driving in free roam has its round trip timed by its compact bundles' stamps, which it echoes, and not by
+// pings; every car state comes through the stamped bundles
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_page_echoes_the_switchs_stamps() {
+    let _s = serial().await;
+    if no_node() {
+        return;
+    }
+    let sw = start(LanOptions { probe_ms: 100, ..opts() }).await;
+    page("echo", &[sw.port]).await;
+    sw.close().await;
+}

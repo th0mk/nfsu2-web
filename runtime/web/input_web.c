@@ -481,6 +481,7 @@ void photo_input(int cmd, int a, int b);                 /* photo.c */
 void treasure_input(uint32_t day, uint32_t found);       /* treasure.c */
 void roam_plat_name_piece(int off, int total, const char *b, int n);    /* roam_web.c */
 void roam_plat_name2_piece(int off, int total, const char *b, int n);   /* ...player 2's (co-op) */
+void roam_plat_lobby_input(int act, uint32_t host, uint32_t lobby, uint32_t race);   /* roam_web.c */
 static int g_muted;
 static void handle(const InEv *e){
     int mute = mprace_owns_input();
@@ -521,6 +522,10 @@ static void handle(const InEv *e){
     case IEV_LOG: watchdog_log_download(); break;
     case IEV_SMS: sms_request(e->a); break;
     case IEV_PHOTO: photo_input(e->dik, e->a, e->b); break;
+    case IEV_LOBBY:
+        roam_plat_lobby_input(e->dik, (uint32_t)e->a, (uint32_t)e->b,
+                              (uint32_t)e->vk | (uint32_t)e->flags << 8 | (uint32_t)e->ch[0] << 16 | (uint32_t)e->ch[1] << 24);
+        break;
     case IEV_TREASURE: treasure_input((uint32_t)e->a, (uint32_t)e->b); break;
     case IEV_NAME: {
         char b[11];
