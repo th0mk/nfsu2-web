@@ -21,7 +21,7 @@
 //  - edge: a word that starts or ends a part (or the name's letters together), plural too ("nigabro", "biggniga"),
 //    but not where a part starts or ends with a word of EDGE_OK ("Nigar", "Minigame" ends no part with it,
 //    "Zuniga", "Hoonigan" is "hooniga" when cut to 7 letters)
-// The other offensive names go the same way (picked from the live server's names, 2026-10-26 and 2026-11-02): Nazi
+// The other offensive names go the same way (picked from the live server's names, 2026-10-26, 11-02 and 11-05): Nazi
 // ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it (the
 // neo-Nazi code); and hate aimed at a group as a phrase (HATE: a verb, a word between or none, the group).  A swear
 // word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an
@@ -35,14 +35,16 @@ export const SLURS = Object.freeze({
     'hitler', 'gitler', 'zitler', 'adolfh', 'himler', 'fuhrer', 'fuehrer', 'siegheil', 'zighael', 'goebbels',
     'mengele', 'mussolini', 'jewhunt', 'jewshunt', 'nigahunt', 'zenciav', 'natehig', 'binladen', 'benladen',
     'rapist', 'molester',
-    'niger', 'higger', 'chigga', 'negroid', 'zencigot', 'kacap', 'rusnya', 'pideras', 'frocio', 'pretomacaco',
+    'niger', 'higger', 'figger', 'chigga', 'negroid', 'zencigot', 'kacap', 'rusnya', 'pideras', 'frocio', 'pretomacaco',
     'kitler', 'fitler', 'ritler', 'sitler', 'xitler', 'heitler', 'nitler', 'neonazi', 'nazist', 'uncleadolf',
     'austrianartist', 'austrianpainter', 'pintoraustria', 'zyklonb', 'kristalnacht', 'ovendodger',
-    'jewkill', 'jewslay', 'jewdestroy', 'jebaczyd', 'zydzidopieca', 'osamabin', 'alqaeda', 'pedophil', 'pedofil']),
+    'jewkill', 'jewslay', 'jewdestroy', 'jebaczyd', 'zydzidopieca', 'osamabin', 'alqaeda', 'pedophil', 'pedofil',
+    'wigger', 'niglet', 'nignog', 'nibber', 'iggernay', 'neegr', 'nigoger', 'nigrigg', 'nigler', 'nigcer', 'nigwer',
+    'poofter', 'binladin', 'htler', 'hitlr', 'hitlur', 'gasthejuice', 'goyim', 'goyslop', 'rapegod', 'rapedog', 'rapeloli', 'biraped']),
   whole: Object.freeze(['fag', 'dyke', 'coon', 'spic', 'paki', 'kike', 'gook', 'chink',
     'niga', 'nyga', 'ngga', 'neger', 'xach', 'xoxol', 'hohol', 'ukrop', 'pider', 'pedik', 'nazi', 'taliban', 'rape',
-    'nig']),
-  edge: Object.freeze(['niga', 'nyga']),
+    'nig', 'killnig', 'fucknig', 'hatenig', 'pedo', 'goy']),
+  edge: Object.freeze(['niga', 'nyga', 'hitla', 'hitle']),
 });
 /** the words a part may start (start) or end (end) with that would read as an edge word there and are none:
  *  a name (Nigar, Nygaard), "Nigam..." ("NIGAMI", a game), a Japanese name (Niigaki), a surname (Zuniga), a word
@@ -60,7 +62,7 @@ export const HATE = Object.freeze({
   verbs: Object.freeze(['gas', 'kill', 'hate', 'hunt', 'slay', 'burn', 'shoot', 'nuke', 'bomb', 'dead', 'death', 'fck',
     'fuck', 'fuk', 'destroy', 'exterminate']),
   between: Object.freeze(['s', 'the', 'all', 'allthe', 'da', 'dem', 'them', 'those', 'every', 'dirty', 'to']),
-  groups: Object.freeze(['jew']),
+  groups: Object.freeze(['jew', 'kike', 'colored', 'coloured']),
 });
 
 const LOOKALIKE = {

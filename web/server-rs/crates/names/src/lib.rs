@@ -20,7 +20,7 @@
 //!    but not where a part starts or ends with a word of [`EDGE_OK_START`] or [`EDGE_OK_END`] there ("Nigar",
 //!    "Zuniga", "Hooniga")
 //!
-//! The other offensive names go the same way (picked from the live server's names, 2026-10-26 and 2026-11-02): Nazi
+//! The other offensive names go the same way (picked from the live server's names, 2026-10-26, 11-02 and 11-05): Nazi
 //! ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it (the neo-Nazi
 //! code); and hate aimed at a group as a phrase ([`HATE_VERBS`]: a verb, a word between or none, the group).  A swear
 //! word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an English word
@@ -96,6 +96,7 @@ pub const ANYWHERE: &[&str] = &[
     "molester",
     "niger",
     "higger",
+    "figger",
     "chigga",
     "negroid",
     "zencigot",
@@ -129,14 +130,37 @@ pub const ANYWHERE: &[&str] = &[
     "alqaeda",
     "pedophil",
     "pedofil",
+    "wigger",
+    "niglet",
+    "nignog",
+    "nibber",
+    "iggernay",
+    "neegr",
+    "nigoger",
+    "nigrigg",
+    "nigler",
+    "nigcer",
+    "nigwer",
+    "poofter",
+    "binladin",
+    "htler",
+    "hitlr",
+    "hitlur",
+    "gasthejuice",
+    "goyim",
+    "goyslop",
+    "rapegod",
+    "rapedog",
+    "rapeloli",
+    "biraped",
 ];
 /// short words that match only as a part of the name on its own
 pub const WHOLE: &[&str] = &[
     "fag", "dyke", "coon", "spic", "paki", "kike", "gook", "chink", "niga", "nyga", "ngga", "neger", "xach", "xoxol", "hohol", "ukrop",
-    "pider", "pedik", "nazi", "taliban", "rape", "nig",
+    "pider", "pedik", "nazi", "taliban", "rape", "nig", "killnig", "fucknig", "hatenig", "pedo", "goy",
 ];
 /// words that match where they start or end a part of the name (or its letters together)
-pub const EDGE: &[&str] = &["niga", "nyga"];
+pub const EDGE: &[&str] = &["niga", "nyga", "hitla", "hitle"];
 /// the words a part may start with that would read as an edge word there and are none: a name (Nigar, Nygaard),
 /// "Nigam..." ("NIGAMI", a game), a Japanese name (Niigaki)
 pub const EDGE_OK_START: &[&str] = &["nigam", "nigar", "nigak", "nygar"];
@@ -169,7 +193,7 @@ pub const HATE_VERBS: &[&str] = &[
 /// the words that may come between a verb and a group of a hate phrase
 pub const HATE_BETWEEN: &[&str] = &["s", "the", "all", "allthe", "da", "dem", "them", "those", "every", "dirty", "to"];
 /// the groups of a hate phrase
-pub const HATE_GROUPS: &[&str] = &["jew"];
+pub const HATE_GROUPS: &[&str] = &["jew", "kike", "colored", "coloured"];
 /// a name with these digits in a row in it is one too (the neo-Nazi code)
 const CODE: &[char] = &['1', '4', '8', '8'];
 

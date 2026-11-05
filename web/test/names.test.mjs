@@ -33,7 +33,10 @@ const BLOCKED = ['nigger', 'N1gg3r', 'n i g g e r', 'n.i.g.g.a', 'NiQQa', 'nlgga
   'Kristal_Nacht', 'HateJews', 'JewSlayer', 'GasJews', 'JEBAC_ZYDOW', 'pedophile', 'Pedofilo', 'OsamaBin',
   'Al_Qaeda', 'xChigga', 'Nazista', 'ZyklonB',
   // hate aimed at a group as a phrase, with a word between (2026-11-05)
-  'GasTheJews', 'Gas_The_Jews', 'KillAllTheJews', 'HuntTheJews', 'DeathToJews', 'g4sTh3J3ws', 'BurnDaJews'];
+  'GasTheJews', 'Gas_The_Jews', 'KillAllTheJews', 'HuntTheJews', 'DeathToJews', 'g4sTh3J3ws', 'BurnDaJews',
+  // the live server's names of 2026-11-05: spellings round the lists' words, phrases at other groups
+  'NatFigger', 'Nat_Figgers', 'BBHITLA', 'Adolph_Hitlr', 'HEIL_HTLER', 'gaskikes67', 'HateTheColored', 'Ihateneegr_s',
+  'GoodestGoy', 'TheGoodGoyim', 'PedoDave', 'killnig', 'nibb3r'];
 const UNICODE = ['ñigga', 'nіgga', 'ｎｉｇｇａ', 'ΝΙGGΑ', 'n̲i̲g̲g̲a̲', 'ⓕⓐⓖ', 'fаg', 'Ηitler', 'Ｈｉｔｌｅｒ', 'Lander１４８８'];
 // other words with those letters in them, the player names this server sees most (Turkish) among them
 const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'mustafagamer', 'Rafa96', 'Vefa', 'Safa',
@@ -52,6 +55,9 @@ const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'musta
   'Hoonigan', 'Hooniga', 'Minigame', 'Minigas', 'Kniga', 'Kunigas', 'Niigaki', 'NIGAMI', 'Nygard', 'TonyGamer',
   'Antony Gaming', 'Brony_Gamer', 'Higgins', 'Higgs', 'Austria', 'AustrianGP', 'Painter', 'Artist', 'Osama',
   'TopiDrift', 'N1995', 'Doran1994TR',
+  // next to the words of 2026-11-05
+  'Figgy', 'Figgis', 'Fighter', 'Tauhitianboy', 'Tahitien', 'Kshitij', 'Hilti_Passat', 'hellhound057', 'Speedo', 'Torpedo',
+  'Goyo204', 'Nigro', 'KonigRider39', 'Rapper', 'Draped', 'KillNight',
   // a hate phrase's words on their own
   'Jewel', 'JewishRacer', 'Andrew', 'Matthew', 'KillerQueen', 'GasMonkey', 'Deadpool', 'Bombshell', 'Shooter'];
 
