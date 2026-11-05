@@ -331,6 +331,7 @@ static void coop_drop(CPU *c){
         split_coop_map_drop(c);                 /* player 2's arrow is an object of its HUD, which ends with it */
         call(c, FN_PLAYER_END, coop_pl, 0, 0, 0);
         if (coop_car){ call(c, FN_DEACTIVATE, coop_car, 0, 0, 0); coop_parked = coop_car; coop_parked_world = coop_world; coop_parked_rec = coop_car_rec; }
+        if (!coop_want) coop_car_rec = 0;       /* left: the next join picks again (the parked car back if the same) */
         coop_parked_pl = coop_pl;
         /* view 2's camera movers (the chase camera the game gave player 2) follow player 2's Player and car: they go
          * too, as at a world's end (deleting one takes it off the view's list, 0x44DDA0 -> 0x48F760); the view mode
@@ -485,7 +486,7 @@ static uint32_t coop_default_car(void){
 }
 void coop_join(int dev){ coop_dev = dev; coop_want = 1; if (!coop_car_rec) coop_car_rec = coop_default_car(); }
 void coop_join_car(int dev, uint32_t rec){ coop_car_rec = rec; coop_join(dev); }
-void coop_leave(void){ coop_want = 0; coop_car_rec = 0; }
+void coop_leave(void){ coop_want = 0; }        /* (its car's record stays until coop_drop parks the car with it) */
 
 /* script: "roam coop join kb|pad N", "roam coop leave", "roam coop state", "roam coop finish" (a race's player 2) */
 int coop_cmd(CPU *c, const char *args, long *wait_start){
@@ -509,6 +510,10 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
         for (i = 0; car && i < n && i < 8u && MR32(rc + 0xbd0u + 4u * i) && MR32(MR32(rc + 0xbd0u + 4u * i)) != car; i++) ;
         if (!car || i >= n || i >= 8u) fprintf(stderr, "[coop] f=%ld script: finish: player 2 is not racing\n", f);
         else { uint32_t a[4] = { i, 0, 0, 1u }; call(c, 0x00606cb0u, rc, 0, 4, a);
+               /* a drift: its points below player 1's 0 (as racewin puts the AI's; the board 0x864630: +8 racer, +0x10 points) */
+               uint32_t me = (MR32(rc + 0xbd0u + 4u * i) - (rc + 0x30u)) / 0x1f0u, e = MR32(0x00864630u);
+               for (int k = 0; e && e != 0x00864630u && k < 16 && mem_is_committed(e + 0x1f); k++, e = MR32(e))
+                   if (MR32(e + 8u) == me) MRF32(e + 0x10u) = -1.f;
                fprintf(stderr, "[coop] f=%ld script: player 2 (racer %u of %u) finished, position %u\n", f, i, n, MR8(MR32(rc + 0xbd0u + 4u * i) + 0xcu)); }
     } else if (!strcasecmp(sub, "leave")){
         coop_leave();
@@ -791,10 +796,11 @@ void coop_ask_frame_(CPU *c){ coop_ask_frame(c); coop_pick_frame(c); coop_outrun
 /* ---- outruns between player 1 and player 2 -------------------------------------------------------------------------
  * As outruns with an online friend (roam_game.c du_*): near each other (25 m) for 4 s, nothing else racing and no
  * tuner's outrun offered, both HUDs show the outrun icon (0x4DB890 with the other's car); either player's Engage
- * starts the game's own outrun (0x607180, as Engage starts one) with the World's AI range narrowed to player 2's car
- * for the call; each frame the one getting away is ranked first (the game ranks the opponent first, and only an AI's
- * road path moves it); the game decides it once the other is 300 m behind.  No career effect: the career's outrun
- * result (0x541320: the stake, the outrun's win, its SMS) is skipped for it. */
+ * starts the game's own outrun (0x607180, as Engage starts one) with the World as a one-human game's for the call
+ * (or_world_one: player 1's car the humans', player 2's alone the AI range); each frame the one getting away is ranked
+ * first (the game ranks the opponent first, and only an AI's road path moves it); the game decides it once the other
+ * is 300 m behind and ends it (0x5F8490, the World one human's again).  No career effect: the career's outrun result
+ * (0x541320: the stake, the outrun's win, its SMS) is skipped for it. */
 #define G_RACE        0x00890118u   /* race coordinator: +0x24 racers, +0x30 racers (0x1F0 each: +0 car, +0x10 completion), +0xBD0/+0xBD4 the order */
 #define G_RACETYPE    0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define G_ENCOUNTERS  0x0085ef70u
@@ -809,10 +815,7 @@ void coop_ask_frame_(CPU *c){ coop_ask_frame(c); coop_pick_frame(c); coop_outrun
 #define FN_ENG_DONE   0x005010e0u   /* thiscall G_ENGAGE */
 #define FN_EM_OVER    0x00500ca0u   /* thiscall G_ENCOUNTERS */
 #define SPLIT_INPUT_CURRENT_COOP 0x00d01000u   /* splitscreen.c's ports' records (16 each): port 1 player 2's */
-/* Off until player 1's HUD survives it: on the outrun's first frame its race widget (0x4C68D0) traps on an object
- * it takes from the car type's block ([car +0xC] +0x7F0), which both cars share when player 2 drives player 1's model
- * (the notes repo, coop-roam README) */
-#define COOP_OUTRUNS  0
+#define COOP_OUTRUNS  1
 #define OR_NEAR_M     25.f
 #define OR_NEAR_US    4000000
 #define OR_KEEP_M     35.f
@@ -837,18 +840,59 @@ void coop_outrun_icon(CPU *c){
     uint32_t p1 = MR32(SPLIT_PLAYERS_INDEX), h1 = p1 ? MR32(p1 + PL_HUD) : 0, car2 = coop_p2_car();
     if (h1 && car2){ call(c, FN_HUD_OUTRUN, h1, 0, 1, &car2); OR.icon1 = car2; }
 }
+/* The World as a one-human game's around a call of the game's outrun code: player 1's car alone in the humans' range
+ * [0, 1), then `n` cars as the AI range.  Player 2's car is a human's in the World's index (IndexCars puts kind 1
+ * first: index 1), and the outrun's start and end take the local humans from where the AI range starts (World +0x14):
+ * the start sets the local-human count [0x89E7C0] from it (0x6071D5) and ranks the AI range's racers first (0x6072D7),
+ * the end keeps that many racers (0x5F8490).  With 2 there, player 1's HUD_SingleRace drew the 2P HUD's rpm lights
+ * (0x4C68D0: 0x4C69C8 -> 0x4C6A33, the widget's +0x34.. which only a 2PHud fills) and trapped on the outrun's first
+ * frame, the order's first was no racer, and free roam kept player 2's racer after it */
+static struct { uint32_t first, end, cars[22]; } or_saved;
+static int or_world_one(uint32_t w, const uint32_t *ai, uint32_t n){
+    uint32_t first = MR32(w + 0x14u), end = MR32(w + 0x18u);
+    if (first < 1u || first > end || end > 22u || 1u + n > 22u || MR32(w + 0x1cu) != p1_car()) return 0;
+    or_saved.first = first; or_saved.end = end;
+    for (uint32_t i = 0; i < 22u; i++) or_saved.cars[i] = MR32(w + 0x1cu + 4u * i);
+    for (uint32_t i = 0; i < n; i++) MR32(w + 0x20u + 4u * i) = ai[i];
+    MR32(w + 0x14u) = 1u; MR32(w + 0x18u) = 1u + n;
+    return 1;
+}
+static void or_world_back(uint32_t w){
+    for (uint32_t i = 0; i < 22u; i++) MR32(w + 0x1cu + 4u * i) = or_saved.cars[i];
+    MR32(w + 0x14u) = or_saved.first; MR32(w + 0x18u) = or_saved.end;
+}
+/* player 2's car in the World's humans' range (IndexCars puts kind-1 cars first: player 1's, player 2's, a parked
+ * one of player 2's), so the World is a two-human game's for the game's outrun code */
+static int or_world_two(uint32_t w){
+    uint32_t car2 = coop_p2_car(), first = w ? MR32(w + 0x14u) : 0;
+    if (!coop_in() || !car2 || first < 2u || first > MR32(w + 0x18u) || MR32(w + 0x18u) > 22u || MR32(w + 0x1cu) != p1_car()) return 0;
+    for (uint32_t i = 1; i < first; i++) if (MR32(w + 0x1cu + 4u * i) == car2) return 1;
+    return 0;
+}
+/* the World's AI range as a one-human game's (or_world_two) */
+static int or_world_ai_one(uint32_t w){
+    uint32_t first = MR32(w + 0x14u), end = MR32(w + 0x18u), ai[22];
+    for (uint32_t i = first; i < end; i++) ai[i - first] = MR32(w + 0x1cu + 4u * i);
+    return or_world_one(w, ai, end - first);
+}
+/* The outrun's start (0x607180) with player 2 in, whoever's outrun it is (a tuner's from Engage, an online player's,
+ * roam_game.c du_start): the World a one-human game's for it, its AI range as the caller left it */
+void sub_00607180_orig(CPU *c);
+void sub_00607180(CPU *c){
+    uint32_t w = MR32(G_WORLD);
+    int one = or_world_two(w) && or_world_ai_one(w);
+    sub_00607180_orig(c);
+    if (one) or_world_back(w);
+}
 static int or_start(CPU *c){
     uint32_t w = MR32(G_WORLD), race = MR32(G_RACE), p1 = MR32(SPLIT_PLAYERS_INDEX), car2 = coop_p2_car();
     if (!w || !race || !p1 || !car2 || MR32(race + 0x24u) != 1u || MR32(G_RACETYPE)) return 0;
-    uint32_t first = MR32(w + 0x14u), end = MR32(w + 0x18u);
-    if (first >= 22u) return 0;
+    if (!or_world_one(w, &car2, 1)) return 0;                              /* the AI range: player 2's car alone */
     or_icons(c, 0);
-    uint32_t keep = MR32(w + 0x1cu + 4u * first);
-    MR32(w + 0x1cu + 4u * first) = car2; MR32(w + 0x18u) = first + 1u;      /* the AI range: player 2's car alone */
     MR32(p1 + PL_OPPONENT) = car2; MR32(G_OUTRUN_ST) = 2u;
     call(c, FN_OUTRUN, race, 0, 0, 0);
     call(c, FN_ENG_DONE, G_ENGAGE, 0, 0, 0);
-    MR32(w + 0x1cu + 4u * first) = keep; MR32(w + 0x18u) = end;
+    or_world_back(w);
     if (MR32(G_RACETYPE) != 7u || MR32(race + 0x24u) != 2u){
         fprintf(stderr, "[coop] f=%ld the outrun did not start (race type %u, %u racers)\n", autotest_frame(), MR32(G_RACETYPE), MR32(race + 0x24u));
         MR32(p1 + PL_OPPONENT) = 0;
@@ -938,6 +982,31 @@ static void coop_outrun_frame(CPU *c){
         break;
     }
 }
+/* The outrun's end (0x5F8490: race type 0, the career's result below, the racers past the humans' let go, then the
+ * AI range's cars new goals, 0x42EFB0) with player 2 in, as a one-human game's: the AI range the World's own; in one
+ * between the two players player 2's racer let go as an AI opponent's is, and its car without a racer again */
+void sub_005f8490_orig(CPU *c);
+void sub_005f8490(CPU *c){
+    uint32_t race = c->ecx, w = MR32(G_WORLD), car2 = coop_p2_car();
+    int ours = race == MR32(G_RACE) && or_world_two(w) && or_world_ai_one(w);
+    sub_005f8490_orig(c);
+    if (!ours) return;
+    or_world_back(w);
+    uint32_t r = MR32(car2 + 0x1cu);
+    if (r && r != race + 0x30u && MR32(r) == car2) MR32(car2 + 0x1cu) = 0;
+    if (MR32(race + 0x24u) != 1u) fprintf(stderr, "[coop] f=%ld the outrun's end: %u racers\n", autotest_frame(), MR32(race + 0x24u));
+}
+/* The race's "everyone home?" (0x5F85B0, from the world's update: then the race's end): every local Player's +0x50
+ * (its racer done) set.  Player 2 is no racer in a tuner's outrun or an online player's, which would never end: it
+ * counts only in one between the two players */
+void sub_005f85b0_orig(CPU *c);
+void sub_005f85b0(CPU *c){
+    if (!coop_in() || coop_outrun_on() || MR32(SPLIT_PLAYERS_COUNT) != 2u || MR32(SPLIT_PLAYERS_ORDER + 4u) != coop_pl){
+        sub_005f85b0_orig(c); return; }
+    MR32(SPLIT_PLAYERS_COUNT) = 1u;
+    sub_005f85b0_orig(c);
+    MR32(SPLIT_PLAYERS_COUNT) = 2u;
+}
 /* the career's outrun result: not for one between player 1 and player 2 */
 void sub_00541320_orig(CPU *c);
 void sub_00541320(CPU *c){
@@ -947,26 +1016,21 @@ void sub_00541320(CPU *c){
     }
     sub_00541320_orig(c);
 }
-/* Player 0x600590 (the HUD step of Player::Update): player 2's HUD is free roam's own, made for a player who is no
- * racer: in an outrun with player 1 (its car one of the race's two racers) its race parts read what a racer's HUD has
- * and player 2's has not (a trap in 0x4C68D0).  It stands still for the outrun's few seconds. */
-void sub_00600590_orig(CPU *c);
-void sub_00600590(CPU *c){
-    if (coop_pl && c->ecx == coop_pl && coop_outrun_on()){ POP32(c->eip); return; }
-    sub_00600590_orig(c);
-}
 
 /* ---- Race together: player 2 in player 1's career race ---------------------------------------------------------------
  * The race card's start (0x499B50, the career's StartRace) asks first while player 2 is in: Together or Alone (the
- * world's dialog over the card).  Together: the race has two humans, as the console's two-player races: the career
- * race's setup (0x53FD30, run before the card's start) forces its type's humans byte ([0x83AAC4 + type * 0x14]) to 1
- * and copies it to [0x89E7C0]; Together runs the setup again with the byte 2 (it only resets and refills the race's
- * globals from the card's settings); human 1's
- * input port ([0x83A9DC], the front end's) 1; the race's cars (0x525ED0) give every human the career's car looked up in
- * that user's table (user 1's is an empty locked slot): human 1's is player 2's garage car in player 1's table
- * (user 0's; else player 1's car again).  The game makes both Players, view 2 and its 2P HUDs (2PHudTop/Bot); the
- * career counts player 1's place only (its win test reads car index 0).  Back in free roam the local humans are one
- * again (the free-roam setup 0x540780 never writes them). */
+ * world's dialog over the card).  Alone: the race as in solo, player 2 waits (back beside player 1 after it).
+ * Together: two humans, as the console's two-player races.  The race's setup (0x53FD30, run before the card's start)
+ * forces its type's humans byte ([0x83AAC4 + type * 0x14]) to 1 and copies it to the local humans [0x89E7C0];
+ * Together runs it again with the byte 2 (it only resets and refills the race's globals from the card's settings;
+ * its cars, 0x525ED0, look human 1's car up in player 1's table, user 1's has an empty locked slot).  The career
+ * race's build at the track load (0x5322E0) then makes player 1's racer from the career and the AI; player 2's racer
+ * (its garage car, else player 1's car again; human 1, port 1) goes in right after player 1's, and the last AI
+ * stays out when that makes more than the coordinator's 6 racers (URL races: 5 AI).  The game makes both
+ * Players, view 2 and the 2P HUDs (2PHudTop/Bot) and ends the race once both are home; the career counts player 1's
+ * place only (its win test reads car index 0).  Back in free roam the local humans are one again (the free-roam
+ * setup 0x540780 never writes them). */
+#define G_AI_N        0x0089e7c4u   /* the race's AI racers */
 #define G_RTYPE       0x0083aab4u   /* the race's type (an index of the types' 0x14-byte records at 0x83AAC4) */
 #define G_TYPE_HUMANS 0x0083aac4u
 #define G_FE_PORT1    0x0083a9dcu
@@ -1049,6 +1113,14 @@ int coop_hook(CPU *c, uint32_t ip){
         return 1;
     case HOOK_SITE(0x005324f1):                 /* 0x5322E0, the career race's racers: player 1's just added */
         if (coop_racing_together()) coop_rt_racer(c);
+        return 1;
+    case HOOK_SITE(0x005324f7):                 /* 0x5322E0: the AI added (0x5260B0) after both players */
+        if (coop_racing_together() && MR32(G_RACEPARAMS + 0x74u) > 6u && MR32(G_AI_N) >= MR32(G_RACEPARAMS + 0x74u) - 6u){
+            /* the race coordinator holds 6 racers (+0x30, 0x1F0 each, to +0xBD0): the last AI stays out */
+            uint32_t drop = MR32(G_RACEPARAMS + 0x74u) - 6u;
+            MR32(G_RACEPARAMS + 0x74u) = 6u; MR32(G_AI_N) -= drop;
+            fprintf(stderr, "[coop] f=%ld the career race: %u AI out for player 2 (6 racers at most)\n", autotest_frame(), drop);
+        }
         return 1;
     case HOOK_SITE(0x00525fb9):                 /* 0x525ED0: human esi's car handle in edi, its user's table in edx */
         if (coop_racing_together() && c->esi == 1u){

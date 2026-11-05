@@ -1,0 +1,29 @@
+# Co-op free roam, Race together in a given career race (COOP_RT_GO: careergo's argument, e.g. S2_URL_1 in seed
+# s2_r7, a URL race whose 5 AI make one too many with player 2; S2_SPRINT_2, S2_STREET_4, S2_H_DRAG_3 in s2_r7;
+# S3_DRIFT_7 in s3_r6): Together, both drive, both home, back in free roam with player 2.
+0     roam fe2roam 14000
++0    roam smsauto on
++120  roam coop join kb
++0    waitmem 0xd00030 2 1500
++60   careergo ${COOP_RT_GO}
++120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitfe IG_GenericDialog_MED.fng 300
++60   tap LEFT
++30   tap RETURN
++900  roam coop state
++0    fnglist
++0    down W
++120  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    up W
++600  racewin
++120  roam coop finish
++0    bot on
++0    waitroam 40000
++0    bot off
++0    waitmem 0xd00030 2 3000
++60   expect i:0x89e7c0 == 1
++0    expect i:0xd00030 == 2
++0    status coop_together_kind_complete
++10   quit
