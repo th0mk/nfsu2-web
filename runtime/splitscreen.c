@@ -123,16 +123,16 @@ static const uint8_t SPLIT_KB_KEYS[3][6][2] = {
     { {0x36, 0}, {0x9d, 0x35}, {0x34, 0}, {0x33, 0}, {0x26, 0}, {0x27, 0} },  /* Right Shift, Right Ctrl or /, . , L ; */
     { {0x2a, 0}, {0x39, 0}, {0x12, 0}, {0x10, 0}, {0x2e, 0}, {0x30, 0} },     /* Left Shift, Space, E, Q, C, B */
 };
-static int split_pause_port;            /* (below: the pause menu's owner while it is up) */
 static void split_kb_read(int side, int both, PadState *pad){
     uint8_t keys[256]; kbd_state(keys, sizeof keys);
     memset(pad, 0, sizeof *pad);
     pad->connected = 1; pad->family = PADF_XBOX;
     strcpy(pad->name, "Keyboard");
-    /* driving: in the world with no menu up (a split race's pause menu, co-op's menus and dialogs); the arrows as a
-     * stick in a menu would be a second press of each (the pad's menu keystrokes, dinput_pad.c) */
+    /* driving: in the world (a split race: as the two-keyboard layout has it, its pause menu too); co-op: with no menu
+     * or dialog up, where the arrows as a stick would be a second press of each (the pad's menu keystrokes,
+     * dinput_pad.c) */
     int split = MR32(0x850078u) == 4;
-    int racing = MR32(0x8654a4u) == 6 && (split ? split_pause_port < 0 : coop_driving());
+    int racing = MR32(0x8654a4u) == 6 && (split || coop_driving());
     /* START: Enter (only Enter's player's while two share the keyboard), and Space's player's Space outside a
      * split race (in one it is the handbrake; co-op's player 2 pauses with the keyboard's Esc) */
     if ((!both || side == SPLIT_KB_ENTER) && (keys[0x1c] || keys[0x9c])) pad->buttons |= 1u << PAD_START;
@@ -1414,8 +1414,9 @@ void coop_note_pools(int big);
 void sub_005e4e70(CPU *c){
     uint32_t streamer = c->ecx;
     int n = split_requested();
-    /* co-op free roam (coop.c): two players' areas of the city, as two players' split race (the 1.5x) */
-    int coop = MR32(0x850078u) == 1 && MR32(0x89e7b0u) == 0 && coop_wanted();
+    /* co-op free roam (coop.c): two players' areas of the city, as two players' split race (the 1.5x); a career race
+     * the two race together too (two views; the game's own two-human pool is smaller than one human's) */
+    int coop = MR32(0x850078u) == 1 && ((MR32(0x89e7b0u) == 0 && coop_wanted()) || coop_racing_together());
     if (coop) n = 2;
     coop_note_pools(coop);
     if (n && (MR32(0x89e7c0u) == 2 || coop)){

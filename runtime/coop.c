@@ -154,7 +154,12 @@ uint32_t garage_find(uint32_t db, uint32_t h);
 int roam_game_coop_skin(CPU *c, uint32_t n);
 int64_t roam_plat_now_us(void);
 static uint32_t coop_car_rec;       /* the garage car player 2 drives (0: a copy of player 1's ride) */
-static uint32_t coop_ride_h, coop_ride_rec, coop_unload_h;   /* its ride's loader handle, of that record; one to let go */
+static uint32_t coop_ride_h, coop_ride_rec;   /* its ride's loader handle, of that record */
+/* rides to unload once a world is up (the loader's handles); rides of parked cars still standing in this world (a
+ * rejoin in another car leaves the parked one there, deactivated: its model stays until the world ends) */
+#define COOP_RIDES_N 8
+static uint32_t coop_unload_q[2 * COOP_RIDES_N], coop_kept_h[COOP_RIDES_N];
+static int coop_unload_n, coop_kept_n;
 static int coop_ride_ready;
 static int64_t coop_load_t0;
 
@@ -202,10 +207,20 @@ static uint32_t coop_loader_entry(uint32_t h){
     for (int k = 0; e && e != head && k < 640; k++, e = MR32(e)) if (MR32(e + 0x123cu) == h) return e;
     return 0;
 }
-static void coop_ride_let_go(void){
-    if (coop_ride_h){ coop_unload_h = coop_ride_h; coop_ride_h = 0; }
+static void coop_unload_later(uint32_t h){
+    if (!h) return;
+    if (coop_unload_n < 2 * COOP_RIDES_N) coop_unload_q[coop_unload_n++] = h;   /* (else kept loaded: never pulled away) */
+}
+/* `kept`: a parked car in this world still drives on it (unloaded at the world's end) */
+static void coop_ride_let_go_(int kept){
+    if (coop_ride_h){
+        if (kept && coop_kept_n < COOP_RIDES_N) coop_kept_h[coop_kept_n++] = coop_ride_h;
+        else if (!kept) coop_unload_later(coop_ride_h);
+        coop_ride_h = 0;
+    }
     coop_ride_ready = 0; coop_ride_rec = 0;
 }
+static void coop_ride_let_go(void){ coop_ride_let_go_(0); }
 /* a ride (0x900) from a garage car with player 2's paint slot */
 static int coop_build_ride(CPU *c, uint32_t rec, uint32_t ride){
     if (!roam_game_coop_skin(c, COOP_SKIN)){ fprintf(stderr, "[coop] no paint slot for player 2's car\n"); return 0; }
@@ -218,11 +233,22 @@ static int coop_build_ride(CPU *c, uint32_t rec, uint32_t ride){
     uint32_t sk = COOP_SKIN; call(c, FN_SKIN, ride, 0, 1, &sk);
     return 1;
 }
+/* a record of player 1's garage now (not sold, this profile's) */
+static int coop_rec_ok(uint32_t rec){
+    uint32_t g[10]; int n = coop_garage(g);
+    for (int i = 0; i < n; i++) if (g[i] == rec) return 1;
+    return 0;
+}
+static uint32_t coop_default_car(void);
 /* player 2's ride for its garage car, loaded: 1 ready, 0 not yet, -1 cannot (then a copy of player 1's) */
 static int coop_ride(CPU *c){
+    if (coop_car_rec && !coop_rec_ok(coop_car_rec)){
+        coop_car_rec = coop_default_car();
+        fprintf(stderr, "[coop] f=%ld player 2's car is no longer in the garage: player 1's own\n", autotest_frame());
+    }
     if (!coop_car_rec) return -1;
     if (coop_ride_ready && coop_ride_rec == coop_car_rec) return 1;
-    if (coop_ride_h && coop_ride_rec != coop_car_rec) coop_ride_let_go();
+    if (coop_ride_h && coop_ride_rec != coop_car_rec) coop_ride_let_go_(coop_parked && coop_parked_rec == coop_ride_rec);
     if (!coop_ride_h){
         uint32_t ride = COOP_RIDE, rec = coop_car_rec;
         if (!coop_build_ride(c, rec, ride)) return -1;
@@ -416,17 +442,35 @@ static int coop_reload_now(CPU *c){
     return 1;
 }
 
+int mprace_phase(void);
+static int coop_rt;
+/* the front end's main menu up, no lobby race's trip under way (mprace.h: MPR_OUT .. MPR_BACK) */
+static int coop_main_menu(void){
+    uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0, top = mg ? MR32(mg + 0xe4u) : 0;
+    const char *nm = top ? gstr_at(MR32(top + 0xcu)) : 0;
+    int ph = mprace_phase();
+    return nm && !strcasecmp(nm, "MC_Main.fng") && !(ph >= 1 && ph <= 4);
+}
 /* every frame at the main-loop hook (roam.c, 0x581475) */
 void coop_frame(CPU *c){
     /* out of the world (the front end, a loading screen): the World ends with player 2's Player and car in it; a
      * Player parked out of its lists is freed once the next world is up (the old car pointed at it until its end) */
     static int away;
+    void coop_outrun_world_end(void);
     if (MR32(G_FLOW) != 6u){
         if (coop_pl) coop_forget("out of the world");
+        if (!away) coop_outrun_world_end();       /* an outrun between them ends with the world */
         away = 1;
+        /* the main menu (Quit, or another profile next): co-op ends, unless a lobby race's trip goes through it */
+        if (coop_want && coop_main_menu()){
+            coop_want = 0; coop_car_rec = 0; coop_rt = 0;
+            fprintf(stderr, "[coop] f=%ld the main menu: co-op ends\n", autotest_frame());
+        }
     } else if (away){
         away = 0;
         coop_ride_let_go();                       /* the world's end: its ride again in the next one */
+        for (int k = 0; k < coop_kept_n; k++) coop_unload_later(coop_kept_h[k]);   /* (the parked cars went with it) */
+        coop_kept_n = 0;
         if (coop_parked_pl){ uint32_t p = coop_parked_pl; call(c, FN_FREE, 0, 0, 1, &p); }
         coop_parked = coop_parked_pl = coop_parked_world = 0;
     }
@@ -447,7 +491,7 @@ void coop_frame(CPU *c){
     }
     if (!coop_want && coop_pl) coop_drop(c);
     if (!coop_want && !coop_pl && coop_ride_h && !coop_parked) coop_ride_let_go();
-    if (coop_unload_h && MR32(G_FLOW) == 6u){ uint32_t h = coop_unload_h; coop_unload_h = 0; call(c, FN_UNLOAD, G_CARLOADER, 0, 1, &h); }
+    if (coop_unload_n && MR32(G_FLOW) == 6u){ uint32_t h = coop_unload_q[--coop_unload_n]; call(c, FN_UNLOAD, G_CARLOADER, 0, 1, &h); }
     void coop_ask_frame_(CPU *c); coop_ask_frame_(c);
 #ifdef __wasm__
     /* the page lets player 2's controller drive nothing but its seat */
@@ -840,6 +884,11 @@ static void or_icons(CPU *c, int on){
     if (h2 && want2 != OR.icon2){ call(c, FN_HUD_OUTRUN, h2, 0, 1, &want2); OR.icon2 = want2; }
 }
 int coop_outrun_on(void){ return OR.st == OR_RACE || OR.st == OR_OVER; }
+static int or_starting;              /* or_start's call of the game's outrun start (sub_00532e30) */
+void coop_outrun_world_end(void){
+    if (OR.st != OR_IDLE) fprintf(stderr, "[coop] f=%ld the world ends: the outrun between the two players with it\n", autotest_frame());
+    OR.st = OR_IDLE; OR.near_since = 0; OR.icon1 = OR.icon2 = 0;
+}
 /* the tuners' step puts player 1's HUD's outrun icon out each frame a tuner is not near: on again while offered */
 void coop_outrun_icon(CPU *c){
     if (OR.st != OR_OFFER) return;
@@ -896,7 +945,9 @@ static int or_start(CPU *c){
     if (!or_world_one(w, &car2, 1)) return 0;                              /* the AI range: player 2's car alone */
     or_icons(c, 0);
     MR32(p1 + PL_OPPONENT) = car2; MR32(G_OUTRUN_ST) = 2u;
+    or_starting = 1;
     call(c, FN_OUTRUN, race, 0, 0, 0);
+    or_starting = 0;
     call(c, FN_ENG_DONE, G_ENGAGE, 0, 0, 0);
     or_world_back(w);
     if (MR32(G_RACETYPE) != 7u || MR32(race + 0x24u) != 2u){
@@ -958,7 +1009,9 @@ static void coop_outrun_frame(CPU *c){
     if (!COOP_OUTRUNS && OR.st == OR_IDLE) return;
     switch (OR.st){
     case OR_IDLE: case OR_OFFER: {
-        int free = MR32(race + 0x24u) == 1u && !MR32(G_RACETYPE) && MR32(G_OUTRUN_ST) != 2u && coop_driving();
+        uint32_t p1 = MR32(SPLIT_PLAYERS_INDEX);
+        int free = MR32(race + 0x24u) == 1u && !MR32(G_RACETYPE) && MR32(G_OUTRUN_ST) != 2u && coop_driving() &&
+                   p1 && !MR32(p1 + 0x9acu);   /* (at a race marker Engage is the marker's: 0x602D99, Player +0x9AC) */
         if (!free || d > (OR.st == OR_OFFER ? OR_KEEP_M : OR_NEAR_M)){ OR.near_since = 0; if (OR.st == OR_OFFER){ or_icons(c, 0); OR.st = OR_IDLE; } break; }
         if (!OR.near_since) OR.near_since = now;
         if (OR.st == OR_IDLE && now - OR.near_since >= OR_NEAR_US){ OR.st = OR_OFFER; fprintf(stderr, "[coop] f=%ld outrun offered\n", autotest_frame()); }
@@ -1013,6 +1066,14 @@ void sub_005f85b0(CPU *c){
     sub_005f85b0_orig(c);
     MR32(SPLIT_PLAYERS_COUNT) = 2u;
 }
+/* The career's outrun start (0x532E30, thiscall Career, from 0x607180 in the career: its kind-4 triggers queued at
+ * Career +0x5D20, which the career saves, and 0x511000): not for one between player 1 and player 2, as its end
+ * (0x541320 below) is not either */
+void sub_00532e30_orig(CPU *c);
+void sub_00532e30(CPU *c){
+    if (or_starting){ POP32(c->eip); return; }
+    sub_00532e30_orig(c);
+}
 /* the career's outrun result: not for one between player 1 and player 2 */
 void sub_00541320_orig(CPU *c);
 void sub_00541320(CPU *c){
@@ -1043,7 +1104,7 @@ void sub_00541320(CPU *c){
 #define MSG_RT_TOGETHER 0xc0c0a011u
 #define MSG_RT_ALONE    0xc0c0a012u
 #define MSG_RT_BACK     0xc0c0a013u
-static int coop_rt, coop_rt_go, coop_rt_ask, coop_rt_port_kept;
+static int coop_rt_go, coop_rt_ask, coop_rt_port_kept;
 static uint32_t coop_rt_card, coop_rt_port;
 int coop_racing_together(void){ return MR32(G_GAMEMODE) == 1u && MR32(G_HUMANS) == 2u && coop_want && coop_rt; }
 /* the race's type gets two humans (the race's load copies the byte to [0x89E7C0]), human 1 port 1 */
@@ -1075,12 +1136,14 @@ static void coop_rt_frame(CPU *c){
     if (!coop_rt_ask) return;
     uint32_t d = coop_dialog(), v = d ? MR32(d + 0x50u) : 0;
     if (v != MSG_RT_TOGETHER && v != MSG_RT_ALONE && v != MSG_RT_BACK){
-        if (!d && !MR32(G_DLG_ID)) coop_rt_ask = 0;           /* gone another way */
+        if (!d && !MR32(G_DLG_ID)){ coop_rt_ask = 0; MR8(coop_rt_card + 0x51u) = 0; }   /* gone another way */
         return;
     }
     if (MR32(G_DLG_ID)) return;                                /* the dialog still going: start once it went */
     coop_rt_ask = 0;
-    if (v == MSG_RT_BACK){ fprintf(stderr, "[coop] f=%ld the race card: no answer\n", autotest_frame()); return; }
+    /* (the card marks itself started, +0x51, once its start returns (0x499C9D) and then takes no Accept or Back: the
+     * card's again for another try or for Back) */
+    if (v == MSG_RT_BACK){ MR8(coop_rt_card + 0x51u) = 0; fprintf(stderr, "[coop] f=%ld the race card: no answer\n", autotest_frame()); return; }
     coop_rt = v == MSG_RT_TOGETHER;
     fprintf(stderr, "[coop] f=%ld the race card: %s\n", autotest_frame(), coop_rt ? "together" : "alone");
     if (coop_rt) call(c, 0x0053fd30u, 0, 0, 0, 0);   /* the race's setup again (it ran before the card's start), two
@@ -1101,7 +1164,7 @@ void sub_00540780(CPU *c){
 static void coop_rt_racer(CPU *c){
     uint32_t n0 = MR32(G_RACEPARAMS + 0x74u), ride = COOP_RIDE;
     if (n0 != 1u){ fprintf(stderr, "[coop] the career race: player 1's racer not alone (%u)\n", n0); return; }
-    if (!coop_car_rec || !coop_build_ride(c, coop_car_rec, ride)) ride = G_RECORDS + 0x10u;   /* player 1's record's */
+    if (!coop_car_rec || !coop_rec_ok(coop_car_rec) || !coop_build_ride(c, coop_car_rec, ride)) ride = G_RECORDS + 0x10u;   /* player 1's record's */
     coop_racer_name();
     memset(g_mem + COOP_REC, 0, REC_SZ);
     uint32_t ri[6] = { 1, 1, ride, COOP_NAME, 0xfffffffeu, 0 };

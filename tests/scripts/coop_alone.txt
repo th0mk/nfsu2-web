@@ -1,12 +1,18 @@
 # Co-op free roam, a career race alone: player 2 in (the keyboard's left half), player 1 on the next career race's
-# marker, Engage, the card's start asks Together or Alone: Alone; the race is player 1's as in solo (one human, one
-# Player, player 1's HUD); player 1 wins; back in free roam player 2 is back beside player 1.
+# marker, Engage, the card's start asks Together or Alone: Back first (the card takes Accept again), then Alone; the
+# race is player 1's as in solo (one human, one Player, player 1's HUD); player 1 wins; back in free roam player 2 is
+# back beside player 1.
 0     roam fe2roam 14000
 +0    roam smsauto on
 +120  roam coop join kb
 +0    waitmem 0xd00030 2 1500
 +60   careergo next
 +120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitfe IG_GenericDialog_MED.fng 300
++60   tap ESCAPE                      # Back: no answer, the card again (it took no Accept or Back after its start)
++0    waitfe UI_EngageRaceDialog.fng 300
 +120  tap LEFT
 +30   tap RETURN
 +0    waitfe IG_GenericDialog_MED.fng 300
