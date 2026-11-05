@@ -749,7 +749,7 @@
   "About this project": "프로젝트 소개",
   "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "약 20년 전, 저는 형제와 함께 이 게임을 즐겼습니다. 그래서 다시 함께 플레이할 수 있도록 브라우저로 이식해 보았습니다. 놀라울 만큼 잘 작동했고, 그러다 일이 좀 커졌네요. 이렇게 많은 분들이 플레이하는 걸 보니 정말 기쁩니다.",
   "To help with hosting and development costs, you can <0>buy me a coffee</0>. No perks, apart from a Discord role.": "호스팅과 개발 비용을 돕고 싶으시다면 <0>커피 한 잔 사 주세요</0>. Discord 역할 외에 다른 혜택은 없습니다.",
-  "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "권리자: <0>legal@nfsu2.xyz</0>. 지원 문의 이메일에는 답변하지 않으니 <1>저희 Discord</1>에서 물어봐 주세요.",
+  "Help, bugs and questions: <0>our Discord</0>. Rights holders: legal (at) nfsu2.xyz.": "도움, 버그, 질문: <0>저희 Discord</0>. 권리자: legal (at) nfsu2.xyz.",
   "Credits": "크레딧",
   "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "소스 코드는 <0>GitHub</0>에 있습니다. Talha Müderrisoğlu의 <1>NFSU2Recomp</1> 기반이며, 이는 <2>N64: Recompiled</2>와 <3>XenonRecomp</3>를 따른 NFSU2의 원조 x86 → C 정적 리컴파일러입니다. 이 프로젝트는 <4>2026년 10월 16일의 MIT 라이선스 버전 NFSU2Recomp</4>에서 포크했으며, 그 버전의 코드만 사용합니다.",
   "Translations": "번역",

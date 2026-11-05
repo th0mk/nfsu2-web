@@ -749,7 +749,7 @@
   "About this project": "關於這個專案",
   "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "大約 20 年前，我和兄弟一起玩過這款遊戲。因為這樣，我試著把它移植到瀏覽器上，讓我們能再一起玩。結果出奇地順利，之後事情就有點一發不可收拾了。看到這麼多人在玩，真的很開心。",
   "To help with hosting and development costs, you can <0>buy me a coffee</0>. No perks, apart from a Discord role.": "若想協助負擔主機與開發費用，可以<0>請我喝杯咖啡</0>。除了 Discord 身分組之外，沒有其他福利。",
-  "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "權利人：<0>legal@nfsu2.xyz</0>。客服相關的電子郵件不會回覆；請到<1>我們的 Discord</1> 詢問。",
+  "Help, bugs and questions: <0>our Discord</0>. Rights holders: legal (at) nfsu2.xyz.": "求助、錯誤與問題：<0>我們的 Discord</0>。權利人：legal (at) nfsu2.xyz。",
   "Credits": "致謝",
   "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "原始碼在 <0>GitHub</0> 上。以 Talha Müderrisoğlu 的 <1>NFSU2Recomp</1> 為基礎，它是 NFSU2 最初的 x86 → C 靜態重編譯器，沿用 <2>N64: Recompiled</2> 與 <3>XenonRecomp</3> 的方法。本專案分支自 <4>NFSU2Recomp 於 2026 年 10 月 16 日的 MIT 授權版本</4>，只使用該版本的程式碼。",
   "Translations": "翻譯",
