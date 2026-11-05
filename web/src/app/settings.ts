@@ -167,6 +167,9 @@ export const KEYS: readonly KeyDef[] = [
   // reads in their place (pfdata/original: io-worker.ts dataFile; the page fetches ahead only the ones picked:
   // datacache.ts).  Not in bundle.m's table either
   { key: 'songs', env: 'NFSU2_SONGS', kind: 'enum', vals: 'uncensored|original', scope: 'web' },
+  // the songs in drag and drift races too (runtime/drift.c race_music; off: none there, as in the original).  Not in
+  // bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_RACE_MUSIC all the same
+  { key: 'race_music', env: 'NFSU2_RACE_MUSIC', kind: 'bool', scope: 'web' },
   // the player's horn, which the others hear too (runtime/horn.c).  Not in bundle.m's table either: NFSU2_HORN there
   { key: 'horn', env: 'NFSU2_HORN', kind: 'enum', vals: HORNS.join('|'), scope: 'web' },
   // the menus', HUD's and maps' textures: texture packs in place of the game's (runtime/web/texrep_web.c; the page
@@ -264,6 +267,12 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # song while you play.
 # [NFSU2_SONGS]
 #songs = uncensored
+
+# Music in drag and drift races: on = the EA Trax songs (or the Radio's
+# tracks) play there too, as in the other races, at the game's music volume;
+# off = as in the original game, which has none there, so you hear the
+# engine for shifting.  [NFSU2_RACE_MUSIC]
+#race_music = off
 
 # Sound output.  [NOSOUND, inverted]
 #sound = on

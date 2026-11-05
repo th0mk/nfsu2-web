@@ -471,8 +471,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
-- A "bug" that is how the original game behaves (drift races have no music; a part's info screen; hidden races): say so
-  when you are sure, or when the guide or the code shows it; otherwise none.
+- A "bug" that is how the original game behaves (drag and drift races have no music, unless Settings, Game, Music in
+  drag and drift races is on; a part's info screen; hidden races): say so when you are sure, or when the guide or the
+  code shows it; otherwise none.
 
 ## Limits players hit (true as of these notes; check the guide and the code)
 

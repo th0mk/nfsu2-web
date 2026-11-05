@@ -102,11 +102,13 @@
  * The music: a drift or drag event has none.  The music manager's tick
  * (0x482180) plays the EA Trax songs in the world only when the race is no
  * drift (0x401910) and no drag event (0x4018F0), and switches to its other
- * player otherwise; the in-game mix (0x471970) turns the music's channel all
- * the way down for both (its attenuation, [this +0x3C] and [0x7ED344], 0x7FFF).
- * Both read the switch, so drift mode silenced the music, and the second X
- * started a new song.  While the switch is ours neither sees it (drift_hook):
- * free roam's song plays on.
+ * player otherwise, which streams a track of its own from the race's start
+ * (MusicSFX.mus, 16 KB a second where a song reads 16 KB every 0.35 s); the
+ * in-game mix (0x471970) turns the music's channel all the way down for both
+ * (its attenuation, [this +0x3C] and [0x7ED344], 0x7FFF; a sibling mix,
+ * 0x45C210, takes its music level from [0x7ED344]).  Both read the switch, so
+ * drift mode silenced the music, and the second X started a new song.  While
+ * the switch is ours neither sees it (drift_hook): free roam's song plays on.
  *
  * Only in free roam itself: the world, free roam's race (kind 0, its one
  * racer, racing: 6 is paused), no career race, not Online or LAN.  A menu,
@@ -121,6 +123,19 @@
  * while [0x83A9C0] and [0x83A9C4] are set, 0x55DBD0; input_web.c), X is a
  * letter and nothing else: the page said "Drift mode only works in free
  * roam" at every x typed in a lobby's chat (a player's report).
+ *
+ * Music in the drag and drift races (players asked for it; race_music on the
+ * page, NFSU2_RACE_MUSIC, off by default as the original, whose silence leaves
+ * the engine to be heard for the shifts): with it on, the music manager's
+ * tick and the in-game mix see neither the race's drag nor its drift byte
+ * (drift_hook), so the race plays its EA Trax songs (and the Radio its tracks
+ * in their place) from the start, as a circuit race does, in the one music
+ * stream the other player's track had, at the game's music volume (its slider
+ * at 0 stops them, as in any race).  The bytes are the race's, whatever set
+ * it up (a career, Quick Race, Online, LAN), and each game's music is its
+ * own.  Measured (tests/scripts/race_music_drag.txt and _drift.txt, Quick
+ * Race, the other sliders at 0): -9 dBFS peaks in both races; -140 (silence)
+ * without it.
  *
  * The page (web/src/app/drift.ts) reads the status table (status_web.c):
  *   drift        bits: 1 drift mode chosen, 2 on now (the panel shows),
@@ -138,6 +153,7 @@
 #include "kbd.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
@@ -155,6 +171,7 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define G_RACE         0x00890118u   /* the race coordinator: +0 state (4 racing, 6 paused), +0x24 racers, +0xBD0 the racers */
 #define G_RACEKIND     0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define G_DRIFTRACE    0x0089e7d9u   /* byte: a drift event */
+#define G_DRAGRACE     0x0089e7d8u   /* byte: a drag event */
 #define G_FORCEDRIFT   0x00890104u   /* the drift-event switch */
 #define G_TXT_ON       0x0083a9c0u   /* byte: the game's text entry (0x83A7B0) takes the typing ... */
 #define G_TXT_REC      0x0083a9c4u   /* ... for this record (0: none) */
@@ -554,13 +571,39 @@ void drift_frame(CPU *c){
     publish();
 }
 
-/* The music's two tests of the switch, while it is ours: no drift event (free roam's songs, at their volume). */
+/* Music in drag and drift events (NFSU2_RACE_MUSIC, the page's race_music; off by default): the page writes 1 or 0,
+ * the Mac app passes the line's own on/off */
+static int race_music(void){
+    static int on = -1;
+    if (on < 0){
+        const char *e = getenv("NFSU2_RACE_MUSIC");
+        on = e && *e && *e != '0' && strcasecmp(e, "off") && strcasecmp(e, "no") && strcasecmp(e, "false");
+        if (on) fprintf(stderr, "[drift] music in drag and drift races: on (NFSU2_RACE_MUSIC)\n");
+    }
+    return on;
+}
+/* The music's tests of a drift or drag event: none while the switch is ours (free roam's songs, at their volume), and
+ * none of the race's own with race_music on (a drag or drift event's songs as a circuit race has them). */
 int drift_hook(CPU *c, uint32_t ip){
+    static int told;                             /* the event last told: 0 none, 1 drag, 2 drift */
     switch (ip){
     case HOOK_SITE(0x00482279):                  /* the music manager: test al, al (0x401910, a drift event?) */
-        if (D.on && !MR8(G_DRIFTRACE)) c->eax &= ~0xffu;
+        if ((D.on && !MR8(G_DRIFTRACE)) || race_music()) c->eax &= ~0xffu;
         return 1;
-    case HOOK_SITE(0x00471b95):                  /* the in-game mix: test eax, eax (eax = [0x890104]) */
+    case HOOK_SITE(0x00482287):                  /* test al, al (0x4018F0, a drag event?) */
+        if (race_music()){
+            int kind = MR8(G_DRAGRACE) ? 1 : MR8(G_DRIFTRACE) ? 2 : 0;
+            if (kind != told && kind)
+                fprintf(stderr, "[drift] f=%ld a %s race: its songs play (race_music)\n", autotest_frame(), kind == 1 ? "drag" : "drift");
+            told = kind;
+            c->eax &= ~0xffu;
+        }
+        return 1;
+    case HOOK_SITE(0x00471b7a):                  /* the in-game mix: test al, al (al = [0x89E7D8], a drag event) */
+    case HOOK_SITE(0x00471b8c):                  /* test al, al (al = [0x89E7D9], a drift event) */
+        if (race_music()) c->eax &= ~0xffu;
+        return 1;
+    case HOOK_SITE(0x00471b95):                  /* test eax, eax (eax = [0x890104]) */
         if (D.on && !MR8(G_DRIFTRACE)) c->eax = 0;
         return 1;
     }

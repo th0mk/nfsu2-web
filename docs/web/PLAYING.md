@@ -152,8 +152,9 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   drift races' (C still goes through all of them), and drifts score as there: the drift races' panel (Best, the
   multiplier with the points its next level needs, Total) shows under Bank, and DRIFT counts a drift's points up
   while you drift, as in the races: lime when it banks, red when a wall loses it. Free roam's
-  music plays on (the drift races have none). Just for fun: the points never go into the bank or the career. X again
-  turns it off and gives your camera back. It is off in races and outruns and comes back in free roam after them.
+  music plays on (the drift races have none, unless Music in drag and drift races is on in Settings). Just for fun:
+  the points never go into the bank or the career. X again turns it off and gives your camera back. It is off in
+  races and outruns and comes back in free roam after them.
   With it on, challenging another player is a drift battle (see section 6, Drift battles).
 - **Photo mode (F12, or Photo Mode in the pause menu):** while you drive (a race, free roam, an outrun) the world
   stands still, the HUD goes and the camera comes loose from the car. Orbit (the first) turns around a point at your
@@ -276,7 +277,7 @@ that room.
 |---|---|
 | Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
-| Game, Game | language, movies, subtitles, songs (uncensored or original), autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
+| Game, Game | language, movies, subtitles, songs (uncensored or original), music in drag and drift races, autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
@@ -303,6 +304,9 @@ that room.
 - **Songs:** the EA Trax songs. Uncensored (the default) plays them unedited, some in longer versions than the
   game's, as a soundtrack mod has them. Original plays the versions the game
   shipped with, where the server has them. F7 skips to the next song while you play.
+- **Music in drag and drift races:** off by default: as in the original game, those races have no music, so you hear
+  the engine for the shifts. On, the EA Trax songs (or the Radio's tracks) play there too, as in the other races, at
+  the game's music volume, in every drag and drift race: the career's, Quick Race, LAN and Online.
 - **Show hidden races:** off by default. The career has 33 hidden races (one in the prologue, then 4, 8, 10 and 10
   in the later stages) that are not on the map or the radar: in the original game one shows only when you drive near it,
   and once all the others are won the map looks empty. On, as MaxHwoy's
