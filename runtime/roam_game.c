@@ -454,6 +454,7 @@ typedef struct {
     int      ghost;                           /* solid cars: no collision body until clear of the player's car */
     int      duel;                            /* the outrun's opponent, solid for the outrun (du_solid; body_update) */
     int      soft;                            /* passable now (SOFT_*): no collision body, whatever the ghost rule */
+    int      oneway;                          /* its player's game does not show ours (PeerView.oneway) */
     int64_t  idle_since;                      /* the friend's car stands since (0: it moves) */
     float    drawn[3];                        /* where the car was drawn last frame (+0x60) */
     float    drawn_v[3];                      /* ...and its velocity there (+0x70) */
@@ -975,9 +976,13 @@ static void ghost_all(void){ for (int k = 0; k < NSLOT; k++) g_sl[k].ghost = 1; 
  * is passable whoever sees it: its own game says so, and every other game
  * sees its type, so a game that does not say so cannot keep it solid.  A
  * player in a drift battle (du_battling) lets every car through theirs and
- * drives through every other, the other player's too: nobody wrecks a drift. */
+ * drives through every other, the other player's too: nobody wrecks a drift.
+ * A car whose player's game does not show ours (the server's hub links us one
+ * way only: they show fewer players than we do, roam_core rc_peer_way) is
+ * passable too: their game never sees a hit, so a solid car of theirs would
+ * be a wall that nothing moves (SOFT_ONEWAY). */
 enum { SOFT_PAUSED = 1, SOFT_IDLE = 2, SOFT_DOOR = 4, SOFT_SPAWN = 8, SOFT_EVENT = 16, SOFT_SAYS = 32, SOFT_BLOCK = 64,
-       SOFT_TRAFFIC = 128, SOFT_BATTLE = 256 };
+       SOFT_TRAFFIC = 128, SOFT_BATTLE = 256, SOFT_ONEWAY = 512 };
 /* an open event: its trigger's box, and what it leads to (FN_MARKER_WHAT's
  * out[kind]: 1 a race, 2 a shop, 3 a showcase (a cover shoot), 4 another
  * (the table at 0x838424: STAGE_2_SHOW_1, STAGE_3_PERF_1, ...)) */
@@ -1177,7 +1182,7 @@ static void soft_update(Slot *s, const rc_pose *pose, int64_t host){
     else if (!s->idle_since) s->idle_since = host;
     int soft = g_pass.me | (s->paused ? SOFT_PAUSED : 0) | (s->idle_since && host - s->idle_since >= IDLE_US ? SOFT_IDLE : 0) |
                (near_door(pose->p[0], pose->p[1]) ? SOFT_DOOR : 0) | (pose->bits & RC_BIT_PASS ? SOFT_SAYS : 0) |
-               (traffic_car(s->car, 0, 0) ? SOFT_TRAFFIC : 0);
+               (traffic_car(s->car, 0, 0) ? SOFT_TRAFFIC : 0) | (s->oneway ? SOFT_ONEWAY : 0);
     if (du_solid(s->car)) soft &= ~(SOFT_EVENT | SOFT_BLOCK | SOFT_SAYS | SOFT_IDLE);
     if (s->soft && !soft) s->ghost = 1;
     s->soft = soft;
@@ -3777,7 +3782,9 @@ typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; char flag[RC_
                  int64_t newest, rt;   /* the sender's time of its newest snapshot, and the one the car is drawn at (push_pose) */
                  int horn;             /* their horn (horn.h's kinds) */
                  int crew;             /* in our crew number crew - 1 (rc_peer_crew + 1; FRIEND_CREW: our friend in none
-                                          of them, rc_peer_friend; 0: none) */ } PeerView;
+                                          of them, rc_peer_friend; 0: none) */
+                 int oneway;           /* the hub links us one way: we get their car, their game does not show ours
+                                          (rc_peer_way RC_MARK_RXONLY) */ } PeerView;
 static PeerView g_pv[RC_TABLE]; static int g_npv;
 static struct { uint32_t id, gen; int horn; } g_phorn[RC_TABLE];   /* each peer's horn, as its record (cfg_gen) has it */
 
@@ -4450,7 +4457,7 @@ static const PeerView *du_pv(uint32_t id){ for (int i = 0; i < g_npv; i++) if (g
 /* the friend can race now: shown, in free roam and not paused, takes challenges */
 static int du_able(int k){
     const PeerView *v = k >= 0 ? du_pv(g_sl[k].peer_id) : 0;
-    return v && v->visible && !v->paused && v->duels && !g_sl[k].paused;
+    return v && v->visible && !v->paused && v->duels && !v->oneway && !g_sl[k].paused;
 }
 /* the friend's game says it takes no outrun now (near a door or one of their
  * events, in a marker, racing): none offered (the challenge goes on once made) */
@@ -8527,6 +8534,7 @@ void roam_game_frame(CPU *c){
                          (p->status == RC_ST_PAUSED ||
                           (p->status == RC_ST_ROAM && host - p->last_snap_rx < 2000000));
             v->paused = p->status == RC_ST_PAUSED; v->duels = p->duels; v->drifts = p->drifts; v->listed = rc_peer_listed(&g_s, i);
+            v->oneway = (rc_peer_way(&g_s, i) & RC_MARK_RXONLY) != 0;
             v->roams = p->status == RC_ST_ROAM || p->status == RC_ST_PAUSED;
             v->crew = rc_peer_crew(&g_s, i) + 1;
             if (!v->crew && rc_peer_friend(&g_s, i)) v->crew = FRIEND_CREW;
@@ -8611,6 +8619,7 @@ void roam_game_frame(CPU *c){
             for (int i = 0; i < g_npv; i++) if (g_pv[i].idx == s->peer && g_pv[i].id == s->peer_id) v = &g_pv[i];
             if (!v) continue;
             if (strcmp(s->flagcode, v->flag)){ memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode); }
+            s->oneway = v->oneway;
             /* a second first: a hitch in the friend's game (streaming) is a pause too */
             if (!v->paused) s->paused_since = 0;
             else if (!s->paused_since) s->paused_since = host;
@@ -9016,12 +9025,13 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
                     car ? MR32(car + 0x24u) : 0, car ? MR32(car + 0x28u) : 0, car ? MR32(car + 0x554u) : 0, car ? (int16_t)MR16(car + 8u) : -1,
                     car ? (double)MRF32(car + 0x50u) : 0, car ? (double)MRF32(car + 0x54u) : 0, car ? (double)MRF32(car + 0x58u) : 0);
             uint32_t body = car ? rd32(car + 0x3cu) : 0;
-            if (car) rlog("[roam]     %s%s%s%s%s%s%s%s%s%s%s; collision body %s%s; %u hit(s) with my car (at most %.1f m/s)\n", g_sl[k].duel ? "the outrun's, " : "",
+            if (car) rlog("[roam]     %s%s%s%s%s%s%s%s%s%s%s%s; collision body %s%s; %u hit(s) with my car (at most %.1f m/s)\n", g_sl[k].duel ? "the outrun's, " : "",
                           !O.collide && !g_sl[k].duel ? "solid cars off" : g_sl[k].soft ? "passable:" : g_sl[k].ghost ? "a ghost" : "solid",
                           g_sl[k].soft & SOFT_PAUSED ? " paused" : "", g_sl[k].soft & SOFT_IDLE ? " standing" : "",
                           g_sl[k].soft & SOFT_DOOR ? " near a door" : "", g_sl[k].soft & SOFT_SPAWN ? " at the start" : "",
                           g_sl[k].soft & SOFT_EVENT ? " near my event" : "", g_sl[k].soft & SOFT_BLOCK ? " my car in the way" : "",
                           g_sl[k].soft & SOFT_SAYS ? " says so" : "", g_sl[k].soft & SOFT_TRAFFIC ? " a traffic car" : "",
+                          g_sl[k].soft & SOFT_ONEWAY ? " theirs shows fewer (one way)" : "",
                           g_sl[k].soft && g_sl[k].ghost ? " (then a ghost)" : "",
                           !ok(body, 0x20) ? "none" : MR8(body + 0x17u) ? "off" : "on", DUELS && du_busy(k) ? "; takes no outrun now" : "",
                           g_sl[k].hits, (double)g_sl[k].hit_max);

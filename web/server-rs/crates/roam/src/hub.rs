@@ -505,12 +505,19 @@ fn same_name(page: &str, game: &str) -> bool {
     shown.trim().eq_ignore_ascii_case(game.trim())
 }
 
-/// a link: the player it is to, and since when
+/// a link: the player it is to, since when, and which way its cars go (DIR_*: both, unless the two take one-way
+/// links, `one_way`)
 #[derive(Clone, Copy, Debug)]
 struct Link {
     slot: u32,
     since: f64,
+    dir: u8,
 }
+
+/// a link's way: we get the other player's car, and it gets ours
+const DIR_RECV: u8 = 1;
+const DIR_SEND: u8 = 2;
+const DIR_BOTH: u8 = 3;
 
 /// (In this order, the fields a map's answer reads of every player it places first: `map_shown`, `ahead`,
 /// `map_cand`.  They are a line or two of memory; Rust's own order had them over three or four of its 656 bytes, and a
@@ -565,6 +572,8 @@ struct Player {
     resulted: Option<(u32, f64, u8)>,
     /// its links after the last tick (a HELLO of another start of the game empties them)
     links: Vec<Link>,
+    /// its core takes one-way links (its HELLO's core: wire::CORE_ONEWAY and up)
+    oneway: bool,
     /// how its car moves (watch.rs)
     watch: Watch,
     /// its place in `order`
@@ -699,6 +708,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         look_ms: f(o.look_ms, d.look_ms),
         away_m: f(o.away_m, d.away_m),
         view_m: f(o.view_m, d.view_m),
+        sends: n(o.sends, d.sends).min(wire::LIST_MAX),
         level_slack_m: f(o.level_slack_m, d.level_slack_m),
         level_grade: f(o.level_grade, d.level_grade),
         level_k: f(o.level_k, d.level_k),
@@ -730,6 +740,8 @@ struct Stats {
     /// players in one room), at the last tick
     crew_links: u64,
     crew_skips: u64,
+    /// the links that went one way only at the last tick (`one_way`)
+    oneway_links: u64,
     /// players' race reports logged
     race_reports: u64,
     /// `[cheat]` lines logged
@@ -762,6 +774,9 @@ struct Scratch {
     ahead: Vec<Place>,
     view: Vec<Place>,
     deg: Vec<usize>,
+    /// each place's core takes one-way links (`Player::oneway`), and what `one_way` keeps from tick to tick
+    newcore: Vec<bool>,
+    ow: OneWay,
     /// each place's crew links at most (`crew_cap`)
     ccap: Vec<u32>,
     mark: Vec<u32>,
@@ -851,6 +866,13 @@ struct Weigh {
 #[inline]
 fn apart(soon: &[Place], ahead: &[Place], view: &[Place], i: usize, j: usize, l: &Level) -> f64 {
     weigh(&soon[i], &soon[j], l).min(weigh(&ahead[i], &ahead[j], l)).min(weigh(&view[i], &soon[j], l)).min(weigh(&view[j], &soon[i], l))
+}
+
+/// a link of the last tick, linked since `since`: its place in the order, younger than hold_ms before every new one,
+/// older at keep its distance
+#[inline]
+fn old_key(soon: &[Place], ahead: &[Place], view: &[Place], i: usize, j: usize, since: f64, w: &Weigh) -> f64 {
+    if w.now - since < w.hold_ms { -1.0 } else { apart(soon, ahead, view, i, j, &w.level) * w.keep }
 }
 
 /// The hub's logic, without its timer (`RoamHub` gives it one).
@@ -1240,6 +1262,7 @@ impl Hub {
                     reported: None,
                     resulted: None,
                     links: Vec::new(),
+                    oneway: false,
                     watch: Watch::new((self.now)()),
                     at: 0,
                     owner: owner.cloned(),
@@ -1298,6 +1321,7 @@ impl Hub {
                 p.degree = if core >= 10 && links > 0 { (links as usize).min(most) } else { degree.min(wire::LINKS_V9) };
                 p.lobbies = lobbies;
                 p.marks = marks;
+                p.oneway = core >= wire::CORE_ONEWAY;
                 p.duel = duel;
                 let was = p.crews[0] != 0;
                 p.crews = distinct(crews);
@@ -1495,7 +1519,7 @@ impl Hub {
         let (room, at, vip, port, hub_port, lobbies) = (p.room, p.p.unwrap_or_default(), p.vip, p.port, p.hub_port, p.lobbies);
         let (at_t, cands) = self.map_cands.remove(&room).unwrap_or_else(|| (now, self.map_room(room, now)));
         let Some(p) = self.player(slot) else { return };
-        let mut links: Vec<u32> = p.links.iter().map(|l| l.slot).collect();
+        let mut links: Vec<u32> = p.links.iter().filter(|l| l.dir & DIR_RECV != 0).map(|l| l.slot).collect();
         links.sort_unstable();
         // (by their places in the room's list, which is by slot; past max, the nearest: each one's distance once, its
         // square, which orders them alike)
@@ -1613,7 +1637,7 @@ impl Hub {
                 if !fresh {
                     // the asker and its links: none of its candidates
                     mark[slot as usize] = stamp;
-                    for l in &p.links {
+                    for l in p.links.iter().filter(|l| l.dir & DIR_RECV != 0) {
                         if let Some(x) = mark.get_mut(l.slot as usize) {
                             *x = stamp;
                         }
@@ -2150,7 +2174,7 @@ impl Hub {
         s.local.resize(self.slots.len(), NONE);
         let level = Level::new(self.o.level_slack_m, self.o.level_grade, self.o.level_k);
         let w = Weigh { now, hold_ms: self.o.hold_ms, keep: self.o.keep, threads: self.o.link_threads, level };
-        let (mut duel_links, mut lobby_links, mut crew_links, mut crew_skips) = (0, 0, 0, 0);
+        let (mut duel_links, mut lobby_links, mut crew_links, mut crew_skips, mut oneway_links) = (0, 0, 0, 0, 0);
         for r in 0..rooms {
             let list = std::mem::take(&mut s.rooms[r]);
             prepare(&self.slots, &list, self.cap, &self.o, now, s);
@@ -2168,7 +2192,12 @@ impl Hub {
             } else {
                 s.cpairs.clear();
             }
-            let (duel, lobby, crew) = if list.len() > self.o.exact_room {
+            // (a room of cores that take one-way links only: their links by distance are `one_way`'s, and only the
+            // ones made first go both ways)
+            let all_new = list.len() >= 2 && list.iter().all(|&slot| player(&self.slots, slot).is_some_and(|p| p.oneway));
+            let (duel, lobby, crew) = if all_new {
+                link_first(&self.slots, &list, &w, s)
+            } else if list.len() > self.o.exact_room {
                 link_many(&self.slots, &list, &w, s)
             } else {
                 link_every_pair(&self.slots, &list, &w, s)
@@ -2176,6 +2205,7 @@ impl Hub {
             duel_links += duel;
             lobby_links += lobby;
             crew_links += crew;
+            oneway_links += one_way(&self.slots, &list, self.cap >= self.o.degree, &self.o, &w, s);
             for &slot in &list {
                 s.local[slot as usize] = NONE;
             }
@@ -2186,6 +2216,7 @@ impl Hub {
         self.st.lobby_links = lobby_links;
         self.st.crew_links = crew_links;
         self.st.crew_skips = crew_skips;
+        self.st.oneway_links = oneway_links;
         self.lists();
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
         self.st.ticks += 1;
@@ -2209,23 +2240,33 @@ impl Hub {
             // player with friends whose core reads it
             let mine = if self.crewed > 0 { &p.crews[..crews_of(p).count()] } else { &[][..] };
             let befriended = p.marks && !p.friend_ids.is_empty();
-            let with = !mine.is_empty() || befriended;
+            // (one-way links: to a core that takes them, `one_way`)
+            let oneway = p.oneway && links.iter().any(|l| l.dir != DIR_BOTH);
+            let with = !mine.is_empty() || befriended || oneway;
             s.marks.clear();
             if with {
-                s.marks.extend(links.iter().map(|l| match slots.get(l.slot as usize) {
-                    Some(Some(q)) => {
-                        let crews = mine.iter().enumerate().fold(0u8, |m, (c, h)| m | (q.crews.contains(h) as u8) << c);
-                        let friend = befriended
-                            && match (&p.owner, &q.owner) {
-                                (Some(a), Some(b)) if a != b => {
-                                    let id = friend_id(a, b);
-                                    p.friend_ids.binary_search(&id).is_ok() && q.friend_ids.binary_search(&id).is_ok()
-                                }
-                                _ => false,
-                            };
-                        crews | if friend { wire::MARK_FRIEND } else { 0 }
-                    }
+                let way = |l: &Link| match l.dir {
+                    DIR_RECV => wire::MARK_RXONLY,
+                    DIR_SEND => wire::MARK_TXONLY,
                     _ => 0,
+                };
+                s.marks.extend(links.iter().map(|l| {
+                    way(l)
+                        | match slots.get(l.slot as usize) {
+                            Some(Some(q)) => {
+                                let crews = mine.iter().enumerate().fold(0u8, |m, (c, h)| m | (q.crews.contains(h) as u8) << c);
+                                let friend = befriended
+                                    && match (&p.owner, &q.owner) {
+                                        (Some(a), Some(b)) if a != b => {
+                                            let id = friend_id(a, b);
+                                            p.friend_ids.binary_search(&id).is_ok() && q.friend_ids.binary_search(&id).is_ok()
+                                        }
+                                        _ => false,
+                                    };
+                                crews | if friend { wire::MARK_FRIEND } else { 0 }
+                            }
+                            _ => 0,
+                        }
                 }));
             }
             let n = F_DATA + if with { wire::peers_crew_len(links.len(), mine.len()) } else { wire::peers_len(links.len()) };
@@ -2380,6 +2421,7 @@ impl Hub {
             "lobbyLinks": st.lobby_links,
             "crewLinks": st.crew_links,
             "crewSkips": st.crew_skips,
+            "onewayLinks": st.oneway_links,
             "raceReports": st.race_reports,
             "cheatLines": st.cheat_lines,
             "nears": st.nears,
@@ -2428,6 +2470,7 @@ const AGE_MAX_S: f64 = 1.0;
 /// was 20 m over the view point, and weighed as on a road above.  The "up" of a player not in free roam is a place's
 /// fourth number, apart from its height.
 fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, now: f64, s: &mut Scratch) {
+    s.newcore.clear();
     s.pos.clear();
     s.soon.clear();
     s.ahead.clear();
@@ -2453,8 +2496,10 @@ fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, 
         s.soon.push(soon);
         s.ahead.push(on(age + o.look_ms / 1000.0));
         s.view.push([soon[0] + fx * view, soon[1] + fy * view, at[2] + s1 * (along * ts + view), up]);
+
         // a player's links at most: its degree, under the cap
         s.deg.push(p.map_or(0, |p| p.degree.min(cap)));
+        s.newcore.push(p.is_some_and(|p| p.oneway));
         s.ccap.push(p.map_or(0, |p| crew_cap(p.degree)));
         s.local[slot as usize] = i as u32;
     }
@@ -2471,8 +2516,8 @@ fn local(s: &[u32], slot: u32) -> Option<usize> {
 
 /// a link made: both ends list each other
 fn join(fresh: &mut [Vec<Link>], a: u32, b: u32, since: f64) {
-    fresh[a as usize].push(Link { slot: b, since });
-    fresh[b as usize].push(Link { slot: a, since });
+    fresh[a as usize].push(Link { slot: b, since, dir: DIR_BOTH });
+    fresh[b as usize].push(Link { slot: a, since, dir: DIR_BOTH });
 }
 
 /// since when the players in slots a and b are linked: since the link of the last tick, or now
@@ -2737,6 +2782,54 @@ pub(crate) fn crew_count(counts: &[(u32, u32)], crew: u32) -> usize {
     counts.binary_search_by_key(&crew, |e| e.0).map_or(0, |k| counts[k].1 as usize)
 }
 
+/// The links made first (the outruns', the race lobbies', then the crews'), as `link_every_pair` and `link_many` make
+/// them before any by distance: in a room whose players all take one-way links (`one_way` makes the rest).  Returns
+/// how many of each were made.
+fn link_first(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch) -> (u64, u64, u64) {
+    let m = list.len();
+    let Scratch { deg, ccap, fresh, dpairs, lpairs, cpairs, ccount, bstart, bnext, .. } = s;
+    let linked = |fresh: &[Vec<Link>], a: u32, b: u32| fresh[a as usize].iter().any(|l| l.slot == b);
+    let (mut duel, mut made) = (0, 0);
+    for (k, &(a, b)) in dpairs.iter().chain(lpairs.iter()).enumerate() {
+        let (a, b) = (a as usize, b as usize);
+        let (sa, sb) = (list[a], list[b]);
+        if fresh[sa as usize].len() < deg[a]
+            && fresh[sb as usize].len() < deg[b]
+            && !linked(fresh, sa, sb)
+            && !kept_apart(bstart, bnext, a, b)
+        {
+            join(fresh, sa, sb, since_of(slots, sa, sb, w.now));
+            if k < dpairs.len() {
+                duel += 1;
+            } else {
+                made += 1;
+            }
+        }
+    }
+    let mut crew = 0;
+    if !cpairs.is_empty() {
+        ccount.clear();
+        ccount.resize(m, 0);
+        for &(_, a, b) in cpairs.iter() {
+            let (a, b) = (a as usize, b as usize);
+            let (sa, sb) = (list[a], list[b]);
+            if ccount[a] < ccap[a]
+                && ccount[b] < ccap[b]
+                && fresh[sa as usize].len() < deg[a]
+                && fresh[sb as usize].len() < deg[b]
+                && !linked(fresh, sa, sb)
+                && !kept_apart(bstart, bnext, a, b)
+            {
+                join(fresh, sa, sb, since_of(slots, sa, sb, w.now));
+                ccount[a] += 1;
+                ccount[b] += 1;
+                crew += 1;
+            }
+        }
+    }
+    (duel, made, crew)
+}
+
 /// The links of a room of at most `exact_room` players: every pair of them, nearest first (a link younger than
 /// `hold_ms` before them all, an older one at `keep` its distance), into the links while both ends have room.  The
 /// outruns' links, the race lobbies' and the crews' come first; returns how many of each were made.
@@ -2829,13 +2922,7 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
         }
         for j in i + 1..m {
             let linked = mark[j] == stamp;
-            let d = if !linked {
-                apart(soon, ahead, view, i, j, &w.level)
-            } else if w.now - since[j] < w.hold_ms {
-                -1.0
-            } else {
-                apart(soon, ahead, view, i, j, &w.level) * w.keep
-            };
+            let d = if linked { old_key(soon, ahead, view, i, j, since[j], w) } else { apart(soon, ahead, view, i, j, &w.level) };
             order.push((order_key(d), pairs.len() as u32));
             pairs.push(Pair { since: if linked { since[j] } else { w.now }, a: i as u32, b: j as u32 });
         }
@@ -2861,6 +2948,372 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
         }
     }
     (duel, made, crew)
+}
+
+/// What a receiver's candidates are read from (`one_way`): read on several threads in a large room
+struct Gather<'a> {
+    news: &'a [u32],
+    psoon: &'a [Place],
+    pahead: &'a [Place],
+    grid: &'a Grid,
+    grid_a: &'a Grid,
+    soon: &'a [Place],
+    ahead: &'a [Place],
+    view: &'a [Place],
+    deg: &'a [usize],
+    newcore: &'a [bool],
+    at: &'a [u32],
+    list: &'a [u32],
+    slots: &'a [Option<Player>],
+    w: &'a Weigh,
+    kept: &'a [(u32, u32)],
+    bstart: &'a [u32],
+    bnext: &'a [u32],
+}
+
+/// a thread's vectors for `Gather::read`
+struct GatherBufs {
+    cand: Vec<(f64, u32)>,
+    stamp: Vec<u32>,
+    ostamp: Vec<u32>,
+    osince: Vec<f64>,
+    odir: Vec<u8>,
+    found: Vec<Found>,
+}
+
+impl GatherBufs {
+    fn new(n: usize, m: usize, found: Vec<Found>) -> GatherBufs {
+        GatherBufs { cand: Vec::new(), stamp: vec![0; n], ostamp: vec![0; m], osince: vec![0.0; m], odir: vec![0; m], found }
+    }
+}
+
+/// a receiver's candidates past its links, as far as its walks read: its links and ONEWAY_MORE more (the ones whose
+/// senders are full are passed by, and the next ones take their place)
+const ONEWAY_MORE: usize = 8;
+/// ...and in the second round, for the ones still short of their links: this far past their links
+const ONEWAY_FAR: usize = 48;
+
+impl Gather<'_> {
+    /// `read` of receivers news[k] for each k of `ks`, on several threads for many (parts, four a thread, as
+    /// `Walks::read`; each part's edges apart, then in the order of the parts)
+    fn read_all(&self, ks: &[u32], more: usize, got: &[(u32, u32)], m: usize, found: &mut Vec<Found>, out: &mut Vec<(u64, u32, u32, u64)>) {
+        let n = self.news.len();
+        let threads = if ks.len() >= WALKS_SHARED { self.w.threads.max(1) } else { 1 };
+        if threads == 1 {
+            let mut b = GatherBufs::new(n, m, std::mem::take(found));
+            self.read(ks, more, got, &mut b, out);
+            *found = b.found;
+            return;
+        }
+        let per = ks.len().div_ceil(4 * threads).max(1);
+        let parts: Vec<&[u32]> = ks.chunks(per).collect();
+        let done: Vec<Mutex<Vec<(u64, u32, u32, u64)>>> = parts.iter().map(|_| Mutex::new(Vec::new())).collect();
+        let next = AtomicUsize::new(0);
+        let work = || {
+            let mut b = GatherBufs::new(n, m, Vec::new());
+            loop {
+                let t = next.fetch_add(1, Ordering::Relaxed);
+                let Some(r) = parts.get(t) else { break };
+                let mut e = Vec::new();
+                self.read(r, more, got, &mut b, &mut e);
+                *done[t].lock().unwrap_or_else(|e| e.into_inner()) = e;
+            }
+        };
+        std::thread::scope(|sc| {
+            for _ in 1..threads {
+                let _ = std::thread::Builder::new().name("roam-oneway".into()).spawn_scoped(sc, &work);
+            }
+            work();
+        });
+        for d in done {
+            out.extend(d.into_inner().unwrap_or_else(|e| e.into_inner()));
+        }
+    }
+
+    fn both(&self, i: usize, j: usize) -> bool {
+        !self.newcore[i] || !self.newcore[j] || self.kept.binary_search(&(i.min(j) as u32, i.max(j) as u32)).is_ok()
+    }
+
+    /// the candidates of receivers news[k] for k in `r`: (place in the order, receiver, sender, since) into `out`
+    /// (`more`: how far past its links each one's walks read; `got`: the (receiver, sender) pairs linked already, sorted,
+    /// passed by)
+    fn read(&self, ks: &[u32], more: usize, got: &[(u32, u32)], b: &mut GatherBufs, out: &mut Vec<(u64, u32, u32, u64)>) {
+        let w = self.w;
+        let (soon, ahead, view) = (self.soon, self.ahead, self.view);
+        for &k in ks {
+            let k = k as usize;
+            let i = self.news[k] as usize;
+            let want = if self.deg[i] == 0 { 0 } else { self.deg[i] + more };
+            if want == 0 {
+                continue;
+            }
+            // each walk's first `want`: the `want` nearest by the nearest of the three are among them
+            b.cand.clear();
+            for walk in 0..3 {
+                if walk == 2 && view[i] == soon[i] {
+                    continue;
+                }
+                let found = b.found.pop().unwrap_or_default();
+                let (g, pos) = if walk == 1 { (self.grid_a, self.pahead) } else { (self.grid, self.psoon) };
+                let mut near = if walk == 2 { Near::from(g, view[i], k as u32, found) } else { Near::new(g, pos, k as u32, found) };
+                let mut got = 0;
+                while got < want {
+                    let Some(e) = near.next(g, pos) else { break };
+                    b.cand.push(e);
+                    got += 1;
+                }
+                b.found.push(near.into_found());
+            }
+            b.cand.sort_unstable_by(|a, c| a.0.total_cmp(&c.0).then(a.1.cmp(&c.1)));
+            let stamp = k as u32 + 1;
+            let old = player(self.slots, self.list[i]).map_or(&[][..], |p| &p.links);
+            for l in old {
+                if let Some(j) = local(self.at, l.slot) {
+                    b.ostamp[j] = stamp;
+                    b.osince[j] = l.since;
+                    b.odir[j] = l.dir;
+                }
+            }
+            let mut taken = 0;
+            for idx in 0..b.cand.len() {
+                if taken == want {
+                    break;
+                }
+                let (d, jj) = b.cand[idx];
+                if b.stamp[jj as usize] == stamp {
+                    continue;
+                }
+                b.stamp[jj as usize] = stamp;
+                taken += 1;
+                let j = self.news[jj as usize] as usize;
+                if self.both(i, j)
+                    || kept_apart(self.bstart, self.bnext, i, j)
+                    || (!got.is_empty() && got.binary_search(&(i as u32, j as u32)).is_ok())
+                {
+                    continue;
+                }
+                let was = (b.ostamp[j] == stamp).then(|| (b.odir[j], b.osince[j]));
+                let key = match was {
+                    Some((dir, since)) if dir & DIR_RECV != 0 && w.now - since < w.hold_ms => -1.0,
+                    Some((dir, _)) if dir & DIR_RECV != 0 => d * w.keep,
+                    _ => d,
+                };
+                out.push((order_key(key), i as u32, j as u32, was.map_or(0, |e| e.1.to_bits())));
+            }
+            // the ones it got at the last tick and did not walk to this far (farther now, or the walks' ties); not in a
+            // second round (the first had them)
+            for l in old.iter().filter(|l| l.dir & DIR_RECV != 0 && got.is_empty()) {
+                let Some(j) = local(self.at, l.slot) else { continue };
+                if j == i || !self.newcore[j] || self.both(i, j) || kept_apart(self.bstart, self.bnext, i, j) {
+                    continue;
+                }
+                let jj = self.news.partition_point(|&x| (x as usize) < j);
+                if b.stamp[jj] == stamp {
+                    continue;
+                }
+                let d =
+                    weigh(&soon[i], &soon[j], &w.level).min(weigh(&ahead[i], &ahead[j], &w.level)).min(weigh(&view[i], &soon[j], &w.level));
+                let key = if w.now - l.since < w.hold_ms { -1.0 } else { d * w.keep };
+                out.push((order_key(key), i as u32, j as u32, l.since.to_bits()));
+            }
+        }
+    }
+}
+
+/// What `one_way` keeps from tick to tick (its vectors, emptied)
+#[derive(Default)]
+struct OneWay {
+    /// the room's players of core 15 and up (places in the room), and their places soon and ahead in that order
+    news: Vec<u32>,
+    psoon: Vec<Place>,
+    pahead: Vec<Place>,
+    grid: Grid,
+    grid_a: Grid,
+    found: Vec<Found>,
+    /// the pairs linked both ways whatever the distance (outruns, race lobbies, crews and friends), the lower first
+    kept: Vec<(u32, u32)>,
+    /// each place's cars it gets, the players it sends its car to, and the players on its list
+    inn: Vec<u16>,
+    out: Vec<u16>,
+    listed: Vec<u16>,
+    /// (its place in the order, receiver, sender, since when the two are linked as bits: 0 new): every receiver's
+    /// candidates
+    edges: Vec<(u64, u32, u32, u64)>,
+    /// the pairs linked by `one_way` (a table: its `find`), and where each place's links of its own begin in `fresh`
+    pairs: Vec<u64>,
+    base: Vec<u16>,
+    /// the receivers read (as indices into `news`), and the (receiver, sender) pairs of the first round
+    ks: Vec<u32>,
+    got: Vec<(u32, u32)>,
+}
+
+/// One-way links (a core of version 15 and up, `wire::CORE_ONEWAY`), after the links of either function above.  A
+/// link goes both ways, so a player shows another's car only while that player has room for it too: a player who
+/// shows 64 among players who show 32, 24 or 16 (the defaults) had its links with whoever had room, often far off,
+/// and lost each one as soon as a nearer player wanted it back.  The player's log of 2026-11-04 (3065 in free roam):
+/// 78 % of its cars went within 10 s, the same player's car came and went every 12 s at 120 to 170 m
+/// (tests/meet.rs, scene "mixed": a quarter of the cars within 60 m were missing, 13 a minute went within 60 m).
+/// Between two such players each way is a link of its own now: each one gets the cars of its nearest others (as its
+/// own walks weigh them: soon, ahead, and from its own view point), its degree of them at most, nearest first over
+/// the room (the ones it got at the last tick at `keep` their distance, the ones younger than hold_ms first), while
+/// the other sends its car to fewer than `sends` (RoamOptions sends: 64; its links under the busy cap), and for the
+/// ones still short of that a second round, walked further.  A player's list names the ones it gets cars from and the
+/// ones it sends its own to, LIST_MAX at most, with the way marked (`lists`).  The links of a player of an older core stay as
+/// they were made, and so do the ones made first (outruns, lobbies, crews and friends): those go both ways.
+/// Returns how many links go one way only.
+#[inline(never)]
+fn one_way(slots: &[Option<Player>], list: &[u32], full: bool, o: &RoamOptions, w: &Weigh, s: &mut Scratch) -> u64 {
+    let m = list.len();
+    let Scratch { soon, ahead, view, deg, newcore, local: at, fresh, dpairs, lpairs, cpairs, bstart, bnext, ow, .. } = s;
+    ow.news.clear();
+    ow.news.extend((0..m as u32).filter(|&i| newcore[i as usize]));
+    if ow.news.len() < 2 {
+        return 0;
+    }
+    let sends = |i: usize| if full { deg[i].max(o.sends) } else { deg[i] };
+    ow.kept.clear();
+    ow.kept.extend(dpairs.iter().chain(lpairs.iter()).map(|&(a, b)| (a.min(b), a.max(b))));
+    ow.kept.extend(cpairs.iter().map(|&(_, a, b)| (a.min(b), a.max(b))));
+    ow.kept.sort_unstable();
+    ow.kept.dedup();
+    // (only the ones the functions above linked: a crew's pair past CREW_LINKS weighs by distance, as any other)
+    ow.kept.retain(|&(a, b)| fresh[list[a as usize] as usize].iter().any(|l| l.slot == list[b as usize]));
+    let kept = &ow.kept;
+    let both = |i: usize, j: usize| !newcore[i] || !newcore[j] || kept.binary_search(&(i.min(j) as u32, i.max(j) as u32)).is_ok();
+    // the links of the functions above between two such players go (each is weighed again below); the others stay,
+    // both ways
+    for &i in &ow.news {
+        fresh[list[i as usize] as usize].retain(|l| local(at, l.slot).is_none_or(|j| both(i as usize, j)));
+    }
+    ow.inn.clear();
+    ow.out.clear();
+    ow.listed.clear();
+    for &slot in list {
+        let n = fresh[slot as usize].len() as u16;
+        ow.inn.push(n);
+        ow.out.push(n);
+        ow.listed.push(n);
+    }
+    // every receiver's candidates: the nearest of its walks (each one's first `want`: the `want` nearest by the
+    // nearest of the three are among them), and the ones it got at the last tick
+    ow.psoon.clear();
+    ow.pahead.clear();
+    ow.psoon.extend(ow.news.iter().map(|&i| soon[i as usize]));
+    ow.pahead.extend(ow.news.iter().map(|&i| ahead[i as usize]));
+    ow.grid.build(&ow.psoon, w.level);
+    ow.grid_a.build(&ow.pahead, w.level);
+    ow.edges.clear();
+    let ctx = Gather {
+        news: &ow.news,
+        psoon: &ow.psoon,
+        pahead: &ow.pahead,
+        grid: &ow.grid,
+        grid_a: &ow.grid_a,
+        soon,
+        ahead,
+        view,
+        deg,
+        newcore,
+        at,
+        list,
+        slots,
+        w,
+        kept: &ow.kept,
+        bstart,
+        bnext,
+    };
+    ow.ks.clear();
+    ow.ks.extend(0..ow.news.len() as u32);
+    ctx.read_all(&ow.ks, ONEWAY_MORE, &[], m, &mut ow.found, &mut ow.edges);
+    ow.edges.sort_unstable();
+    // each pair once in a table (open addressing: the pair's two places, the lower first, plus one; 0 empty), for
+    // the lists' room: a pair linked one way, then the other, is one entry of each list
+    // (room for every pair the lists can hold, LIST_MAX a player and each pair in two lists: half full at most, and a
+    // search always ends at an empty place)
+    let cap2 = (ow.news.len() * wire::LIST_MAX).next_power_of_two().max(64);
+    ow.pairs.clear();
+    ow.pairs.resize(cap2, 0);
+    let mask = cap2 - 1;
+    // (the pair's place in the table: where it is, or the empty place it would go; and whether it is there)
+    let find = |t: &[u64], a: usize, b: usize| -> (usize, u64, bool) {
+        let key = ((a.min(b) as u64) << 32 | a.max(b) as u64) + 1;
+        let mut h = (key.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) as usize & mask;
+        loop {
+            match t[h] {
+                0 => return (h, key, false),
+                k if k == key => return (h, key, true),
+                _ => h = (h + 1) & mask,
+            }
+        }
+    };
+    // each new player's own links start past the ones kept above: those the pass below adds are merged per list at
+    // the end (a link one way and then the other is one link both ways)
+    ow.base.clear();
+    ow.base.extend(list.iter().map(|&slot| fresh[slot as usize].len() as u16));
+    ow.got.clear();
+    // the edges in order, while the receiver has room and the sender does: twice, the second time for the receivers
+    // still short of their links (their nearest senders full), walked further (ONEWAY_FAR past their links) over
+    // the senders' room left
+    for round in 0..2 {
+        if round == 1 {
+            ow.ks.clear();
+            ow.ks.extend(
+                (0..ow.news.len() as u32).filter(|&k| (ow.inn[ow.news[k as usize] as usize] as usize) < deg[ow.news[k as usize] as usize]),
+            );
+            if ow.ks.is_empty() {
+                break;
+            }
+            ow.got.sort_unstable();
+            ow.edges.clear();
+            ctx.read_all(&ow.ks, ONEWAY_FAR, &ow.got, m, &mut ow.found, &mut ow.edges);
+            ow.edges.sort_unstable();
+        }
+        for &(_, i, j, since) in &ow.edges {
+            let (i, j) = (i as usize, j as usize);
+            if ow.inn[i] as usize >= deg[i] || ow.out[j] as usize >= sends(j) {
+                continue;
+            }
+            let (h, key, known) = find(&ow.pairs, i, j);
+            if !known {
+                if ow.listed[i] as usize >= wire::LIST_MAX || ow.listed[j] as usize >= wire::LIST_MAX {
+                    continue;
+                }
+                ow.pairs[h] = key;
+                ow.listed[i] += 1;
+                ow.listed[j] += 1;
+            }
+            let since = if since == 0 { w.now } else { f64::from_bits(since) };
+            fresh[list[i] as usize].push(Link { slot: list[j], since, dir: DIR_RECV });
+            fresh[list[j] as usize].push(Link { slot: list[i], since, dir: DIR_SEND });
+            ow.inn[i] += 1;
+            ow.out[j] += 1;
+            if round == 0 {
+                ow.got.push((i as u32, j as u32));
+            }
+        }
+    }
+    let mut oneway = 0;
+    for &i in &ow.news {
+        let l = &mut fresh[list[i as usize] as usize];
+        let from = ow.base[i as usize] as usize;
+        if l.len() - from < 2 {
+            oneway += l[from..].iter().filter(|x| x.dir == DIR_RECV).count() as u64;
+            continue;
+        }
+        l[from..].sort_unstable_by_key(|x| x.slot);
+        let mut k = from;
+        for x in from + 1..l.len() {
+            if l[x].slot == l[k].slot {
+                l[k].dir |= l[x].dir;
+            } else {
+                k += 1;
+                l[k] = l[x];
+            }
+        }
+        l.truncate(k + 1);
+        oneway += l[from..].iter().filter(|x| x.dir == DIR_RECV).count() as u64;
+    }
+    oneway
 }
 
 /// whether `places` has `j` (every one compared, without a branch: there are at most a degree of them, and this
@@ -3112,7 +3565,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
                 // each link once: by its lower end, or by the only end that lists it (j's links are in already)
                 if i < j || !has_place(&olinks[ostart[j] as usize..ostart[j + 1] as usize], i as u32) {
                     // a link's place in the order: younger than `hold_ms` first, older at `keep` its distance
-                    let d = if w.now - l.since < w.hold_ms { -1.0 } else { apart(soon, ahead, view, i, j, &w.level) * w.keep };
+                    let d = old_key(soon, ahead, view, i, j, l.since, w);
                     olds.push(cand(d, i, j, false));
                 }
             }

@@ -21,7 +21,7 @@
 #include <stddef.h>
 
 #define RC_PROTO_VER     1          /* header byte 4; a different value is ignored */
-#define RC_CORE_VER      14        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
+#define RC_CORE_VER      15        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
                                        4: state extensions, RC_HF_STATEX; 5: race lobbies, RC_HF_LOBBY; 6: quick chat,
                                        RC_HF_SAY; 7: crews, RC_HF_CREW; 8: crews from the hub, RC_HF_HUBCREW;
                                        9: a HELLO to one peer names only that peer, roam_core.c fill_hello;
@@ -29,7 +29,8 @@
                                        it wants, rc_config.links; 11: in an outrun, after the links, the id of its
                                        other player, rc_set_duel; 12: drift battles, RC_HF_DRIFT; 13: to a peer, after
                                        the outrun's player, the player's flag, rc_config.flag; 14: lists of up to
-                                       RC_MAX_PEERS (64)) */
+                                       RC_MAX_PEERS (64); 15: one-way links, the hub's lists of up to RC_LIST_MAX
+                                       with RC_MARK_RXONLY / RC_MARK_TXONLY) */
 #define RC_MAGIC0        0x4E       /* "N2FR" */
 #define RC_MAGIC1        0x32
 #define RC_MAGIC2        0x46
@@ -44,6 +45,8 @@
 #define RC_PEERS_V1      7          /* the most a core of version 1 reads in a HELLO's ids or a PEERS list */
 #define RC_PEERS_V9      32         /* ...a core of versions 2 to 9 */
 #define RC_PEERS_V13     48         /* ...a core of versions 10 to 13 */
+#define RC_LIST_MAX      96         /* the most a hub's list names to a core of version 15: the players whose cars we get
+                                       (our links, RC_MAX_PEERS at most) and the ones we send ours to (hub.rs one_way) */
 #define RC_TABLE         128        /* known addresses (configured, gossiped, heard): the peers and those going or coming */
 #define RC_SNAP_STATES   3          /* states per SNAP (newest first): loss redundancy */
 #define RC_STATE_BYTES   52
@@ -265,6 +268,12 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
  * this one goes both ways (the server's friends lists, EA Messenger's); a hub
  * of before sets none, a core of before reads only the crews' bits */
 #define RC_MARK_FRIEND   0x80
+/* ...and the way a link goes (to a core of version 15: hub.rs one_way): we get
+ * that player's car and send it nothing of ours, as it shows fewer players
+ * than we do (RXONLY); or it gets our car and sends us nothing (TXONLY).
+ * Neither: both ways, as every link of before */
+#define RC_MARK_RXONLY   0x20
+#define RC_MARK_TXONLY   0x40
 /* decoder results */
 enum { RC_OK = 0, RC_E_SHORT = -1, RC_E_MAGIC = -2, RC_E_VERSION = -3, RC_E_LENGTH = -4,
        RC_E_CRC = -5, RC_E_TYPE = -6, RC_E_FIELD = -7, RC_E_TRAIL = -8, RC_E_RANGE = -9 };
@@ -397,8 +406,8 @@ typedef struct {
                  uint32_t duel;            /* after the links (the byte too, 0 or not): our outrun's other player, 0: none (core 11, to the hub) */
                  char flag[RC_FLAG_MAX + 1]; } hello;   /* after the duel (the links and the duel too, 0 or not): our flag, "" none
                                                            (core 13, to a peer: roam_game.c flags_*) */
-        struct { uint8_t n; struct { uint32_t ip; uint16_t port; uint32_t id; } e[RC_MAX_PEERS];
-                 uint8_t n_mine; uint32_t mine[RC_CREW_MAX]; uint8_t crew[RC_MAX_PEERS]; } peers;   /* the crew marks: with RC_HF_CREW only */
+        struct { uint8_t n; struct { uint32_t ip; uint16_t port; uint32_t id; } e[RC_LIST_MAX];
+                 uint8_t n_mine; uint32_t mine[RC_CREW_MAX]; uint8_t crew[RC_LIST_MAX]; } peers;   /* the crew marks: with RC_HF_CREW only */
         struct { uint8_t status, epoch; uint16_t cfg_rev; uint8_t n, clock; rc_state s[RC_SNAP_STATES]; } snap;
         struct { uint16_t cfg_rev; uint8_t frag, nfrag; uint16_t total, dlen; const uint8_t *data; } cfg;
         struct { uint16_t cfg_rev; uint8_t have_mask; } cfgreq;
@@ -595,6 +604,7 @@ typedef struct {
     uint8_t  n_crews;  uint32_t crews[RC_CREW_MAX];   /* its crews, as its last HELLO had them (an older core's, or no hub) */
     uint8_t  n_hub_crews; uint32_t hub_crews[RC_CREW_MAX];   /* our crews it is in too, as the hub's last list naming it said */
     uint8_t  hub_friend;                                     /* ...and that it is our friend (RC_MARK_FRIEND) */
+    uint8_t  hub_way;                                        /* ...and the way the link goes (RC_MARK_RXONLY, RC_MARK_TXONLY; 0 both) */
     uint16_t cfg_rev_seen;         /* what the peer announces */
     int      hears_us, lost;
     int      hears_miss;           /* with the hub: one HELLO without our id forgiven (hub mode only) */
@@ -709,6 +719,9 @@ int  rc_peer_listed(const rc_session *s, int i);
 int  rc_peer_crew(const rc_session *s, int i);
 /* peer i is our friend, as the hub's last list naming it said (RC_MARK_FRIEND) */
 int  rc_peer_friend(const rc_session *s, int i);
+/* the way the hub's link with peer i goes (RC_MARK_RXONLY: we get its car only; RC_MARK_TXONLY: it gets ours only;
+ * 0: both ways, or no hub) */
+int  rc_peer_way(const rc_session *s, int i);
 /* our crews changed while the session runs: at most RC_CREW_MAX, 0s and
  * repeats left out; the hub (or without one, the peers) hears them at the
  * next tick */

@@ -226,6 +226,10 @@ Checked against the guide or the code, and confirmed by players in threads:
   row with a size such as 1916x884 (the screen's own at the page's resolution scale), not 1080p or 1440p, which draw
   more pixels than a phone's default 75%. Players' cars shown (start page, Online) takes 16, 24, 32, 40 or 48
   (since 4 November, pending release: 16, 24, 32, 48 or 64), nothing lower.
+- "I picked 64 but see fewer / cars keep popping in and out in busy places": a link went both ways, so a car showed
+  only while that player had room for yours too, and most players keep 32, 24 or 16. Since 5 November (pending
+  release) players get the cars of their nearest players one way where those show fewer, and friends' cars load in
+  fewer frames. Until it is live: nothing to do; a car meet of 64 players who all picked 64 shows them all.
 - No sound at all on an iPhone, while the log's sound is fine: Silent mode is on, and Safari plays no page sound in
   it. Turn it off (the switch on the side; on newer iPhones the Action button or Control Center). Posters confirmed it.
   Since 4 November (pending release) the page plays its sound in Silent mode too (Safari's audio session "playback",

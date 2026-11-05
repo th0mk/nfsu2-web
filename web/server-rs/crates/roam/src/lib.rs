@@ -176,6 +176,11 @@ pub struct RoamOptions {
     /// a player's view point, this far ahead of where its car points (m): a car in front counts from there too, so it
     /// is linked from farther away than one beside or behind
     pub view_m: f64,
+    /// one-way links (a core of version 15 and up: `wire::CORE_ONEWAY`): a player sends its car to this many players
+    /// at most (its links if more), so that a player who shows more cars than the players round it gets theirs.  A
+    /// game sends a car state once whatever the receivers (the page's bundles name them, web/src/net TxBundle): a
+    /// phone's upload grows by 4 bytes a receiver, the server makes the copies.  Under the busy cap, its links.
+    pub sends: usize,
     /// a gap in height between two players that no road explains (a highway over a street, a tunnel under a hill):
     /// up to level_slack_m (m) plus level_grade of the way across (a hill, a ramp, a jump) it counts as it is, and
     /// each metre past that counts level_k metres more.  Two cars on one road weigh as before, one on a road above or
@@ -222,6 +227,7 @@ impl Default for RoamOptions {
             look_ms: 4_000.0,
             away_m: 100.0,
             view_m: 150.0,
+            sends: 64,
             level_slack_m: 5.0,
             level_grade: 0.2,
             level_k: 25.0,
