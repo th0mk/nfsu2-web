@@ -169,9 +169,10 @@ pub struct RoamOptions {
     /// port of its own, its HELLO flagged: hub.rs `Player::seat2`), and one more for a game started again while its
     /// last start's endpoint lingers (until `gone_ms`).  A browser's endpoints are never linked with each other.
     pub max_per_vip: usize,
-    /// The players (endpoints) on the hub at most, 15360: the switch's 14000 places (nfsu2-lan `ADDRS`, one browser
-    /// each) and 1360 more, a tenth of them in co-op (desktop pages only), each with its second player an endpoint
-    /// more (a restart's lingering endpoint is one too, for a few seconds).  At most 16384 (hub.rs SLOTS_MAX: a world
+    /// The players (endpoints) on the hub at most, 15360: of the switch's 16000 places (nfsu2-lan `ADDRS`, one browser
+    /// each) some two in five are in free roam at once (nfsu2.xyz, 2026-11-05: 4,968 of 13,163), a tenth of those in
+    /// co-op (desktop pages only), each with its second player an endpoint more (a restart's lingering endpoint is one
+    /// too, for a few seconds).  At most 16384 (hub.rs SLOTS_MAX: a world
     /// map's key names a slot under it), and that far under it that a full hub's new player purges the slots of the
     /// ones gone at most once in 1024 (else an eighth of the players, as before).  What grows with it: a player's
     /// slot (some 1.5 KB with its links), the kept watches (one each at most), the tick (each link; a second player

@@ -4,9 +4,9 @@
 //!
 //! # The protocol
 //!
-//! Every browser that joins gets an address on 10.77.0.0/18 (`MASK`): 250 in each of 10.77.0-55.x (`NETS`, host
-//! bytes 2-251, so none ends in .0 or .255 and 10.77.0.1 and .253 stay the server's own), `ADDRS` (14000) in all,
-//! handed out in turn across the fifty-six (`vip_at`: 10.77.0.2, 10.77.1.2, ..., 10.77.55.2, 10.77.0.3, ...), so two
+//! Every browser that joins gets an address on 10.77.0.0/18 (`MASK`): 250 in each of 10.77.0-63.x (`NETS`, host
+//! bytes 2-251, so none ends in .0 or .255 and 10.77.0.1 and .253 stay the server's own), `ADDRS` (16000) in all,
+//! handed out in turn across the sixty-four (`vip_at`: 10.77.0.2, 10.77.1.2, ..., 10.77.63.2, 10.77.0.3, ...), so two
 //! players are rarely in the same /24 and anything that still takes the network for a /24 (or for the /19 it was
 //! before) shows at once, not only past 250 (or 8000) players.  Binary frames carry the game's network traffic; the
 //! switch only routes them and never looks inside:
@@ -28,7 +28,7 @@
 //!   UDP, TCP segments and ICMP with ports at [12..15] and an 8-byte LAN header (op, ttl, connection id) before the
 //!   data.  Their broadcasts go only to the browsers that have LAN play open (the game's LAN or Online screens:
 //!   "lan":1 in the hello, then {"t":"lan","on":0|1}; one that says nothing has it shut): the others drop them
-//!   anyway, and on a full switch each one would reach 14000 browsers.
+//!   anyway, and on a full switch each one would reach 16000 browsers.
 //! - 32 (`KIND_BUNDLE`): a bundle: several frames in one message, [1..3] reserved, then entries of [0] u8 n,
 //!   [1] reserved, [2..3] u16 frame length, n x u32 destination vip, the frame: to each of the n (the frame's own
 //!   destination is ignored), or with n = 0 to its own.  The switch takes them from anyone, and sends a client its
@@ -58,7 +58,7 @@
 //! A page whose LAN play is shut ("lan":0, or no word of it: free roam alone) gets a list of the server's own hosts only, and no changes,
 //! until it opens LAN play ({"t":"lan","on":1}: the whole list then, and the changes after it; shut again, no more
 //! changes).  Only LAN play needs the other players' addresses (members.rs `list_for`), and on a full switch the whole
-//! list is about 490 KB and every change went to 14000 pages, four times a second.
+//! list is about 490 KB and every change went to 16000 pages, four times a second.
 //!
 //! ## Addresses and tokens
 //!
@@ -177,7 +177,7 @@
 //!   own buckets (behind its own lock, uncontended but for the Online host's charges), its client's and site's
 //!   (behind theirs: shared only by that client's connections), then the receivers.  No lock is shared by all.
 //! - Who is on the switch changes under one lock (`members`: admit, leave, reservations, the peer-list changes,
-//!   the store); routing never takes it.  A frame finds its receiver in a fixed table of the 14000 addresses (an
+//!   the store); routing never takes it.  A frame finds its receiver in a fixed table of the 16000 addresses (an
 //!   `ArcSwapOption<Peer>` per address: one atomic load), a broadcast walks a copy-on-write list of every peer (LAN
 //!   play's, of every peer with LAN play open).  What a broadcast costs its sender is its list's length, known
 //!   without a look at the peers, and they are walked only for a broadcast paid for (the second security audit,
@@ -270,9 +270,9 @@ pub use text::{clean_name, vip_num};
 
 /// 10.77.0.0/18's mask, which the welcome tells the page
 pub const MASK: &str = "255.255.192.0";
-/// the /24s of it that addresses are handed out in: 10.77.0-55.x
-pub const NETS: usize = 56;
-/// addresses the switch hands out: host bytes 2-251 in each of the fifty-six /24s
+/// the /24s of it that addresses are handed out in: 10.77.0-63.x, all of them
+pub const NETS: usize = 64;
+/// addresses the switch hands out: host bytes 2-251 in each of the sixty-four /24s
 pub const ADDRS: usize = NETS * 250;
 pub const BROADCAST: u32 = 0xFFFF_FFFF;
 /// the close codes of a kick and a ban (the crate doc's Kicks and bans): the page stays off the switch after them
@@ -927,7 +927,7 @@ pub struct LanSwitch {
     online_backlog: Arc<nfsu2_util::host::Backlog>,
     tap: Option<Tap>,
     store: Option<Arc<store::Store>>,
-    /// the peer at each of the 14000 addresses (`slot()`), for unicast without a lock
+    /// the peer at each of the 16000 addresses (`slot()`), for unicast without a lock
     table: Box<[ArcSwapOption<Peer>]>,
     /// every peer, in the order of `Members::peers` (broadcasts, the timers, info)
     all: ArcSwap<Vec<Arc<Peer>>>,
@@ -1760,7 +1760,7 @@ pub struct ReservedView {
     pub site: Option<String>,
 }
 
-/// the i-th address in the order they are handed out (round the fifty-six /24s: the crate doc says why)
+/// the i-th address in the order they are handed out (round the sixty-four /24s: the crate doc says why)
 pub fn vip_at(i: usize) -> u32 {
     BASE | ((i % NETS) << 8) as u32 | ((i / NETS) as u32 + 2)
 }
@@ -1793,13 +1793,14 @@ mod tests {
             BASE | 1,
             BASE | 252,
             BASE | 255,
-            BASE | 0x3800 | 2,
-            BASE | 0x3F00 | 2,
             BASE | 0x4000 | 2,
+            BASE | 0x7F00 | 2,
             0,
             BROADCAST,
             BASE | 0x3700 | 0xFD,
             BASE | 0x37FF,
+            BASE | 0x3F00 | 0xFC,
+            BASE | 0x3F00 | 0xFD,
             BASE | 0x3FFF,
         ] {
             assert_eq!(slot(v), None, "{v:x}");
