@@ -1505,5 +1505,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "今日の宝探し：ダイヤ {n}/{total}",
   "{n} km": "{n} km",
   "{n} m": "{n} m",
-  "The rest open as your career goes on.": "残りはキャリアを進めると解放されます。"
+  "The rest open as your career goes on.": "残りはキャリアを進めると解放されます。",
+  "Golden diamond": "ゴールドダイヤ",
+  "All 15 in {time}.": "15 個を {time} で。",
+  "Your quickest: {time}.": "最速記録：{time}",
+  "Finished today: {n}.": "今日の完了：{n} 人",
+  "No one has found all 15 today yet.": "今日はまだ誰も 15 個集めていません。"
 }

@@ -1505,5 +1505,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "今日尋寶：已找到 {n}/{total} 顆鑽石。",
   "{n} km": "{n} 公里",
   "{n} m": "{n} 公尺",
-  "The rest open as your career goes on.": "其餘的會隨生涯進度開放。"
+  "The rest open as your career goes on.": "其餘的會隨生涯進度開放。",
+  "Golden diamond": "黃金鑽石",
+  "All 15 in {time}.": "15 顆用時 {time}。",
+  "Your quickest: {time}.": "你的最快紀錄：{time}。",
+  "Finished today: {n}.": "今日完成：{n} 人。",
+  "No one has found all 15 today yet.": "今天還沒有人找齊 15 顆。"
 }

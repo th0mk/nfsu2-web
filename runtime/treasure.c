@@ -11,7 +11,8 @@
  * The page says which day it is and which of its diamonds were found already (IEV_TREASURE: a the day, b the found
  * ones, a bit each); driving within FIND_R of where one is for the player finds it.  The last one of the day pays
  * the career's bank twice what a win of the player's stage pays (mprace_prize_of(1)), once: a day the page says was
- * all found already pays nothing more (the others pay nothing: the prize is for all fifteen).  The game's autosave keeps
+ * all found already pays nothing more (the others pay nothing: the prize is for all fifteen).  On one day in GOLD_DAYS
+ * one of the fifteen is golden (the same one for every player): it pays a win's when found.  The game's autosave keeps
  * the money as any (mprace.c pays a race's prize the same way).
  *
  * Out in two status slots (runtime/web/status_web.c), while the career's free roam is on:
@@ -19,8 +20,10 @@
  *             played now) | paid << 32 ($ / 10 this game, 16 bits) | locked << 48 (4 bits: not found, no open spot)
  *   th_aim    the nearest open diamond not found yet: its distance (m, 16 bits) | its bearing from the car's nose << 16
  *             (degrees clockwise, 9 bits) | which one << 25 (4 bits) | the day's prize << 29 ($ / 10, 12 bits) |
- *             aimed << 41 (1: there is one to aim at)
+ *             aimed << 41 (1: there is one to aim at) | the golden one + 1 << 42 (4 bits, 0: none today)
  *   th_screen where that one is on the screen (project: 0 behind the camera)
+ * The minimap and the world map (roam_game.c, with free roam's multiplayer) mark the ones not found within MAP_R
+ * (roam_minimap_marks, treasure_map_marks).
  * and a [treasure] line in the log for the pool (once), each diamond found and the prize. */
 #include "cpu.h"
 #include "splitscreen_mem.h"
@@ -33,8 +36,9 @@
 __attribute__((weak)) int host_status_slot(const char *name){ (void)name; return -1; }
 __attribute__((weak)) void host_status_set_n(const int *slot, const double *value, int n){ (void)slot; (void)value; (void)n; }
 long autotest_frame(void);
-/* roam_game.c: a place on the minimap (none in a build without free roam's multiplayer) */
-__attribute__((weak)) void roam_minimap_beacon(int on, float x, float y){ (void)on; (void)x; (void)y; }
+/* roam_game.c: places on the minimap (none in a build without free roam's multiplayer): kind 1 a diamond, 2 the
+ * golden one, | 4 kept on the minimap's edge */
+__attribute__((weak)) void roam_minimap_marks(int n, const float (*xy)[2], const int *kind){ (void)n; (void)xy; (void)kind; }
 /* walls.c: the career's roads the start reaches as the barriers are now */
 int walls_open_roads(void);
 int walls_open_node(int i, float *x, float *y, float *z);
@@ -63,7 +67,9 @@ int walls_road_z(float x, float y, float near_z, float *z);
 #define TRIG_DOOR     14            /* ...the shops', the garage's, the car lot's */
 #define PICK_APART    400.f         /* m: the day's diamonds at least this far from each other (less where it must) */
 #define FIND_R        18.f          /* m: this close finds one */
-#define MINIMAP_R     500.f         /* m: the nearest one this close is on the minimap */
+#define MINIMAP_R     500.f         /* m: the nearest one this close stays on the minimap's edge */
+#define MAP_R         1000.f        /* m: the world map marks the ones this near the car */
+#define GOLD_DAYS     3u            /* one day in this many has a golden diamond */
 
 static int committed(uint32_t a, uint32_t n){
     if (!a || a + n < a) return 0;
@@ -83,8 +89,9 @@ static struct {
     int placed_ok; uint32_t placed_day; int placed_stage, placed_roads;
     Spot at[N_DIAMONDS]; int moved[N_DIAMONDS], locked[N_DIAMONDS];   /* where each is for this player */
     unsigned paid;                                 /* the money this game paid ($) */
+    int gold;                                      /* the day's golden diamond (-1: none) */
     int slot[3];
-} T = { .slot = { -2, -2, -2 } };
+} T = { .slot = { -2, -2, -2 }, .gold = -1 };
 
 /* the page: the day, and its diamonds found so far */
 void treasure_input(uint32_t day, uint32_t found){
@@ -168,6 +175,8 @@ static void pick(void){
             for (int k = 0; k < n && ok; k++) ok = hypotf(T.pool[i].x - T.pool[T.pick[k]].x, T.pool[i].y - T.pool[T.pick[k]].y) >= apart;
             if (ok){ used[i] = 1; T.pick[n++] = i; }
         }
+    uint32_t g = (T.day ^ 0x60ddu) * 2246822519u; g ^= g >> 15;
+    T.gold = g % GOLD_DAYS == 0u ? (int)((g >> 8) % N_DIAMONDS) : -1;
     T.picked_day = T.day; T.picked_day_ok = 1;
 }
 
@@ -269,7 +278,7 @@ void treasure_frame(CPU *c){
     uint32_t pl = rd(G_PLAYER1), car = pl ? rd(pl + 4u) : 0;
     int on = T.known && rd(G_FLOW) == 6u && rd(G_GAMEMODE) == 1u && rd(G_RACEKIND) == 0u && car && committed(car + 0x60u, 0x48)
              && pool();
-    if (!on){ publish(0, 0, 0, 0); roam_minimap_beacon(0, 0.f, 0.f); return; }
+    if (!on){ publish(0, 0, 0, 0); roam_minimap_marks(0, 0, 0); return; }
     pick();
     int stage = rd(G_STAGE) < 1u ? 1 : (int)rd(G_STAGE), win = mprace_prize_of(1);
     /* (the walls looked at again now and then: a new stage's come with a new world, or with the races' screens) */
@@ -291,14 +300,21 @@ void treasure_frame(CPU *c){
             T.found |= 1u << k;
             fprintf(stderr, "[treasure] f=%ld diamond %d found (%d of %d)%s\n", autotest_frame(), k + 1, __builtin_popcount(T.found),
                     N_DIAMONDS, T.moved[k] ? " (moved from its home)" : "");
+            if (k == T.gold) pay(prize / 2u / 10u * 10u, "the golden diamond");
             if (T.found == ALL_FOUND && !T.was_done) pay(prize, "all of the day's diamonds");
             continue;
         }
         if (d < bd){ bd = d; best = k; }
     }
-    double aim = (double)((uint64_t)((prize / 10u) & 0xfffu) << 29), screen = 0;
-    if (best >= 0 && bd < MINIMAP_R) roam_minimap_beacon(1, T.at[best].x, T.at[best].y);
-    else roam_minimap_beacon(0, 0.f, 0.f);
+    double aim = (double)((uint64_t)((prize / 10u) & 0xfffu) << 29 | (uint64_t)(T.gold + 1) << 42), screen = 0;
+    /* the minimap: the ones not found within MAP_R (as the world map), the nearest on its edge within MINIMAP_R */
+    { float xy[N_DIAMONDS][2]; int kind[N_DIAMONDS], n = 0;
+      for (int k = 0; k < N_DIAMONDS; k++){
+          if ((T.found & (1u << k)) || T.locked[k] || hypotf(T.at[k].x - x, T.at[k].y - y) > MAP_R) continue;
+          xy[n][0] = T.at[k].x; xy[n][1] = T.at[k].y;
+          kind[n++] = (k == T.gold ? 2 : 1) | (k == best && bd < MINIMAP_R ? 4 : 0);
+      }
+      roam_minimap_marks(n, (const float (*)[2])xy, kind); }
     if (best >= 0){
         const Spot *b = &T.at[best];
         screen = project(b->x, b->y, (b->z ? b->z : rdf(car + 0x68u)) + FLOAT_UP);
@@ -310,4 +326,18 @@ void treasure_frame(CPU *c){
         aim += (double)((uint64_t)(bd > 65535.f ? 65535u : (unsigned)bd) | (uint64_t)deg << 16 | (uint64_t)best << 25 | 1ull << 41);
     }
     publish(1, locked, aim, screen);
+}
+
+/* the world map (roam_game.c): the day's diamonds not found and not locked within MAP_R of the car, where they are
+ * for this player (at most max), each with 1 in gold[] when it is the golden one; 0 when the hunt is not on */
+int treasure_map_marks(float (*xy)[2], int *gold, int max){
+    uint32_t pl = rd(G_PLAYER1), car = pl ? rd(pl + 4u) : 0;
+    if (!T.known || !T.placed_ok || T.placed_day != T.day || !car || !committed(car + 0x60u, 8)) return 0;
+    float cx = rdf(car + 0x60u), cy = rdf(car + 0x64u);
+    int n = 0;
+    for (int k = 0; k < N_DIAMONDS && n < max; k++){
+        if ((T.found & (1u << k)) || T.locked[k] || hypotf(T.at[k].x - cx, T.at[k].y - cy) > MAP_R) continue;
+        xy[n][0] = T.at[k].x; xy[n][1] = T.at[k].y; gold[n] = k == T.gold; n++;
+    }
+    return n;
 }

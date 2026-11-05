@@ -1657,5 +1657,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Búsqueda del tesoro de hoy: {n} de {total} diamantes.",
   "{n} km": "{n} km",
   "{n} m": "{n} m",
-  "The rest open as your career goes on.": "El resto se abre a medida que avanza tu modo carrera."
+  "The rest open as your career goes on.": "El resto se abre a medida que avanza tu modo carrera.",
+  "Golden diamond": "Diamante dorado",
+  "All 15 in {time}.": "Los 15 en {time}.",
+  "Your quickest: {time}.": "Tu mejor tiempo: {time}.",
+  "Finished today: {n}.": "Completada hoy: {n}.",
+  "No one has found all 15 today yet.": "Hoy nadie ha encontrado aún los 15."
 }

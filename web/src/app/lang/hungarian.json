@@ -1538,5 +1538,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Mai kincsvadászat: {n}/{total} gyémánt.",
   "{n} km": "{n} km",
   "{n} m": "{n} m",
-  "The rest open as your career goes on.": "A többi a karriered előrehaladtával nyílik meg."
+  "The rest open as your career goes on.": "A többi a karriered előrehaladtával nyílik meg.",
+  "Golden diamond": "Arany gyémánt",
+  "All 15 in {time}.": "Mind a 15: {time}.",
+  "Your quickest: {time}.": "A leggyorsabb időd: {time}.",
+  "Finished today: {n}.": "Ma teljesítette: {n}.",
+  "No one has found all 15 today yet.": "Ma még senki sem találta meg mind a 15-öt."
 }

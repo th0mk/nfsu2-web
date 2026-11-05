@@ -1695,5 +1695,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Dnešní hon na poklad: {n} z {total} diamantů.",
   "{n} km": "{n} km",
   "{n} m": "{n} m",
-  "The rest open as your career goes on.": "Zbytek se odemkne s postupem kariéry."
+  "The rest open as your career goes on.": "Zbytek se odemkne s postupem kariéry.",
+  "Golden diamond": "Zlatý diamant",
+  "All 15 in {time}.": "Všech 15 za {time}.",
+  "Your quickest: {time}.": "Tvůj nejrychlejší: {time}.",
+  "Finished today: {n}.": "Dnes dokončilo: {n}.",
+  "No one has found all 15 today yet.": "Dnes ještě nikdo nenašel všech 15."
 }

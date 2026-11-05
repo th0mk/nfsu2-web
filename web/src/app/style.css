@@ -1481,6 +1481,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .ach-pop.small .ach-pop-what { color: var(--lime); font-style: italic; font-weight: 700; font-size: 16px; line-height: 22px; }
 .ach-pop.small.in { animation: ach-in 360ms cubic-bezier(0.2, 0.9, 0.25, 1.15) both; }
 .ach-pop.small.in::after { animation: none; }
+.ach-pop.gold > svg, .ach-pop.gold .ach-pop-what { color: #ffc830; stroke: #ffc830; }
+.ach-pop.gold { border-color: rgba(255, 200, 48, 0.6); }
 /* the treasure hunt's marker over the street (treasure.ts): a glowing diamond where the nearest open one is, bigger
  * as it comes near, its distance under it */
 .th-mark { position: absolute; z-index: 4; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -1491,5 +1493,19 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .th-mark span { padding: 1px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); color: var(--lime);
   font: italic 700 13px/18px var(--font); font-variant-numeric: tabular-nums; }
 @keyframes th-bob { 50% { transform: translateY(-12%); } }
-@media (prefers-reduced-motion: reduce) { .th-mark svg { animation: none; } }
-.stage.photo :is(.th-hud, .th-mark, .ach-pop) { display: none; }
+/* ...the golden one's (treasure.c: one day in three) */
+.th-mark.gold svg { fill: rgba(255, 200, 48, 0.3); stroke: #ffc830; filter: drop-shadow(0 0 6px rgba(255, 200, 48, 0.7)) drop-shadow(0 0 2px rgba(0, 0, 0, 0.8)); }
+.th-mark.gold span { color: #ffc830; }
+/* the stage's flash at a diamond found */
+.th-flash { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at 50% 55%, rgba(200, 240, 136, 0.35), rgba(200, 240, 136, 0) 60%); }
+.th-flash.gold { background: radial-gradient(ellipse at 50% 55%, rgba(255, 200, 48, 0.45), rgba(255, 200, 48, 0) 60%); }
+.th-flash.on { animation: th-flash 600ms ease-out; }
+@keyframes th-flash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .th-mark svg { animation: none; } .th-flash.on { animation-duration: 1ms; } }
+.stage.photo :is(.th-hud, .th-mark, .th-flash, .ach-pop) { display: none; }
+
+/* the achievements tab's treasure hunt board (huntboard.ts): the day's fastest */
+.hunt-best { margin: 4px 0 16px; padding: 0 0 0 24px; color: var(--muted); font-size: 14px; line-height: 22px; }
+.hunt-best li span { margin-right: 8px; color: var(--text); }
+.hunt-best li b { color: var(--lime); font-variant-numeric: tabular-nums; }

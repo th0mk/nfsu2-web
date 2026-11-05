@@ -1559,5 +1559,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Σημερινό κυνήγι θησαυρού: {n} από {total} διαμάντια.",
   "{n} km": "{n} χλμ.",
   "{n} m": "{n} μ.",
-  "The rest open as your career goes on.": "Τα υπόλοιπα ανοίγουν όσο προχωρά η καριέρα σου."
+  "The rest open as your career goes on.": "Τα υπόλοιπα ανοίγουν όσο προχωρά η καριέρα σου.",
+  "Golden diamond": "Χρυσό διαμάντι",
+  "All 15 in {time}.": "Και τα 15 σε {time}.",
+  "Your quickest: {time}.": "Ο καλύτερος χρόνος σου: {time}.",
+  "Finished today: {n}.": "Ολοκλήρωσαν σήμερα: {n}.",
+  "No one has found all 15 today yet.": "Κανείς δεν έχει βρει ακόμα και τα 15 σήμερα."
 }

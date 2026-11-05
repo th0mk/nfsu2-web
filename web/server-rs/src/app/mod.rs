@@ -16,6 +16,7 @@ pub mod days;
 mod etag;
 mod files;
 mod friends;
+mod hunts;
 mod kept;
 mod lan;
 mod manifest;
@@ -157,7 +158,7 @@ const STATUS: [(u16, &str); 8] = [
     (503, "Service Unavailable"),
 ];
 
-pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /seen\nDisallow: /lan\nDisallow: /vault\nDisallow: /names\nDisallow: /friends";
+pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /seen\nDisallow: /lan\nDisallow: /vault\nDisallow: /names\nDisallow: /friends\nDisallow: /hunt";
 
 /// what a client may ask a file to be sent as
 const TYPES: [(&str, &str); 11] = [
@@ -241,6 +242,8 @@ pub struct App {
     pub bans: Arc<nfsu2_bans::Bans>,
     /// how many come each day (days.rs: /seen, the hellos, the sweep)
     pub days: Arc<days::Days>,
+    /// the daily treasure hunt's board (/hunt: hunts.rs), in the state folder's hunts.json
+    pub hunts: Arc<hunts::Hunts>,
     /// SO_SNDBUF for /lan connections (NFSU2_LAN_SNDBUF, a measurement knob; 0: the kernel's own, which Linux grows
     /// to megabytes, ahead of the switch's own queue rules)
     lan_sndbuf: usize,
@@ -366,6 +369,7 @@ impl App {
             friends,
             bans,
             days,
+            hunts: Arc::new(hunts::Hunts::open(&o.state, nfsu2_util::now_ms())),
             lan_sndbuf,
             o,
         }
@@ -556,7 +560,8 @@ impl App {
         if q.method == "PUT" && self.o.dev && !self.o.artifacts.is_empty() && p.starts_with("/artifacts/") {
             return self.put_artifact(q, s, &p[11..]).await;
         }
-        // keyphrase saves, claimed names and friends: their own methods and bodies (vault.rs, names.rs, friends.rs)
+        // keyphrase saves, claimed names, friends and the treasure hunt's board: their own methods and bodies (vault.rs,
+        // names.rs, friends.rs, hunts.rs)
         if p == "/vault" {
             return self.vault(q, s, &u).await;
         }
@@ -568,6 +573,9 @@ impl App {
         }
         if p == "/lastfm" {
             return self.lastfm(q, s, &u).await;
+        }
+        if p == "/hunt" {
+            return self.hunt_route(q, s, &u).await;
         }
         if q.method != "GET" && q.method != "HEAD" {
             return self

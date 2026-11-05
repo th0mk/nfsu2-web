@@ -426,6 +426,12 @@ pub async fn run(o: Options, cores: usize) {
                 if let Some(l) = &app.lastfm {
                     l.prune();
                 }
+                // the treasure hunt's board (hunts.rs): the days before the kept ones go, hunts.json written when it changed
+                app.hunts.prune(nfsu2_util::now_ms());
+                let h = app.hunts.clone();
+                if let Ok(Err(e)) = tokio::task::spawn_blocking(move || h.save()).await {
+                    log::error(&format!("hunts.json: {e}"));
+                }
                 // the claimed names: the ended ones go, names.json written when anything changed
                 if let Some(n) = &app.names {
                     n.prune();
@@ -511,11 +517,11 @@ pub async fn run(o: Options, cores: usize) {
         });
     }
 
-    // SIGTERM, SIGINT: the switch saves its addresses, the hosts stop, the claimed names and the day so far are written, the control
-    // socket's file goes, then the process ends
+    // SIGTERM, SIGINT: the switch saves its addresses, the hosts stop, the claimed names, the day so far and the hunt's
+    // board are written, the control socket's file goes, then the process ends
     let control_up = control.is_some();
     {
-        let (lan, trace, claims, days) = (lan.clone(), trace.clone(), claims.clone(), days.clone());
+        let (lan, trace, claims, days, hunts) = (lan.clone(), trace.clone(), claims.clone(), days.clone(), app.hunts.clone());
         let mut term = signal(SignalKind::terminate()).unwrap_or_else(|e| die(&format!("SIGTERM: {e}")));
         let mut int = signal(SignalKind::interrupt()).unwrap_or_else(|e| die(&format!("SIGINT: {e}")));
         tokio::spawn(async move {
@@ -535,6 +541,9 @@ pub async fn run(o: Options, cores: usize) {
                 }
                 if let Err(e) = days.save() {
                     log::error(&format!("days.json: {e}"));
+                }
+                if let Err(e) = hunts.save() {
+                    log::error(&format!("hunts.json: {e}"));
                 }
                 if let Some(c) = &control {
                     c.remove();

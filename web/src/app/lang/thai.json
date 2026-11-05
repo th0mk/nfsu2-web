@@ -1505,5 +1505,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "ล่าสมบัติวันนี้: เพชร {n} จาก {total} เม็ด",
   "{n} km": "{n} กม.",
   "{n} m": "{n} ม.",
-  "The rest open as your career goes on.": "ที่เหลือจะเปิดเมื่อโหมดอาชีพของคุณก้าวหน้าขึ้น"
+  "The rest open as your career goes on.": "ที่เหลือจะเปิดเมื่อโหมดอาชีพของคุณก้าวหน้าขึ้น",
+  "Golden diamond": "เพชรทองคำ",
+  "All 15 in {time}.": "ครบ 15 เม็ดใน {time}",
+  "Your quickest: {time}.": "เวลาเร็วที่สุดของคุณ: {time}",
+  "Finished today: {n}.": "วันนี้ทำสำเร็จ: {n} คน",
+  "No one has found all 15 today yet.": "วันนี้ยังไม่มีใครเก็บครบ 15 เม็ด"
 }

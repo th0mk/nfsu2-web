@@ -1695,5 +1695,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Охота за сокровищами сегодня: алмазов {n} из {total}.",
   "{n} km": "{n} км",
   "{n} m": "{n} м",
-  "The rest open as your career goes on.": "Остальные откроются по ходу карьеры."
+  "The rest open as your career goes on.": "Остальные откроются по ходу карьеры.",
+  "Golden diamond": "Золотой алмаз",
+  "All 15 in {time}.": "Все 15 за {time}.",
+  "Your quickest: {time}.": "Твой лучший результат: {time}.",
+  "Finished today: {n}.": "Сегодня прошли: {n}.",
+  "No one has found all 15 today yet.": "Сегодня ещё никто не нашёл все 15."
 }

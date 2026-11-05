@@ -1505,5 +1505,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "오늘의 보물찾기: 다이아몬드 {total}개 중 {n}개",
   "{n} km": "{n}km",
   "{n} m": "{n}m",
-  "The rest open as your career goes on.": "나머지는 커리어가 진행되면 열려요."
+  "The rest open as your career goes on.": "나머지는 커리어가 진행되면 열려요.",
+  "Golden diamond": "황금 다이아몬드",
+  "All 15 in {time}.": "15개를 {time} 만에.",
+  "Your quickest: {time}.": "최고 기록: {time}.",
+  "Finished today: {n}.": "오늘 완료: {n}명.",
+  "No one has found all 15 today yet.": "오늘은 아직 아무도 15개를 다 찾지 못했어요."
 }

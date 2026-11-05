@@ -2362,9 +2362,12 @@ export async function boot() {
     pop: $('#ach-pop'), log: logLine,
   });
   void achievements.load();
-  treasure = new TreasureHunt($('#th-hud'), achievements, logLine);
+  treasure = new TreasureHunt($('#th-hud'), achievements, logLine, {
+    token: () => vault ? vault.token() : Promise.resolve(null), board: $('#achievements').querySelector<HTMLElement>('[data-hunt-board]'),
+  });
+  void treasure.board();                                        // (the day's board in the Achievements tab from the start)
   // (again when the tab opens: a restore or the cloud saves may have brought another device's)
-  $('#settings').querySelector('[role=tab][data-tab=achievements]')?.addEventListener('click', () => void achievements.load());
+  $('#settings').querySelector('[role=tab][data-tab=achievements]')?.addEventListener('click', () => { void achievements.load(); void treasure?.board(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { void checkNewer(); vault.shown(); } });
   setInterval(() => { if (document.visibilityState === 'visible') void checkNewer(); }, NEWER_EVERY_MS);
   // iPhone and iPad: Safari plays a page's Web Audio as "ambient", muted by Silent mode, and players took that for a

@@ -37,20 +37,23 @@ export interface Totals {
   winsByCar: Record<string, number>;
   /** the treasure hunts finished, the days in a row up to the last one, the most days in a row, the last one's day */
   hunts: number; huntStreak: number; bestHuntStreak: number; lastHuntDay: number;
+  /** the quickest hunt (ms of free roam from the first diamond to the last; 0: none timed yet) */
+  bestHuntMs: number;
 }
 export const emptyTotals = (): Totals => ({
   races: 0, wins: 0, streak: 0, bestStreak: 0, meters: 0, topKmh: 0, bestDrift: 0, closeWin: false, playersWins: 0,
   typesWon: [], tracks: [], wonOn: [], bothWays: false, carsWon: [], winsByCar: {},
-  hunts: 0, huntStreak: 0, bestHuntStreak: 0, lastHuntDay: -1,
+  hunts: 0, huntStreak: 0, bestHuntStreak: 0, lastHuntDay: -1, bestHuntMs: 0,
 });
 /** a treasure hunt finished on day (the UTC day's number) into the totals (a new object; a day once only) */
-export function addHunt(t0: Totals, day: number): Totals {
+export function addHunt(t0: Totals, day: number, ms = 0): Totals {
   if (t0.lastHuntDay === day) return t0;
   const s = structuredClone(t0);
   s.hunts++;
   s.huntStreak = s.lastHuntDay === day - 1 ? s.huntStreak + 1 : 1;
   s.bestHuntStreak = Math.max(s.bestHuntStreak, s.huntStreak);
   s.lastHuntDay = day;
+  if (ms > 0 && (!s.bestHuntMs || ms < s.bestHuntMs)) s.bestHuntMs = ms;
   return s;
 }
 
@@ -125,6 +128,11 @@ export const levelName = (a: Achievement, level: number) => a.levels.length > 1 
 /** a level's need, short, in the page's language (50K, 1,5 Tsd.) */
 const compact = (x: number) =>
   new Intl.NumberFormat(language() === 'english' ? 'en-GB' : LOCALE[language()], { notation: 'compact' }).format(x);
+/** a hunt's time, m:ss (h:mm:ss from an hour) */
+export function huntClock(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`;
+}
 /** the UTC day's number (days since 1970-01-01): the treasure hunt's day */
 export const utcDay = (ms = Date.now()) => Math.floor(ms / 86_400_000);
 export const bitCount = (x: number) => { let n = 0; for (; x; x &= x - 1) n++; return n; };
@@ -132,7 +140,8 @@ export const bitCount = (x: number) => { let n = 0; for (; x; x &= x - 1) n++; r
 export const LEVELS = ACHIEVEMENTS.reduce((s, a) => s + a.levels.length, 0);
 
 /** achievements.json */
-export interface Kept { v: 1; totals: Totals; got: Record<string, number>; hunt?: { day: number; found: number } }
+/** hunt: the day's treasure hunt so far (the diamonds found, a bit each; its time, ms) */
+export interface Kept { v: 1; totals: Totals; got: Record<string, number>; hunt?: { day: number; found: number; ms?: number } }
 export function parse(text: string | null): Kept {
   try {
     const k = JSON.parse(text ?? '') as Partial<Kept>;
@@ -169,8 +178,8 @@ export function earn(k: Kept, r: RaceResult, when: number): { kept: Kept; got: {
   return { kept: { ...k, totals, got }, got: now };
 }
 /** a day's treasure hunt finished: the new totals (once a day), and the levels it reached */
-export function earnHunt(k: Kept, day: number, when: number): { kept: Kept; got: { a: Achievement; level: number }[] } {
-  const totals = addHunt(k.totals, day), { got, now } = reach(totals, k.got, when);
+export function earnHunt(k: Kept, day: number, when: number, ms = 0): { kept: Kept; got: { a: Achievement; level: number }[] } {
+  const totals = addHunt(k.totals, day, ms), { got, now } = reach(totals, k.got, when);
   return { kept: { ...k, totals, got }, got: now };
 }
 
@@ -187,6 +196,8 @@ interface Card {
   icon: 'trophy' | 'diamond'; label: string; name: string; what: string; chips?: { texts: string[]; reached: number };
   /** a small one: one line under the hunt's pill, a short while (a diamond found) */
   small?: boolean;
+  /** ...in gold (the golden diamond) */
+  gold?: boolean;
 }
 const POP_MS = 4800, POP_SMALL_MS = 2500, POP_GAP_MS = 350;
 const ICONS = {
@@ -264,24 +275,29 @@ export class Achievements {
 
   /** the treasure hunt (treasure.ts): day's diamonds found so far, as the file has them (0: none, or another day) */
   huntFound(day: number): number { return this.kept.hunt?.day === day ? this.kept.hunt.found : 0; }
-  /** ...the day's diamonds found forgotten (?hunt=reset, to play the day's hunt again; the achievements stay) */
-  huntReset(day: number) { this.change(k => ({ kept: { ...k, hunt: { day, found: 0 } }, got: [] })); }
-  /** ...a diamond found: its card and the day's progress kept */
-  diamond(day: number, found: number, total: number, paid: number) {
+  /** ...the day's hunt's time so far (ms) */
+  huntMs(day: number): number { return this.kept.hunt?.day === day ? this.kept.hunt.ms ?? 0 : 0; }
+  /** ...a diamond found (the golden one: what it paid, $): its card and the day's progress kept */
+  diamond(day: number, found: number, total: number, paid: number, ms: number, golden = false) {
     const n = bitCount(found);
-    this.change(k => ({ kept: { ...k, hunt: { day, found } }, got: [] }),
-      [{ icon: 'diamond', label: '', name: t('Diamond {n} of {total}', { n: count(n), total: count(total) }),
-         what: paid > 0 ? `+$${count(paid)}` : '', small: true }]);
+    this.change(k => ({ kept: { ...k, hunt: { day, found, ms } }, got: [] }),
+      [{ icon: 'diamond', label: '', name: golden ? t('Golden diamond') : t('Diamond {n} of {total}', { n: count(n), total: count(total) }),
+         what: paid > 0 ? `+$${count(paid)}` : '', small: true, ...(golden ? { gold: true } : {}) }]);
   }
-  /** ...all of them found: the card (with the prize the game paid into the career's bank, $), the hunt in the totals */
-  huntDone(day: number, found: number, prize: number) {
-    this.change(k => earnHunt({ ...k, hunt: { day, found } }, day, Date.now()),
-      [{ icon: 'diamond', label: t('Treasure hunt'), name: t('Hunt complete'),
-         what: prize > 0 ? t('${n} into your career\'s bank.', { n: count(prize) }) : t('All of today\'s diamonds found.') }]);
+  /** ...all of them found: the card (with the prize the game paid into the career's bank, $, and the hunt's time), the
+   *  hunt in the totals; the last one golden: what it paid on its own card first */
+  huntDone(day: number, found: number, prize: number, ms: number, goldPaid = 0) {
+    const time = ms > 0 ? t('All 15 in {time}.', { time: huntClock(ms) }) + ' ' : '';
+    this.change(k => earnHunt({ ...k, hunt: { day, found, ms } }, day, Date.now(), ms),
+      [...(goldPaid > 0 ? [{ icon: 'diamond' as const, label: '', name: t('Golden diamond'), what: `+$${count(goldPaid)}`, small: true, gold: true }] : []),
+       { icon: 'diamond', label: t('Treasure hunt'), name: t('Hunt complete'),
+         what: time + (prize > 0 ? t('${n} into your career\'s bank.', { n: count(prize) }) : t('All of today\'s diamonds found.')) }]);
   }
   /** ...today's progress for the tab */
   private huntLine(): string {
-    return t('Today\'s treasure hunt: {n} of {total} diamonds.', { n: count(bitCount(this.huntFound(utcDay()))), total: count(15) });
+    const best = this.kept.totals.bestHuntMs;
+    return t('Today\'s treasure hunt: {n} of {total} diamonds.', { n: count(bitCount(this.huntFound(utcDay()))), total: count(15) }) +
+      (best > 0 ? ' ' + t('Your quickest: {time}.', { time: huntClock(best) }) : '');
   }
 
   /** the next card over the game: its icon, label, name and line, the levels (the new one popping in); one after
@@ -301,6 +317,7 @@ export class Achievements {
     body.append(name);
     if (c.what) body.append(what);
     el.classList.toggle('small', !!c.small);
+    el.classList.toggle('gold', !!c.gold);
     if (c.chips) {
       const chips = document.createElement('ol');
       chips.className = 'ach-levels';

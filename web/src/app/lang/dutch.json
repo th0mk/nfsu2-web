@@ -1619,5 +1619,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Schattenjacht van vandaag: {n} van {total} diamanten.",
   "{n} km": "{n} km",
   "{n} m": "{n} m",
-  "The rest open as your career goes on.": "De rest gaat open naarmate je carrière vordert."
+  "The rest open as your career goes on.": "De rest gaat open naarmate je carrière vordert.",
+  "Golden diamond": "Gouden diamant",
+  "All 15 in {time}.": "Alle 15 in {time}.",
+  "Your quickest: {time}.": "Je snelste: {time}.",
+  "Finished today: {n}.": "Vandaag voltooid: {n}.",
+  "No one has found all 15 today yet.": "Nog niemand heeft vandaag alle 15 gevonden."
 }

@@ -1544,5 +1544,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Bugünün hazine avı: {total} elmastan {n} tanesi.",
   "{n} km": "{n} km",
   "{n} m": "{n} m",
-  "The rest open as your career goes on.": "Kalanlar kariyerin ilerledikçe açılır."
+  "The rest open as your career goes on.": "Kalanlar kariyerin ilerledikçe açılır.",
+  "Golden diamond": "Altın elmas",
+  "All 15 in {time}.": "15'i de {time} içinde.",
+  "Your quickest: {time}.": "En hızlın: {time}.",
+  "Finished today: {n}.": "Bugün bitiren: {n}.",
+  "No one has found all 15 today yet.": "Bugün henüz kimse 15'ini de bulamadı."
 }

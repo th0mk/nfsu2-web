@@ -1619,5 +1619,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Dagens skattejagt: {n} af {total} diamanter.",
   "{n} km": "{n} km",
   "{n} m": "{n} m",
-  "The rest open as your career goes on.": "Resten åbner, efterhånden som din karriere skrider frem."
+  "The rest open as your career goes on.": "Resten åbner, efterhånden som din karriere skrider frem.",
+  "Golden diamond": "Gylden diamant",
+  "All 15 in {time}.": "Alle 15 på {time}.",
+  "Your quickest: {time}.": "Din hurtigste: {time}.",
+  "Finished today: {n}.": "Fuldført i dag: {n}.",
+  "No one has found all 15 today yet.": "Ingen har fundet alle 15 i dag endnu."
 }

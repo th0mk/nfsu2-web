@@ -1619,5 +1619,10 @@
   "Today's treasure hunt: {n} of {total} diamonds.": "Dagens skattjakt: {n} av {total} diamanter.",
   "{n} km": "{n} km",
   "{n} m": "{n} m",
-  "The rest open as your career goes on.": "Resten öppnas allteftersom din karriär går framåt."
+  "The rest open as your career goes on.": "Resten öppnas allteftersom din karriär går framåt.",
+  "Golden diamond": "Gyllene diamant",
+  "All 15 in {time}.": "Alla 15 på {time}.",
+  "Your quickest: {time}.": "Din snabbaste: {time}.",
+  "Finished today: {n}.": "Klara i dag: {n}.",
+  "No one has found all 15 today yet.": "Ingen har hittat alla 15 i dag än."
 }

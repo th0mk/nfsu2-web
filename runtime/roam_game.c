@@ -3364,6 +3364,34 @@ static int wm_room(uint32_t pk){
     int room = (RH_FE_NODES < FE_LIST_MAX ? RH_FE_NODES : FE_LIST_MAX) - WM_SPARE - fe_objects(pk + 0x4cu, 0);
     return room > 0 ? room : 0;
 }
+/* The treasure hunt's diamonds not found yet (treasure.c) on a map just opened: a copy of the cover-shoot star each
+ * (as a car meet's, meet_make), light blue, the day's golden one gold, at its place; the map frees them with its own
+ * markers.  Not on the legend's rows: a diamond is not a player */
+#define GEM_MARK_SZ     0x2cu         /* a marker (as WM_ICON_SZ): +8 type, +0xC FE object, +0x10/+0x14 x y */
+#define GEM_RGB_MAP     0xffe15au     /* b g r, as fe_colour_to takes it: light blue */
+#define GOLD_RGB_MAP    0x30c8ffu     /* ...gold */
+__attribute__((weak)) int treasure_map_marks(float (*xy)[2], int *gold, int max){ (void)xy; (void)gold; (void)max; return 0; }
+static int gem_map_open(CPU *c, uint32_t map, uint32_t pkg, uint32_t pk){
+    float xy[16][2]; int gold[16], n = treasure_map_marks(xy, gold, 16), made = 0;
+    uint32_t icon = 0;
+    char nm[32];
+    for (int i = 0; i < 3 && n && !icon; i++){ snprintf(nm, sizeof nm, "SHOWCASEINDICATOR_%d", i); icon = wm_find(c, pkg, nm); }
+    for (int i = 0; i < n && icon && wm_room(pk) > 2; i++){
+        snprintf(nm, sizeof nm, "ROAM_GEM_%d", i);
+        uint32_t obj = fe_clone(c, pkg, icon, nm), rgb = gold[i] ? GOLD_RGB_MAP : GEM_RGB_MAP;
+        if (!obj) break;
+        fe_colour_to(c, obj, (const int32_t[3]){ (int32_t)(rgb >> 16 & 0xff), (int32_t)(rgb >> 8 & 0xff), (int32_t)(rgb & 0xff) });
+        uint32_t sz = GEM_MARK_SZ, m = rh_call(c, FN_MALLOC, 0, 0, 1, &sz);
+        if (!ok(m, GEM_MARK_SZ)) break;
+        for (uint32_t j = 0; j < GEM_MARK_SZ; j += 4) MR32(m + j) = 0;
+        MR32(m + 8u) = WM_CAR; MR32(m + 0xcu) = obj; MRF32(m + 0x10u) = xy[i][0]; MRF32(m + 0x14u) = xy[i][1];
+        uint32_t head = map + 4u, tail = rd32(head + 4u);
+        MR32(tail) = m; MR32(head + 4u) = m; MR32(m + 4u) = tail; MR32(m) = head;
+        made++;
+    }
+    if (n) rlog("[roam] f=%ld world map: %d of the treasure hunt's %d diamonds left marked%s\n", rh_frame(), made, n, icon ? "" : " (no star to copy)");
+    return made;
+}
 /* a copy of AIRACERINDICATOR_0 for each car marker without an object, at most max */
 static int wm_dress(CPU *c, uint32_t map, uint32_t pkg, int max){
     uint32_t o0 = 0; int copies = 0;
@@ -3922,8 +3950,9 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
             if (!wm_mark(c, map, pkg, s->car)) break;
             n++;
         }
+        int gems = gem_map_open(c, map, pkg, pk);
         int copies = wm_dress(c, map, pkg, wm_room(pk));
-        if (n || copies) gcall0(c, FN_WM_PLACE, map);
+        if (n || copies || gems) gcall0(c, FN_WM_PLACE, map);
         crew_map_open(c, map, pkg, pk, w);
         ai_map_open(c, map, pkg, w);
         wmf_open(c, scr, map, pkg, w);
@@ -4263,31 +4292,40 @@ static int nr_put(CPU *c, uint32_t icons, int *k, float x, float y, uint16_t hea
     (*k)++;
     return 1;
 }
-/* A place of our own on the minimap (treasure.c: the day's nearest diamond within 500 m): an icon of the player's
- * type (as the players' above) with a stand-in of its own, its FE object a copy of the HUD's cover-shoot star
- * (SHOWCASEINDICATOR_, else an AI racer's arrow) in BEACON_RGB, drawn on the minimap's edge pointing to it while it
- * is past the edge.  Made again with a new HUD or new icons, as the players' arrows */
+/* Places of our own on the minimap (treasure.c: the day's diamonds not found within 1 km): icons of the player's type
+ * (as the players' above), each with a stand-in of its own, its FE object a copy of the HUD's cover-shoot star
+ * (SHOWCASEINDICATOR_, else an AI racer's arrow), light blue or gold; hidden past the minimap's edge, but for the one
+ * kept on its edge pointing there (the nearest).  Made as needed, again with a new HUD or new icons, as the players'
+ * arrows */
 #define BEACON_RGB_R    90
 #define BEACON_RGB_G    225
 #define BEACON_RGB_B    255
+#define BC_N            16
+#define BC_GOLD         2             /* roam_minimap_marks' kinds: 1 a diamond, 2 the golden one, | BC_EDGE */
+#define BC_EDGE         4             /* ...kept on the minimap's edge while past it */
 static struct {
-    int on, said, failed; float x, y;
-    uint32_t hud, icons, blk, copy, hash, vis, icon; const char *from;
+    int n, said, failed, made; float x[BC_N], y[BC_N]; int kind[BC_N];
+    uint32_t hud, icons, blk[BC_N], copy[BC_N], hash[BC_N], vis[BC_N], icon[BC_N]; const char *from;
 } g_beacon;
-void roam_minimap_beacon(int on, float x, float y){ g_beacon.on = on; g_beacon.x = x; g_beacon.y = y; }
-/* its copy is still the HUD package's and its icon still in the icons' list */
-static int bc_live(CPU *c, uint32_t icons){
-    if (!g_beacon.icon) return 0;
+/* the marks this frame: n places, each kind 1 or BC_GOLD, | BC_EDGE for the one on the edge */
+void roam_minimap_marks(int n, const float (*xy)[2], const int *kind){
+    g_beacon.n = n < 0 ? 0 : n > BC_N ? BC_N : n;
+    for (int i = 0; i < g_beacon.n; i++){ g_beacon.x[i] = xy[i][0]; g_beacon.y[i] = xy[i][1]; g_beacon.kind[i] = kind[i]; }
+}
+/* mark k's copy is still the HUD package's and its icon still in the icons' list */
+static int bc_live(CPU *c, uint32_t icons, int k){
     uint32_t pk = gcall1(c, FN_FE_PACKAGE, 0, rd32(icons + 0x18u));
-    if (!ok(pk, 0x54) || !fe_list_of(pk + 0x4cu, g_beacon.copy, 0) || rd32(g_beacon.copy + 0x10u) != g_beacon.hash) return 0;
+    if (!ok(pk, 0x54) || !fe_list_of(pk + 0x4cu, g_beacon.copy[k], 0) || rd32(g_beacon.copy[k] + 0x10u) != g_beacon.hash[k]) return 0;
     for (uint32_t n = rd32(icons), m = 0; n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n), m++)
-        if (n == g_beacon.icon) return rd32(n + 0x1cu) == g_beacon.vis && ok(g_beacon.vis, 8) && MR32(g_beacon.vis) == g_beacon.copy;
+        if (n == g_beacon.icon[k]) return rd32(n + 0x1cu) == g_beacon.vis[k] && ok(g_beacon.vis[k], 8) && MR32(g_beacon.vis[k]) == g_beacon.copy[k];
     return 0;
 }
+/* the next mark (g_beacon.made) */
 static int bc_make(CPU *c, uint32_t icons){
+    int k = g_beacon.made;
     uint32_t pkg = rd32(icons + 0x18u), m = 0;
     for (uint32_t n = rd32(icons); n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n)) m++;
-    if (m + NSLOT + NEAR_SLOTS + 16u >= MM_POOL) return 0;           /* (room kept for the friends' and the players' arrows) */
+    if (k >= BC_N || m + NSLOT + NEAR_SLOTS + 16u >= MM_POOL) return 0;   /* (room kept for the friends' and the players' arrows) */
     static const char *const FROM[] = { "SHOWCASEINDICATOR_0", "SHOWCASEINDICATOR_1", "AIRACERINDICATOR_0", 0 };
     uint32_t o0 = 0, sa = g_gmem + TAG_SCR + 0x48u;
     for (int i = 0; FROM[i] && !o0; i++){
@@ -4297,45 +4335,51 @@ static int bc_make(CPU *c, uint32_t icons){
     }
     uint32_t pk = o0 ? gcall1(c, FN_FE_PACKAGE, 0, pkg) : 0;
     if (!ok(pk, 0x54) || wm_room(pk) <= TAG_ALL) return 0;
-    uint32_t cl = fe_clone(c, pkg, o0, "ROAM_TREASURE");
+    char nm[24]; snprintf(nm, sizeof nm, "ROAM_TREASURE_%d", k);
+    uint32_t cl = fe_clone(c, pkg, o0, nm);
     if (!cl) return 0;
-    static const int32_t bc[3] = { BEACON_RGB_B, BEACON_RGB_G, BEACON_RGB_R };
-    fe_colour_to(c, cl, bc);
-    if (!g_beacon.blk){ uint32_t sz = NEAR_BLK; g_beacon.blk = rh_call(c, FN_MALLOC, 0, 0, 1, &sz); }
-    if (!ok(g_beacon.blk, NEAR_BLK)){ g_beacon.blk = 0; return 0; }
+    if (!g_beacon.blk[k]){ uint32_t sz = NEAR_BLK; g_beacon.blk[k] = rh_call(c, FN_MALLOC, 0, 0, 1, &sz); }
+    if (!ok(g_beacon.blk[k], NEAR_BLK)){ g_beacon.blk[k] = 0; return 0; }
     uint32_t vp = rd32(G_MM_VISPOOL), ip = rd32(G_MM_ICONPOOL);
     uint32_t v = vp ? rh_call(c, FN_POOL_ALLOC, 0, 0, 1, &vp) : 0, ic = ok(v, 8) && ip ? rh_call(c, FN_POOL_ALLOC, 0, 0, 1, &ip) : 0;
     if (!ok(ic, 0x20)){
         if (ok(v, 8)){ uint32_t a[2] = { vp, v }; rh_call(c, FN_POOL_FREE, 0, 0, 2, a); }
         return 0;
     }
-    uint32_t d = g_beacon.blk;
+    uint32_t d = g_beacon.blk[k];
     MR32(d) = d; MR32(d + 4u) = d; MRF32(d + 0x50u) = 1e5f; MRF32(d + 0x54u) = 1e5f; MR16(d + 0x40cu) = 0;
     MR32(v) = cl; MR32(v + 4u) = MM_PLAYER;
     MR32(ic + 8u) = (d - G_PLAYER1) >> 2; MR32(ic + 0xcu) = 0; MR32(ic + 0x10u) = 0; MR32(ic + 0x14u) = 0;
-    MR32(ic + 0x18u) = MM_HIDE; MR32(ic + 0x1cu) = v;
+    MR32(ic + 0x18u) = MM_EDGE | MM_HIDE; MR32(ic + 0x1cu) = v;
     uint32_t tail = rd32(icons + 4u);
     MR32(tail) = ic; MR32(icons + 4u) = ic; MR32(ic) = icons; MR32(ic + 4u) = tail;
-    g_beacon.copy = cl; g_beacon.hash = MR32(cl + 0x10u); g_beacon.vis = v; g_beacon.icon = ic;
+    g_beacon.copy[k] = cl; g_beacon.hash[k] = MR32(cl + 0x10u); g_beacon.vis[k] = v; g_beacon.icon[k] = ic;
+    g_beacon.made = k + 1;
     return 1;
 }
 static void bc_update(CPU *c, uint32_t icons, uint32_t hud){
-    if (hud != g_beacon.hud || icons != g_beacon.icons || (g_beacon.icon && !bc_live(c, icons))){
-        g_beacon.hud = hud; g_beacon.icons = icons; g_beacon.icon = 0; g_beacon.failed = 0;
-    }
-    if (g_beacon.on && !g_beacon.icon && !g_beacon.failed){
+    int live = hud == g_beacon.hud && icons == g_beacon.icons;
+    for (int k = 0; live && k < g_beacon.made; k++) live = bc_live(c, icons, k);
+    if (!live){ g_beacon.hud = hud; g_beacon.icons = icons; g_beacon.made = 0; g_beacon.failed = 0; }
+    while (g_beacon.made < g_beacon.n && !g_beacon.failed){
+        int was = g_beacon.made;
         g_beacon.failed = !bc_make(c, icons);
-        rlog("[roam] f=%ld minimap: the treasure hunt's mark %s%s\n", rh_frame(), g_beacon.failed ? "not made (no room, or no icon to copy)" : "made from ",
-             g_beacon.failed ? "" : g_beacon.from);
+        if (!was || g_beacon.failed)
+            rlog("[roam] f=%ld minimap: the treasure hunt's mark %d %s%s\n", rh_frame(), was + 1,
+                 g_beacon.failed ? "not made (no room, or no icon to copy)" : "made from ", g_beacon.failed ? "" : g_beacon.from);
     }
-    if (!g_beacon.icon) return;
-    uint32_t fl = MR32(g_beacon.icon + 0x18u), want = g_beacon.on ? 0u : MM_HIDE;
-    if (fl != want) MR32(g_beacon.icon + 0x18u) = want;
-    if (!g_beacon.on) return;
-    MRF32(g_beacon.blk + 0x50u) = g_beacon.x; MRF32(g_beacon.blk + 0x54u) = g_beacon.y;
-    if (ok(g_beacon.copy, 0x20) && (MR32(g_beacon.copy + 0x1cu) & 1u)) gcall1(c, FN_FE_SHOW, 0, g_beacon.copy);
+    static const int32_t blue[3] = { BEACON_RGB_B, BEACON_RGB_G, BEACON_RGB_R }, gold[3] = { 0x30, 0xc8, 0xff };
+    for (int k = 0; k < g_beacon.made; k++){
+        int on = k < g_beacon.n;
+        uint32_t fl = MR32(g_beacon.icon[k] + 0x18u), want = !on ? (fl | MM_HIDE) : (g_beacon.kind[k] & BC_EDGE) ? 0u : MM_EDGE;
+        if (fl != want) MR32(g_beacon.icon[k] + 0x18u) = want;
+        if (!on) continue;
+        MRF32(g_beacon.blk[k] + 0x50u) = g_beacon.x[k]; MRF32(g_beacon.blk[k] + 0x54u) = g_beacon.y[k];
+        fe_colour_to(c, g_beacon.copy[k], (g_beacon.kind[k] & BC_GOLD) ? gold : blue);
+        if (ok(g_beacon.copy[k], 0x20) && (MR32(g_beacon.copy[k] + 0x1cu) & 1u)) gcall1(c, FN_FE_SHOW, 0, g_beacon.copy[k]);
+    }
 }
-static void bc_hide(void){ if (g_beacon.icon && ok(g_beacon.icon, 0x20)) MR32(g_beacon.icon + 0x18u) |= MM_HIDE; }
+static void bc_hide(void){ for (int k = 0; k < g_beacon.made; k++) if (ok(g_beacon.icon[k], 0x20)) MR32(g_beacon.icon[k] + 0x18u) |= MM_HIDE; }
 static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
     g_auto.wait = 0;
     uint32_t pl = rd32(G_PLAYER1), hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0, icons = rd32(G_MM_ICONS);
@@ -4347,7 +4391,7 @@ static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
     }
     if (O.near_max <= 0 || !hud || !ok(icons, 0x1c) || !g_gmem){
         static int said;
-        if (g_beacon.on && !said++) rlog("[roam] f=%ld minimap: no mark for the treasure hunt (arrows %d, HUD %s, icons %s)\n", rh_frame(),
+        if (g_beacon.n && !said++) rlog("[roam] f=%ld minimap: no mark for the treasure hunt (arrows %d, HUD %s, icons %s)\n", rh_frame(),
                                          O.near_max, hud ? "up" : "none", ok(icons, 0x1c) ? "there" : "none");
         return;
     }
