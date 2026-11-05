@@ -11,9 +11,9 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-05 (ea2d66f)
+## 2026-11-05 (8d6654c)
 
-- **Races:** several lobbies can wait at one start: the lobby card shows them one at a time (E for the next) and starts on one a friend or crew-mate is in. A host can make a lobby Friends & crew only (V) and invite friends (Z), who join from wherever they are.
+- **Races:** several lobbies can wait at one start: the lobby card shows them one at a time (E for the next) and starts on one a friend or crew-mate is in. A host can make a lobby Friends & crew only (V) and invite friends (Z), who join from wherever they are. Lobbies you can't join (full, starting, or of a stage you're past) no longer show on the map or at the start.
 - **Free roam:** the box at the top left shows only when it says something: a new message, at a race, shop or outrun, and for a moment at the start and after a menu.
 - **Touch controls:** Reset shows only when the car is slow, and Pressurize and Bounce only when they can be used; the other buttons stay where they are.
 - **Vinyls:** Art Factory 28 to 34, Sha_Do's designs that only the Japanese release had, on every car after Art Factory 27 (ported to the PC by the underground2.net team).
