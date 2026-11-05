@@ -197,6 +197,14 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   garage, the shops and the main menu the right stick turns the car round and tilts the view, as the middle-button
   drag does: right turns the view right, as in photo mode (and as a drag to the right), down looks down on the car;
   full stick turns about 60° a second. Each screen starts at the game's own angle.
+- **Steam Controller, Steam Deck:** Valve's controllers are no game controllers to the browser (without Steam they act
+  as a mouse and a keyboard). In Chrome or Edge on a computer, Controls, Controller, **Connect a Steam Controller**
+  opens the browser's list: pick it once, and while you play it is a controller, its buttons where an Xbox pad has
+  them. That works for both Steam Controllers (the 2015 one on its cable or dongle, the 2026 one on its cable, dongle or
+  Bluetooth) and a Steam Deck's controls. The 2015 controller's right pad is the right stick (where your thumb is on
+  it), its left pad's clicks the D-pad. While the game is in front it is no mouse; switch away from the tab or the
+  window and it is one again. The 2026 controller and the Deck rumble. In Firefox and Safari: add the browser to Steam
+  as a non-Steam game with a gamepad layout and start it through Steam.
 - **Steering wheel:** a Logitech G29, G920 or G923, and other wheels the browser shows as a game controller. The wheel
   steers, the pedals are throttle and brake (and reverse), the paddles shift down and up, Cross (A) is nitrous, Square
   (X) the handbrake, Circle and Triangle (B and Y) look back and camera, Share respawns, Options pauses, PS opens the

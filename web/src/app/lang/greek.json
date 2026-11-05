@@ -1494,5 +1494,9 @@
   "Mods": "Mods",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "Τα mods του παιχνιδιού και οι δημιουργοί τους (μεταφράσεις: η καρτέλα «Μεταφράσεις»). Οι αλλαγές εφαρμόζονται την επόμενη φορά που θα πατήσεις «Παίξε».",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Τα αρχεία του παιχνιδιού δεν φορτώθηκαν σωστά. Σε αυτή τη σελίδα: «Παιχνίδι → Διαγραφή δεδομένων παιχνιδιού» και μετά «Παίξε». Οι αποθηκεύσεις σου διατηρούνται. Αν συμβεί ξανά, ίσως το δίκτυό σου αποκλείει το παιχνίδι: δοκίμασε άλλο δίκτυο.",
-  "Mods and their makers: the <0>Mods</0> tab.": "Τα mods και οι δημιουργοί τους: η καρτέλα <0>Mods</0>."
+  "Mods and their makers: the <0>Mods</0> tab.": "Τα mods και οι δημιουργοί τους: η καρτέλα <0>Mods</0>.",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller ή Steam Deck: σύνδεσέ το μία φορά.",
+  "{names}: connected in this browser.": "{names}: συνδεδεμένο σε αυτό το πρόγραμμα περιήγησης.",
+  "Connect a Steam Controller": "Σύνδεση Steam Controller",
+  "Connect another": "Σύνδεση κι άλλου"
 }

@@ -1612,5 +1612,9 @@
   "Mods": "Моди",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "Моди в цій грі та їхні автори (переклади: вкладка «Переклади»). Зміни діятимуть після наступного натискання «Грати».",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Файли гри завантажилися неправильно. На цій сторінці: «Гра», «Видалити дані гри», потім «Грати» (ваші збереження залишаться). Якщо це повториться, можливо, гру блокує ваша мережа: спробуйте іншу мережу.",
-  "Mods and their makers: the <0>Mods</0> tab.": "Моди та їхні автори: вкладка <0>Моди</0>."
+  "Mods and their makers: the <0>Mods</0> tab.": "Моди та їхні автори: вкладка <0>Моди</0>.",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller або Steam Deck: достатньо під'єднати один раз.",
+  "{names}: connected in this browser.": "{names}: під'єднано в цьому браузері.",
+  "Connect a Steam Controller": "Під'єднати Steam Controller",
+  "Connect another": "Під'єднати ще один"
 }

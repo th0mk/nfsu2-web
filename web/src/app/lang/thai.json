@@ -1467,5 +1467,9 @@
   "Mods": "ม็อด",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "ม็อดในเกมนี้และผู้สร้าง (การแปล: แท็บ “การแปล”) การเปลี่ยนแปลงจะมีผลเมื่อกด “เล่น” ครั้งถัดไป",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "ไฟล์เกมโหลดไม่สมบูรณ์ ในหน้านี้ให้กด “เกม” แล้วกด “ลบข้อมูลเกม” จากนั้นกด “เล่น” (เซฟของคุณยังอยู่) หากเกิดขึ้นอีก เครือข่ายของคุณอาจบล็อกเกมอยู่ ให้ลองใช้เครือข่ายอื่น",
-  "Mods and their makers: the <0>Mods</0> tab.": "ม็อดและผู้สร้าง: แท็บ <0>ม็อด</0>"
+  "Mods and their makers: the <0>Mods</0> tab.": "ม็อดและผู้สร้าง: แท็บ <0>ม็อด</0>",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller หรือ Steam Deck: เชื่อมต่อเพียงครั้งเดียว",
+  "{names}: connected in this browser.": "{names}: เชื่อมต่อในเบราว์เซอร์นี้แล้ว",
+  "Connect a Steam Controller": "เชื่อมต่อ Steam Controller",
+  "Connect another": "เชื่อมต่ออีกเครื่อง"
 }

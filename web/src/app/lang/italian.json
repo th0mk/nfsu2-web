@@ -1579,5 +1579,9 @@
   "Mods": "Mod",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "Le mod di questo gioco e i loro autori (traduzioni: la scheda Traduzioni). Le modifiche si applicano la prossima volta che premi Gioca.",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "I file del gioco non si sono caricati bene. In questa pagina: Gioco, Elimina i dati di gioco, poi Gioca (i tuoi salvataggi restano). Se succede di nuovo, forse la tua rete blocca il gioco: prova un'altra rete.",
-  "Mods and their makers: the <0>Mods</0> tab.": "Le mod e i loro autori: la scheda <0>Mod</0>."
+  "Mods and their makers: the <0>Mods</0> tab.": "Le mod e i loro autori: la scheda <0>Mod</0>.",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller o Steam Deck: collegalo una volta.",
+  "{names}: connected in this browser.": "{names}: collegato in questo browser.",
+  "Connect a Steam Controller": "Collega uno Steam Controller",
+  "Connect another": "Collegane un altro"
 }

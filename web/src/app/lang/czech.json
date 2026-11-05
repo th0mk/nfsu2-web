@@ -1612,5 +1612,9 @@
   "Mods": "Mody",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "Mody v této hře a jejich autoři (překlady: karta Překlady). Změny se projeví, až příště stiskneš „Hrát“.",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Soubory hry se nenačetly správně. Na této stránce: „Hra“, „Smazat data hry“, pak „Hrát“ (tvoje uložené hry zůstanou). Pokud se to stane znovu, možná hru blokuje tvoje síť: zkus jinou síť.",
-  "Mods and their makers: the <0>Mods</0> tab.": "Mody a jejich autoři: karta <0>Mody</0>."
+  "Mods and their makers: the <0>Mods</0> tab.": "Mody a jejich autoři: karta <0>Mody</0>.",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller nebo Steam Deck: stačí jednou připojit.",
+  "{names}: connected in this browser.": "{names}: připojeno v tomto prohlížeči.",
+  "Connect a Steam Controller": "Připojit Steam Controller",
+  "Connect another": "Připojit další"
 }

@@ -1479,5 +1479,9 @@
   "Mods": "Modlar",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "Bu oyundaki modlar ve yapımcıları (çeviriler: Çeviriler sekmesi). Değişiklikler bir sonraki Oyna'ya basışında geçerli olur.",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "Oyunun dosyaları düzgün yüklenmedi. Bu sayfada: Oyun, Oyun verisini sil, sonra Oyna (kayıtların kalır). Yine olursa ağın oyunu engelliyor olabilir: başka bir ağ dene.",
-  "Mods and their makers: the <0>Mods</0> tab.": "Modlar ve yapımcıları: <0>Modlar</0> sekmesi."
+  "Mods and their makers: the <0>Mods</0> tab.": "Modlar ve yapımcıları: <0>Modlar</0> sekmesi.",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller veya Steam Deck: bir kez bağlaman yeterli.",
+  "{names}: connected in this browser.": "{names}: bu tarayıcıda bağlı.",
+  "Connect a Steam Controller": "Steam Controller bağla",
+  "Connect another": "Bir tane daha bağla"
 }

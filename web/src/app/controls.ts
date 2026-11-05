@@ -12,7 +12,8 @@
 // SVG's 336 px, the labels in rows of px left and right of it and over its middle, each joined to its control by a
 // line.  The D-pad's three rows and the face buttons' four share one line, from a bracket beside them.
 
-import { drivingPad, familyOf, PAD_DRIVER_EVENT } from '../input/gamepad';
+import { allPads, drivingPad, familyOf, PAD_DRIVER_EVENT } from '../input/gamepad';
+import { connectSteamPad, steamPadsPicked, steamPadsPossible } from '../input/steampad';
 import { PADF_PLAYSTATION } from '../input/proto';
 import { wheelSection } from './wheel-setup';
 import { askMotion, levelHorizon, menuSize, nitroSteerSide, onSteering, setSteering, steering, STEERING, steeringName, touchPosition,
@@ -193,13 +194,31 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
     <div class="seg" role="radiogroup" aria-label="${esc(t('Button names'))}">
       <label class="opt"><input type="radio" name="${id}-fam" value="xb">Xbox</label>
       <label class="opt"><input type="radio" name="${id}-fam" value="ps">PlayStation</label>
-    </div></div>`;
+    </div>
+    ${steamPadsPossible() ? '<p class="hint steam-state"></p><div class="row"><button type="button" class="btn" data-steam></button></div>' : ''}
+    </div>`;
     pad.append(wheel.box, ...kept);
     svg = pad.querySelector('svg')!;
     radios = [...pad.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
     for (const r of radios) r.onchange = () => { if (r.checked) sheet.family(r.value as Family); };
+    steamPart();
     wheel.relabel();
     requestAnimationFrame(fit);
+  };
+  /** Valve's controllers under the drawing, where the browser can read them (steampad.ts: WebHID, Chrome and Edge on a
+   *  computer): those connected in this browser, and the button that opens the browser's list of them (it opens only
+   *  from a click; the one picked works at once in a running game, else from Play, and on later visits too) */
+  const steamPart = () => {
+    const btn = pad.querySelector<HTMLButtonElement>('[data-steam]'), state = pad.querySelector<HTMLElement>('.steam-state');
+    if (!btn || !state) return;
+    const show = (names: string[]) => {
+      state.textContent = names.length ? t('{names}: connected in this browser.', { names: names.join(', ') })
+        : t('Steam Controller or Steam Deck: connect it once.');
+      btn.textContent = names.length ? t('Connect another') : t('Connect a Steam Controller');
+    };
+    show([]);
+    void steamPadsPicked().then(show);
+    btn.onclick = () => connectSteamPad().then(() => steamPadsPicked()).then(show, () => {});
   };
   /** a label too long for the drawing (another language's words) a little smaller, so it stays inside the 336 px;
    *  measured once the tab shows (a hidden one has no size).  Measured again after each change: a renderer that draws
@@ -306,7 +325,7 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
     };
     window.addEventListener('gamepadconnected', e => seen(e.gamepad));
     window.addEventListener(PAD_DRIVER_EVENT, () => { const g = drivingPad(); if (g) seen(g); });
-    try { const g = navigator.getGamepads?.().find(p => p?.connected); if (g) seen(g); } catch { /* no Gamepad API */ }
+    try { const g = allPads().find(p => p?.connected); if (g) seen(g); } catch { /* no Gamepad API */ }
   }
   sheet.show(tab);
   sheet.family(fam);

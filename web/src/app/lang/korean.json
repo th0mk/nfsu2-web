@@ -1467,5 +1467,9 @@
   "Mods": "모드",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "이 게임의 모드와 제작자(번역은 '번역' 탭). 변경 사항은 다음에 '플레이'를 누를 때 적용돼요.",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "게임 파일을 제대로 불러오지 못했어요. 이 페이지에서 '게임', '게임 데이터 삭제'를 차례로 누른 다음 '플레이'를 누르세요(저장 데이터는 그대로예요). 또 이런 일이 생기면 네트워크에서 게임을 막고 있을 수 있어요. 다른 네트워크로 시도해 보세요.",
-  "Mods and their makers: the <0>Mods</0> tab.": "모드와 제작자: <0>모드</0> 탭."
+  "Mods and their makers: the <0>Mods</0> tab.": "모드와 제작자: <0>모드</0> 탭.",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller 또는 Steam Deck: 한 번만 연결하면 돼요.",
+  "{names}: connected in this browser.": "{names}: 이 브라우저에 연결됨.",
+  "Connect a Steam Controller": "Steam Controller 연결",
+  "Connect another": "하나 더 연결"
 }

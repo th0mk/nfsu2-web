@@ -10,6 +10,8 @@
 //   touch first: the primary pointer is a finger (phones, tablets), not a
 //                laptop whose screen also takes touch.
 // The Controls sheet and the hints follow touch first (html[data-touch]).
+import { allPads } from '../input/steampad';
+
 export function isPhone(): boolean {
   const uad = (navigator as unknown as { userAgentData?: { mobile?: boolean } }).userAgentData;
   return uad?.mobile === true || /Android.+Mobile|iPhone|iPod/.test(navigator.userAgent) || phoneScreen(navigator.maxTouchPoints);
@@ -74,7 +76,7 @@ export function rememberRender(v: string | null) {
 
 /** whether the browser shows the page a controller (Chrome: only after a button press on the page) */
 export function padSeen(): boolean {
-  try { return typeof navigator.getGamepads === 'function' && navigator.getGamepads().some(g => !!g?.connected); }
+  try { return allPads().some(g => !!g?.connected); }
   catch { return false; }
 }
 

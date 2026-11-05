@@ -1554,5 +1554,9 @@
   "Mods": "Mods",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "De mods in dit spel en hun makers (vertalingen: het tabblad Vertalingen). Wijzigingen gelden vanaf de volgende keer dat je op Spelen drukt.",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "De bestanden van het spel zijn niet goed geladen. Op deze pagina: Spel, Spelgegevens verwijderen, dan Spelen (je opgeslagen spellen blijven). Gebeurt het nog eens, dan blokkeert je netwerk het spel misschien: probeer een ander netwerk.",
-  "Mods and their makers: the <0>Mods</0> tab.": "Mods en hun makers: het tabblad <0>Mods</0>."
+  "Mods and their makers: the <0>Mods</0> tab.": "Mods en hun makers: het tabblad <0>Mods</0>.",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller of Steam Deck: één keer koppelen.",
+  "{names}: connected in this browser.": "{names}: gekoppeld in deze browser.",
+  "Connect a Steam Controller": "Steam Controller koppelen",
+  "Connect another": "Nog een koppelen"
 }

@@ -1473,5 +1473,9 @@
   "Mods": "Modok",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "A játék modjai és készítőik (fordítások: a Fordítások lap). A változások a következő indításkor lépnek életbe.",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "A játék fájljai nem töltődtek be rendesen. Ezen az oldalon: „Játék” lap, „Játékadatok törlése”, majd a „Játék” gomb (a mentéseid megmaradnak). Ha újra előfordul, lehet, hogy a hálózatod blokkolja a játékot: próbálj egy másik hálózatot.",
-  "Mods and their makers: the <0>Mods</0> tab.": "A modok és készítőik: a <0>Modok</0> lap."
+  "Mods and their makers: the <0>Mods</0> tab.": "A modok és készítőik: a <0>Modok</0> lap.",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller vagy Steam Deck: elég egyszer csatlakoztatni.",
+  "{names}: connected in this browser.": "{names}: csatlakoztatva ebben a böngészőben.",
+  "Connect a Steam Controller": "Steam Controller csatlakoztatása",
+  "Connect another": "Másik csatlakoztatása"
 }

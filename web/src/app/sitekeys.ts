@@ -20,6 +20,7 @@
 //   bound     a key the player put one of the game's controls on (its Options, Controls: the game keeps those in
 //             registry.txt, runtime/dinput_kbd.c's user maps) stays the game's: its row says so.
 import { CODE_OF_DIK, CODES } from '../input/keymap';
+import { allPads } from '../input/steampad';
 import { N, t } from './i18n';
 
 export type OurId = 'drift' | 'showoff' | 'horn' | 'lights' | 'look' | 'chat' | 'message' | 'friend' | 'photo' | 'hud' | 'menu' | 'song' | 'fps';
@@ -345,7 +346,7 @@ export class SiteKeysView {
     const was = new Set<string>();
     const poll = () => {
       // a controller's press of a choice it offers (the standard mapping's places), not one held since the wait began
-      const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+      const pads = allPads();
       const down = new Set<string>();
       for (const g of pads) if (g?.connected) for (const [v, i] of Object.entries(PAD_INDEX)) if (g.buttons[i]?.pressed) down.add(v);
       const fresh = [...down].find(v => !was.has(v) && BUTTONS[o.button!].includes(v));
@@ -354,7 +355,7 @@ export class SiteKeysView {
       this.cancel();
       void this.take(o, true, fresh);
     };
-    if (button) { for (const g of navigator.getGamepads?.() ?? []) if (g?.connected) for (const [v, i] of Object.entries(PAD_INDEX)) if (g.buttons[i]?.pressed) was.add(v);
+    if (button) { for (const g of allPads()) if (g?.connected) for (const [v, i] of Object.entries(PAD_INDEX)) if (g.buttons[i]?.pressed) was.add(v);
       raf = requestAnimationFrame(poll); }
     this.stopWait = () => { window.removeEventListener('keydown', keydown, { capture: true }); cancelAnimationFrame(raf); };
     (this.box?.querySelector<HTMLElement>(`[data-our="${o.id}"] .selected`))?.focus();

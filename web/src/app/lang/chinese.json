@@ -1467,5 +1467,9 @@
   "Mods": "模組",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "本遊戲的模組與作者（翻譯請見「翻譯」分頁）。變更會在下次按「開始遊戲」時生效。",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "遊戲檔案沒有正確載入。請在這個頁面依序按「遊戲」、「刪除遊戲資料」，然後按「開始遊戲」（你的存檔會保留）。如果再次發生，可能是你的網路封鎖了遊戲：請換一個網路試試。",
-  "Mods and their makers: the <0>Mods</0> tab.": "模組與作者：請見<0>模組</0>分頁。"
+  "Mods and their makers: the <0>Mods</0> tab.": "模組與作者：請見<0>模組</0>分頁。",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller 或 Steam Deck：只需連接一次。",
+  "{names}: connected in this browser.": "{names}：已連接到此瀏覽器。",
+  "Connect a Steam Controller": "連接 Steam Controller",
+  "Connect another": "再連接一個"
 }

@@ -1467,5 +1467,9 @@
   "Mods": "MOD",
   "The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.": "このゲームのMODとその作者（翻訳は「翻訳」タブ）。変更は、次に「プレイ」を押したときに反映されます。",
   "The game's files didn't load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.": "ゲームのファイルが正しく読み込まれませんでした。このページで「ゲーム」、「ゲームデータを削除」の順に押してから、「プレイ」を押してください（セーブデータはそのまま残ります）。また起きる場合は、ネットワークがゲームをブロックしている可能性があります。別のネットワークを試してください。",
-  "Mods and their makers: the <0>Mods</0> tab.": "MODとその作者: 「<0>MOD</0>」タブ。"
+  "Mods and their makers: the <0>Mods</0> tab.": "MODとその作者: 「<0>MOD</0>」タブ。",
+  "Steam Controller or Steam Deck: connect it once.": "Steam Controller・Steam Deck：一度接続すれば使えます。",
+  "{names}: connected in this browser.": "{names}：このブラウザで接続済みです。",
+  "Connect a Steam Controller": "Steam Controller を接続",
+  "Connect another": "もう1台接続"
 }
