@@ -590,9 +590,11 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   still has it); since 8027226 the note after such a race says "Only a win counts in your career". The lobby panel marks with a star whom
   it counts for ("A win counts in your career"); the words over a lobby and on the world map end in "- career". A
   lobby whose race counts for the player who opened it takes only players up to that race's stage and the opener's
-  friends (and crew-mates since 8027226; a later stage's car would win it most of the time); the others see why at the spot, and since 85c39ac no
-  other lobby opens at that start while it waits (before that they could open their own beside it; a full lobby still
-  lets them). A
+  friends (and crew-mates since 8027226; a later stage's car would win it most of the time). Since 0d543f8 the others
+  don't see such a lobby at all (not at the start, over it or on the world map), nor a full lobby or one already on
+  its way to the race, and Enter at that start opens a lobby of their own beside it (before that they saw it with the
+  reason, "A career race for players up to stage 2 ..."; from 85c39ac to fc56fdd it even stopped them opening their
+  own there). A
   URL event of 2 or 3 heats races them all in one trip, with the career's points. A race that does not count pays
   by the player's stage (1st what a normal race of the stage pays, at least $400; 2nd to 4th three quarters, half,
   a quarter of that, at least $300/$200/$100). A race that counts pays the career's prize or that, whichever is more. Where the game would offer sponsors, the crib asks on the way back
