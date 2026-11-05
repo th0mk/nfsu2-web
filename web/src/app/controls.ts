@@ -196,7 +196,7 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
     </div></div>`;
     pad.append(wheel.box, ...kept);
     svg = pad.querySelector('svg')!;
-    radios = [...pad.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    radios = [...pad.querySelectorAll<HTMLInputElement>('.pad-foot input[type="radio"]')];
     for (const r of radios) r.onchange = () => { if (r.checked) sheet.family(r.value as Family); };
     wheel.relabel();
     requestAnimationFrame(fit);
