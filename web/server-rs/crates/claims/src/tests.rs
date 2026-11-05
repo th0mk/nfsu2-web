@@ -298,45 +298,87 @@ fn an_exact_claim_of_a_second_form_comes_first() {
     // and once it is let go, the second form is Alex's
     c.unclaim("Alex_2");
     assert!(c.may_use("Alex 2", Some(&a), NOW) && !c.may_use("Alex 2", Some(&b), NOW));
+    // so for a name of 13 too: its second form's claim (of 15) is no name that shares it
+    let x = owner(3);
+    c.claim("Abcdefghijklm_2", &b, NOW + 1).unwrap();
+    c.claim("Abcdefghijklm", &x, NOW + 1).unwrap();
+    assert_eq!(c.holders("Abcdefghijklm 2", NOW + 1), vec![b.clone()]);
 }
 
-// names of 14 and 15 characters cut to the same 13: their second form is each of their owners', nobody else's; it
-// goes with the last of them (a release, the operator's unclaim, the hold's end), and holds over a restart (names.json)
+// names of 13, 14 and 15 characters that begin alike have one second form: a keyphrase claims none of them while
+// another keyphrase holds one, either way round (the 2026-11-05 security audit: a free "Speedracer123x" made its
+// claimant the second player of "Speedracer123", no impostor, and a block of that second player blocked
+// "Speedracer123" too); the owner's own change to another of them is none
 #[test]
-fn a_second_form_of_long_names_is_each_of_their_owners() {
+fn a_name_that_shares_anothers_second_form_is_taken() {
+    let c = Claims::in_memory();
+    let (v, a, b) = (owner(1), owner(2), owner(3));
+    c.claim("Speedracer123", &v, NOW).unwrap();
+    let p2 = "Speedracer123 2";
+    for n in [p2, "Speedracer123x", "SPEEDRACER123xy"] {
+        assert_eq!(c.status(n, Some(&a), NOW), Status::Taken, "{n}");
+        assert_eq!(c.claim(n, &a, NOW), Err(Refusal::Taken), "{n}");
+    }
+    assert_eq!(c.status("Speedracer123x", Some(&v), NOW), Status::Free, "its own to claim");
+    assert!(c.mine(&a, NOW).is_none());
+    assert!(c.may_use(p2, Some(&v), NOW) && !c.may_use(p2, Some(&a), NOW));
+    assert_eq!(c.status(p2, Some(&a), NOW), Status::Taken);
+    assert_eq!(c.holders(p2, NOW), vec![v.clone()]);
+    // a name of 14 first, then its 13 (or another 15 that begins alike)
+    c.claim("Alex the Great", &a, NOW).unwrap();
+    assert_eq!(c.claim("Alex the Grea", &b, NOW), Err(Refusal::Taken));
+    assert_eq!(c.claim("Alex the Greats", &b, NOW), Err(Refusal::Taken));
+    assert_eq!(c.holders("Alex the Grea 2", NOW), vec![a.clone()]);
+    assert!(c.claim("Alex the Gre", &b, NOW).is_ok(), "12: its own second form");
+    // its owner changes to another of them: no one else's
+    assert_eq!(c.claim("Speedracer123x", &v, NOW + 1).unwrap().name, "Speedracer123x");
+    assert!(c.may_use(p2, Some(&v), NOW + 1) && !c.may_use(p2, Some(&a), NOW + 1));
+    // once its names are let go, they are anyone's
+    c.release(&v);
+    assert!(c.claim("Speedracer123xy", &a, NOW + 2).is_ok());
+    assert!(c.may_use(p2, Some(&a), NOW + 2));
+}
+
+// Claims of before that share a second form (names.json: made before a claim of one was refused) give it to one
+// keyphrase: the holder of the name of 13, else the oldest claim's.  It goes with the last of them (the operator's
+// unclaim, a release, the hold's end), and holds over a restart.
+#[test]
+fn claims_of_before_that_share_a_second_form_give_it_to_one() {
     let dir = tempfile::tempdir().unwrap();
-    let (a, b, x) = (owner(1), owner(2), owner(3));
-    let c = Claims::open(dir.path(), NOW);
-    c.claim("Abcdefghijklmn", &a, NOW).unwrap();
-    c.claim("ABCDEFGHIJKLMNO", &b, NOW).unwrap();
-    assert_eq!(canonical(&second("Abcdefghijklmn").unwrap()), canonical(&second("ABCDEFGHIJKLMNO").unwrap()));
+    let (a, b, x, y) = (owner(1), owner(2), owner(3), owner(4));
+    let claim = |name: &str, o: &Owner, made: i64| format!(r#"{{"name":"{name}","owner":"{o}","made":{made},"seen":{made}}}"#);
+    let claims = [claim("Abcdefghijklmn", &a, NOW + 1), claim("ABCDEFGHIJKLMNO", &b, NOW), claim("abcdefghijklm", &x, NOW + 2)];
+    std::fs::write(dir.path().join("names.json"), format!(r#"{{"v":1,"claims":[{}]}}"#, claims.join(","))).unwrap();
+    let t = NOW + 10;
+    let c = Claims::open(dir.path(), t);
+    assert_eq!(c.count(t), 3);
     let p2 = "Abcdefghijklm 2";
-    assert!(c.may_use(p2, Some(&a), NOW) && c.may_use(p2, Some(&b), NOW) && !c.may_use(p2, Some(&x), NOW));
-    assert_eq!(c.status(p2, Some(&a), NOW), Status::Yours { until: NOW + HOLD_DAYS * DAY_MS, current: true });
-    assert_eq!(c.status(p2, Some(&x), NOW), Status::Taken);
-    let mut both = vec![a.clone(), b.clone()];
-    both.sort_unstable();
-    assert_eq!(c.holders(p2, NOW), both);
-    assert_eq!(c.claim(p2, &a, NOW), Err(Refusal::Taken), "b's too: a claim of it would take it from b");
-    assert_eq!(c.claim(p2, &x, NOW), Err(Refusal::Taken));
-    // a name of 13 is one of them too
-    c.claim("abcdefghijklm", &x, NOW).unwrap();
-    assert!(c.may_use(p2, Some(&x), NOW));
-    c.unclaim("abcdefghijklm");
+    // the name of 13's holder, the youngest of them
+    assert_eq!(c.holders(p2, t), vec![x.clone()]);
+    assert!(c.may_use(p2, Some(&x), t) && !c.may_use(p2, Some(&a), t) && !c.may_use(p2, Some(&b), t));
+    // without it, the oldest claim's
+    assert_eq!(c.unclaim("abcdefghijklm").as_deref(), Some("abcdefghijklm"));
+    assert_eq!(c.holders(p2, t), vec![b.clone()]);
+    assert!(c.may_use(p2, Some(&b), t) && !c.may_use(p2, Some(&a), t) && !c.may_use(p2, None, t));
+    assert_eq!(c.status(p2, Some(&a), t), Status::Taken);
+    assert_eq!(c.status(p2, Some(&b), t), Status::Yours { until: NOW + HOLD_DAYS * DAY_MS, current: true });
+    assert_eq!(c.claim(p2, &a, t), Err(Refusal::Taken));
+    assert_eq!(c.claim("abcdefghijklm", &y, t), Err(Refusal::Taken), "no third one");
     // over a restart
-    assert!(c.save(NOW + 1).unwrap());
-    let c = Claims::open(dir.path(), NOW + 2);
-    assert!(c.may_use(p2, Some(&a), NOW + 2) && c.may_use(p2, Some(&b), NOW + 2) && !c.may_use(p2, Some(&x), NOW + 2));
-    // b let go, then a: free
-    c.release(&b);
-    assert_eq!(c.holders(p2, NOW + 2), vec![a.clone()]);
-    assert!(!c.may_use(p2, Some(&b), NOW + 2));
+    assert!(c.save(t).unwrap());
+    let c = Claims::open(dir.path(), t + 1);
+    assert_eq!(c.holders(p2, t + 1), vec![b.clone()]);
+    // b's keyphrase deleted: a's (and only b's name left the index)
+    assert_eq!(c.release(&b), 1);
+    assert_eq!(c.holders(p2, t + 1), vec![a.clone()]);
+    assert_eq!(c.inner.read().long.get("abcdefghijklm"), Some(&vec!["abcdefghijklmn".to_string()]));
     assert_eq!(c.unclaim("abcdefghijklmn").as_deref(), Some("Abcdefghijklmn"));
-    assert_eq!(c.status(p2, Some(&x), NOW + 2), Status::Free);
+    assert!(c.inner.read().long.is_empty());
+    assert_eq!(c.status(p2, Some(&y), t + 1), Status::Free);
     // a claim's end lets its second form go (the prune's index)
-    c.claim("Abcdefghijklmnz", &a, NOW + 3).unwrap();
-    assert!(!c.may_use(p2, Some(&x), NOW + 3));
-    let end = NOW + 3 + HOLD_DAYS * DAY_MS;
+    c.claim("Abcdefghijklmnz", &y, t + 2).unwrap();
+    assert!(!c.may_use(p2, Some(&x), t + 2));
+    let end = t + 2 + HOLD_DAYS * DAY_MS;
     assert!(c.prune(end));
     assert!(c.may_use(p2, Some(&x), end));
 }

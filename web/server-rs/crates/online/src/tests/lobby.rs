@@ -905,20 +905,20 @@ fn ea_messenger() {
     assert_eq!(w.c(a).l("USER").g("USER"), "Bravo");
     w.send(a, "USCH", fields![("USER", "alp"), ("ID", 3)]);
     assert_eq!(w.c(a).l("USCH").g("SIZE"), "0");
-    // Alpha adds Bravo: Bravo hears of it, Alpha sees Bravo's presence
+    // Alpha adds Bravo (RADD LIST=B, which the game never sends: a friend request, as RADM, since the 2026-11-05
+    // security audit): Bravo hears of the request, Alpha sees Bravo's presence; no friend before Bravo's answer
     w.send(b, "PSET", fields![("SHOW", "CHAT"), ("STAT", "EX=0\nP=nfs5\n"), ("PROD", "is playing Underground 2")]);
     w.send(a, "RADD", fields![("LRSC", "PC"), ("USER", "Bravo"), ("LIST", "B"), ("ID", 5)]);
     assert_eq!(w.c(a).l("RADD").code, "");
     assert_eq!(w.c(a).l("PGET").g("USER"), "Bravo");
     assert_eq!(w.c(a).l("PGET").g("SHOW"), "CHAT");
-    assert_eq!(w.c(b).l("RNOT").g("USER"), "Alpha");
+    assert_eq!([w.c(b).l("RNOT").g("USER"), w.c(b).l("RNOT").g("ATTR")], ["Alpha", "R"]);
     w.send(a, "RGET", fields![("LIST", "B"), ("ID", 2)]);
-    assert_eq!(w.c(a).l("RGET").g("SIZE"), "1");
-    assert_eq!(w.c(a).l("ROST").g("USER"), "Bravo");
-    // presence changes reach the friend (at most once a second)
-    w.advance(1000.0);
-    w.send(b, "PSET", fields![("SHOW", "AWAY"), ("STAT", ""), ("PROD", "racing")]);
-    assert_eq!(w.c(a).l("PGET").g("SHOW"), "AWAY");
+    assert_eq!(w.c(a).l("RGET").g("SIZE"), "0");
+    // declined: the request goes, Alpha told
+    w.send(b, "RRSP", fields![("LRSC", "PC"), ("USER", "Alpha"), ("ANSW", "N"), ("ID", 6)]);
+    assert_eq!([w.c(a).l("RNOT").g("USER"), w.c(a).l("RNOT").g("CHNG")], ["Bravo", "D"]);
+    assert!(!w.core.buddies.list("Bravo").is_some_and(|l| l.q.contains_key("alpha")));
     // a message, and a game invite passed on with the sender named by the server
     w.send(a, "SEND", fields![("USER", "Bravo"), ("BODY", "race?\u{7}"), ("SUBJ", ""), ("TYPE", "C")]);
     assert_eq!(w.c(b).l("RECV").g("USER"), "Alpha");
@@ -935,6 +935,14 @@ fn ea_messenger() {
     assert_eq!(w.c(b).l("RNOT").g("USER"), "Alpha");
     assert_eq!(w.c(b).l("RNOT").g("CHNG"), "A");
     assert!(w.core.buddies.list("Bravo").unwrap().b.contains_key("alpha"));
+    // (the lists asked: 4 at once, then one a second)
+    w.advance(1000.0);
+    w.send(a, "RGET", fields![("LIST", "B"), ("ID", 2)]);
+    assert_eq!(w.c(a).l("RGET").g("SIZE"), "1");
+    assert_eq!(w.c(a).l("ROST").g("USER"), "Bravo");
+    // presence changes reach the friend (at most once a second)
+    w.send(b, "PSET", fields![("SHOW", "AWAY"), ("STAT", ""), ("PROD", "racing")]);
+    assert_eq!(w.c(a).l("PGET").g("SHOW"), "AWAY");
     let friends_lines = |w: &World| w.text().iter().filter(|l| l.contains("are friends")).count();
     assert_eq!(friends_lines(&w), 1);
     w.send(a, "RRSP", fields![("USER", "Bravo"), ("ANSW", "Y")]);

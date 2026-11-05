@@ -22,8 +22,8 @@
 //!   goes (to the asker: RNOT USER CHNG=D)
 //! - RDEM USER (a friend taken off, the game's RDEL after it; or a request taken back) and RDEL LIST=B USER -> ack;
 //!   the two are friends no more, on neither list, the other told (RNOT USER CHNG=D)
-//! - RADD/RDEL LIST=I USER ID -> ack: blocking, kept with the persona's lists; RADD LIST=B (the game sends none) puts
-//!   a friend on this persona's list only, the friend told (RNOT USER) and its presence to the adder
+//! - RADD/RDEL LIST=I USER ID -> ack: blocking, kept with the persona's lists; RADD LIST=B (the game sends none) is a
+//!   friend request, as RADM (until the 2026-11-05 security audit it put a friend on this persona's list only, unasked)
 //! - PADD/PDEL USER -> ack, and that player's presence (the Messenger's "All" list: players searched for or met; the
 //!   game's own, in memory only)
 //! - PSET SHOW STAT PROD -> ack; when it changed, PGET USER SHOW STAT PROD TITL EXTR ATTR to every online player who
@@ -180,9 +180,14 @@ pub type PageMailHook = Box<dyn Fn(&str, &PageMail) -> bool + Send>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FriendRow {
     pub name: String,
-    /// in the Online lobby or the Messenger now
+    /// its list names this persona back, under its name's claim: a friendship both ways, as an accepted request makes
+    /// it.  Only these are told where they play (the server's friends.rs) and linked first in free roam; a one-way
+    /// entry (a list of before the 2026-11-05 security audit, when the Messenger's RADD LIST=B made one unasked, or a
+    /// name its friend let go and another keyphrase claimed) is a name on the list, no more.
+    pub mutual: bool,
+    /// in the Online lobby or the Messenger now (a mutual friend only)
     pub online: bool,
-    /// its line for its friends (`FriendsList::contact`), when its list is in memory
+    /// its line for its friends (`FriendsList::contact`; a mutual friend only)
     pub contact: Option<String>,
 }
 
@@ -1005,6 +1010,17 @@ impl Buddies {
         r != l.r.len() || q != l.q.len() || mail > 0
     }
 
+    /// k's list (lower case, in memory) when it names `me` (lower case) back and is its name's claimer's: with me's
+    /// list naming k, a friendship both ways (`FriendRow::mutual`)
+    fn names_back(&self, k: &str, me: &str, now: f64) -> Option<&FriendsList> {
+        let f = self.lists.get(k).filter(|f| f.b.contains_key(me) && !f.temp)?;
+        match &self.claims {
+            // (a claim that changed hands leaves its old list behind for a while)
+            Some(c) => (f.owner.is_some() && f.owner == c.holder(&f.name, now as i64)).then_some(f),
+            None => Some(f),
+        }
+    }
+
     /// a persona's friends list, or None: none is made by asking
     pub fn list(&self, name: &str) -> Option<&FriendsList> {
         self.lists.get(&lower(name))
@@ -1244,6 +1260,15 @@ impl Core {
         let now = self.bnow();
         let lobby = &self.lobby.by_persona;
         self.buddies.fetch(k, now, &|x| lobby.contains_key(x))
+    }
+
+    /// k's list (lower case) in memory as `buddy_fetch` has it, and whether it names persona `me` (lower case) back
+    /// (`Buddies::names_back`); me's own list kept in memory meanwhile
+    fn fetch_back(&mut self, me: &str, k: &str) -> bool {
+        let now = self.bnow();
+        let lobby = &self.lobby.by_persona;
+        self.buddies.fetch(k, now, &|x| x == me || lobby.contains_key(x));
+        self.buddies.names_back(k, me, now).is_some()
     }
 
     /// a persona's friends list, made if needed (on behalf of client `group`): false when that client made its share
@@ -1574,16 +1599,26 @@ impl Core {
             }
             FriendAsk::Block(_) => "name",
         };
+        // (each friend's list in memory, for whether it names this persona back)
+        let keys: Vec<String> = self.buddies.lists.get(&mk).map(|l| l.b.keys().cloned().collect()).unwrap_or_default();
+        for k in &keys {
+            self.fetch_back(&mk, k);
+        }
         let bs = &self.buddies;
         let l = bs.lists.get(&mk);
         let waits = |t: &f64| now - t < ASK_DAYS * DAY_MS;
         let friends = l
             .into_iter()
             .flat_map(|l| l.b.iter())
-            .map(|(k, n)| FriendRow {
-                name: n.clone(),
-                online: bs.online.contains_key(k) || self.lobby.by_persona.contains_key(k),
-                contact: bs.lists.get(k).and_then(|f| f.contact.clone()),
+            .map(|(k, n)| {
+                let back = bs.names_back(k, &mk, now);
+                let mutual = back.is_some();
+                FriendRow {
+                    name: n.clone(),
+                    mutual,
+                    online: mutual && (bs.online.contains_key(k) || self.lobby.by_persona.contains_key(k)),
+                    contact: back.and_then(|f| f.contact.clone()),
+                }
             })
             .collect();
         let not_friend = |k: &str| !l.is_some_and(|l| l.b.contains_key(k));
@@ -1611,9 +1646,14 @@ impl Core {
         if self.buddies.claims.as_ref().is_some_and(|c| c.holder(name, now as i64).is_none()) {
             return "claim";
         }
-        self.buddy_fetch(&k);
+        // (friends both ways already; a name on this one's list alone is asked as any other)
+        let back = self.fetch_back(&mk, &k);
         let (friends, full, asked_full) = match self.buddies.list(me) {
-            Some(l) => (l.b.contains_key(&k), l.b.len() >= MAX_LIST, l.r.len() >= MAX_ASKED && !l.r.contains_key(&k)),
+            Some(l) => (
+                l.b.contains_key(&k) && back,
+                l.b.len() >= MAX_LIST && !l.b.contains_key(&k),
+                l.r.len() >= MAX_ASKED && !l.r.contains_key(&k),
+            ),
             None => (false, false, false),
         };
         if friends {
@@ -2003,7 +2043,8 @@ impl Core {
                 }
                 Ok(())
             }
-            "RADD" | "RDEL" | "RDEM" => {
+            // (RADD LIST=B: a friend request, as RADM below)
+            "RADD" | "RDEL" | "RDEM" if kind != "RADD" || list_field(f) == "I" => {
                 let which = if kind == "RDEM" { "B" } else { list_field(f) };
                 let who = strip_at(f.str("USER")).to_string();
                 if !valid_name(&who) || lower(&who) == me {
@@ -2020,41 +2061,28 @@ impl Core {
                     }
                     return self.bsend(b, kind, &with_id, "");
                 }
-                if kind != "RADD" {
-                    // a friend taken off, or the request taken back: on neither side any more
-                    self.bsend(b, kind, &with_id, "")?;
-                    return self.unfriend(&bp, &who);
-                }
-                let cur = self.buddies.list(&bp);
-                if cur.is_some_and(|l| l.b.len() >= MAX_LIST && !l.b.contains_key(&k)) {
-                    return self.bsend(b, kind, &with_id, "full");
-                }
-                if cur.is_none() && !self.make_list(&bp, &group) {
-                    return self.bsend(b, kind, &with_id, "full");
-                }
-                self.buddies.add_friend(&me, k.clone(), who.clone());
-                self.touch_lists();
+                // a friend taken off, or the request taken back: on neither side any more
                 self.bsend(b, kind, &with_id, "")?;
-                let o = self.buddies.online.get(&k).copied();
-                let p = self.presence_of(&k, &who);
-                self.bsend(b, "PGET", &p, "")?;
-                if let Some(o) = o.filter(|_| !self.buddies.blocks(&k, &me)) {
-                    let bp2 = self.buddies.conns.get(&b).and_then(|x| x.persona.clone());
-                    self.bsend(o, "RNOT", &fields![("USER", bp2), ("LIST", "B")], "")?;
-                }
-                Ok(())
+                self.unfriend(&bp, &who)
             }
-            "RADM" => {
-                // a friend request (Send Friend Request): it waits for the persona's answer, RRSP
+            "RADM" | "RADD" => {
+                // a friend request (Send Friend Request): it waits for the persona's answer, RRSP.  RADD LIST=B too,
+                // which the game never sends: until the 2026-11-05 security audit it put the persona on this one's
+                // list at once, unasked, and the free-roam hub then told this one where the persona played
                 let who = strip_at(f.str("USER")).to_string();
                 let k = lower(&who);
                 if !valid_name(&who) || k == me {
                     return self.bsend(b, kind, &with_id, "user");
                 }
                 let now = self.bnow();
-                self.buddy_fetch(&k);
+                // (friends both ways already; a name on this one's list alone is asked as any other)
+                let back = self.fetch_back(&me, &k);
                 let (friends, full, asked_full) = match self.buddies.list(&bp) {
-                    Some(l) => (l.b.contains_key(&k), l.b.len() >= MAX_LIST, l.r.len() >= MAX_ASKED && !l.r.contains_key(&k)),
+                    Some(l) => (
+                        l.b.contains_key(&k) && back,
+                        l.b.len() >= MAX_LIST && !l.b.contains_key(&k),
+                        l.r.len() >= MAX_ASKED && !l.r.contains_key(&k),
+                    ),
                     None => (false, false, false),
                 };
                 if friends {

@@ -675,11 +675,13 @@ impl Block {
     }
 
     /// the keyphrases that hold its names now, when the claims changed since it last looked (a second form's, "Bob 2",
-    /// the owner of "Bob": its co-op second player is its owner's, nfsu2-claims `holders`)
+    /// the owner of "Bob": its co-op second player is its owner's, nfsu2-claims `holders`).  A name of more holders than
+    /// one names none of them: a block of one player must never block another keyphrase's (a second form two claims
+    /// shared, until the 2026-11-05 security audit, blocked the other one's first player too)
     fn owners_of(&mut self, claims: Option<&nfsu2_claims::Claims>, now: f64) {
         let Some(c) = claims.filter(|c| c.generation() != self.checked) else { return };
         self.checked = c.generation();
-        self.owners = self.names.iter().flat_map(|n| c.holders(n, now as i64)).collect();
+        self.owners = self.names.iter().map(|n| c.holders(n, now as i64)).filter(|h| h.len() == 1).flatten().collect();
     }
 
     /// whether it blocks player p
@@ -2050,8 +2052,11 @@ impl Hub {
 
     /// Browser `vip`'s keyphrase (`me`) has these friends (their keyphrases: the server reads its friends list when its
     /// page asks): each one in its room is linked with it first, while each one's list here names the other
-    /// (`friend_id`).  A friendship goes both ways in the server's lists, so each of these friends in free roam now (as
-    /// of the last tick) has `me` on its list here too: one befriended while it was away is linked from now on.
+    /// (`friend_id`).  The server tells only friendships that go both ways in its lists (its friends.rs: each one's
+    /// list names the other, as an accepted request makes them), so each of these friends in free roam now (as of the
+    /// last tick) has `me` on its list here too: one befriended while it was away is linked from now on.  (Until the
+    /// 2026-11-05 security audit a name on one list alone came here too, and this linked its player with the other one
+    /// from anywhere in the room.)
     pub fn friends(&mut self, vip: u32, me: Arc<str>, owners: Vec<Arc<str>>) {
         let theirs: Vec<u32> =
             owners.iter().filter_map(|o| self.player(*self.owners_at.get(o)?)).map(|p| p.vip).filter(|&v| v != vip).collect();

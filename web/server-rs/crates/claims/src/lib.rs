@@ -19,9 +19,12 @@
 //! - A claim of a name also holds its second form ([`second`]: "Alex" holds "Alex_2"), the name of co-op free roam's
 //!   second player beside its owner on one screen (the page names player 2 "<player 1's Online form> 2"): nobody else
 //!   plays under it ([`Claims::may_use`]) or claims it ([`Claims::claim`]) while the claim holds.  The name is cut to
-//!   [`SECOND_BASE`] characters first, so a second form may be several 14- and 15-character names' at once: then it is
-//!   each of their owners' (and nobody else's).  A claim of the second form itself, made before its name was claimed,
-//!   is its own claimant's, as any claim is: an exact claim comes first.
+//!   [`SECOND_BASE`] characters first, so names of 13, 14 and 15 characters that begin alike have one second form:
+//!   a keyphrase claims none of them while another keyphrase holds one ([`Claims::claim`]: taken).  Claims of before
+//!   that share one (until the 2026-11-05 security audit each of their owners had it, and another keyphrase's claim of
+//!   "Speedracer123x" made it the second player of "Speedracer123") give it to one owner only: the holder of the name
+//!   of 13 itself, else the oldest claim's.  A claim of the second form itself, made before its name was claimed, is
+//!   its own claimant's, as any claim is: an exact claim comes first.
 //!
 //! Kept in <state>/names.json (the names, their owners' hashes, when they were made and last played), written whole
 //! to a temporary file of 0600 and renamed over the old one ([`Claims::save`]).
@@ -219,11 +222,33 @@ impl Inner {
     }
 
     /// The live claims whose second form `key` is (an Online form in lower case: `second`), an exact claim of it aside:
-    /// the claim of its base, and of a base of SECOND_BASE characters each claim of 14 or 15 that starts with it
+    /// the claim of its base, and of a base of SECOND_BASE characters each claim of 14 or 15 that starts with it; all of
+    /// one keyphrase's (the module's text: of claims of before that share it, the base's holder's, else the oldest
+    /// claim's)
     fn seconds(&self, key: &str, now: i64) -> Vec<&Claim> {
         let Some(base) = second_base(key) else { return Vec::new() };
         let long = self.long.get(base).filter(|_| base.len() == SECOND_BASE);
-        self.live(base, now).into_iter().chain(long.into_iter().flatten().filter_map(|k| self.live(k, now))).collect()
+        let exact = self.live(base, now);
+        let mut of: Vec<&Claim> =
+            exact.into_iter().chain(long.into_iter().flatten().filter(|k| *k != key).filter_map(|k| self.live(k, now))).collect();
+        let first = exact.or_else(|| of.iter().copied().min_by(|a, b| (a.made, &a.name).cmp(&(b.made, &b.name))));
+        if let Some(owner) = first.map(|c| c.owner.clone()) {
+            of.retain(|c| c.owner == owner);
+        }
+        of
+    }
+
+    /// Whether another keyphrase than `owner` holds a live claim that would share a second form with a claim of `key`
+    /// (an Online form in lower case of SECOND_BASE characters or more): the name of its first SECOND_BASE, or one of 14
+    /// or 15 that starts with them (an exact claim of the second form itself aside: it is its claimant's anyway)
+    fn shares_second(&self, key: &str, owner: &str, now: i64) -> bool {
+        if key.len() < SECOND_BASE {
+            return false;
+        }
+        let base = &key[..SECOND_BASE];
+        let form = format!("{base}_2");
+        let long = self.long.get(base).into_iter().flatten().map(String::as_str);
+        std::iter::once(base).chain(long).filter(|k| *k != key && *k != form).filter_map(|k| self.live(k, now)).any(|c| *c.owner != *owner)
     }
 
     /// `long` with a key of `names` in it (one claimed now)
@@ -236,7 +261,19 @@ impl Inner {
         }
     }
 
-    /// `long` made again from `names` (after names went: a prune, a release, the file read)
+    /// `long` without a key of `names` (one that went: an unclaim, a release)
+    fn unindex(&mut self, key: &str) {
+        if key.len() > SECOND_BASE
+            && let Some(keys) = self.long.get_mut(&key[..SECOND_BASE])
+        {
+            keys.retain(|k| k != key);
+            if keys.is_empty() {
+                self.long.remove(&key[..SECOND_BASE]);
+            }
+        }
+    }
+
+    /// `long` made again from `names` (after names went: a prune, the file read)
     fn index_all(&mut self) {
         self.long.clear();
         let keys: Vec<String> = self.names.keys().filter(|k| k.len() > SECOND_BASE).cloned().collect();
@@ -343,6 +380,8 @@ impl Claims {
                 let of = g.seconds(&key, now);
                 match owner.and_then(|o| of.iter().filter(|c| *c.owner == *o).max_by_key(|c| (c.until == 0, c.end()))) {
                     Some(c) => yours(c),
+                    // (one whose second form another keyphrase's claim has: `claim` refuses it)
+                    None if of.is_empty() && g.shares_second(&key, owner.unwrap_or(""), now) => Status::Taken,
                     None if of.is_empty() => Status::Free,
                     None => Status::Taken,
                 }
@@ -358,8 +397,8 @@ impl Claims {
         self.inner.read().live(&key, now).map(|c| c.owner.clone())
     }
 
-    /// the keyphrases that hold `name` now: its claim's, else, for a second form (`second`), the owners of the names it
-    /// is made of (most often one); none: nobody's
+    /// the keyphrases that hold `name` now: its claim's, else, for a second form (`second`), the owner of the names it is
+    /// made of (one: the module's text); none: nobody's
     pub fn holders(&self, name: &str, now: i64) -> Vec<Owner> {
         let Some(key) = canonical(name) else { return Vec::new() };
         let g = self.inner.read();
@@ -373,7 +412,7 @@ impl Claims {
     }
 
     /// whoever has `owner` may play under `name`: nobody claimed it, or that keyphrase did; or, for the second form of
-    /// claimed names (`second`), that keyphrase holds one of them
+    /// claimed names (`second`), that keyphrase holds it (`holders`)
     pub fn may_use(&self, name: &str, owner: Option<&str>, now: i64) -> bool {
         let Some(key) = canonical(name) else { return true };
         let g = self.inner.read();
@@ -421,8 +460,8 @@ impl Claims {
             }
             // the name it changed from (back to it: a change too)
             Some(_) => {}
-            // free, or the second form of claimed names (`second`): another's if any of them is another keyphrase's;
-            // its own already if they are all its own (no change: a claim of it would let its name go)
+            // free, or the second form of claimed names (`second`): another's if it is another keyphrase's; its own
+            // already if it is its own (no change: a claim of it would let its name go)
             None => {
                 let of = g.seconds(&key, now);
                 if of.iter().any(|c| c.owner != *owner) {
@@ -434,6 +473,10 @@ impl Claims {
                     return Ok(mine);
                 }
             }
+        }
+        // a name whose second form another keyphrase's claim has (the module's text): theirs
+        if g.shares_second(&key, owner, now) {
+            return Err(Refusal::Taken);
         }
         if let Some(old) = g.current(owner, now).cloned() {
             let rec = g.owners.get(owner).cloned().unwrap_or_default();
@@ -490,18 +533,19 @@ impl Claims {
     /// a keyphrase gone from the cloud: its names are free.  How many there were.
     pub fn release(&self, owner: &str) -> usize {
         let mut g = self.inner.write();
-        let n = g.names.len();
-        g.names.retain(|_, c| *c.owner != *owner);
-        g.owners.remove(owner);
-        let gone = n - g.names.len();
-        if gone > 0 {
-            g.index_all();
+        let keys: Vec<String> = g.names.iter().filter(|(_, c)| *c.owner == *owner).map(|(k, _)| k.clone()).collect();
+        // (only these out of `long`: making it again from every claim took 165-180 ms at 500k claims, under the lock
+        // every reader waits on: the 2026-11-05 security audit)
+        for k in &keys {
+            g.names.remove(k);
+            g.unindex(k);
         }
+        g.owners.remove(owner);
         drop(g);
-        if gone > 0 {
+        if !keys.is_empty() {
             self.changed();
         }
-        gone
+        keys.len()
     }
 
     /// the operator frees a name (the control socket): whose it was
@@ -509,14 +553,7 @@ impl Claims {
         let key = canonical(name)?;
         let mut g = self.inner.write();
         let c = g.names.remove(&key)?;
-        if key.len() > SECOND_BASE
-            && let Some(keys) = g.long.get_mut(&key[..SECOND_BASE])
-        {
-            keys.retain(|k| *k != key);
-            if keys.is_empty() {
-                g.long.remove(&key[..SECOND_BASE]);
-            }
-        }
+        g.unindex(&key);
         if let Some(r) = g.owners.get_mut(&c.owner)
             && r.current.as_deref() == Some(key.as_str())
         {

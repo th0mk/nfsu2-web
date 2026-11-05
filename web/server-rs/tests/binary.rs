@@ -1342,3 +1342,166 @@ async fn free_roams_friends_through_the_server() {
     al.close().await;
     assert_eq!(srv.stop().await, Some(0));
 }
+
+// The 2026-11-05 security audit's rename bait: a player whose edited game shows a victim's claimed name over its car,
+// its page under an offensive name for the operator to rename.  The rename takes the offensive name only, and says
+// why not the other: the victim's claim stays its own, its page plays on, and nobody is refused its name or the ones
+// that read the same.  Nor is a name over the car that reads as another player's claimed name taken (that player
+// would be asked for another name too); naming it takes it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_rename_takes_no_other_keyphrases_name() {
+    use nfsu2_claims::{Claims, owner_of_token};
+    let tmp = tempfile::tempdir().unwrap();
+    let (data, wasm) = game_folder(tmp.path());
+    let state = tmp.path().join("state");
+    std::fs::create_dir_all(&state).unwrap();
+    let tok = |c: char| c.to_string().repeat(43);
+    let now = nfsu2_util::now_ms();
+    let claims = Claims::open(&state, now);
+    claims.claim("Victor", &owner_of_token(&tok('V')).unwrap(), now).unwrap();
+    claims.claim("Wendy", &owner_of_token(&tok('W')).unwrap(), now).unwrap();
+    claims.save(now).unwrap();
+    let port = free_port();
+    let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--vault-gb", "1", "--online", "off"]), port);
+    srv.ready().await;
+    let host = format!("localhost:{port}");
+    let names = |c: char, n: &'static str| {
+        let b = format!("Bearer {}", tok(c));
+        async move {
+            let (code, body) = http(port, "GET", &format!("/names?name={n}"), &[("authorization", &b), ("sec-fetch-site", "same-origin")], "").await;
+            assert_eq!(code, 200, "{body}");
+            serde_json::from_str::<Value>(&body).unwrap()
+        }
+    };
+    assert_eq!(names('V', "Victor").await["state"], "yours");
+    // the victims play under their claims; the attackers under offensive page names, the victims' names over their cars
+    let open = |xff: &'static str, page: &'static str, claim: Option<char>, id: u32, game: &'static [u8]| {
+        let host = host.clone();
+        async move {
+            let b = Browser::open_from(&host, port, "", None, None, Some(xff)).await;
+            let mut h = serde_json::json!({ "t": "hello", "name": page, "id": format!("page-{id}") });
+            if let Some(c) = claim {
+                h["claim"] = tok(c).into();
+            }
+            b.text(&h.to_string());
+            b.binary(to_hub(&roam_hello_named(id, game)));
+            b
+        }
+    };
+    let victor = open("192.0.2.9", "Victor", Some('V'), 601, b"Victor").await;
+    let wendy = open("192.0.2.8", "Wendy", Some('W'), 602, b"Wendy").await;
+    let meanie = open("192.0.2.1", "Meanie", None, 501, b"Victor").await;
+    let rude = open("192.0.2.2", "Rude", None, 502, b"W3ndy").await;
+    let t0 = Instant::now();
+    while !(ctl(&state, &["who", "meanie"]).1.contains("its game shows \"Victor\"")
+        && ctl(&state, &["who", "rude"]).1.contains("its game shows \"W3ndy\""))
+        && t0.elapsed() < Duration::from_secs(3)
+    {
+        sleep(50).await;
+    }
+    let rn = ctl(&state, &["rename", "Meanie", "Offensive", "name"]);
+    assert_eq!(rn.0, 0, "{}", rn.1);
+    assert!(rn.1.starts_with("rename #1: \"Meanie\" taken away from everyone, and the names that read the same\n"), "{}", rn.1);
+    assert!(rn.1.contains("\nnot taken: \"Victor\" (another keyphrase's claimed name); to take one, name it\n"), "{}", rn.1);
+    assert!(!rn.1.contains("its claim went"), "{}", rn.1);
+    assert_eq!(meanie.until_ms(3000, |g| g.closed.clone()).await, (4004, "rename".into()));
+    let after = names('V', "Victor").await;
+    assert_eq!((after["state"].as_str(), after["mine"].is_object()), (Some("yours"), true), "the victim's claim stays: {after}");
+    assert_ne!(names('V', "V1ct0r1999").await["state"], "blocked", "nor are the names that read the same refused");
+    // a lookalike over the car of another player's claimed name, the same
+    let rn = ctl(&state, &["rename", "Rude"]);
+    assert!(rn.1.contains(&format!("not taken: \"W3ndy\" (reads as {} \"Wendy\", that player's claimed name)", nfsu2_util::vip_str(wendy.vip))), "{}", rn.1);
+    assert_eq!(rude.until_ms(3000, |g| g.closed.clone()).await, (4004, "rename".into()));
+    sleep(300).await;
+    assert!(victor.is_open() && wendy.is_open(), "the victims play on");
+    let taken = ctl(&state, &["names"]).1;
+    assert!(taken.contains("\"Meanie\"") && taken.contains("\"Rude\"") && !taken.contains("Victor") && !taken.contains("ndy"), "{taken}");
+    let lines = srv.lines();
+    assert!(lines.iter().any(|l| l.contains("[ban] rename #1 \"Meanie\": \"Meanie\": \"Offensive name\"; not taken: \"Victor\" (another keyphrase's claimed name)")), "{lines:?}");
+    assert_eq!(srv.stop().await, Some(0));
+}
+
+// The 2026-11-05 security audit's one-sided friend: a name on one friends list alone (one the Messenger's RADD LIST=B
+// put there unasked, before it became a request; or a friend's name another keyphrase claimed since) tells its list's
+// player nothing: neither on its link nor on the start page does it hear where the other plays, nor its room; asked
+// and accepted, a friendship both ways does
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_one_sided_friend_learns_nothing() {
+    use nfsu2_claims::{Claims, owner_of_token};
+    use sha2::{Digest, Sha256};
+    let tmp = tempfile::tempdir().unwrap();
+    let (data, wasm) = game_folder(tmp.path());
+    let state = tmp.path().join("state");
+    std::fs::create_dir_all(&state).unwrap();
+    let tok = |c: char| c.to_string().repeat(43);
+    let now = nfsu2_util::now_ms();
+    let claims = Claims::open(&state, now);
+    let mallory = owner_of_token(&tok('A')).unwrap();
+    claims.claim("Mallory", &mallory, now).unwrap();
+    claims.claim("Victim", &owner_of_token(&tok('V')).unwrap(), now).unwrap();
+    claims.save(now).unwrap();
+    // Mallory's list on the shelf (nfsu2-online buddy.rs: <state>/online/friends/<2 hex>/<32 hex>.json) names Victim;
+    // Victim's names nobody
+    let h: String = Sha256::digest(b"mallory").iter().take(16).map(|b| format!("{b:02x}")).collect();
+    let shelf = state.join("online").join("friends").join(&h[..2]);
+    std::fs::create_dir_all(&shelf).unwrap();
+    let list = serde_json::json!({ "v": 4, "name": "Mallory", "seen": "2026-11", "owner": &*mallory, "B": ["Victim"] });
+    std::fs::write(shelf.join(format!("{h}.json")), list.to_string()).unwrap();
+    let port = free_port();
+    let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--vault-gb", "1"]), port);
+    srv.ready().await;
+    let host = format!("localhost:{port}");
+    let bearer = |c: char| format!("Bearer {}", tok(c));
+    let page = |name: &'static str, key: char, id: u32, x: f32| {
+        let host = host.clone();
+        async move {
+            let b = Browser::open_at(&host, port, "", None).await;
+            b.text(&serde_json::json!({ "t": "hello", "name": name, "claim": tok(key) }).to_string());
+            b.binary(to_hub(&roam_hello_named(id, name.as_bytes())));
+            b.binary(to_hub(&roam_snap(id, [x, 0.0, 0.0])));
+            b
+        }
+    };
+    // Victim in free roam 3 km off; Mallory's page asks for its friends, then where they play
+    let victim = page("Victim", 'V', 801, 3000.0).await;
+    let mal = page("Mallory", 'A', 802, 0.0).await;
+    for p in [&victim, &mal] {
+        p.text(r#"{"t":"friend","op":"list"}"#);
+    }
+    async fn first(b: &Browser, op: &'static str, from: usize) -> Value {
+        b.until_ms(4000, move |g| friend_msgs(g, from).into_iter().find(|m| m["op"] == op)).await
+    }
+    assert_eq!(first(&mal, "list", 0).await["friends"], serde_json::json!(["Victim"]), "the name on its list");
+    sleep(1500).await;
+    let n = |b: &Browser| friend_msgs(&b.got(), 0).len();
+    let k = n(&mal);
+    mal.text(r#"{"t":"friend","op":"where"}"#);
+    let nowhere = serde_json::json!([{ "name": "Victim", "where": "" }]);
+    assert_eq!(first(&mal, "where", k).await["friends"], nowhere, "on its link");
+    let get = |c: char| {
+        let b = bearer(c);
+        async move {
+            let (code, body) = http(port, "GET", "/friends", &[("authorization", &b), ("sec-fetch-site", "same-origin")], "").await;
+            assert_eq!(code, 200, "{body}");
+            serde_json::from_str::<Value>(&body).unwrap()
+        }
+    };
+    assert_eq!(get('A').await["friends"], nowhere, "on the start page");
+    // asked (not "friends": the name on its list is no friendship), accepted: friends both ways, and where it plays
+    let post = |c: char, op: &'static str, name: &'static str| {
+        let b = bearer(c);
+        async move {
+            let body = serde_json::json!({ "op": op, "name": name }).to_string();
+            let (code, r) = http(port, "POST", "/friends", &[("authorization", &b), ("content-type", "application/json")], &body).await;
+            assert_eq!(code, 200, "{r}");
+            serde_json::from_str::<Value>(&r).unwrap()["done"].clone()
+        }
+    };
+    assert_eq!(post('A', "ask", "Victim").await, "asked");
+    assert_eq!(post('V', "accept", "Mallory").await, "friends");
+    assert_eq!(get('A').await["friends"], serde_json::json!([{ "name": "Victim", "where": "roam", "room": "" }]));
+    for p in [victim, mal] {
+        p.close().await;
+    }
+    assert_eq!(srv.stop().await, Some(0));
+}

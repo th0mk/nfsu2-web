@@ -1,7 +1,9 @@
 //! Free roam's friends (docs/web/PLAYING.md, "Friends"): two players whose cars touched front bumpers for 3 seconds
 //! may befriend each other, and see each other on their start pages from then on.  The friends lists are EA
 //! Messenger's (nfsu2-online buddy.rs: one file a player, kept for claimed names only, so a friend made in free roam is
-//! one in the Messenger too); the free-roam hub links friends first and says where they play (nfsu2-roam).
+//! one in the Messenger too); the free-roam hub links friends first and says where they play (nfsu2-roam).  Only a
+//! friendship both ways (each one on the other's list, as an accepted request makes it: nfsu2-online
+//! `FriendRow::mutual`) is linked or told where the other plays; a name on one list alone is a name, no more.
 //!
 //! In the game, the page's control messages on its /lan connection (nfsu2-lan `LanSwitch::on_text`), each answered on
 //! it:
@@ -176,7 +178,8 @@ impl Friends {
         self.lists(o, group, FriendAsk::Send(name.to_string(), body)).await.done
     }
 
-    /// the page's lists to it, with the messages that waited for it, and its friends to the hub
+    /// the page's lists to it, with the messages that waited for it, and its friends to the hub: the friendships both
+    /// ways only (`FriendRow::mutual`), since the hub links each one's friends with it, and puts it on theirs
     async fn send_list(&self, vip: u32, owner: Option<Arc<str>>, group: Arc<str>) {
         let Some(o) = owner else {
             return self.say(vip, json!({ "t": "friend", "op": "list", "me": null, "friends": [], "asks": [] }));
@@ -184,7 +187,7 @@ impl Friends {
         let r = self.lists(o.clone(), group, FriendAsk::ListMail).await;
         if r.me.is_some() {
             let now = Self::now();
-            let owners = r.friends.iter().filter_map(|f| self.claims.holder(&f.name, now)).collect();
+            let owners = r.friends.iter().filter(|f| f.mutual).filter_map(|f| self.claims.holder(&f.name, now)).collect();
             self.roam.friends(vip, o, owners);
         }
         let names: Vec<&str> = r.friends.iter().map(|f| f.name.as_str()).collect();
@@ -214,7 +217,7 @@ impl Friends {
         let is = |n: &String| n.eq_ignore_ascii_case(&peer);
         c.st = if r.me.is_none() {
             "claim"
-        } else if r.friends.iter().any(|f| is(&f.name)) {
+        } else if r.friends.iter().any(|f| f.mutual && is(&f.name)) {
             "friends"
         } else if r.asks.iter().any(is) {
             "asks"
@@ -265,10 +268,13 @@ impl Friends {
         json!({ "me": r.me, "done": r.done, "friends": friends, "asks": r.asks, "sent": r.sent, "mail": mail_json(&r.mail) })
     }
 
-    /// the friends of the lists, each where it plays (the module's doc, GET /friends)
+    /// the friends of the lists, each where it plays (the module's doc, GET /friends): a one-way entry
+    /// (`FriendRow::mutual`) nowhere, its room none (the 2026-11-05 security audit: one the Messenger's RADD put on a
+    /// list unasked told the adder where its player was, and the name of its private room)
     async fn placed(&self, r: &FriendReply) -> Vec<Value> {
         let now = Self::now();
-        let owners: Vec<Option<Arc<str>>> = r.friends.iter().map(|f| self.claims.holder(&f.name, now)).collect();
+        let owners: Vec<Option<Arc<str>>> =
+            r.friends.iter().map(|f| if f.mutual { self.claims.holder(&f.name, now) } else { None }).collect();
         let found: Vec<Arc<str>> = owners.iter().flatten().cloned().collect();
         let mut at = self.roam.whereabouts(found).await.unwrap_or_default().into_iter();
         r.friends

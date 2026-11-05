@@ -10,7 +10,9 @@
 //!    not "its game shows"; the operator's `who` still has its name;
 //! 5. the cheat watch: a second player's car put beside its first one's is no teleport; anywhere else it is, and so
 //!    is one beside another flagged endpoint or beside an endpoint not flagged;
-//! 6. a block of the second player's name, as a claimed name's, blocks its owner (both players);
+//! 6. a block of the second player's name, as a claimed name's, blocks its owner (both players); a second form two
+//!    claims of before share is one keyphrase's: another one's player under it is an impostor, and a block of it never
+//!    blocks that other keyphrase;
 //! 7. the counts: /players counts the browser once, info() its second players; a full hub of 15360 with players
 //!    coming and going keeps every slot a world map's key can name.
 
@@ -337,6 +339,39 @@ fn a_block_of_a_second_players_name_blocks_its_owner() {
         let l = k.lists();
         assert!(!linked(&l, (V(1), P1), (V(0), P1)) && !linked(&l, (V(1), P1), (V(0), P2)), "{blocked} blocked");
         assert!(linked(&l, (V(2), P1), (V(0), P1)) && linked(&l, (V(2), P1), (V(0), P2)), "{blocked}: the others see both");
+    }
+}
+
+// The 2026-11-05 security audit's case: "Speedracer123" (V) and "Speedracer123x" (A), claims of before that share one
+// second form, "Speedracer123 2" (a claim of the second now is refused: nfsu2-claims).  It is V's only, the holder of
+// the name of 13: A's player under it is an impostor, linked with nobody, and a block of it blocks V (its second
+// player's name), never A's player under A's own claim.
+#[test]
+fn a_second_form_two_claims_share_is_one_keyphrases() {
+    let t0 = 1_000_000;
+    let dir = std::env::temp_dir().join(format!("nfsu2-roam-coop-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let claim = |name: &str, c: char, made: i64| format!(r#"{{"name":"{name}","owner":"{}","made":{made},"seen":{made}}}"#, owner(c));
+    let file = format!(r#"{{"v":1,"claims":[{},{}]}}"#, claim("Speedracer123x", 'A', t0), claim("Speedracer123", 'V', t0 + 1));
+    std::fs::write(dir.join("names.json"), file).unwrap();
+    let claims = Arc::new(Claims::open(&dir, t0 + 2));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(claims.count(t0 + 2), 2);
+    for block in [false, true] {
+        let mut k = Kit::new(RoamOptions::default());
+        k.hub.set_claims(Some(claims.clone()));
+        if block {
+            k.hub.blocks(V(0), vec!["Speedracer123 2".into()]);
+        }
+        put(&mut k, V(0), P1, 100, &seat1(b"Watcher"), None, [0.25, 0.25]);
+        put(&mut k, V(1), P1, 101, &seat1(b"Speedracer123"), Some('V'), [10.25, 0.25]);
+        put(&mut k, V(2), P1, 102, &seat1(b"Speedracer123x"), Some('A'), [20.25, 0.25]);
+        put(&mut k, V(3), P1, 103, &seat1(b"Speedracer123 2"), Some('A'), [30.25, 0.25]);
+        k.hub.tick();
+        let l = k.lists();
+        assert!(!linked(&l, (V(0), P1), (V(3), P1)), "block {block}: A under V's second form, an impostor");
+        assert!(linked(&l, (V(0), P1), (V(2), P1)), "block {block}: A under its own claim");
+        assert_eq!(linked(&l, (V(0), P1), (V(1), P1)), !block, "block {block}: V, the second form's owner");
     }
 }
 

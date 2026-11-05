@@ -314,7 +314,7 @@ fn pages_befriend_through_the_messenger_lists() {
     assert_eq!((r.done, names(&r), r.asks.len()), ("friends", vec!["Bravo".to_string()], 0));
     assert_eq!(roster(&mut w, ma), ["Bravo"]);
     let r = w.core.friends(&b, &g, List);
-    assert_eq!(r.friends, [crate::buddy::FriendRow { name: "Alpha".into(), online: true, contact: None }]);
+    assert_eq!(r.friends, [crate::buddy::FriendRow { name: "Alpha".into(), mutual: true, online: true, contact: None }]);
     assert_eq!(w.core.friends(&b, &g, Ask("Alpha".into())).done, "friends", "already");
     // what takes no part: oneself, a name nobody claimed, a keyphrase without a name
     assert_eq!(w.core.friends(&a, &g, Ask("alpha".into())).done, "self");
@@ -418,4 +418,71 @@ fn pages_message_friends() {
     w.advance(600_001.0);
     assert_eq!(w.core.friends(&b, &g, Send("Alpha".into(), "sorry".into())).done, "sent");
     assert_eq!(got.lock().unwrap().len(), n + 1);
+}
+
+// The 2026-11-05 security audit's one-sided friend: the Messenger's RADD LIST=B (the game sends none) put the victim
+// on the adder's list at once, unasked, and the free-roam hub then linked the two anywhere and told the adder where
+// the victim played.  Now it is a friend request, as RADM: on neither list until the victim accepts it.
+#[test]
+fn a_messenger_radd_is_a_friend_request() {
+    use crate::buddy::FriendAsk::List;
+    let claims = Arc::new(Claims::in_memory());
+    let mut w = world_with(&claims, None);
+    let (a, v) = (owner_of_token(&token('A')).unwrap(), owner_of_token(&token('V')).unwrap());
+    claims.claim("Mallory", &a, now(&w)).unwrap();
+    claims.claim("Victim", &v, now(&w)).unwrap();
+    let (_, mv) = player(&mut w, "10.77.0.3", "Victim", Some('V'));
+    let (_, ma) = player(&mut w, "10.77.0.2", "Mallory", Some('A'));
+    w.send(ma, "RADD", fields![("USER", "Victim"), ("LIST", "B"), ("ID", 1)]);
+    assert_eq!(w.c(ma).l("RADD").code, "");
+    w.deliver();
+    assert_eq!(w.c(mv).l("RNOT").g("ATTR"), "R", "the victim's Messenger: a request to answer");
+    let g: Arc<str> = Arc::from("g1");
+    let names = |r: &crate::buddy::FriendReply| r.friends.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+    let r = w.core.friends(&a, &g, List);
+    assert!(names(&r).is_empty(), "no friend unasked: {:?}", names(&r));
+    assert_eq!(r.sent, ["Victim"]);
+    let r = w.core.friends(&v, &g, List);
+    assert!(names(&r).is_empty());
+    assert_eq!(r.asks, ["Mallory"]);
+    // accepted: friends both ways
+    w.send(mv, "RRSP", fields![("USER", "Mallory"), ("ANSW", "Y"), ("ID", 2)]);
+    let r = w.core.friends(&a, &g, List);
+    assert_eq!(r.friends, [crate::buddy::FriendRow { name: "Victim".into(), mutual: true, online: true, contact: None }]);
+}
+
+// A one-way entry on a list (one of before RADD stopped making them, or a friend's name that its keyphrase let go and
+// another one claimed since) is a name on the list only: no friendship both ways, so the pages are told nothing of
+// where it is (not even whether it is online) and the hub links nothing first (the server's friends.rs)
+#[test]
+fn a_one_way_friend_is_told_nothing() {
+    use crate::buddy::FriendAsk::{Answer, Ask, List};
+    let tmp = tempfile::tempdir().unwrap();
+    let claims = Arc::new(Claims::in_memory());
+    let mut w = world_with(&claims, Some(tmp.path().join("online")));
+    let [a, v, b, c] = ['A', 'V', 'B', 'C'].map(|k| owner_of_token(&token(k)).unwrap());
+    for (n, o) in [("Mallory", &a), ("Victim", &v), ("Bravo", &b)] {
+        claims.claim(n, o, now(&w)).unwrap();
+    }
+    let (_, ma) = player(&mut w, "10.77.0.2", "Mallory", Some('A'));
+    let (_, mv) = player(&mut w, "10.77.0.3", "Victim", Some('V'));
+    let (_, mb) = player(&mut w, "10.77.0.4", "Bravo", Some('B'));
+    befriend(&mut w, ma, mv, "Victim", "Mallory");
+    befriend(&mut w, ma, mb, "Bravo", "Mallory");
+    let g: Arc<str> = Arc::from("g1");
+    let row = |name: &str, mutual: bool| crate::buddy::FriendRow { name: name.into(), mutual, online: mutual, contact: None };
+    assert_eq!(w.core.friends(&a, &g, List).friends, [row("Victim", true), row("Bravo", true)]);
+    // Victim's list no longer names Mallory (as a list of before RADD's would not)
+    w.core.buddies.lists.get_mut("victim").unwrap().b.shift_remove("mallory");
+    // Bravo's keyphrase let its name go, and another claimed it: Bravo's old list, still in memory, is not the new
+    // claimer's
+    claims.release(&b);
+    claims.claim("Bravo", &c, now(&w)).unwrap();
+    assert_eq!(w.core.friends(&a, &g, List).friends, [row("Victim", false), row("Bravo", false)]);
+    assert!(w.core.friends(&v, &g, List).friends.is_empty());
+    // a one-way entry is asked as anyone: a request that waits for its answer, then friends both ways
+    assert_eq!(w.core.friends(&a, &g, Ask("Victim".into())).done, "asked");
+    assert_eq!(w.core.friends(&v, &g, List).asks, ["Mallory"]);
+    assert_eq!(w.core.friends(&v, &g, Answer("Mallory".into(), true)).done, "friends");
+    assert_eq!(w.core.friends(&a, &g, List).friends, [row("Victim", true), row("Bravo", false)]);
 }
