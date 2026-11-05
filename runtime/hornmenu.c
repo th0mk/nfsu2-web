@@ -38,7 +38,8 @@ static uint32_t g_pct = 100;                     /* the volume, percent, as the 
  * 0xE9; Turkish's "Korna Sesi" after its "Motor Sesi", ASCII; Hungarian's
  * "Duda hangereje" after its "Motor hangereje"; Czech's "Hlasitost klaksonu"
  * after its "Hlasitost motoru"; Slovak's "Hlasitos\x9d klaks\xf3nu" after its
- * "Hlasitos\x9d motora", in Windows-1250 as its pack's fonts draw it); English for the others,
+ * "Hlasitos\x9d motora", in Windows-1250 as its pack's fonts draw it; Lithuanian's
+ * "Klaksono garsumas" after its "Variklio garsumas"); English for the others,
  * whose fonts have their own encodings but draw ASCII as it is (car names) */
 static const char *label(void){
     static const struct { const char *lang, *text; } T[] = {
@@ -47,6 +48,7 @@ static const char *label(void){
         { "danish", "Lydstyrke for horn" }, { "portuguese", "Volume da Buzina" },
         { "polish", "G\xeeo\xe2no\xe2\xe9 klaksonu" }, { "turkish", "Korna Sesi" }, { "hungarian", "Duda hangereje" },
         { "czech", "Hlasitost klaksonu" }, { "slovak", "Hlasitos\x9d klaks\xf3nu" },
+        { "lithuanian", "Klaksono garsumas" },
     };
     const char *l = language_name();
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) if (!strcmp(l, T[i].lang)) return T[i].text;

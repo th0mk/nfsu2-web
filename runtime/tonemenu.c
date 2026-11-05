@@ -54,6 +54,7 @@ static const char *label_of(int white){
         { "polish", "Ekspozycja", "Poziom bieli" }, { "turkish", "Pozlama", "Beyaz Seviyesi" },
         { "hungarian", "Expoz\xed" "ci\xf3", "Feh\xe9rszint" },
         { "czech", "Expozice", "\xdaroven b\xedl\xe9" }, { "slovak", "Expoz\xed" "cia", "\xdarove\xf2 bielej" },
+        { "lithuanian", "Ekspozicija", "Baltos lygis" },
     };
     const char *l = language_name();
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) if (!strcmp(l, T[i].lang)) return white ? T[i].white : T[i].exposure;
