@@ -370,7 +370,7 @@ context lists every problem the developer has a report on, with its first thread
   the game's Joypad Configuration steers or brakes with no longer looks round; the left stick does when the game uses
   none of it. On an older version: reload. On a newer one the report is new. Threads 1567127501359153282,
   1567191097149497415 (also 1567230313292112002, "Option to change view stick on gamepad", which this answers).
-  The look can be turned off: the start page's Controls, Site, Free look (a click on its Auto makes it Off): no stick
+  Since 1c0af43d the look can be turned off: the start page's Controls, Site, Free look (a click on its Auto makes it Off): no stick
   looks round, straight back is no Look Back, and the stick straight up no longer switches the headlights (G still
   does); the answer to "make the 360 camera optional" (threads 1567427206119166022, 1567191097149497415).
 - Free roam, error 134 with `tlsf_alloc < gheap_alloc_c < gbuf_alloc` at the top of the stack while other players'
@@ -437,10 +437,12 @@ fixes of the original game's crashes and glitches. Changing its core gameplay me
 performance and tuning, AI and traffic, the career's progression, races and rewards, the economy.
 
 - A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
-  (Power Units in Options, Gameplay; Show Player Names there too (also in the pause menu's Options, Gameplay): Off
+  (Power Units in Options, Gameplay; Show Player Names there too since 31cc3384 (also in the pause menu's Options, Gameplay): Off
   hides the names over other players' cars, in free roam and LAN races; the Bank box in career free roam shows only
   for 20 s after the bank changes, 10 s when free roam starts and 8 s after the pause menu, the map or a shop, the
-  answer to "hide the Bank"; drift mode with X, and since 19f84c9 with the drift races' handling and the car's
+  answer to "hide the Bank"; Jump Camera Off in Options, Gameplay (also the pause menu's; it may take the next race
+  or free roam to apply) turns off both the jump camera and the slow-motion camera after a crash, the answer to
+  "disable the jump and crash cutscenes" (thread 1567563824121249905); drift mode with X, and since 19f84c9 with the drift races' handling and the car's
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
   (right looks right; straight down is the game's Look Back since 77a2a706; the left stick when the game's controls
   steer or brake with the right one, since c04e9dc0) and turns it in the garage; quick chat,
@@ -451,11 +453,11 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   but no longer get in the way; Upscaled HUD in the start page's Game, Display, more: Menus, HUD and maps (Upscaled),
   which since 09e907f1
   also shows JeansBig's Detailed Map: the minimap's, world map's and race menus' maps sharp, with the missing
-  shortcuts, and Map only in the same row shows the Detailed Map alone, with the game's own menus and HUD; the time
+  shortcuts, and since 5988eb2a Map only in the same row shows the Detailed Map alone, with the game's own menus and HUD; the time
   played in this browser in Saves, and the last game's under Play (counted only in this browser, not synced; counting
   began on 26 October and stopped at 2 hours until 31 October, so older browsers show "at least"); Delete all for
   the F12 screenshots in Saves, Screenshots (also the way out of a Download backup too big for the browser: "RangeError", "Blob size"); Quebec in
-  Online, Your flag; photo mode with F12 or the pause menu's
+  Online, Your flag, since 5988eb2a; photo mode with F12 or the pause menu's
   Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and
   Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for the eyes, in
   the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in the start page's Game, more:
@@ -463,7 +465,7 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   since 2970e8e; opening the trunk, hood and doors parked in free roam, O or a controller's D-pad down held a second,
   other players see them, they close when the car drives off, since 1ccb47ac (the open trunk showed no trunk audio:
   empty boxes on the player's own car, nothing on others'; since 68128859 it shows the layout, speakers and amps on
-  every car); one part at a time: O the hood, again the trunk alone, the doors alone, all of them, all closed (the
+  every car); since 1c0af43d one part at a time: O the hood, again the trunk alone, the doors alone, all of them, all closed (the
   answer to "open only the hood" or "only the doors", threads 1567568582660071586, 1567034148458205255); car meets on
   the world map, with the GPS to them, since 109bdcc4; Songs in the start page's Game (Uncensored or the game's
   Original versions) and F7 for the next song,
@@ -480,14 +482,14 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   changeable (it starts at 5 and 5), and a race of one lap shows Completed % in place of LAP 1/1, since 81fad175;
   headlights on G: a tap turns them off or back on, held is high beam (brighter, reaching farther) until let go, and
   friends in free roam see it; on a controller the look's stick straight up; another key, or none, in Controls,
-  Site; since a64138c4; the whole HUD hidden while driving, F10 (again: back), free roam and races, the names and
+  Site; since a64138c4; since 1c0af43d the whole HUD hidden while driving, F10 (again: back), free roam and races, the names and
   quick chat lines over other players' cars with it, the pause menu, map and messages still shown, off again at each
   Play, no touch button; another key, or none, in Controls, Site, Hide HUD (thread 1567596160397344910); the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
 - A "bug" that is how the original game behaves (drag and drift races have no music, unless Settings, Game, Music in
-  drag and drift races is on; a part's info screen; hidden races): say so when you are sure, or when the guide or the
+  drag and drift races is on, since 0dc17b5d; a part's info screen; hidden races): say so when you are sure, or when the guide or the
   code shows it; otherwise none.
 
 ## Limits players hit (true as of these notes; check the guide and the code)
