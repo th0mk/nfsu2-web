@@ -99,7 +99,7 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     }
     // 1 and 2 host (2 nearer to 0), 4 hosts in another room; to a player, not the hub: not kept
     k.from(W(1), &lobby(101, 1, 0, 0xA1, 0x1111, 500, 0, 0, 6, &[101]));
-    k.from(W(2), &lobby(102, 1, 0, 0xA2, 0x2222, 50, -20, 1, 4, &[102, 103]));
+    k.from(W(2), &lobby(102, 1, 0, 0xA2, 0x2222, 50, -20, 0, 4, &[102, 103]));
     k.from(W(4), &lobby(104, 1, 0, 0xA4, 0x4444, 0, 0, 0, 6, &[104]));
     k.from(W(3), &lobby(103, 1, 100, 0xA3, 0x3333, 0, 0, 0, 6, &[103]));
     // a bad one: the same player twice
@@ -107,7 +107,7 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     k.hub.tick();
     k.clear();
     k.from(W(0), &mapreq_base(100, 7, 2048, 0));
-    assert_eq!(lobbies(&k), [(W(0), 7, vec![(50, -20, 0x2222, 2, 4, 1), (500, 0, 0x1111, 1, 6, 0)])]);
+    assert_eq!(lobbies(&k), [(W(0), 7, vec![(50, -20, 0x2222, 2, 4, 0), (500, 0, 0x1111, 1, 6, 0)])]);
     // without the flag: the map, no lobbies; another room: its own
     k.clear();
     k.from(W(3), &mapreq_base(103, 1, 2048, 0));
@@ -121,7 +121,7 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     k.step(1100.0);
     k.clear();
     k.from(W(0), &mapreq_base(100, 8, 2048, 0));
-    assert_eq!(lobbies(&k), [(W(0), 8, vec![(50, -20, 0x2222, 2, 4, 1)])], "only 2's, closed with another id");
+    assert_eq!(lobbies(&k), [(W(0), 8, vec![(50, -20, 0x2222, 2, 4, 0)])], "only 2's, closed with another id");
     k.step(3100.0);
     k.from(W(0), &snap(100, [0.0, 0.0, 0.0]));
     k.clear();
@@ -239,7 +239,21 @@ fn lobbies_on_the_wire_roam_core_and_the_hub_agree() {
     let mut args = vec!["lobbies".to_string()];
     args.extend(frames);
     let got = run(&args);
-    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0", 0x0BADF00Du32).as_str()), "{got}");
+    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0,0", 0x0BADF00Du32).as_str()), "{got}");
+    // a career lobby's advert (its t: the race counts in its host's career): its entry marked so, and the C core
+    // takes the mark off its state (an older core drops the entry)
+    let ad = unhex(&run(&["lobbycareer".to_string()]));
+    k.step(1100.0);
+    k.from(W(0), &ad);
+    k.from(W(1), &snap(101, [0.0, 0.0, 0.0]));
+    k.clear();
+    k.from(W(1), &mapreq_base(101, 1, 2048, 0));
+    assert_eq!(lobbies(&k), [(W(1), 1, vec![(-1234, 567, 0x0BADF00D, 2, 6, 0x80)])]);
+    let frames: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();
+    let mut args = vec!["lobbies".to_string()];
+    args.extend(frames);
+    let got = run(&args);
+    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0,128", 0x0BADF00Du32).as_str()), "{got}");
 }
 
 // a lobby's host is linked with its players and with the players in free roam near its start before any nearer one
@@ -330,7 +344,17 @@ fn racerep(sender: u32, lobby: u32, place: u8, players: u8, flags: u8, rating: f
 
 /// `racerep` with the reporter's time (s)
 #[allow(clippy::too_many_arguments)]
-fn racerep_in(sender: u32, lobby: u32, place: u8, players: u8, flags: u8, rating: f32, name: &[u8], payload_len: usize, time: f32) -> Vec<u8> {
+fn racerep_in(
+    sender: u32,
+    lobby: u32,
+    place: u8,
+    players: u8,
+    flags: u8,
+    rating: f32,
+    name: &[u8],
+    payload_len: usize,
+    time: f32,
+) -> Vec<u8> {
     let mut p = vec![0u8; payload_len];
     p[0..4].copy_from_slice(&lobby.to_le_bytes());
     p[4..8].copy_from_slice(&0x0BADF00Du32.to_le_bytes());
@@ -421,7 +445,8 @@ fn an_edited_car_in_a_race_is_a_cheat_line() {
 fn a_car_of_edited_game_data_in_a_race_is_a_cheat_line_when_it_gained() {
     let mut k = Kit::new(RoamOptions::default());
     k.from(W(0), &hello_with(100, &HelloOpts { core: 5, name: b"Ed", ..Default::default() }));
-    let rep = |lobby: u32, place: u8, flags: u8, rating: f32, time: f32| racerep_in(100, lobby, place, 3, flags, rating, b"SUPRA", 64, time);
+    let rep =
+        |lobby: u32, place: u8, flags: u8, rating: f32, time: f32| racerep_in(100, lobby, place, 3, flags, rating, b"SUPRA", 64, time);
     // too few honest times of the race yet: a note on its [race] line
     k.from(W(0), &rep(0xA0, 2, 4, 239.3, 35.0));
     let lines = k.lines.lock().clone();
@@ -655,6 +680,49 @@ fn a_lobby_for_friends_and_crew_is_on_their_maps_only() {
         k.step(1100.0);
         k.from(W(0), &lobby_t(100, 1, 0, 0xC1, 0x1111, 0, 0, 0, 6, &[100, 104], t));
         assert_eq!(who(&mut k), want, "t {t:#06x}");
+    }
+}
+
+// A lobby a player could not join is not on its world map (every lobby was, and players drove to ones that were not
+// there for them): one on its way to the race, or full, is on its own players' maps only.  A career lobby's entry (its
+// advert's t: 0x8000 | 0x0001) says so (0x80 on its state), and to its host's friends and crew-mates that its host is
+// theirs (0x40): the game keeps it off the map of a player past its race's stage, as it keeps that one out, but theirs
+#[test]
+fn a_lobby_one_could_not_join_is_not_on_the_map() {
+    let x = fnv1a("x crew");
+    let mut k = Kit::new(RoamOptions::default());
+    put(&mut k, 0, b"carl", Some('C'), &[x], [0.0, 0.0]);
+    put(&mut k, 1, b"anna", Some('A'), &[], [5.0, 0.0]);
+    put(&mut k, 2, b"dave", Some('D'), &[], [10.0, 0.0]);
+    put(&mut k, 3, b"bob", Some('B'), &[], [15.0, 0.0]);
+    put(&mut k, 4, b"eve", None, &[x], [20.0, 0.0]);
+    k.hub.friends(W(0), owner('C'), vec![owner('D')]);
+    k.hub.friends(W(2), owner('D'), vec![owner('C')]);
+    k.hub.tick();
+    // each player's map: the lobby's (players, state) when listed
+    let maps = |k: &mut Kit| {
+        (0..5u32)
+            .map(|i| {
+                k.clear();
+                k.from(W(i), &mapreq_base(100 + i, 1, 2048, 0));
+                lobbies(k).first().and_then(|l| l.2.first().map(|e| (e.3, e.5)))
+            })
+            .collect::<Vec<_>>()
+    };
+    // carl's lobby with anna in it: (state, most players, players, t), what each of carl, anna, dave, bob, eve sees
+    let (o, open) = (None, |st: u8| Some((2u8, st)));
+    let cases: [(u8, u8, &[u32], u16, [Option<(u8, u8)>; 5]); 5] = [
+        (0, 6, &[100, 101], 0x8000, [open(0), open(0), open(0), open(0), open(0)]),
+        (1, 6, &[100, 101], 0x8000, [open(1), open(1), o, o, o]),
+        (2, 6, &[100, 101], 0x8000, [open(2), open(2), o, o, o]),
+        (0, 2, &[100, 101], 0x8000, [open(0), open(0), o, o, o]),
+        (0, 6, &[100, 101], 0x8001, [open(0xC0), open(0x80), open(0xC0), open(0x80), open(0xC0)]),
+    ];
+    for (state, max, ids, t, want) in cases {
+        // (a browser's lobbies go with its map's answer once a second at most)
+        k.step(1100.0);
+        k.from(W(0), &lobby_t(100, 1, 0, 0xC1, 0x1111, 0, 0, state, max, ids, t));
+        assert_eq!(maps(&mut k), want, "state {state}, {}/{max}, t {t:#06x}", ids.len());
     }
 }
 

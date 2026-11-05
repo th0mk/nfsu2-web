@@ -11,8 +11,9 @@
  *   roam_hubwire near <hex>...    the same for the minimap (its NEARREQ for 64 within 300 m, the hub's NEARDs);
  *                                 then "near <gen> <total> <n> id:x,y,h,vx,vy ..."
  *   roam_hubwire lobby            a race lobby's advert to the hub (to 0), as roam_core encodes it, in hex
+ *   roam_hubwire lobbycareer      the same of a lobby whose race counts in its host's career (its t: MP_COUNTS_ON | 1)
  *   roam_hubwire lobbies <hex>... a session that takes race lobbies asks for the world map as above and takes
- *                                 these datagrams; then "lobbies <gen> <n> x,y,race,n,max,state ..."
+ *                                 these datagrams; then "lobbies <gen> <n> x,y,race,n,max,state,flags ..."
  *   roam_hubwire racerep          a race's report to the hub, as roam_core encodes it, in hex
  *   roam_hubwire hellocrew [n] [id]  a session's HELLO to the hub, in hex: its crews "Blue Room" and "Night Owls"
  *                                 (rc_room_hash) after the ids of the two players the hub listed, who said hello
@@ -152,8 +153,8 @@ int main(int argc, char **argv){
         }
         if (c.lobbies){
             printf("lobbies %u %d", S.lobbies_gen, S.lobbies_n);
-            for (int i = 0; i < S.lobbies_n; i++) printf(" %d,%d,%u,%u,%u,%u", S.lobbies_e[i].x, S.lobbies_e[i].y, S.lobbies_e[i].race,
-                                                     S.lobbies_e[i].n, S.lobbies_e[i].max, S.lobbies_e[i].state);
+            for (int i = 0; i < S.lobbies_n; i++) printf(" %d,%d,%u,%u,%u,%u,%u", S.lobbies_e[i].x, S.lobbies_e[i].y, S.lobbies_e[i].race,
+                                                     S.lobbies_e[i].n, S.lobbies_e[i].max, S.lobbies_e[i].state, S.lobbies_e[i].flags);
             printf("\n");
             return 0;
         }
@@ -189,11 +190,12 @@ int main(int argc, char **argv){
             s->t_us = 1000000u - 50000u * (uint32_t)k; s->q[3] = 1;
             s->p[0] = 1695.25f - (float)k; s->p[1] = -883.5f; s->p[2] = 24.125f; s->v[0] = 20.f;
         }
-    } else if (!strcmp(argv[1], "lobby")){
+    } else if (!strcmp(argv[1], "lobby") || !strcmp(argv[1], "lobbycareer")){
         m.h.type = RC_MSG_LOBBY;
         rc_lobby *l = &m.u.lobby;
         l->op = RC_LOBBY_ADVERT; l->state = RC_LS_OPEN; l->max = 6; l->to = 0; l->lobby = 0xA1B2C3D4u; l->race = 0x0BADF00Du;
         l->x = -1234; l->y = 567; l->n = 2; l->away_s = 25; l->ids[0] = 0x1234ABCDu; l->ids[1] = 0x55u;   /* (away: the hub skips it) */
+        if (!strcmp(argv[1], "lobbycareer")) l->t_ms = 0x8001u;
     } else if (!strcmp(argv[1], "racerep")){
         m.h.type = RC_MSG_RACEREP;
         rc_racerep *r = &m.u.racerep;

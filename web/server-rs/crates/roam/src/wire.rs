@@ -87,9 +87,19 @@ pub(crate) const LOBBY_CLOSE: u8 = 5;
 /// start's players for it to them alone.  An older game sends neither (t 0: its lobby is anyone's).
 pub(crate) const LOBBY_COUNTS_ON: u16 = 0x8000;
 pub(crate) const LOBBY_PRIVATE: u16 = 0x0040;
-/// a LOBBIES entry: x, y (i16 LE, m), race (u32 LE), players, most players, state (u8); at most LOBBIES_MAX of them
+/// ...and its lowest bit says the race counts in its host's career (a career lobby: it keeps out the players past the
+/// race's stage, but its host's friends and crew-mates)
+pub(crate) const LOBBY_COUNTS_HOST: u16 = 0x0001;
+/// a LOBBIES entry: x, y (i16 LE, m), race (u32 LE), players, most players, state (u8: with LOBBIES_CAREER and
+/// LOBBIES_MATE); at most LOBBIES_MAX of them
 pub(crate) const LOBBIES_ENTRY: usize = 11;
 pub(crate) const LOBBIES_MAX: usize = 96;
+/// a LOBBIES entry's state, past the lobby's own: a career lobby (LOBBY_COUNTS_HOST), and its host a friend or
+/// crew-mate of the player told (roam_core.h RC_LOBBIES_CAREER, RC_LOBBIES_MATE): the game keeps a career lobby of a
+/// race of a stage it is past off its map unless its host is a mate.  Only a career lobby's entry has them (an older
+/// game drops such an entry: a state of 3 or more)
+pub(crate) const LOBBIES_CAREER: u8 = 0x80;
+pub(crate) const LOBBIES_MATE: u8 = 0x40;
 /// the most players a lobby takes (roam_core.h RC_LOBBY_MAX)
 pub(crate) const LOBBY_PLAYERS: usize = 6;
 /// a MAPD entry (roam_core.h RC_MAPD_*): a player's key (u16 LE: the hub's slot, MAPD_GONE set when it went), then,
@@ -183,6 +193,8 @@ pub(crate) enum Msg<'a> {
         ids: [u32; LOBBY_PLAYERS],
         /// an ADVERT of a lobby for its host's friends and crew-mates only (LOBBY_PRIVATE)
         private: bool,
+        /// an ADVERT of a career lobby (LOBBY_COUNTS_HOST)
+        career: bool,
     },
     /// a player's report of a race it raced (roam_core.h rc_racerep), checked as roam_core.c's racerep_ok
     RaceRep(RaceRep<'a>),
@@ -510,8 +522,9 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             }
             let t = u16_le(d, 36);
             let private = op == LOBBY_ADVERT && t & LOBBY_COUNTS_ON != 0 && t & LOBBY_PRIVATE != 0;
+            let career = op == LOBBY_ADVERT && t & LOBBY_COUNTS_ON != 0 && t & LOBBY_COUNTS_HOST != 0;
             let (x, y) = (u16_le(d, 32) as i16, u16_le(d, 34) as i16);
-            Msg::Lobby { op, to: u32_le(d, 20), lobby, race, x, y, n: n as u8, max, state, ids, private }
+            Msg::Lobby { op, to: u32_le(d, 20), lobby, race, x, y, n: n as u8, max, state, ids, private, career }
         }
         MSG_RACEREP if end == HDR + RACEREP_BYTES => Msg::RaceRep(racerep(d, HDR)?),
         MSG_RACERES => Msg::RaceRes(raceres(d, HDR, end - HDR)?),

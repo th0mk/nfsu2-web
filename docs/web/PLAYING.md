@@ -708,10 +708,11 @@ Good to know:
     icon (the legend's Players' races row hides them). They join at the start:
     within 15 m of it the panel shows the lobby and Enter joins (at an open race: its card's Accept, then **Join**).
     **Several lobbies at one start:** the panel shows one at a time ("Lobby 1 of 3"), **E** (or a click or tap on
-    "Next lobby") the next, and after them "New lobby", where Enter opens one of your own beside them. It starts on
-    the lobby Enter would pick for you: one a friend or crew-mate of yours is in first, then a race that counts in
-    your career, then the fullest. Up to 6 players; at a full one, or one that keeps you out (below), the panel says
-    so, and Enter starts another. Drive more than 40 m from the start to leave a lobby; the host leaving calls it off, and a lobby nobody joins closes after 5 minutes. A host who seems
+    "Next lobby") the next, and after them "New lobby", where Enter opens one of your own beside them (with one lobby
+    there, E goes to "New lobby" at once). It starts on the lobby Enter would pick for you: one a friend or crew-mate
+    of yours is in first, then a race that counts in your career, then the fullest. Up to 6 players. A lobby you
+    can't join is not shown to you anywhere (at the start, over it, on the world map): a full one, one on its way to
+    the race, one that keeps you out (below); Enter there opens a lobby of your own. Drive more than 40 m from the start to leave a lobby; the host leaving calls it off, and a lobby nobody joins closes after 5 minutes. A host who seems
     away (none of the game's keys or controller buttons and no driving for 2 minutes while others wait) gets a
     30-second countdown on every panel of the lobby, then it closes; one of those keys keeps it. A lobby is within
     your Room, as everything in free roam. At a race's start Enter is for the race: no outrun is offered there.
@@ -772,9 +773,8 @@ Good to know:
     career", after the race). The panel marks each player the race counts for with ★ ("A win counts in your career"), and the
     words over such a lobby or spot and beside its world-map icon end in "- career". A lobby whose race counts for the
     player who opened it takes players up to that race's stage and the opener's friends and crew-mates: a car of a later stage would
-    win it most of the time, however the cars are evened out. Past that stage you see why at the spot ("A career race
-    for players up to stage 2 and ...'s friends and crew"), and Enter opens a lobby of your own beside it. Solo stays as
-    it always was.
+    win it most of the time, however the cars are evened out. Past that stage you don't see such a lobby (at the
+    start, over it, on the world map), and Enter opens a lobby of your own beside it. Solo stays as it always was.
   - **Any other race** pays only prize money: 1st gets what a normal race of your stage pays (stages 1 to 3 $400,
     stage 4 $1,200, stage 5 $2,000), 2nd to 4th three quarters, half and a quarter of that (never less than $300, $200
     and $100), 5th and 6th nothing. **Quitting the race**

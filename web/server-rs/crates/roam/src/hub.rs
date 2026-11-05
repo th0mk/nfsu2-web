@@ -47,6 +47,8 @@ struct HubLobby {
     state: u8,
     ids: [u32; wire::LOBBY_PLAYERS],
     private: bool,
+    /// its race counts in its host's career (wire::LOBBY_COUNTS_HOST): it keeps out the players past the race's stage
+    career: bool,
 }
 
 /// The race lobby a browser's player hosts, as its last advert to the hub had it (`Hub::hosted`), for an invite to a
@@ -1497,9 +1499,9 @@ impl Hub {
             // (a browser's maps are its first player's: a second one's questions go unanswered, `Player::seat2`)
             Msg::MapReq { req, max, base, flags } if sender == p.id && !p.seat2 => ask = Some((req, max, base, flags)),
             Msg::NearReq { req, max, base, radius } if sender == p.id && !p.seat2 => ask_near = Some((req, max, base, radius)),
-            Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids, private } if sender == p.id => {
+            Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids, private, career } if sender == p.id => {
                 match op {
-                    wire::LOBBY_ADVERT => p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids, private }, now)),
+                    wire::LOBBY_ADVERT => p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids, private, career }, now)),
                     wire::LOBBY_CLOSE if p.lobby.is_some_and(|(l, _)| l.id == lobby) => p.lobby = None,
                     wire::LOBBY_JOIN => p.join = Some((lobby, now)),
                     _ => {}
@@ -2033,7 +2035,10 @@ impl Hub {
     /// With the world map's answer, to a player that takes race lobbies: the open lobbies of its room (any player's,
     /// its own too, an advert younger than LOBBY_STALE_MS), nearest first, LOBBIES_MAX at most, in one datagram.  A
     /// lobby for its host's friends and crew-mates only (`HubLobby::private`) only to them, to the players it lists
-    /// and to its host.
+    /// and to its host.  One the player could not join, full or starting its race (a map showed them all, and
+    /// players drove to lobbies that were not there for them, 2026-11-05), only to its own players.  A career
+    /// lobby's entry says so, and whether its host is the player's friend or crew-mate (wire::LOBBIES_CAREER,
+    /// LOBBIES_MATE): the game keeps it off the map for a player past its race's stage, as it keeps that one out.
     fn lobbies(&mut self, slot: u32, req: u16, now: f64) {
         let Some(p) = self.player(slot) else { return };
         if !p.lobbies || p.impostor {
@@ -2050,11 +2055,16 @@ impl Hub {
             if self.apart_from(slot, q, p, o) {
                 continue;
             }
-            if l.private && q != slot && !l.ids[..(l.n as usize).min(wire::LOBBY_PLAYERS)].contains(&p.id) && !mates(p, o) {
+            let ours = q == slot || l.ids[..(l.n as usize).min(wire::LOBBY_PLAYERS)].contains(&p.id);
+            if l.private && !ours && !mates(p, o) {
                 continue;
             }
+            if !ours && (l.state != 0 || l.n >= l.max) {
+                continue;
+            }
+            let state = if l.career { l.state | wire::LOBBIES_CAREER | if mates(p, o) { wire::LOBBIES_MATE } else { 0 } } else { l.state };
             let d = distance(&at, &[l.x as f64, l.y as f64, at[2]]);
-            near.push((order_key(d), (l.x, l.y, l.race, l.n, l.max, l.state)));
+            near.push((order_key(d), (l.x, l.y, l.race, l.n, l.max, state)));
         }
         near.sort_by_key(|e| e.0);
         near.truncate(wire::LOBBIES_MAX);
