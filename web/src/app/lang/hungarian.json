@@ -588,8 +588,6 @@
   "Next song": "Következő zene",
   "Autosave": "Automatikus mentés",
   "Sets each profile's Save option to Autosave once. A later change in the game's Options stays.": "Egyszer minden profil Mentés beállítását „Automatikus Mentés” értékre állítja. Ha később a játék Beállításaiban módosítod, az úgy marad.",
-  "Crash damage": "Ütközési sérülések",
-  "FRS Mods' Crashing Foreign Cars: cars dent, scratch, lose parts and break their lights where they are hit. Only what is seen: the car drives as before.": "Az FRS Mods Crashing Foreign Cars modja: az autók ott horpadnak, karcolódnak, veszítik el alkatrészeiket és törnek a lámpáik, ahol ütés éri őket. Csak a látvány: az autó ugyanúgy vezethető, mint korábban.",
   "Startup movies": "Indítási videók",
   "Logos, PSA and intro. Skippable: Enter, Esc, Space, a click, A, B or Start skips each. Original: only the intro can be skipped.": "Logók, figyelmeztetés (PSA) és intró. Átugorható: Enter, Esc, Space, kattintás, A, B vagy Start mindegyiket átugorja. Eredeti: csak az intró ugorható át.",
   "Skippable": "Átugorható",

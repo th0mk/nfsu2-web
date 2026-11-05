@@ -324,8 +324,6 @@
   "Next song": "次の曲",
   "Autosave": "オートセーブ",
   "Sets each profile's Save option to Autosave once. A later change in the game's Options stays.": "各プロフィールの「セーブ」オプションを一度だけ「オートセーブ」に設定します。その後ゲームの「オプション」で変更した場合は、それが維持されます。",
-  "Crash damage": "衝突ダメージ",
-  "FRS Mods' Crashing Foreign Cars: cars dent, scratch, lose parts and break their lights where they are hit. Only what is seen: the car drives as before.": "FRS Mods の Crashing Foreign Cars：車はぶつかった場所がへこみ、傷つき、パーツが外れ、ライトが割れます。見た目だけで、走りは今までどおりです。",
   "Startup movies": "起動時のムービー",
   "Logos, PSA and intro. Skippable: Enter, Esc, Space, a click, A, B or Start skips each. Original: only the intro can be skipped.": "ロゴ、PSA、イントロ。スキップ可: Enter、Esc、スペース、クリック、A、B、Startでそれぞれスキップします。オリジナル: スキップできるのはイントロだけです。",
   "Skippable": "スキップ可",
