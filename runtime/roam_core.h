@@ -97,12 +97,14 @@
 #define RC_LOBBY_INBOX   16         /* LOBBY messages held for the game side */
 #define RC_LOBBIES_ENTRY 11         /* a LOBBIES entry: x, y (int16, m), race (u32), n, max, state (u8: RC_LS_*, and
                                        RC_LOBBIES_STAGED, RC_LOBBIES_MATE) */
-/* a LOBBIES entry's state byte, past its RC_LS_*: the lobby keeps out the players past its race's stage (its advert
- * said so: a career lobby, or its host's Who can join, roam_game.c mp_kept_out), and its host is a friend or
- * crew-mate of the player asked for (who is never kept out).  Only such a lobby's entry has them: an older core
- * drops such an entry (a state of RC_LS__N or more), and keeps every other */
+/* a LOBBIES entry's state byte, past its RC_LS_* (its low 2 bits): the lobby keeps out the players past its host's
+ * stage (its advert said so: a career lobby, or its host's Who can join, roam_game.c mp_kept_out), that stage (bits
+ * 2-4, 0: an older game's, its race's), and its host is a friend or crew-mate of the player asked for (who is never
+ * kept out).  Only such a lobby's entry has them: an older core drops such an entry (a state of RC_LS__N or more), and
+ * keeps every other */
 #define RC_LOBBIES_STAGED 0x80
 #define RC_LOBBIES_MATE   0x40
+#define RC_LOBBIES_HSTAGE 2          /* the host's stage: state >> this & 7 */
 #define RC_LOBBIES_MAX   96         /* entries per LOBBIES datagram (the hub's nearest) */
 #define RC_RACEREP_BYTES 64         /* a RACEREP's payload: lobby, race (u32); mode, laps (u8); track (u16); place, players,
                                        flags, type, class (u8), 3 bytes 0; rating, field, factor, kW, kg, km/h, time (f32);
@@ -739,7 +741,7 @@ typedef struct {
     /* the hub's open lobbies of our room, with the answer to our last map
      * question (lobbies_gen +1 for each) */
     uint32_t  lobbies_gen;  int lobbies_n;  uint16_t lobbies_req;   /* (the question they answered) */
-    struct { int16_t x, y; uint32_t race; uint8_t n, max, state, flags; } lobbies_e[RC_LOBBIES_MAX];   /* (flags: RC_LOBBIES_STAGED, _MATE) */
+    struct { int16_t x, y; uint32_t race; uint8_t n, max, state, flags, hstage; } lobbies_e[RC_LOBBIES_MAX];   /* (flags: RC_LOBBIES_STAGED, _MATE) */
     /* SAY messages from established peers, oldest first, until the game
      * side takes them (rc_take_say) */
     struct { uint32_t from; uint8_t phrase, seq, stay; } say_in[RC_SAY_INBOX];

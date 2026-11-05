@@ -728,12 +728,11 @@ Good to know:
     (World Map, SMS), as with D-pad down's hold; a direction you put another of the game's controls on stays the
     game's. Invites are in the menu's Friends.
   - **Who can join:** the host's **V** (or a click or tap on its line in the panel) goes round its choices while the
-    lobby waits. **Stage 2 and below can join** (the race's stage; the default) keeps out players past that stage,
-    but the host's friends and crew-mates. **Friends & crew can join:** only the host's friends and crew-mates see it,
+    lobby waits. **Stage 2 and below can join** (the host's own stage; the default) keeps out players past it, but
+    the host's friends and crew-mates. **Friends & crew can join:** only the host's friends and crew-mates see it,
     at the start, over it and on the world map, and only they can join; the players already in it stay. **Everyone
     can join.** A
-    lobby whose race counts in its host's career has no Everyone, and a host past the race's stage no stage limit
-    (Everyone is its default: a limit there would leave most such lobbies empty).
+    lobby whose race counts in its host's career has no Everyone.
   - **Inviting friends:** the host's **Z** (or "Invite friends" in the panel) opens the menu's Friends, where each
     friend in free roam in your Room has an Invite (a flag) while your lobby has room. The friend gets a line over
     the game, "Ann invites you to a circuit (2/6)", for 20 seconds; their **Z**, a click or a tap joins from wherever

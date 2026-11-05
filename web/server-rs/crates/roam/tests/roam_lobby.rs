@@ -239,7 +239,7 @@ fn lobbies_on_the_wire_roam_core_and_the_hub_agree() {
     let mut args = vec!["lobbies".to_string()];
     args.extend(frames);
     let got = run(&args);
-    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0,0", 0x0BADF00Du32).as_str()), "{got}");
+    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0,0,0", 0x0BADF00Du32).as_str()), "{got}");
     // a career lobby's advert (its t: the race counts in its host's career): its entry marked so, and the C core
     // takes the mark off its state (an older core drops the entry)
     let ad = unhex(&run(&["lobbycareer".to_string()]));
@@ -248,12 +248,12 @@ fn lobbies_on_the_wire_roam_core_and_the_hub_agree() {
     k.from(W(1), &snap(101, [0.0, 0.0, 0.0]));
     k.clear();
     k.from(W(1), &mapreq_base(101, 1, 2048, 0));
-    assert_eq!(lobbies(&k), [(W(1), 1, vec![(-1234, 567, 0x0BADF00D, 2, 6, 0x80)])]);
+    assert_eq!(lobbies(&k), [(W(1), 1, vec![(-1234, 567, 0x0BADF00D, 2, 6, 0x88)])]);
     let frames: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();
     let mut args = vec!["lobbies".to_string()];
     args.extend(frames);
     let got = run(&args);
-    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0,128", 0x0BADF00Du32).as_str()), "{got}");
+    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0,128,2", 0x0BADF00Du32).as_str()), "{got}");
 }
 
 // a lobby's host is linked with its players and with the players in free roam near its start before any nearer one
@@ -712,14 +712,15 @@ fn a_lobby_one_could_not_join_is_not_on_the_map() {
     };
     // carl's lobby with anna in it: (state, most players, players, t), what each of carl, anna, dave, bob, eve sees
     let (o, open) = (None, |st: u8| Some((2u8, st)));
-    let cases: [(u8, u8, &[u32], u16, [Option<(u8, u8)>; 5]); 6] = [
+    let cases: [(u8, u8, &[u32], u16, [Option<(u8, u8)>; 5]); 7] = [
         (0, 6, &[100, 101], 0x8000, [open(0), open(0), open(0), open(0), open(0)]),
         (1, 6, &[100, 101], 0x8000, [open(1), open(1), o, o, o]),
         (2, 6, &[100, 101], 0x8000, [open(2), open(2), o, o, o]),
         (0, 2, &[100, 101], 0x8000, [open(0), open(0), o, o, o]),
         (0, 6, &[100, 101], 0x8001, [open(0xC0), open(0x80), open(0xC0), open(0x80), open(0xC0)]),
-        // (its host's stage limit, a lobby that does not count for it: the same)
+        // (its host's stage limit, a lobby that does not count for it: the same; with its host's stage, 3, in bits 2-4)
         (0, 6, &[100, 101], 0x8080, [open(0xC0), open(0x80), open(0xC0), open(0x80), open(0xC0)]),
+        (0, 6, &[100, 101], 0x8080 | 3 << 9, [open(0xCC), open(0x8C), open(0xCC), open(0x8C), open(0xCC)]),
     ];
     for (state, max, ids, t, want) in cases {
         // (a browser's lobbies go with its map's answer once a second at most)

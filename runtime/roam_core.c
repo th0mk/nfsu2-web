@@ -1175,11 +1175,11 @@ static void lobbies_from_hub(rc_session *s, const rc_msg *m){
     for (int k = 0; k < m->u.lobbies.n; k++){
         const uint8_t *e = m->u.lobbies.data + (size_t)k * RC_LOBBIES_ENTRY;
         uint32_t race = (uint32_t)e[4] | (uint32_t)e[5] << 8 | (uint32_t)e[6] << 16 | (uint32_t)e[7] << 24;
-        uint8_t st = e[10] & (uint8_t)~(RC_LOBBIES_STAGED | RC_LOBBIES_MATE);
+        uint8_t st = e[10] & 3u;
         if (!race || e[9] < 2 || e[9] > RC_LOBBY_MAX || e[8] > e[9] || st >= RC_LS__N) continue;
         s->lobbies_e[n].x = (int16_t)(e[0] | e[1] << 8); s->lobbies_e[n].y = (int16_t)(e[2] | e[3] << 8);
         s->lobbies_e[n].race = race; s->lobbies_e[n].n = e[8]; s->lobbies_e[n].max = e[9]; s->lobbies_e[n].state = st;
-        s->lobbies_e[n].flags = e[10] & (RC_LOBBIES_STAGED | RC_LOBBIES_MATE);
+        s->lobbies_e[n].flags = e[10] & (RC_LOBBIES_STAGED | RC_LOBBIES_MATE); s->lobbies_e[n].hstage = e[10] >> RC_LOBBIES_HSTAGE & 7u;
         n++;
     }
     s->lobbies_n = n; s->lobbies_gen++;
