@@ -269,15 +269,56 @@ struct KeptWatch {
 /// heard of.  A RACERES is taken only from one of them, naming only them: no player can be named in a race it was
 /// not in.  Kept JOINED_KEEP_MS after its last advert or ask (a race and the way back take minutes), at most
 /// JOINED_PER_VIP a browser (its newest) and JOINED_IDS players a lobby (those who left before it started count too).
+///
+/// A player of it is the endpoint that joined with its id (`Racer`), and every line names it by that endpoint, never
+/// by a look for its id among all players: a game says its own id, and another player's is in any PEERS list (the
+/// 2026-11-05 security audit: a browser's second endpoint said a player's id, joined its own lobby with it, and its
+/// results had that player's car jump 300 m, a line naming a player who never raced).  An id is the first browser's
+/// to join with it: another browser's ask under it counts for nothing, the same browser's moves it to that endpoint.
+/// An endpoint is one player of it: its ask under another id (another start of its game) takes its place.
 struct Joined {
     race: u32,
     vip: u32,
-    ids: Vec<u32>,
+    racers: Vec<Racer>,
     at: f64,
 }
 const JOINED_KEEP_MS: f64 = 1_800_000.0;
 const JOINED_PER_VIP: usize = 4;
 const JOINED_IDS: usize = 12;
+
+/// one player of a lobby (`Joined`): its game's id, the endpoint that joined with it (`key`), and that endpoint's
+/// name as of its last ask (the lines' once it has gone)
+struct Racer {
+    id: u32,
+    key: u64,
+    name: String,
+}
+
+impl Joined {
+    /// an ask to join it (or its host's advert) from endpoint `key`, named `name`, under `id` (see `Joined`)
+    fn join(&mut self, id: u32, key: u64, name: &str) {
+        if self.racers.iter().any(|r| r.id == id && r.key >> 16 != key >> 16) {
+            return;
+        }
+        self.racers.retain(|r| r.key != key || r.id == id);
+        match self.racers.iter().position(|r| r.id == id) {
+            Some(k) => {
+                let r = &mut self.racers[k];
+                r.key = key;
+                if r.name != name {
+                    r.name = name.to_string();
+                }
+            }
+            None if self.racers.len() < JOINED_IDS => self.racers.push(Racer { id, key, name: name.to_string() }),
+            None => {}
+        }
+    }
+
+    /// whether endpoint `key` joined it under `id`
+    fn has(&self, id: u32, key: u64) -> bool {
+        self.racers.iter().any(|r| r.id == id && r.key == key)
+    }
+}
 /// Two players of a room who share a crew are linked after the race lobbies' links and before all others, each
 /// player with at most this many such links (`crew_pairs`): half of the 32, so that the cars around it still show
 /// (under the busy cap, 8 links a player, a crew of 9 or more in one place takes all of them); half of its own links
@@ -959,7 +1000,7 @@ pub struct Hub {
     /// the cheat watches of players gone without a BYE, by endpoint, for WATCH_KEEP_MS (at most max_players of them)
     kept: HashMap<u64, KeptWatch>,
     /// the races' results as the players' games showed them, until each race is judged (results.rs), and the lobbies
-    /// whose players' results are taken, by their ids
+    /// whose players' results are taken, by the endpoints that joined with their ids
     results: Results,
     /// the lobbies' races' honest times, an edited car's compared with them (`edited_car_line`)
     times: Times,
@@ -1254,8 +1295,16 @@ impl Hub {
         self.frame_from(from, data, None);
     }
 
-    /// a frame from the browser at `from`, whose page plays with keyphrase `owner` (`FrameCtx::owner`)
+    /// a frame from the browser at `from`, whose page plays with keyphrase `owner` (`FrameCtx::owner`); the browser is
+    /// a client of its own
     pub fn frame_from(&mut self, from: u32, data: &[u8], owner: Option<&Arc<str>>) {
+        self.frame_of(from, data, owner, None);
+    }
+
+    /// a frame from the browser at `from`, whose page plays with keyphrase `owner` (`FrameCtx::owner`), of the client
+    /// `client` (an opaque id of its address, as the switch has it: `RoamHub`'s frames); None: the browser is a client
+    /// of its own.  A race's results count the clients that report its winner (results.rs, its clean wins).
+    pub fn frame_of(&mut self, from: u32, data: &[u8], owner: Option<&Arc<str>>, client: Option<&Arc<str>>) {
         self.st.frames += 1;
         if data.len() < F_DATA + wire::HDR + wire::CRC || data[0] != KIND_UDP {
             self.st.bad += 1;
@@ -1418,7 +1467,7 @@ impl Hub {
                     _ => {}
                 }
                 if matches!(op, wire::LOBBY_ADVERT | wire::LOBBY_JOIN) {
-                    heard = Some((op, lobby, race, p.id, p.vip));
+                    heard = Some((op, lobby, race));
                 }
             }
             // one report a race (its lobby), and none within REPORT_GAP_MS of the player's last; its results the same
@@ -1441,8 +1490,8 @@ impl Hub {
             }
             _ => {}
         }
-        if let Some((op, lobby, race, id, vip)) = heard {
-            self.lobby_heard(op, lobby, race, id, vip, now);
+        if let Some((op, lobby, race)) = heard {
+            self.lobby_heard(slot, op, lobby, race, now);
         }
         if let Some((was, is)) = crewed {
             self.crewed = self.crewed + is as usize - was as usize;
@@ -1465,19 +1514,20 @@ impl Hub {
         for s in seen.into_iter().flatten() {
             self.cheat(slot, s, now);
         }
-        // a race's results from one of its lobby's players, naming only them (a racer not of it is nobody: no line
-        // names it); none of a lobby the hub did not see
+        // a race's results from one of its lobby's players (the endpoint that joined with its id), naming only them (a
+        // racer not of it is nobody: no line names it), each as the endpoint that joined with its id; none of a lobby
+        // the hub did not see
         if let Some((by, mut r)) = res
-            && let Some(ids) = self.joined.get(&r.lobby).filter(|j| j.race == r.race && j.ids.contains(&by)).map(|j| j.ids.clone())
+            && let Some(j) = self.joined.get(&r.lobby).filter(|j| j.race == r.race && j.has(by, k))
         {
             for x in &mut r.rows[..r.n] {
-                if !ids.contains(&x.id) {
+                if !j.racers.iter().any(|m| m.id == x.id) {
                     x.id = 0;
                 }
             }
-            let mut results = std::mem::take(&mut self.results);
-            results.add(now, by, r, &|id| self.who(id));
-            self.results = results;
+            let names: Vec<(u32, String)> = j.racers.iter().map(|m| (m.id, self.racer_name(m))).collect();
+            let client = client.cloned().unwrap_or_else(|| Arc::from(vip_str(from)));
+            self.results.add(now, by, client, r, &|id| names.iter().find(|m| m.0 == id).map(|m| m.1.clone()));
         }
         if let Some((req, max, base, flags)) = ask {
             self.mapd(slot, req, max, base, flags, now);
@@ -1487,15 +1537,15 @@ impl Hub {
         }
     }
 
-    /// A lobby's advert (from its host) or a player's own ask to join it: its players, for its races' results
-    /// (`Joined`).  An advert of a lobby another browser hosts, and an ask for a lobby the hub did not see, count for
-    /// nothing.
-    fn lobby_heard(&mut self, op: u8, lobby: u32, race: u32, id: u32, vip: u32, now: f64) {
+    /// A lobby's advert (from its host) or a player's own ask to join it, from the player in `slot`: its players, for
+    /// its races' results (`Joined`).  An advert of a lobby another browser hosts, an ask for a lobby the hub did not
+    /// see, and an ask under an id another browser joined it with, count for nothing.
+    fn lobby_heard(&mut self, slot: u32, op: u8, lobby: u32, race: u32, now: f64) {
+        let Some(Some(p)) = self.slots.get(slot as usize) else { return };
+        let (id, key, vip) = (p.id, p.key(), p.vip);
         if let Some(j) = self.joined.get_mut(&lobby) {
             if j.race == race && (op != wire::LOBBY_ADVERT || j.vip == vip) {
-                if !j.ids.contains(&id) && j.ids.len() < JOINED_IDS {
-                    j.ids.push(id);
-                }
+                j.join(id, key, &p.name);
                 j.at = now;
             }
             return;
@@ -1510,7 +1560,7 @@ impl Hub {
             self.joined.remove(&old);
         }
         mine.push(lobby);
-        self.joined.insert(lobby, Joined { race, vip, ids: vec![id], at: now });
+        self.joined.insert(lobby, Joined { race, vip, racers: vec![Racer { id, key, name: p.name.clone() }], at: now });
     }
 
     /// What a player's SNAP showed of its car (watch.rs) as a `[cheat]` line, while it has lines: who was next to where
@@ -1576,13 +1626,11 @@ impl Hub {
         })
     }
 
-    /// a player by its game's id, as a line names it: its address and name (one gone a while ago by its kept watch)
-    fn who(&self, id: u32) -> Option<String> {
-        if let Some(p) = self.players().find(|p| p.id == id) {
-            return Some(format!("{} \"{}\"", nfsu2_util::vip_str(p.vip), p.name));
-        }
-        let (k, w) = self.kept.iter().find(|(_, w)| w.id == id)?;
-        Some(format!("{} \"{}\"", nfsu2_util::vip_str((k >> 16) as u32), w.name))
+    /// a lobby's player as a line names it: its endpoint's address and name (its name now while it is on the hub
+    /// under that id, else as of its last ask to join)
+    fn racer_name(&self, r: &Racer) -> String {
+        let now = self.by_key.get(&r.key).and_then(|&s| self.player(s)).filter(|p| p.id == r.id);
+        format!("{} \"{}\"", vip_str((r.key >> 16) as u32), now.map_or(&r.name, |p| &p.name))
     }
 
     /// The world map's answer to the player in `slot` (roam_core.h RC_MSG_MAPD): the players of its room in free roam
@@ -2220,7 +2268,8 @@ impl Hub {
         }
         // the races whose results all came (or a while ago): each one's result, and the ones won by cheating
         for (o, v) in self.results.judged(now) {
-            let who = |id: u32| o.names.get(&id).cloned().or_else(|| self.who(id)).unwrap_or_else(|| format!("player {id:08x}"));
+            // (every racer as its lobby's endpoint that joined with its id, `Joined`: never another player of that id)
+            let who = |id: u32| o.names.get(&id).cloned().unwrap_or_else(|| format!("player {id:08x}"));
             let result = results::result_line(&o, &who);
             let cheats: Vec<String> =
                 v.map(|v| results::line(&v, &who)).into_iter().chain(o.jumps.iter().map(|j| results::jump_line(&o, j, &who))).collect();

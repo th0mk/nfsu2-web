@@ -83,7 +83,9 @@
 //! The hub also watches how each player's car moves (watch.rs): a teleport, a car faster than any of the game's, or a
 //! game whose clock runs fast (a speed hack) is a `[cheat]` line with the player's address and name, and who was
 //! next to where its car came to.  And it judges each race lobby's race by its racers' results (results.rs): a win
-//! no car makes is a `[cheat]` line too.  Lines only: the operator decides (`nfsu2-server ctl kick|ban`).
+//! no car makes is a `[cheat]` line too (the races' clean wins it goes by are by two clients' games at least: a
+//! frame's client is its site, an IPv6 /48, or else its address, `FrameCtx::site` and `group`).  Lines only: the
+//! operator decides (`nfsu2-server ctl kick|ban`).
 //!
 //! A claimed name (nfsu2-claims) is its keyphrase's only: a player whose HELLO names one that another keyphrase
 //! claimed (its page's hello to the switch named the keyphrase it plays with: `FrameCtx::owner`) gets no links, is on
@@ -297,8 +299,8 @@ pub struct PeerEntry {
 
 /// What the switch posts to the hub's thread, in order.
 enum Cmd {
-    /// a frame from a browser, and the keyphrase its page plays with
-    Frame(u32, Bytes, Option<Arc<str>>),
+    /// a frame from a browser, the keyphrase its page plays with, and its client (`Hub::frame_of`)
+    Frame(u32, Bytes, Option<Arc<str>>, Arc<str>),
     Gone(u32),
     Attach(SwitchSend),
     Info(oneshot::Sender<serde_json::Value>),
@@ -512,10 +514,10 @@ fn run(
             },
         };
         match cmd {
-            Cmd::Frame(from, data, owner) => {
+            Cmd::Frame(from, data, owner, client) => {
                 pending.fetch_sub(1, Ordering::Relaxed);
                 let t0 = Instant::now();
-                guard(|| hub.frame_from(from, &data, owner.as_ref()));
+                guard(|| hub.frame_of(from, &data, owner.as_ref(), Some(&client)));
                 work += t0.elapsed();
             }
             Cmd::Gone(vip) => guard(|| hub.peer_gone(vip)),
@@ -564,13 +566,14 @@ impl Host for RoamHub {
         false
     }
     fn frame(&self, from: u32, data: Bytes, ctx: FrameCtx) {
-        // the hub's lists are charged to nobody; the owner is for the claimed names
-        let owner = ctx.owner;
+        // the hub's lists are charged to nobody; the owner is for the claimed names; the client, its site (an IPv6
+        // /48) or else its address, for the races' clean wins (results.rs: one address's endpoints are one client)
+        let (owner, client) = (ctx.owner, ctx.site.unwrap_or(ctx.group));
         if self.pending.fetch_add(1, Ordering::Relaxed) >= MAX_PENDING {
             self.pending.fetch_sub(1, Ordering::Relaxed);
             return;
         }
-        if self.tx.send(Cmd::Frame(from, data, owner)).is_err() {
+        if self.tx.send(Cmd::Frame(from, data, owner, client)).is_err() {
             self.pending.fetch_sub(1, Ordering::Relaxed);
         }
     }
