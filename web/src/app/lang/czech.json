@@ -248,8 +248,8 @@
   "{n} points": {
     "one": "{n} bod",
     "few": "{n} body",
-    "many": "{n} bodů",
-    "other": "{n} bodu"
+    "many": "{n} bodu",
+    "other": "{n} bodů"
   },
   "open": "volné",
   "friend": "přítel",
@@ -1609,5 +1609,68 @@
   "Steam Controller or Steam Deck: connect it once.": "Steam Controller nebo Steam Deck: stačí jednou připojit.",
   "{names}: connected in this browser.": "{names}: připojeno v tomto prohlížeči.",
   "Connect a Steam Controller": "Připojit Steam Controller",
-  "Connect another": "Připojit další"
+  "Connect another": "Připojit další",
+  "All-rounder": "Všestranný",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Vyhraj okruh, sprint, drag, drift, Street X a závod URL.",
+  "Both ways": "Tam i zpátky",
+  "Win on the same track in both directions.": "Vyhraj na stejné trati v obou směrech.",
+  "Tourist": "Turista",
+  "Collector": "Sběratel",
+  "Loyal": "Věrný",
+  "Photo finish": "Fotofiniš",
+  "Win a race by less than a tenth of a second.": "Vyhraj závod o méně než desetinu sekundy.",
+  "Sideways": "Bokem",
+  "Speed demon": "Démon rychlosti",
+  "Road trip": "Na cestách",
+  "Bragging rights": "Je čím se chlubit",
+  "Achievement unlocked": "Úspěch odemčen",
+  "{n} of {total} achievements": "{n} z {total} úspěchů",
+  "Achievements": "Úspěchy",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Získáváš je v závodech, které dokončíš, jakmile se zobrazí jejich výsledky. Ukládají se spolu s tvými uloženými hrami.",
+  "Winner": "Vítěz",
+  "Win {n} races.": {
+    "one": "Vyhraj závod.",
+    "few": "Vyhraj {n} závody.",
+    "many": "Vyhraj {n} závodu.",
+    "other": "Vyhraj {n} závodů."
+  },
+  "Winning streak": "Vítězná série",
+  "Win {n} races in a row.": {
+    "one": "Vyhraj {n} závod za sebou.",
+    "few": "Vyhraj {n} závody za sebou.",
+    "many": "Vyhraj {n} závodu za sebou.",
+    "other": "Vyhraj {n} závodů za sebou."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Získej {n} bod v jednom driftu.",
+    "few": "Získej {n} body v jednom driftu.",
+    "many": "Získej {n} bodu v jednom driftu.",
+    "other": "Získej {n} bodů v jednom driftu."
+  },
+  "Reach {n} km/h in a race.": "Dosáhni v závodě {n} km/h.",
+  "Race {n} km in all.": "Najezdi v závodech celkem {n} km.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Dokonči závody na {n} trati (každý směr se počítá zvlášť).",
+    "few": "Dokonči závody na {n} různých tratích (každý směr se počítá zvlášť).",
+    "many": "Dokonči závody na {n} různých tratích (každý směr se počítá zvlášť).",
+    "other": "Dokonči závody na {n} různých tratích (každý směr se počítá zvlášť)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Vyhraj s {n} autem.",
+    "few": "Vyhraj s {n} různými auty.",
+    "many": "Vyhraj s {n} různými auty.",
+    "other": "Vyhraj s {n} různými auty."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Vyhraj {n} závod se stejným autem.",
+    "few": "Vyhraj {n} závody se stejným autem.",
+    "many": "Vyhraj {n} závodu se stejným autem.",
+    "other": "Vyhraj {n} závodů se stejným autem."
+  },
+  "Win {n} races against other players.": {
+    "one": "Vyhraj závod proti jiným hráčům.",
+    "few": "Vyhraj {n} závody proti jiným hráčům.",
+    "many": "Vyhraj {n} závodu proti jiným hráčům.",
+    "other": "Vyhraj {n} závodů proti jiným hráčům."
+  }
 }

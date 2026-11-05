@@ -1551,5 +1551,54 @@
   "Steam Controller or Steam Deck: connect it once.": "Steam Controller eller Steam Deck: anslut den en gång.",
   "{names}: connected in this browser.": "{names}: ansluten i den här webbläsaren.",
   "Connect a Steam Controller": "Anslut en Steam Controller",
-  "Connect another": "Anslut en till"
+  "Connect another": "Anslut en till",
+  "All-rounder": "Allroundare",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Vinn ett banrace, ett sprintrace, ett dragrace, ett driftrace, ett Street X-race och ett URL-race.",
+  "Both ways": "Fram och tillbaka",
+  "Win on the same track in both directions.": "Vinn på samma bana åt båda hållen.",
+  "Tourist": "Turist",
+  "Collector": "Samlare",
+  "Loyal": "Trogen",
+  "Photo finish": "Målfoto",
+  "Win a race by less than a tenth of a second.": "Vinn ett race med mindre än en tiondels sekund.",
+  "Sideways": "På tvären",
+  "Speed demon": "Fartdåre",
+  "Road trip": "Roadtrip",
+  "Bragging rights": "Skryträtt",
+  "Achievement unlocked": "Prestation upplåst",
+  "{n} of {total} achievements": "{n} av {total} prestationer",
+  "Achievements": "Prestationer",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Du tjänar in dem i de race du kör klart, när resultaten visas. De sparas med dina sparfiler.",
+  "Winner": "Vinnare",
+  "Win {n} races.": {
+    "one": "Vinn ett race.",
+    "other": "Vinn {n} race."
+  },
+  "Winning streak": "Segersvit",
+  "Win {n} races in a row.": {
+    "one": "Vinn {n} race i rad.",
+    "other": "Vinn {n} race i rad."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Få {n} poäng i en drift.",
+    "other": "Få {n} poäng i en drift."
+  },
+  "Reach {n} km/h in a race.": "Nå {n} km/h i ett race.",
+  "Race {n} km in all.": "Kör totalt {n} km i race.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Kör klart race på {n} bana (varje riktning räknas).",
+    "other": "Kör klart race på {n} olika banor (varje riktning räknas)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Vinn med {n} bil.",
+    "other": "Vinn med {n} olika bilar."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Vinn {n} race med samma bil.",
+    "other": "Vinn {n} race med samma bil."
+  },
+  "Win {n} races against other players.": {
+    "one": "Vinn ett race mot andra spelare.",
+    "other": "Vinn {n} race mot andra spelare."
+  }
 }

@@ -126,6 +126,7 @@
     <section class="panel tabbed" id="settings">
       <div class="tabs big" role="tablist">
         <button type="button" class="tab" role="tab" data-tab="saves" data-i18n>Saves</button>
+        <button type="button" class="tab" role="tab" data-tab="achievements" data-i18n>Achievements</button>
         <button type="button" class="tab" role="tab" data-tab="online" data-i18n>Online</button>
         <button type="button" class="tab" role="tab" data-tab="friends" data-i18n>Friends &amp; crews</button>
         <button type="button" class="tab" role="tab" data-tab="game" data-i18n>Game</button>
@@ -195,6 +196,11 @@
         <p class="msg warn" id="storage-note" hidden></p>
       </div>
 
+      <div class="pane" role="tabpanel" data-tab="achievements" id="achievements" hidden>
+        <p class="hint" data-i18n>Earned in the races you finish, once their results show. They are kept with your saves.</p>
+        <p class="ach-count" data-ach-count></p>
+        <ul class="ach-list" data-ach-list></ul>
+      </div>
       <div class="pane" role="tabpanel" data-tab="online" id="online" hidden>
         <p class="hint" id="online-note" hidden></p>
         <div id="online-body"></div>
@@ -333,6 +339,7 @@
     <div class="toast" id="toast" hidden></div>
     <div class="toast" id="toast-also" hidden></div>
   </div>
+  <div class="ach-pop" id="ach-pop" role="status" aria-live="polite" hidden></div>
   <div class="toast away" id="away" role="status" hidden></div>
   <div class="toast away" id="removed" role="alert" hidden></div>
   <div class="notices" id="notices" role="status" aria-live="polite"></div>

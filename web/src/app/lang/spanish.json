@@ -1580,5 +1580,61 @@
   "Steam Controller or Steam Deck: connect it once.": "Steam Controller o Steam Deck: conéctalo una vez.",
   "{names}: connected in this browser.": "{names}: conectado en este navegador.",
   "Connect a Steam Controller": "Conectar un Steam Controller",
-  "Connect another": "Conectar otro"
+  "Connect another": "Conectar otro",
+  "All-rounder": "Todoterreno",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Gana una carrera de cada tipo: circuito, sprint, aceleración, derrape, Calle X y URL.",
+  "Both ways": "Ida y vuelta",
+  "Win on the same track in both directions.": "Gana en el mismo recorrido en ambos sentidos.",
+  "Tourist": "Turista",
+  "Collector": "Coleccionista",
+  "Loyal": "Fiel",
+  "Photo finish": "Foto finish",
+  "Win a race by less than a tenth of a second.": "Gana una carrera por menos de una décima de segundo.",
+  "Sideways": "De lado",
+  "Speed demon": "Demonio de la velocidad",
+  "Road trip": "Gran viaje",
+  "Bragging rights": "Para presumir",
+  "Achievement unlocked": "Logro desbloqueado",
+  "{n} of {total} achievements": "{n} de {total} logros",
+  "Achievements": "Logros",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Se consiguen en las carreras que terminas, cuando aparecen sus resultados. Se guardan con tus partidas guardadas.",
+  "Winner": "Ganador",
+  "Win {n} races.": {
+    "one": "Gana una carrera.",
+    "many": "Gana {n} de carreras.",
+    "other": "Gana {n} carreras."
+  },
+  "Winning streak": "Racha de victorias",
+  "Win {n} races in a row.": {
+    "one": "Gana {n} carrera seguida.",
+    "many": "Gana {n} de carreras seguidas.",
+    "other": "Gana {n} carreras seguidas."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Consigue {n} punto en un derrape.",
+    "many": "Consigue {n} de puntos en un derrape.",
+    "other": "Consigue {n} puntos en un derrape."
+  },
+  "Reach {n} km/h in a race.": "Alcanza los {n} km/h en una carrera.",
+  "Race {n} km in all.": "Recorre {n} km en carreras en total.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Termina carreras en {n} recorrido (cada sentido cuenta).",
+    "many": "Termina carreras en {n} de recorridos distintos (cada sentido cuenta).",
+    "other": "Termina carreras en {n} recorridos distintos (cada sentido cuenta)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Gana con {n} coche.",
+    "many": "Gana con {n} de coches distintos.",
+    "other": "Gana con {n} coches distintos."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Gana {n} carrera con el mismo coche.",
+    "many": "Gana {n} de carreras con el mismo coche.",
+    "other": "Gana {n} carreras con el mismo coche."
+  },
+  "Win {n} races against other players.": {
+    "one": "Gana una carrera contra otros jugadores.",
+    "many": "Gana {n} de carreras contra otros jugadores.",
+    "other": "Gana {n} carreras contra otros jugadores."
+  }
 }
