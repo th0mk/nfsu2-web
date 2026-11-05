@@ -631,6 +631,26 @@ pub struct Breakdown {
     pub waited: u64,
 }
 
+/// One kind of player on the switch now, and the WebSocket messages its pages sent and were sent since the last
+/// `LanSwitch::messages_by_kind` (those of pages gone since are left out)
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct KindMsgs {
+    pub kind: &'static str,
+    pub players: usize,
+    pub msgs_in: u64,
+    pub msgs_out: u64,
+}
+
+/// `messages_by_kind`'s kinds, in its order: a page counts under the first that fits
+pub const MSG_KINDS: [&str; 6] = [
+    "racing or in a race lobby",
+    "in Online mode",
+    "on the LAN or Online screens",
+    "driving in free roam",
+    "in free roam, not driving",
+    "leaving or starting",
+];
+
 /// a player this far behind on its path counts in `Breakdown::behind` (ms)
 pub const BEHIND_MS: f64 = 1000.0;
 /// a player whose own free-roam HELLO or SNAP came within this, and said it drives, is timed by every probe (its page
@@ -1247,6 +1267,43 @@ impl LanSwitch {
     /// the LAN or Online screens open, free roam (the hub's vips()), the rest (leaving: the page lets go 10 s after the
     /// last network feature; or starting: free roam not yet heard by the hub); and apart from that, how many of them
     /// are behind on their path and get fewer snapshots (lag.rs)
+    /// The WebSocket messages each kind of player sent and was sent since the last call (`MSG_KINDS`; each page's
+    /// counts are taken: call it from one place).  A page that sent LAN play's datagrams since counts as racing (the
+    /// game's races, Online's and free roam's lobby races all go as LAN play's UDP); the rest as `breakdown` has them,
+    /// free roam's split by its pages' own word that they drive (away.rs).  Messages are what the kernel and
+    /// cloudflared pay for one by one: a page driving in free roam sends and gets about 20 a second, one racing its
+    /// game's frames.
+    pub async fn messages_by_kind(&self) -> Vec<KindMsgs> {
+        let online = match &self.online {
+            Some(h) => h.vips().await.unwrap_or_default(),
+            None => Default::default(),
+        };
+        let roam = match &self.roam {
+            Some(h) => h.vips().await.unwrap_or_default(),
+            None => Default::default(),
+        };
+        let mut out: Vec<KindMsgs> = MSG_KINDS.iter().map(|&kind| KindMsgs { kind, ..KindMsgs::default() }).collect();
+        for p in self.all.load().iter() {
+            let c = &p.conn;
+            let (raced, i, o) = (c.lan_sent.swap(0, Relaxed) > 0, c.msgs_in.swap(0, Relaxed), c.msgs_out.swap(0, Relaxed));
+            let k = if raced {
+                0
+            } else if online.contains(&p.vip) {
+                1
+            } else if p.lan() {
+                2
+            } else if roam.contains(&p.vip) {
+                if p.away.load(Relaxed) { 4 } else { 3 }
+            } else {
+                5
+            };
+            out[k].players += 1;
+            out[k].msgs_in += i;
+            out[k].msgs_out += o;
+        }
+        out
+    }
+
     pub async fn breakdown(&self) -> Breakdown {
         let online = match &self.online {
             Some(h) => h.vips().await.unwrap_or_default(),

@@ -92,6 +92,7 @@ where
             }
             Ok(Message::Ping(d)) => {
                 sw.stats.msg(mix::IN_PING);
+                conn.msgs_in.fetch_add(1, Relaxed);
                 // answered here, under the rate and while the queue has room (nfsu2-ws answers none itself): an answer
                 // to every ping queues pongs without a limit for a client that never reads (the phase-2 deploy
                 // review's finding 1, of the ws library's own answer: gigabytes in seconds); a copy, not the block the
@@ -102,6 +103,7 @@ where
             }
             Ok(Message::Pong(d)) => {
                 sw.stats.msg(mix::IN_PONG);
+                conn.msgs_in.fetch_add(1, Relaxed);
                 // only a pong carrying the payload of one of the switch's pings counts: its round trip is timed, and
                 // for a ping queued since the keepalive's last tick it says the client is there (lag.rs)
                 if let Some(p) = &peer {
@@ -167,6 +169,7 @@ impl LanSwitch {
     /// a frame (`max_frame`)
     fn on_message(&self, peer: &Arc<Peer>, text: bool, data: Bytes) {
         peer.alive.store(true, Relaxed);
+        peer.conn.msgs_in.fetch_add(1, Relaxed);
         peer.last_in.store(now_ms(), Relaxed);
         let n = data.len();
         let o = &self.o;

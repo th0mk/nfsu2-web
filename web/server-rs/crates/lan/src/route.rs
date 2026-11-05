@@ -87,6 +87,9 @@ impl LanSwitch {
     pub(crate) fn route(&self, peer: &Arc<Peer>, data: &Bytes, dsts: impl Iterator<Item = u32> + Clone) -> bool {
         let n = data.len();
         let lan_only = (KIND_LAN_UDP..=KIND_LAN_ICMP).contains(&data[0]);
+        if lan_only {
+            peer.conn.lan_sent.fetch_add(1, Relaxed);
+        }
         let reaches = |p: &Arc<Peer>| !Arc::ptr_eq(p, peer) && p.open() && (!lan_only || p.lan());
         // what the switch sends for each: a broadcast costs its size for every player on its list but the sender (all
         // of them, or for LAN play's kinds those with LAN play open), so the switch never sends more for a client
