@@ -41,7 +41,7 @@ import { PadPoller, type PadPage, type TouchPad } from './gamepad';
 import { SynthDriver } from './synth';
 import {
   IEV_FOCUS, IEV_KEY_DOWN, IEV_KEY_TAP, IEV_KEY_UP, IEV_LOG, IEV_MOUSE_DOWN, IEV_MOUSE_MOVE, IEV_MOUSE_UP, IEV_QUIT, IEV_SMS,
-  IEV_PHOTO, IEV_NAME, INAME_SEAT2, IEV_LOBBY, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
+  IEV_PHOTO, IEV_NAME, INAME_SEAT2, IEV_LOBBY, IEV_TREASURE, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
   IM_EV_DROP, IM_EV_R, IM_EV_W, IM_EVENTS, IM_GAME_INACTIVE, IM_HDR_WORDS, IM_KEYS_HELD, IM_MAGIC, IM_MOUSE_X,
   IM_MOUSE_Y, IM_NAMES_GEN, IM_OFF_EV, IM_OFF_NAMES, IM_OFF_SYN, IM_QUIT_REQ, IM_SYN_R, IM_SYN_W, IM_TEXT,
   IM_TEXT_KIND, IM_TEXT_LEN, IM_TEXT_MAX, IM_TEXT_SEQ, IM_MENU_SCALE, IM_VERSION, IM_VIEW_ROLL, INPUT_EV_N, INPUT_MAGIC, INPUT_NAME_LEN,
@@ -93,6 +93,8 @@ export interface InputHandle {
   sms(id: number): boolean;
   /** photo mode (runtime/photo.c): what (its PH_* number) and its values.  false: it cannot reach the game */
   photo(what: number, a?: number, b?: number): boolean;
+  /** the daily treasure hunt (runtime/treasure.c): the UTC day's number and its diamonds found (a bit each) */
+  treasure(day: number, found: number): boolean;
   /** a new name for free roam and Online mode, now (the operator took the old one away: runtime/web/roam_web.c
    *  roam_plat_name), or (seat2) co-op player 2's in free roam (roam_plat_name2).  false: it cannot reach the game */
   name(name: string, seat2?: boolean): boolean;
@@ -415,6 +417,11 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     photo(what, a = 0, b = 0) {
       if (!h || !api.canQuit()) return false;
       push(IEV_PHOTO, what, 0, 0, [], a, b);
+      return true;
+    },
+    treasure(day, found) {
+      if (!h || !api.canQuit()) return false;
+      push(IEV_TREASURE, 0, 0, 0, [], day, found);
       return true;
     },
     name(name, seat2 = false) {

@@ -93,6 +93,7 @@ enum {
     IEV_LOBBY = 16,       /* free roam's race lobby (roam_web.c roam_plat_lobby_input): dik = what (roam_plat.h ROAM_LB_*);
                              ROAM_LB_JOIN (an invite's Join): a = the lobby's host's id, b = the lobby's id, its race's
                              hash in vk, flags, ch[0], ch[1] (little-endian) */
+    IEV_TREASURE = 17,    /* the daily treasure hunt (treasure.c): a = the UTC day's number, b = its diamonds found (a bit each) */
 };
 #define INAME_SEAT2 1u            /* IEV_NAME's flags: player 2's (co-op) */
 enum {                    /* event flags */

@@ -1635,5 +1635,96 @@
   "Next race lobby at a start, then a new one (in free roam)": "Следующее лобби гонки на старте, затем новое (в свободной езде)",
   "Your race lobby: only your friends and crew can see and join it": "Ваше лобби гонки: видеть его и присоединяться могут только ваши друзья и команда",
   "Invite to a race": "Пригласить в гонку",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Пригласить друзей в своё лобби гонки, принять приглашение друга, выйти из гонки, к которой вы присоединились издалека"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Пригласить друзей в своё лобби гонки, принять приглашение друга, выйти из гонки, к которой вы присоединились издалека",
+  "All-rounder": "Мастер на все руки",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Победите в кольце, спринте, драг-рейсинге, дрифтинге, Стрит-X и гонке Профессиональной лиги.",
+  "Both ways": "Туда и обратно",
+  "Win on the same track in both directions.": "Выиграйте на одной и той же трассе в обоих направлениях.",
+  "Tourist": "Турист",
+  "Collector": "Коллекционер",
+  "Loyal": "Однолюб",
+  "Photo finish": "Фотофиниш",
+  "Win a race by less than a tenth of a second.": "Выиграйте гонку с отрывом меньше десятой доли секунды.",
+  "Sideways": "Боком",
+  "Speed demon": "Лихач",
+  "Road trip": "Дальнобойщик",
+  "Bragging rights": "Есть чем похвастаться",
+  "Achievement unlocked": "Достижение получено",
+  "{n} of {total} achievements": "Достижений: {n} из {total}",
+  "Achievements": "Достижения",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Засчитываются в гонках, которые вы завершили, когда появятся их результаты. Хранятся вместе с вашими сохранениями.",
+  "Winner": "Победитель",
+  "Win {n} races.": {
+    "one": "Выиграйте {n} гонку.",
+    "few": "Выиграйте {n} гонки.",
+    "many": "Выиграйте {n} гонок.",
+    "other": "Выиграйте {n} гонки."
+  },
+  "Winning streak": "Серия побед",
+  "Win {n} races in a row.": {
+    "one": "Выиграйте {n} гонку подряд.",
+    "few": "Выиграйте {n} гонки подряд.",
+    "many": "Выиграйте {n} гонок подряд.",
+    "other": "Выиграйте {n} гонки подряд."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Наберите {n} очко в дрифтинге.",
+    "few": "Наберите {n} очка в дрифтинге.",
+    "many": "Наберите {n} очков в дрифтинге.",
+    "other": "Наберите {n} очка в дрифтинге."
+  },
+  "Reach {n} km/h in a race.": "Разгонитесь до {n} км/ч в гонке.",
+  "Race {n} km in all.": "Проедьте в гонках в сумме {n} км.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Финишируйте в гонках на {n} разной трассе (каждое направление считается отдельно).",
+    "few": "Финишируйте в гонках на {n} разных трассах (каждое направление считается отдельно).",
+    "many": "Финишируйте в гонках на {n} разных трассах (каждое направление считается отдельно).",
+    "other": "Финишируйте в гонках на {n} разных трассах (каждое направление считается отдельно)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Победите на {n} разной машине.",
+    "few": "Победите на {n} разных машинах.",
+    "many": "Победите на {n} разных машинах.",
+    "other": "Победите на {n} разных машинах."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Выиграйте {n} гонку на одной машине.",
+    "few": "Выиграйте {n} гонки на одной машине.",
+    "many": "Выиграйте {n} гонок на одной машине.",
+    "other": "Выиграйте {n} гонки на одной машине."
+  },
+  "Win {n} races against other players.": {
+    "one": "Выиграйте {n} гонку против других игроков.",
+    "few": "Выиграйте {n} гонки против других игроков.",
+    "many": "Выиграйте {n} гонок против других игроков.",
+    "other": "Выиграйте {n} гонки против других игроков."
+  },
+  "Treasure hunter": "Кладоискатель",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Найдите все алмазы дня в свободной езде за {n} день.",
+    "few": "Найдите все алмазы дня в свободной езде за {n} дня.",
+    "many": "Найдите все алмазы дня в свободной езде за {n} дней.",
+    "other": "Найдите все алмазы дня в свободной езде за {n} дня."
+  },
+  "Daily driver": "Каждый день за рулём",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Находите все алмазы {n} день подряд.",
+    "few": "Находите все алмазы {n} дня подряд.",
+    "many": "Находите все алмазы {n} дней подряд.",
+    "other": "Находите все алмазы {n} дня подряд."
+  },
+  "Diamond {n} of {total}": "Алмаз {n} из {total}",
+  "Treasure hunt": "Охота за сокровищами",
+  "Hunt complete": "Охота завершена",
+  "${n} into your career's bank.": "${n} на счёт вашей карьеры.",
+  "All of today's diamonds found.": "Все сегодняшние алмазы найдены.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Охота за сокровищами сегодня: алмазов {n} из {total}.",
+  "{n} km": "{n} км",
+  "{n} m": "{n} м",
+  "The rest open as your career goes on.": "Остальные откроются по ходу карьеры.",
+  "Golden diamond": "Золотой алмаз",
+  "All 15 in {time}.": "Все 15 за {time}.",
+  "Your quickest: {time}.": "Твой лучший результат: {time}.",
+  "Finished today: {n}.": "Сегодня прошли: {n}.",
+  "No one has found all 15 today yet.": "Сегодня ещё никто не нашёл все 15."
 }

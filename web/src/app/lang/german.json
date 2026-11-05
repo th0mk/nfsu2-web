@@ -1577,5 +1577,78 @@
   "Next race lobby at a start, then a new one (in free roam)": "Nächste Rennlobby an einem Start, dann eine neue (in der freien Fahrt)",
   "Your race lobby: only your friends and crew can see and join it": "Deine Rennlobby: Nur deine Freunde und deine Crew können sie sehen und ihr beitreten",
   "Invite to a race": "Zu einem Rennen einladen",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Freunde in deine Rennlobby einladen, die Einladung eines Freundes annehmen, ein aus der Ferne beigetretenes Rennen verlassen"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Freunde in deine Rennlobby einladen, die Einladung eines Freundes annehmen, ein aus der Ferne beigetretenes Rennen verlassen",
+  "All-rounder": "Allrounder",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Gewinne je ein Rundkurs-, Sprint-, Drag-, Drift-, Street-X- und URL-Rennen.",
+  "Both ways": "Hin und zurück",
+  "Win on the same track in both directions.": "Gewinne auf derselben Strecke in beiden Richtungen.",
+  "Tourist": "Tourist",
+  "Collector": "Sammler",
+  "Loyal": "Treue Seele",
+  "Photo finish": "Fotofinish",
+  "Win a race by less than a tenth of a second.": "Gewinne ein Rennen mit weniger als einer Zehntelsekunde Vorsprung.",
+  "Sideways": "Quertreiber",
+  "Speed demon": "Bleifuß",
+  "Road trip": "Roadtrip",
+  "Bragging rights": "Grund zum Angeben",
+  "Achievement unlocked": "Erfolg freigeschaltet",
+  "{n} of {total} achievements": "{n} von {total} Erfolgen",
+  "Achievements": "Erfolge",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Du verdienst sie in den Rennen, die du beendest, sobald deren Ergebnisse angezeigt werden. Sie werden mit deinen Spielständen gespeichert.",
+  "Winner": "Sieger",
+  "Win {n} races.": {
+    "one": "Gewinne ein Rennen.",
+    "other": "Gewinne {n} Rennen."
+  },
+  "Winning streak": "Siegesserie",
+  "Win {n} races in a row.": {
+    "one": "Gewinne {n} Rennen in Folge.",
+    "other": "Gewinne {n} Rennen in Folge."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Erziele {n} Punkt in einem Drift.",
+    "other": "Erziele {n} Punkte in einem Drift."
+  },
+  "Reach {n} km/h in a race.": "Erreiche {n} km/h in einem Rennen.",
+  "Race {n} km in all.": "Fahre in Rennen insgesamt {n} km.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Beende Rennen auf einer Strecke (jede Richtung zählt).",
+    "other": "Beende Rennen auf {n} verschiedenen Strecken (jede Richtung zählt)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Gewinne mit einem Wagen.",
+    "other": "Gewinne mit {n} verschiedenen Wagen."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Gewinne {n} Rennen mit demselben Wagen.",
+    "other": "Gewinne {n} Rennen mit demselben Wagen."
+  },
+  "Win {n} races against other players.": {
+    "one": "Gewinne ein Rennen gegen andere Spieler.",
+    "other": "Gewinne {n} Rennen gegen andere Spieler."
+  },
+  "Treasure hunter": "Schatzjäger",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Finde in der freien Fahrt alle Diamanten eines Tages.",
+    "other": "Finde an {n} Tagen in der freien Fahrt alle Diamanten des Tages."
+  },
+  "Daily driver": "Stammgast",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Finde an einem Tag alle Diamanten.",
+    "other": "Finde {n} Tage in Folge alle Diamanten."
+  },
+  "Diamond {n} of {total}": "Diamant {n} von {total}",
+  "Treasure hunt": "Schatzsuche",
+  "Hunt complete": "Suche abgeschlossen",
+  "${n} into your career's bank.": "${n} auf das Konto deiner Karriere.",
+  "All of today's diamonds found.": "Alle Diamanten von heute gefunden.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Heutige Schatzsuche: {n} von {total} Diamanten.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "Der Rest wird im Laufe deiner Karriere freigeschaltet.",
+  "Golden diamond": "Goldener Diamant",
+  "All 15 in {time}.": "Alle 15 in {time}.",
+  "Your quickest: {time}.": "Deine schnellste: {time}.",
+  "Finished today: {n}.": "Heute geschafft: {n}.",
+  "No one has found all 15 today yet.": "Heute hat noch niemand alle 15 gefunden."
 }

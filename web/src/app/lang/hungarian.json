@@ -1496,5 +1496,78 @@
   "Next race lobby at a start, then a new one (in free roam)": "Következő versenylobbi egy rajtnál, utána egy új (Felfedező módban)",
   "Your race lobby: only your friends and crew can see and join it": "A versenylobbid: csak a barátaid és csapattársaid láthatják és csatlakozhatnak hozzá",
   "Invite to a race": "Meghívás versenyre",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Barátok meghívása a versenylobbidba, egy barát meghívásának elfogadása, kilépés a versenyből, amelyhez távolról csatlakoztál"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Barátok meghívása a versenylobbidba, egy barát meghívásának elfogadása, kilépés a versenyből, amelyhez távolról csatlakoztál",
+  "All-rounder": "Mindenes",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Nyerj meg egy körversenyt, egy sprintet, egy gyorsulást, egy driftet, egy Stílus X-et és egy URL versenyt.",
+  "Both ways": "Oda-vissza",
+  "Win on the same track in both directions.": "Nyerj ugyanazon a pályán mindkét irányban.",
+  "Tourist": "Turista",
+  "Collector": "Gyűjtő",
+  "Loyal": "Hűséges",
+  "Photo finish": "Célfotó",
+  "Win a race by less than a tenth of a second.": "Nyerj meg egy versenyt kevesebb mint egy tizedmásodperc előnnyel.",
+  "Sideways": "Keresztben",
+  "Speed demon": "Száguldó ördög",
+  "Road trip": "Hosszú út",
+  "Bragging rights": "Van mivel dicsekedni",
+  "Achievement unlocked": "Teljesítmény feloldva",
+  "{n} of {total} achievements": "{n}/{total} teljesítmény",
+  "Achievements": "Teljesítmények",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "A befejezett versenyeidben szerezheted meg őket, amint megjelennek az eredmények. A mentéseiddel együtt tárolódnak.",
+  "Winner": "Győztes",
+  "Win {n} races.": {
+    "one": "Nyerj meg egy versenyt.",
+    "other": "Nyerj meg {n} versenyt."
+  },
+  "Winning streak": "Győzelmi sorozat",
+  "Win {n} races in a row.": {
+    "one": "Nyerj meg {n} versenyt egymás után.",
+    "other": "Nyerj meg {n} versenyt egymás után."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Szerezz {n} pontot egy driftben.",
+    "other": "Szerezz {n} pontot egy driftben."
+  },
+  "Reach {n} km/h in a race.": "Érd el a {n} km/h-t egy versenyen.",
+  "Race {n} km in all.": "Versenyezz összesen {n} km-t.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Érj célba {n} különböző pályán (mindkét irány külön számít).",
+    "other": "Érj célba {n} különböző pályán (mindkét irány külön számít)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Nyerj {n} különböző autóval.",
+    "other": "Nyerj {n} különböző autóval."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Nyerj meg {n} versenyt ugyanazzal az autóval.",
+    "other": "Nyerj meg {n} versenyt ugyanazzal az autóval."
+  },
+  "Win {n} races against other players.": {
+    "one": "Nyerj meg egy versenyt más játékosok ellen.",
+    "other": "Nyerj meg {n} versenyt más játékosok ellen."
+  },
+  "Treasure hunter": "Kincsvadász",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Találd meg egy nap összes gyémántját Felfedező módban.",
+    "other": "Találd meg egy nap összes gyémántját Felfedező módban {n} különböző napon."
+  },
+  "Daily driver": "Napról napra",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Találd meg az összes gyémántot {n} egymást követő napon.",
+    "other": "Találd meg az összes gyémántot {n} egymást követő napon."
+  },
+  "Diamond {n} of {total}": "Gyémánt: {n}/{total}",
+  "Treasure hunt": "Kincsvadászat",
+  "Hunt complete": "Kincsvadászat teljesítve",
+  "${n} into your career's bank.": "${n} került a karriered bankszámlájára.",
+  "All of today's diamonds found.": "Megvan a mai összes gyémánt.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Mai kincsvadászat: {n}/{total} gyémánt.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "A többi a karriered előrehaladtával nyílik meg.",
+  "Golden diamond": "Arany gyémánt",
+  "All 15 in {time}.": "Mind a 15: {time}.",
+  "Your quickest: {time}.": "A leggyorsabb időd: {time}.",
+  "Finished today: {n}.": "Ma teljesítette: {n}.",
+  "No one has found all 15 today yet.": "Ma még senki sem találta meg mind a 15-öt."
 }

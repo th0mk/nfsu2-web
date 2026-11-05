@@ -1635,5 +1635,96 @@
   "Next race lobby at a start, then a new one (in free roam)": "Ďalšie závodné loby na štarte, potom nové (vo voľnej jazde)",
   "Your race lobby: only your friends and crew can see and join it": "Tvoje závodné loby: vidieť ho a pridať sa doň môžu len tvoji priatelia a partia",
   "Invite to a race": "Pozvať do závodu",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvať priateľov do svojho závodného loby, prijať pozvánku priateľa, opustiť závod, ku ktorému si sa pridal na diaľku"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvať priateľov do svojho závodného loby, prijať pozvánku priateľa, opustiť závod, ku ktorému si sa pridal na diaľku",
+  "All-rounder": "Všestranný",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Vyhraj okruh, šprint, drag, drift, Street X a závod URL.",
+  "Both ways": "Tam aj späť",
+  "Win on the same track in both directions.": "Vyhraj na tej istej trati v oboch smeroch.",
+  "Tourist": "Turista",
+  "Collector": "Zberateľ",
+  "Loyal": "Verný",
+  "Photo finish": "Fotofiniš",
+  "Win a race by less than a tenth of a second.": "Vyhraj závod o menej ako desatinu sekundy.",
+  "Sideways": "Bokom",
+  "Speed demon": "Démon rýchlosti",
+  "Road trip": "Na cestách",
+  "Bragging rights": "Je sa čím chváliť",
+  "Achievement unlocked": "Úspech odomknutý",
+  "{n} of {total} achievements": "{n} z {total} úspechov",
+  "Achievements": "Úspechy",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Získavaš ich v závodoch, ktoré dokončíš, hneď ako sa zobrazia ich výsledky. Ukladajú sa spolu s tvojimi uloženiami.",
+  "Winner": "Víťaz",
+  "Win {n} races.": {
+    "one": "Vyhraj závod.",
+    "few": "Vyhraj {n} závody.",
+    "many": "Vyhraj {n} závodu.",
+    "other": "Vyhraj {n} závodov."
+  },
+  "Winning streak": "Víťazná séria",
+  "Win {n} races in a row.": {
+    "one": "Vyhraj {n} závod za sebou.",
+    "few": "Vyhraj {n} závody za sebou.",
+    "many": "Vyhraj {n} závodu za sebou.",
+    "other": "Vyhraj {n} závodov za sebou."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Získaj {n} bod v jednom drifte.",
+    "few": "Získaj {n} body v jednom drifte.",
+    "many": "Získaj {n} bodu v jednom drifte.",
+    "other": "Získaj {n} bodov v jednom drifte."
+  },
+  "Reach {n} km/h in a race.": "Dosiahni v závode {n} km/h.",
+  "Race {n} km in all.": "Najazdi v závodoch spolu {n} km.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Dokonči závody na {n} trati (každý smer sa počíta zvlášť).",
+    "few": "Dokonči závody na {n} rôznych tratiach (každý smer sa počíta zvlášť).",
+    "many": "Dokonči závody na {n} rôznych tratiach (každý smer sa počíta zvlášť).",
+    "other": "Dokonči závody na {n} rôznych tratiach (každý smer sa počíta zvlášť)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Vyhraj s {n} autom.",
+    "few": "Vyhraj s {n} rôznymi autami.",
+    "many": "Vyhraj s {n} rôznymi autami.",
+    "other": "Vyhraj s {n} rôznymi autami."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Vyhraj {n} závod s tým istým autom.",
+    "few": "Vyhraj {n} závody s tým istým autom.",
+    "many": "Vyhraj {n} závodu s tým istým autom.",
+    "other": "Vyhraj {n} závodov s tým istým autom."
+  },
+  "Win {n} races against other players.": {
+    "one": "Vyhraj závod proti iným hráčom.",
+    "few": "Vyhraj {n} závody proti iným hráčom.",
+    "many": "Vyhraj {n} závodu proti iným hráčom.",
+    "other": "Vyhraj {n} závodov proti iným hráčom."
+  },
+  "Treasure hunter": "Lovec pokladov",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Nájdi vo voľnej jazde všetky diamanty jedného dňa.",
+    "few": "Nájdi vo voľnej jazde všetky diamanty dňa v {n} rôznych dňoch.",
+    "many": "Nájdi vo voľnej jazde všetky diamanty dňa v {n} rôznych dňoch.",
+    "other": "Nájdi vo voľnej jazde všetky diamanty dňa v {n} rôznych dňoch."
+  },
+  "Daily driver": "Deň čo deň",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Nájdi všetky diamanty {n} deň po sebe.",
+    "few": "Nájdi všetky diamanty {n} dni po sebe.",
+    "many": "Nájdi všetky diamanty {n} dňa po sebe.",
+    "other": "Nájdi všetky diamanty {n} dní po sebe."
+  },
+  "Diamond {n} of {total}": "Diamant {n} z {total}",
+  "Treasure hunt": "Hon na poklad",
+  "Hunt complete": "Hon dokončený",
+  "${n} into your career's bank.": "${n} do banky tvojej kariéry.",
+  "All of today's diamonds found.": "Všetky dnešné diamanty nájdené.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Dnešný hon na poklad: {n} z {total} diamantov.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "Zvyšok sa odomkne s postupom kariéry.",
+  "Golden diamond": "Zlatý diamant",
+  "All 15 in {time}.": "Všetkých 15 za {time}.",
+  "Your quickest: {time}.": "Tvoj najrýchlejší: {time}.",
+  "Finished today: {n}.": "Dnes dokončilo: {n}.",
+  "No one has found all 15 today yet.": "Dnes ešte nikto nenašiel všetkých 15."
 }

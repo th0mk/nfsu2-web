@@ -1577,5 +1577,78 @@
   "Next race lobby at a start, then a new one (in free roam)": "Nästa racelobby vid en start, sedan en ny (i läget Utforska)",
   "Your race lobby: only your friends and crew can see and join it": "Din racelobby: bara dina vänner och din crew kan se och gå med i den",
   "Invite to a race": "Bjud in till ett race",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Bjud in vänner till din racelobby, tacka ja till en väns inbjudan, lämna ett race du gått med i på avstånd"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Bjud in vänner till din racelobby, tacka ja till en väns inbjudan, lämna ett race du gått med i på avstånd",
+  "All-rounder": "Allroundare",
+  "Win a circuit, a sprint, a drag, a drift, a Street X and a URL race.": "Vinn ett banrace, ett sprintrace, ett dragrace, ett driftrace, ett Street X-race och ett URL-race.",
+  "Both ways": "Fram och tillbaka",
+  "Win on the same track in both directions.": "Vinn på samma bana åt båda hållen.",
+  "Tourist": "Turist",
+  "Collector": "Samlare",
+  "Loyal": "Trogen",
+  "Photo finish": "Målfoto",
+  "Win a race by less than a tenth of a second.": "Vinn ett race med mindre än en tiondels sekund.",
+  "Sideways": "På tvären",
+  "Speed demon": "Fartdåre",
+  "Road trip": "Roadtrip",
+  "Bragging rights": "Skryträtt",
+  "Achievement unlocked": "Prestation upplåst",
+  "{n} of {total} achievements": "{n} av {total} prestationer",
+  "Achievements": "Prestationer",
+  "Earned in the races you finish, once their results show. They are kept with your saves.": "Du tjänar in dem i de race du kör klart, när resultaten visas. De sparas med dina sparfiler.",
+  "Winner": "Vinnare",
+  "Win {n} races.": {
+    "one": "Vinn ett race.",
+    "other": "Vinn {n} race."
+  },
+  "Winning streak": "Segersvit",
+  "Win {n} races in a row.": {
+    "one": "Vinn {n} race i rad.",
+    "other": "Vinn {n} race i rad."
+  },
+  "Score {n} points in a drift.": {
+    "one": "Få {n} poäng i en drift.",
+    "other": "Få {n} poäng i en drift."
+  },
+  "Reach {n} km/h in a race.": "Nå {n} km/h i ett race.",
+  "Race {n} km in all.": "Kör totalt {n} km i race.",
+  "Finish races on {n} different tracks (each direction counts).": {
+    "one": "Kör klart race på {n} bana (varje riktning räknas).",
+    "other": "Kör klart race på {n} olika banor (varje riktning räknas)."
+  },
+  "Win with {n} different cars.": {
+    "one": "Vinn med {n} bil.",
+    "other": "Vinn med {n} olika bilar."
+  },
+  "Win {n} races with the same car.": {
+    "one": "Vinn {n} race med samma bil.",
+    "other": "Vinn {n} race med samma bil."
+  },
+  "Win {n} races against other players.": {
+    "one": "Vinn ett race mot andra spelare.",
+    "other": "Vinn {n} race mot andra spelare."
+  },
+  "Treasure hunter": "Skattjägare",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Hitta alla dagens diamanter i Utforska.",
+    "other": "Hitta alla dagens diamanter i Utforska under {n} dagar."
+  },
+  "Daily driver": "Stamgäst",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Hitta alla diamanter under en dag.",
+    "other": "Hitta alla diamanter {n} dagar i rad."
+  },
+  "Diamond {n} of {total}": "Diamant {n} av {total}",
+  "Treasure hunt": "Skattjakt",
+  "Hunt complete": "Jakten klar",
+  "${n} into your career's bank.": "${n} till din karriärs bank.",
+  "All of today's diamonds found.": "Alla dagens diamanter hittade.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Dagens skattjakt: {n} av {total} diamanter.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "Resten öppnas allteftersom din karriär går framåt.",
+  "Golden diamond": "Gyllene diamant",
+  "All 15 in {time}.": "Alla 15 på {time}.",
+  "Your quickest: {time}.": "Din snabbaste: {time}.",
+  "Finished today: {n}.": "Klara i dag: {n}.",
+  "No one has found all 15 today yet.": "Ingen har hittat alla 15 i dag än."
 }

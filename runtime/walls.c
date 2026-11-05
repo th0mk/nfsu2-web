@@ -418,3 +418,45 @@ int walls_cmd(const char *args){
             w.seg >= 0 && W.scut[w.seg] ? ", a barrier line across it" : "", (double)w.qx, (double)w.qy, (double)w.qz, (double)w.qd);
     return 1;
 }
+
+/* ---- the career's roads, for treasure.c -------------------------------------------------------------------------- */
+/* A node of the career's roads OPEN_GAP from every barrier line on: a place for a diamond (the walls' far side
+ * stays out of it) */
+#define OPEN_GAP        30.f
+static int spot_node(int g){ return W.reach[g] == W_OPEN && isfinite(W.x[g] + W.y[g]) && bar_dist(W.x[g], W.y[g]) >= OPEN_GAP; }
+/* how many such nodes there are as the barriers are now (the network built again if they changed): 0 when it is
+ * not there or not as expected */
+int walls_open_roads(void){
+    if (MR32(G_FLOW) != 6u) return 0;
+    ensure(autotest_frame());
+    if (!W.ok) return 0;
+    int n = 0;
+    for (int g = 0; g < W.n; g++) n += spot_node(g);
+    return n;
+}
+/* the i-th of them (0 .. walls_open_roads() - 1, in the network's order: the same in every game): where */
+int walls_open_node(int i, float *x, float *y, float *z){
+    if (!W.ok || i < 0) return 0;
+    for (int g = 0; g < W.n; g++) if (spot_node(g) && i-- == 0){ *x = W.x[g]; *y = W.y[g]; *z = W.z[g]; return 1; }
+    return 0;
+}
+/* the place's nearest node (within 60 m) is on the career's roads */
+int walls_open_at(float x, float y){
+    if (!W.ok) return 0;
+    int best = -1; float bd = 1e30f;
+    for (int g = 0; g < W.n; g++){ float d = hypotf(W.x[g] - x, W.y[g] - y); if (d < bd){ bd = d; best = g; } }
+    return best >= 0 && bd < 60.f && W.reach[best] == W_OPEN;
+}
+/* the height of the road nearest the place (within 40 m; 2D, the nearer to near_z where roads cross over roads) */
+int walls_road_z(float x, float y, float near_z, float *z){
+    if (!W.ok) return 0;
+    int best = -1; float bd = 1e30f;
+    for (int g = 0; g < W.n; g++){
+        float d = hypotf(W.x[g] - x, W.y[g] - y);
+        if (d < 40.f) d += fabsf(W.z[g] - near_z) * 0.25f;
+        if (d < bd){ bd = d; best = g; }
+    }
+    if (best < 0 || hypotf(W.x[best] - x, W.y[best] - y) >= 40.f) return 0;
+    *z = W.z[best];
+    return 1;
+}
