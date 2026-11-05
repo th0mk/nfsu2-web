@@ -9,8 +9,8 @@ runtime/vinylpacks.c adds their seven parts to the car part database.
     tools/vinylpacks.py <game folder> --shado <underground2.net folder> [--out <folder>]
 
 <underground2.net folder> is the underground2.net mod (nfsmods.xyz/mod/2004, by
-the underground2.net team, used with their permission) extracted: the folder
-with "1 - Mod Files" in it, or that folder itself.  Its cars' VINYLS.BIN have
+the underground2.net team) extracted: the folder with "1 - Mod Files" in it, or
+that folder itself.  Its cars' VINYLS.BIN have
 the Sha_Do vinyls ported to the PC; only those 14 textures a car (7 vinyls, each
 with its mask) are taken, nothing else of the mod.  The packs are written under
 <out> (default: the game folder): VINYLPACKS/...
