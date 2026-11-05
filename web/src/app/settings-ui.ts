@@ -814,8 +814,7 @@ export class SettingsPanel {
     if (by && keyDef(by.key)?.key !== it.key) this.state(row, t('settings.ini line {line} sets {env} = {value} by its own name: that is what applies.', { line: by.phys, env: def.env, value: this.fileOnly.env[def.env] }), 'env');
     const envName = def.env;
     if (envName in this.deps.environment) this.state(row, t('The page address sets {env}={value}, which wins over this setting.', { env: envName, value: this.deps.environment[envName] }), 'env');
-    // a room or crews with free roam off do nothing: new players often never turned it on (the first Play does not ask
-    // while the server's free roam is busy), and saw nobody in the room their friends named
+    // a room or crews with free roam off do nothing: players who had it off saw nobody in the room their friends named
     if (ROAM_ROWS.includes(it.key) && cur && this.current('roam') !== 'on')
       this.state(row, it.key === 'roam_crew' ? t('Needs Free roam with others (Online).') : t('Needs Free roam with others (above).'), 'env');
     // who is in the room now (setRoomLine), while free roam is on in one

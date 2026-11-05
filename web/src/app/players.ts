@@ -4,7 +4,8 @@
 // server without the route shows no panel.  Whether the server answered at all goes to reached() (offline mode).
 
 /** roam: driving in free roam or paused there (null, or missing from an older server: not shown);
- *  roamBusy: free roam gives fewer cars a player now (the server's hub cut its links), so the first Play does not ask about it;
+ *  roamBusy: free roam gives fewer cars a player now (the server's hub cut its links; until 2026-11-05 the first Play
+ *  did not ask about free roam then);
  *  room: of roam, those in the room asked for (/players?room=, missing without one or from an older server);
  *  crews: of roam, those in each crew asked for, in the order asked (/players?crews=, the same) */
 export interface PlayerCounts {

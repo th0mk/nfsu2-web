@@ -273,7 +273,7 @@ try {
     await until(s => s.have > 2 * M);
     const workers = () => page.workers().map(w => new URL(w.url()).pathname.replace(/^\/host\/|\.js$/g, '')).filter(n => n !== 'game-worker');
     const before = workers();
-    // free roam answered, so the first Play does not ask (shell.ts askRoam)
+    // free roam off (a player's page has it on by default): the game plays alone
     await page.evaluate(async () => {
       const fh = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('save', { create: true })).getFileHandle('settings.ini', { create: true });
       const text = await (await fh.getFile()).text();

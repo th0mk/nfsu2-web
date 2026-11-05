@@ -527,18 +527,7 @@
   "Ready": "Pronto",
   "No connection to the server: you can play, but not with others. {press}": "Nessuna connessione al server: puoi giocare, ma non con gli altri. {press}",
   "The game": "Il gioco",
-  "Drive in your career's free roam with other players and challenge each other to outruns. Races, traffic and money stay your own.": "Guida con altri giocatori nella modalità Esplora della tua carriera e sfidatevi in gare a inseguimento. Gare, traffico e soldi restano solo tuoi.",
-  "Everyone on this server sees your name and whether you're driving or in the menus; players near you also see your car.": "Tutti su questo server vedono il tuo nome e se stai guidando o sei nei menu; i giocatori vicini a te vedono anche la tua auto.",
-  "You wait in line too, driving alone until it's your turn.": "Anche tu aspetti in coda, guidando per conto tuo finché non tocca a te.",
-  "The server is full: {n} players are in line.": {
-    "one": "Il server è pieno: {n} giocatore è in coda.",
-    "many": "Il server è pieno: {n} giocatori sono in coda.",
-    "other": "Il server è pieno: {n} giocatori sono in coda."
-  },
-  "The server is full.": "Il server è pieno.",
   "{Error}.": "{Error}.",
-  "You can change this under Online on the start page.": "Puoi cambiarlo in \"Online\" nella pagina iniziale.",
-  "Free roam with others?": "Modalità Esplora con altri giocatori?",
   "Turn on": "Attiva",
   "Not now": "Non ora",
   "{n} players are waiting in line.": {

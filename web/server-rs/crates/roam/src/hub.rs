@@ -2590,7 +2590,7 @@ impl Hub {
         self.thread_busy = if busy.is_finite() { busy.clamp(0.0, 1.0) } else { 0.0 };
     }
 
-    /// free roam is busy: the cap is under `ask_cap` (the start page does not ask new players then)
+    /// free roam is busy: the cap is under `ask_cap` (until 2026-11-05 the start page did not ask new players then)
     pub fn crowded(&self) -> bool {
         self.cap < self.o.ask_cap
     }

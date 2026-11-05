@@ -513,17 +513,7 @@
   "Ready": "Redo",
   "No connection to the server: you can play, but not with others. {press}": "Ingen anslutning till servern: du kan spela, men inte med andra. {press}",
   "The game": "Spelet",
-  "Drive in your career's free roam with other players and challenge each other to outruns. Races, traffic and money stay your own.": "Kör med andra spelare i din karriärs läge Utforska och utmana varandra till outrun-race. Race, trafik och pengar förblir dina egna.",
-  "Everyone on this server sees your name and whether you're driving or in the menus; players near you also see your car.": "Alla på servern ser ditt namn och om du kör eller är i menyerna; spelare nära dig ser också din bil.",
-  "You wait in line too, driving alone until it's your turn.": "Du ställer dig också i kö och kör ensam tills det är din tur.",
-  "The server is full: {n} players are in line.": {
-    "one": "Servern är full: {n} spelare står i kö.",
-    "other": "Servern är full: {n} spelare står i kö."
-  },
-  "The server is full.": "Servern är full.",
   "{Error}.": "{Error}.",
-  "You can change this under Online on the start page.": "Du kan ändra detta under Online på startsidan.",
-  "Free roam with others?": "Utforska med andra?",
   "Turn on": "Slå på",
   "Not now": "Inte nu",
   "{n} players are waiting in line.": {

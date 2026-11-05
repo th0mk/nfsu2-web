@@ -488,11 +488,8 @@ that room.
 Free roam is shared with **everyone** on the server who turns it on. Join a Crew to find your friends among them,
 or use a Room to keep to a group.
 
-1. Each player turns on **Online, Free roam with others** on the start page. The first Play asks too (Turn on or
-   Not now, and Esc is Not now); it asks once, and the switch changes the answer later. While the server's free
-   roam is busy (it gives each player fewer than 24 cars) it doesn't ask, and asks at a later Play instead.
-   **Online, Your name** is the name the others see (empty: your profile name); the question shows it once there
-   is one, to change. **Online, Your flag** puts a flag before it (a country, England, Scotland, Wales, Northern
+1. **Online, Free roam with others** on the start page is on by default (off: your career's free roam alone).
+   **Online, Your name** is the name the others see (empty: your profile name). **Online, Your flag** puts a flag before it (a country, England, Scotland, Wales, Northern
    Ireland or Quebec; none at first). Typed before you have a profile, it is also what the game's name box for your first profile
    starts with, instead of `NAME` (its letters and digits, 7 at most; Enter takes it).
 2. Everyone plays from the same server's address.

@@ -75,9 +75,9 @@
 //! tick (of its CPU quota: of the last `QUOTA_WINDOW`) the cap on the links goes down by a quarter, at most every
 //! `cap_down_ms`, to `min_degree` at the least; once it has room again (under `busy_low`) the cap goes back up by 2
 //! every `cap_up_ms`.  The nearest links stay.  While
-//! the cap is under `ask_cap` (24) free roam counts as busy (the server's /players roamBusy): the start page does not
-//! ask its question (Free roam with others?) at a Play then, so fewer new players join a crowd that already gets fewer
-//! cars; it asks at a later Play once the cap is back.  /players also says how many drive in free roam, or are paused
+//! the cap is under `ask_cap` (24) free roam counts as busy (the server's /players roamBusy): until 2026-11-05 the start
+//! page did not ask its question (Free roam with others?) at a Play then, so fewer new players joined a crowd that
+//! already got fewer cars (free roam is on by default since).  /players also says how many drive in free roam, or are paused
 //! there (`in_roam()`, counted at each tick).
 //!
 //! The hub also watches how each player's car moves (watch.rs): a teleport, a car faster than any of the game's, or a

@@ -533,19 +533,7 @@
   "Ready": "Готово",
   "No connection to the server: you can play, but not with others. {press}": "Немає зв'язку із сервером: грати можна, але не з іншими. {press}",
   "The game": "Гра",
-  "Drive in your career's free roam with other players and challenge each other to outruns. Races, traffic and money stay your own.": "Катайтеся з іншими гравцями у вільній їзді своєї кар'єри та викликайте одне одного на дуель. Гонки, трафік і гроші залишаються вашими.",
-  "Everyone on this server sees your name and whether you're driving or in the menus; players near you also see your car.": "Усі на цьому сервері бачать ваше ім'я і те, чи ви за кермом, чи в меню; гравці поруч також бачать вашу машину.",
-  "You wait in line too, driving alone until it's your turn.": "Ви теж стаєте в чергу та їздите самі, доки вона не дійде до вас.",
-  "The server is full: {n} players are in line.": {
-    "one": "Сервер заповнений: у черзі {n} гравець.",
-    "few": "Сервер заповнений: у черзі {n} гравці.",
-    "many": "Сервер заповнений: у черзі {n} гравців.",
-    "other": "Сервер заповнений: у черзі {n} гравця."
-  },
-  "The server is full.": "Сервер заповнений.",
   "{Error}.": "{Error}.",
-  "You can change this under Online on the start page.": "Це можна змінити в розділі «Онлайн» на стартовій сторінці.",
-  "Free roam with others?": "Вільна їзда з іншими?",
   "Turn on": "Увімкнути",
   "Not now": "Не зараз",
   "{n} players are waiting in line.": {

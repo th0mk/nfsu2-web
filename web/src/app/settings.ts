@@ -507,7 +507,7 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # Traffic, races and money stay your own.  Your name (above) is what they
 # see.  For these options a ';' or '#' after a blank starts a comment.
 # [NFSU2_ROAM]
-#roam = off
+#roam = on
 # Empty: you drive with everyone.  With a name, free roam shows only the
 # players who set the same name (capitals and spaces do not count).  Not
 # private: everyone on the server still sees your name.  [NFSU2_ROAM_ROOM]

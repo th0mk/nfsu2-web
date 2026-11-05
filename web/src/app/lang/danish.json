@@ -513,17 +513,7 @@
   "Ready": "Klar",
   "No connection to the server: you can play, but not with others. {press}": "Ingen forbindelse til serveren: du kan spille, men ikke med andre. {press}",
   "The game": "Spillet",
-  "Drive in your career's free roam with other players and challenge each other to outruns. Races, traffic and money stay your own.": "Kør med andre spillere i din karrieres udforsknings-mode, og udfordr hinanden til Outrun-løb. Løb, trafik og penge forbliver dine egne.",
-  "Everyone on this server sees your name and whether you're driving or in the menus; players near you also see your car.": "Alle på denne server ser dit navn, og om du kører eller er i menuerne; spillere i nærheden ser også din bil.",
-  "You wait in line too, driving alone until it's your turn.": "Du stiller dig også i kø og kører alene, til det er din tur.",
-  "The server is full: {n} players are in line.": {
-    "one": "Serveren er fuld: {n} spiller står i kø.",
-    "other": "Serveren er fuld: {n} spillere står i kø."
-  },
-  "The server is full.": "Serveren er fuld.",
   "{Error}.": "{Error}.",
-  "You can change this under Online on the start page.": "Du kan ændre det under Online på startsiden.",
-  "Free roam with others?": "Udforskning med andre?",
   "Turn on": "Slå til",
   "Not now": "Ikke nu",
   "{n} players are waiting in line.": {

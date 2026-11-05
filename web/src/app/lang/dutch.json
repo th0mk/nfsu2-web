@@ -513,17 +513,7 @@
   "Ready": "Klaar",
   "No connection to the server: you can play, but not with others. {press}": "Geen verbinding met de server: je kunt spelen, maar niet met anderen. {press}",
   "The game": "Het spel",
-  "Drive in your career's free roam with other players and challenge each other to outruns. Races, traffic and money stay your own.": "Rij in Verkennen in je carrière met andere spelers en daag elkaar uit voor outruns. Races, verkeer en geld blijven van jou.",
-  "Everyone on this server sees your name and whether you're driving or in the menus; players near you also see your car.": "Iedereen op deze server ziet je naam en of je aan het rijden bent of in de menu's zit; spelers bij je in de buurt zien ook je wagen.",
-  "You wait in line too, driving alone until it's your turn.": "Je wacht ook in de rij en rijdt alleen tot je aan de beurt bent.",
-  "The server is full: {n} players are in line.": {
-    "one": "De server is vol: {n} speler staat in de rij.",
-    "other": "De server is vol: {n} spelers staan in de rij."
-  },
-  "The server is full.": "De server is vol.",
   "{Error}.": "{Error}.",
-  "You can change this under Online on the start page.": "Je kunt dit wijzigen onder Online op de startpagina.",
-  "Free roam with others?": "Verkennen met anderen?",
   "Turn on": "Aanzetten",
   "Not now": "Niet nu",
   "{n} players are waiting in line.": {

@@ -95,6 +95,7 @@ function takeParams(dev: boolean): string[] {
   const given = TEST_PARAMS.filter(k => addr.has(k));
   if (!given.length || !dev) return given;
   q = addr;
+  DEVICE.roam = 'off';
   // never the game data's own OPFS folder, nor the page id's file (savefs keeps names to one segment)
   const save = (q.get('save') || 'save').replace(/[^A-Za-z0-9._-]/g, '_');
   SAVE = save === 'cache' || save === PAGE_ID_FILE || /^\.+$/.test(save) ? 'save-test' : save;
@@ -313,8 +314,10 @@ async function editSettings(edit: (text: string) => string): Promise<string> {
   void settings.refresh();
   return text;
 }
-/** this device's own defaults (a phone's: device.ts), below settings.ini and the page address */
-const DEVICE = deviceDefaults();
+/** the page's own defaults, below settings.ini and the page address: free roam with others on (2026-11-05; until then
+ *  off, and the first Play asked; the game's own default stays off), and this device's (a phone's: device.ts).  A test
+ *  page keeps free roam off (takeParams): its tools set NFSU2_ROAM where they want it */
+const DEVICE: Record<string, string> = { roam: 'on', ...deviceDefaults() };
 function resolved(host: Record<string, string> = {}): Resolved { return resolveEnv(settingsText, ENVIRONMENT, host, DEVICE); }
 /** the game's language (runtime/language.c): which language pack the page fetches ahead and counts */
 const language = (r: Resolved = resolved()) => (r.env.NFSU2_LANGUAGE ?? 'english').toLowerCase();
@@ -339,62 +342,9 @@ function stageCanvas(): HTMLCanvasElement {
 let untrack: (() => void) | null = null;
 
 /**
- * The first Play asks whether to play free roam with others (off by default: with it on, everyone on the server
- * sees the player's name and status).  The answer goes into settings.ini as roam = on or off, so it is asked
- * once; Not now and Esc are off.  Not asked when the file or the page address sets it already, on a test page
- * (the address's test settings), offline or with network = off.  The name shows only when there is one (Your
- * name, else the newest career profile's): a new player has none yet, the game asks for it before free roam.
- * While the server's free roam is busy (its newest /players says roamBusy: fewer links a player) it is not asked
- * and nothing is written, so a later Play asks once free roam has room again.  While the server is full it is asked,
- * and says that with it on the game waits in line for a place (and plays alone until then).  True: it was asked.
- * ASK_ROAM false: never asked, and free roam stays off until the player turns it on under Online.
- */
-const ASK_ROAM = true;
-async function askRoam(): Promise<boolean> {
-  const r = resolved();
-  if (!ASK_ROAM || r.source.NFSU2_ROAM || TEST_PARAMS.some(k => q.has(k)) || offline || /^(off|0|none)$/i.test(r.env.NFSU2_NET?.trim() ?? '')) return false;
-  if (players?.last()?.roamBusy === true) { log.add('[app] free roam with others: not asked, the server\'s free roam is busy (asked at a later Play)'); return false; }
-  const name = (r.source.NFSU2_ROAM_NAME === 'settings.ini' ? r.env.NFSU2_ROAM_NAME : '') || (await newestProfile())?.name || '';
-  const p = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
-  const body = document.createElement('div');
-  body.append(p(t('Drive in your career\'s free roam with other players and challenge each other to outruns. Races, traffic and money stay your own.')),
-    p(t('Everyone on this server sees your name and whether you\'re driving or in the menus; players near you also see your car.')));
-  const c = players?.last();
-  if (c?.full === true) {
-    const n = Number.isInteger(c.queue) && c.queue! > 0 ? c.queue! : 0;
-    const turn = t('You wait in line too, driving alone until it\'s your turn.');
-    body.append(p(`${n ? tn(n, 'The server is full: {n} player is in line.', 'The server is full: {n} players are in line.')
-      : t('The server is full.')} ${turn}`));
-  }
-  let field: HTMLInputElement | null = null;
-  if (name) {
-    const row = document.createElement('p'); row.className = 'dlg-field';
-    const label = Object.assign(document.createElement('label'), { className: 'set-label', htmlFor: 'roam-ask-name', textContent: t('Your name') });
-    const f = field = Object.assign(document.createElement('input'), { type: 'text', id: 'roam-ask-name', value: name, maxLength: 24, autocomplete: 'off', spellcheck: false });
-    // a name the setting refuses keeps the question open (Not now and Esc still close it)
-    f.oninput = () => { const v = f.value.trim(), c = v ? checkSetting('roam_name', v) : null; f.setCustomValidity(c && !c.ok ? t('{Error}.', { Error: tvars(c.why, c.v) }) : ''); };
-    // Enter in the field turns it on (the form's first button, which Enter would press, is Not now)
-    f.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $<HTMLButtonElement>('#confirm-ok').click(); } };
-    row.append(label, f);
-    body.append(row);
-  }
-  body.append(p(t('You can change this under Online on the start page.')));
-  const answer = confirmBox(t('Free roam with others?'), body, t('Turn on'), false, '', t('Not now'));
-  $<HTMLButtonElement>('#confirm-ok').focus();
-  const on = await answer;
-  const typed = field?.value.trim() ?? name;
-  const edit = (s: string) => { const r = putKey(s, 'roam', on ? 'on' : 'off').text; return on && typed !== name ? putKey(r, 'roam_name', typed || null).text : r; };
-  // (not written, the browser's storage full or not answering: this game plays as answered, and the next Play asks again)
-  try { await editSettings(edit); }
-  catch (e) { log.add(`[app] free roam with others: the answer was not written (${e})`); settingsText = edit(settingsText ?? TEMPLATE); }
-  log.add(`[app] free roam with others: ${on ? 'on' : 'off'} (asked at the first Play${c?.full === true ? ', the server full' : ''})${on && typed !== name ? `, name ${typed || '(the profile\'s)'}` : ''}`);
-  return true;
-}
-
-/**
  * Play asks a player with a profile here and no cloud saves to turn them on: the saves live only in this browser, and
  * browsers clear a site's data now and then.  First at the first Play with a profile here (a new player's second: the
- * first asks about free roam, and the next one asks), then a week after each Not now (or Esc), three times in all
+ * first makes the profile), then a week after each Not now (or Esc), three times in all
  * (vault-ui.ts offerable; before 2026-10-31 once, at the fifth Play), and once more past 12 games started and 3 hours
  * played here, whatever the count and the week (2026-11-03).  It shows what is at stake (the profiles, their
  * money, the hours played here; until 2026-11-03 also a Download backup button).  Not on a test page, offline, or where
@@ -505,8 +455,7 @@ async function playName(): Promise<string | null> {
  * line for it.  The player picks: wait in line (the game starts, alone until it is their turn; the default, also for
  * Esc), or play offline (this game only, without free roam or Online; settings.ini stays as it is).  True: offline.
  * Not asked when the game would not take a place at once (free roam off: the LAN and Online screens wait in line
- * themselves, the line over the game says where), offline mode, network = off or a test page, nor right after the
- * free-roam question (askRoam), which says the server is full itself.
+ * themselves, the line over the game says where), offline mode, network = off or a test page.
  */
 async function askFull(c: PlayerCounts | null): Promise<boolean> {
   const r = resolved();
@@ -670,10 +619,8 @@ async function startGame() {
     if (cloud === 'stop') { void audio?.close().catch(() => {}); startAudio = null; endStage(); return; }
     if (cloud === 'taken' || pulled) await loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`));
   }
-  // (the free-roam question says when the server is full: answered, it is not asked again what to do about that)
-  const roamAsked = await askRoam();
-  if (!roamAsked && !noSave) await askCloud();
-  const alone = !roamAsked && await askFull(counts);
+  if (!noSave) await askCloud();
+  const alone = await askFull(counts);
   // the name this game plays under, by the claims
   const playAs = alone ? null : await playName();
   setPhase('starting', T('Starting'), full && canFullscreen() ? T('Going full screen and starting the game.') : T('Starting the game.'));

@@ -143,7 +143,7 @@ async function run(mode) {
   const t0 = Date.now();
   try {
     // a production server: the page takes no settings from its address (the audit's PAGE-1), so the test's own
-    // (no movies, the front-end log the checks below read, free roam answered: the first Play would ask) go into
+    // (no movies, the front-end log the checks below read, free roam off: a player's page has it on by default) go into
     // this fresh browser's settings.ini, as a player's would
     const resp = await page.goto(`${origin}/`);
     const h = resp.headers();
