@@ -19,13 +19,17 @@
 //             menus' controls (the game's status "netrace");
 //             Start (Engage) only while Engage does something: an event's or a shop's marker, an outrun offer, a race
 //             spot or lobby (the game's status "roam_near" and "engage", runtime/web/status_web.c; a game without them
-//             shows these always).  The steering button held opens the touch settings (deps.settings)
+//             shows these always); Reset only while the car is slow (the game's "fast": over 30 km/h, again under
+//             25), where it is for (stuck, after a crash), not under a stray tap at speed.  The steering button held
+//             opens the touch settings (deps.settings)
 //   hydraulics  with a car that has them (the game's status "hydraulics"), Pressurize and Bounce among the small
 //             buttons: a tap turns one on (lit) and holds its key, H or J, as a keyboard player holds it, until a tap
 //             turns it off or the other on.  Meanwhile the steering (the arrow keys, or the stick's x) and Gas and
 //             Brake (the up and down arrows) pick the corners, and Gas drives no more: the game's own.  The game
 //             starts them only at 10 mph or less, a moment after the key goes down, so the key is pressed again
-//             whenever the car gets that slow (status 2)
+//             whenever the car gets that slow (status 2); and they show only then, or while one is on (HYD_STOW_MS
+//             after the car got faster: none comes and goes about 10 mph).  A control away like Reset or these keeps
+//             its place (stowed: hidden, no finger takes it), so the others do not move under a thumb
 //   position  which thumb steers: the steering, the gear buttons and Start under the left thumb and the pedals under
 //             the right, or the other way round; either way by the screen's sides, moved in from them (EDGE_IN px)
 //             or moved in more (EDGE_IN_MORE px), as far as there is room.  One list in the Controls sheet's touch
@@ -70,6 +74,8 @@ const LONG_MS = 250;
 const PRESS_MS = 500;
 /** the keys Pressurize and Bounce hold while on (the game's Hydraulic Pressurize and Bounce) */
 const HYD_KEYS = { lift: 'KeyH', bounce: 'KeyJ' } as const;
+/** Pressurize and Bounce stowed this long after the car got too fast to start them */
+const HYD_STOW_MS = 1000;
 
 const STEER_EVENT = 'nfsu2-touch-steering';
 let steeringNow: Steering = (() => {
@@ -334,6 +340,10 @@ export class TouchControls {
   private hydTimer = 0;
   private hydWide = false;
   private hydWorks = false;
+  /** the last time Pressurize and Bounce could start them (status 2) or one was on */
+  private hydSlowAt = -Infinity;
+  /** the car goes fast (the game's status "fast": Reset stowed; undefined: a game that does not say) */
+  private fast: number | undefined;
   /** a race between players (runtime/racehorn.c "netrace": 1 driving, 2 its results): Quick chat shows there too */
   private netrace = 0;
   private statusAt = 0;
@@ -477,7 +487,8 @@ export class TouchControls {
   state() {
     return { shown: this.mode === 'drive', menu: this.mode === 'menu', drive: this.drive, steering: this.steering, lx: this.lx,
       buttons: this.padButtons, keys: [...this.keys.keys()], roll: this.sentRoll, menuScale: this.menuScale, menuBar: this.menuBar, menuSent: !!this.menuTo,
-      engage: this.engage, near: this.near, drift: this.drift, hydraulics: this.hydraulics, hyd: this.hyd };
+      engage: this.engage, near: this.near, drift: this.drift, hydraulics: this.hydraulics, hyd: this.hyd, fast: this.fast,
+      stowed: [...this.ctls.values()].filter(c => c.el.classList.contains('stowed')).map(c => c.id) };
   }
 
   /** the game ended: everything let go, nothing of it kept */
@@ -505,6 +516,7 @@ export class TouchControls {
         this.drive = st.get('drive') ?? 0; this.frames = st.get('frames') ?? 0;
         this.engage = st.get('engage'); this.near = st.get('roam_near'); this.drift = st.get('drift') ?? 0;
         this.hydraulics = st.get('hydraulics');
+        this.fast = st.get('fast');
         this.netrace = st.get('netrace') ?? 0;
       }
     }
@@ -551,7 +563,21 @@ export class TouchControls {
     const works = this.hydraulics === 2;
     if (works && !this.hydWorks) this.pressHydAgain();
     this.hydWorks = works;
+    // Pressurize and Bounce while they would start them or one is on (and HYD_STOW_MS after), Reset while the car is
+    // slow: in their places either way
+    const now = performance.now();
+    if (works || this.hyd) this.hydSlowAt = now;
+    const hydAway = now - this.hydSlowAt > HYD_STOW_MS;
+    this.stow('lift', hydAway); this.stow('bounce', hydAway);
+    this.stow('reset', this.fast === 1);
     this.setMode(mode);
+  }
+  /** a control away for now in its place (style.css .stowed: hidden), or back: one going lets go of its finger */
+  private stow(id: string, away: boolean) {
+    const c = this.ctls.get(id)!;
+    if (c.el.classList.contains('stowed') === away) return;
+    c.el.classList.toggle('stowed', away);
+    if (away) this.letGo(id);
   }
 
   /** Pressurize or Bounce on, its key (H, J) held from now on, or neither (''): a press again still waiting is
@@ -610,6 +636,7 @@ export class TouchControls {
     if (e.pointerType === 'touch' && e.isPrimary) this.dropFingers();
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-ctl]');
     const c = el ? this.ctls.get(el.dataset.ctl!) : undefined;
+    if (c?.el.classList.contains('stowed')) return;      // (hidden: no finger lands on it)
     if (c) { this.byFinger.set(e.pointerId, c); this.press(c, e.pointerId); return; }
     if ((e.target as HTMLElement).closest('.stick')) this.stickDown(e);
   };

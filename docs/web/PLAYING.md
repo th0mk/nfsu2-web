@@ -84,7 +84,8 @@ While you drive:
   Nitro and the handbrake trade places.
 - **Gears:** with a manual gearbox (the race's Transmission choice, and always in a drag race), gear down and gear up
   above the steering.
-- **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages,
+- **Small buttons** along the top: pause, camera (held: look back), reset (only while the car goes slower than about
+  30 km/h, as when it is stuck or after a crash; its place stays empty at speed); in free roam also the map, messages,
   **Drift** (drift mode, the game's drift icon, lit while it is on), the career status (the game's Career Status, as
   D-pad Down on a controller, T or F4 on a keyboard), and the horn and quick chat (not with quick chat off)
   while another player's car is within a horn's reach. In a race with other players quick chat shows after reset
@@ -94,8 +95,9 @@ While you drive:
 - **Hydraulics:** with a car that has them (the Hydraulics part, Car Specialties), **Pressurize** and **Bounce** join
   the small buttons (in free roam after the career status, upright in the second row; in a race after reset). A tap
   turns one on (lit, as H or J held on a keyboard), another tap turns it off, or the other one on. While one is on,
-  the steering and Gas and Brake pick the corners instead of driving, under 10 mph as with H and J; turned on faster,
-  it starts working once the car is that slow.
+  the steering and Gas and Brake pick the corners instead of driving, under 10 mph as with H and J. Both show only
+  while the car is that slow (or one is on): a second after it goes faster their places are empty, so the other
+  buttons stay where they are.
 - **HUD:** a phone starts with the game's 4:3 HUD layout (Game, Display, HUD layout), which keeps the minimap and
   the speedometer between the thumbs instead of under the steering and Brake.
 - **Sizes**, in the Controls sheet's Touch tab and kept in this browser: **Control size** for the touch controls, and

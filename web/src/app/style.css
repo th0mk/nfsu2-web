@@ -689,6 +689,8 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .touch[data-alone] :is([data-ctl="horn"], [data-ctl="chat"]),
 .touch[data-no-chat] [data-ctl="chat"],
 .touch:not([data-hyd]) .hyd { display: none; }
+/* away for now in its place (touch.ts stow: Reset at speed, Pressurize and Bounce too fast to start them) */
+.touch .tc.stowed { visibility: hidden; }
 /* a race between players (touch.ts netrace): Quick chat in the first row after Reset while driving (after Pressurize
  * and Bounce in landscape when the car has hydraulics; upright those are in the second row), beside the menu's button
  * on the results (the menus' controls).  Upright, right: auto over the second row's inline start, which a Position on
