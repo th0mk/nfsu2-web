@@ -84,20 +84,26 @@ static void mm_apply(unsigned seat){
         MR32(mm_obj[i].obj + 0x1c) |= 0x400000u;
     }
 }
+void roam_game_trap_minimap_upright(uint32_t icons);
+static void mm_place_native(CPU *c){
+    uint32_t icons=c->ecx;
+    sub_004ca840_orig(c);
+    roam_game_trap_minimap_upright(icons);
+}
 void sub_004ca840(CPU *c){
     if (mm_test < 0){
         mm_test = getenv("NFSU2_SPLIT_MAP_TEST") != NULL;
         if (mm_test) mem_commit(0xd0d000u, 0x80);
     }
     mm_players = 0;
-    if (!split_racing()){ sub_004ca840_orig(c); return; }
+    if (!split_racing()){ mm_place_native(c); return; }
     mm_collect(c);
     if (!mm_count || !mm_marker[0] || !mm_marker[1] || !mm_extend(c, c->ecx)){
-        sub_004ca840_orig(c); return;
+        mm_place_native(c); return;
     }
     CPU before = *c, after = *c;
     for (int k = split_render_limit()-1; k >= 0; --k){
-        mm_center = k; *c = before; sub_004ca840_orig(c); after = *c;
+        mm_center = k; *c = before; mm_place_native(c); after = *c;
         for (int j = 0; j < split_render_limit(); ++j) if (mm_marker[j]){
             uint32_t data = MR32(mm_marker[j] + 0x2c);
             if (data) memcpy(g_mem + data, mm_colors[j], 16);

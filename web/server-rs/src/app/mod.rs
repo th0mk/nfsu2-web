@@ -16,6 +16,7 @@ pub mod days;
 mod etag;
 mod files;
 mod friends;
+mod gates;
 mod kept;
 mod lan;
 mod manifest;
@@ -267,6 +268,13 @@ impl App {
         lan_sndbuf: usize,
         compress_threads: usize,
     ) -> App {
+        if o.dev {
+            if let Some(repo)=std::path::Path::new(&o.tests).parent() {
+                if let Ok(text)=std::fs::read_to_string(repo.join("web/server-rs/crates/roam/src/speedtraps.def")) {
+                    if let Ok(gates)=nfsu2_roam::speedtrap::parse_catalog(&text) { nfsu2_roam::speedtrap::set_dev_catalog(gates); }
+                }
+            }
+        }
         let host_check = HostCheck::new(&o.hosts);
         let real_roots: Arc<Mutex<HashMap<String, String>>> = Arc::default();
         let manifest: Arc<manifest::ManifestCell> = Arc::default();
@@ -548,6 +556,8 @@ impl App {
         if p.chars().any(|c| c <= '\u{1f}' || c == '\u{7f}' || c == '\\') || p.contains("//") {
             return self.bad_request(q, s).await;
         }
+        if p == "/test/gates/markers" { return self.gate_markers(q,s).await; }
+        if p == "/test/gates/catalog" { return self.gates(q,s).await; }
         if q.method == "PUT" && self.o.dev && !self.o.artifacts.is_empty() && p.starts_with("/artifacts/") {
             return self.put_artifact(q, s, &p[11..]).await;
         }

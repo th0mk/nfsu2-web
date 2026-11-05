@@ -36,6 +36,7 @@ import { TextField } from './textentry';
 import { PauseHint } from './pausehint';
 import { TitleMark } from './titlemark';
 import { DriftPanel } from './drift';
+import { SpeedTrapPanel } from './speedtrap';
 import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
 import type { NetBanCase, NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
@@ -83,12 +84,23 @@ type Phase = 'boot' | 'ready' | 'error' | 'waiting' | 'starting' | 'playing' | '
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
 // the page address's test aids, once boot knows whether the server is a development server
-const TEST_PARAMS = ['env', 'save', 'fresh', 'reg', 'script', 'artifacts', 'dumpscale', 'away', 'rendercheck', 'playtime', 'claim'];
+const TEST_PARAMS = ['env', 'save', 'fresh', 'reg', 'script', 'artifacts', 'dumpscale', 'away', 'rendercheck', 'playtime', 'claim', 'trapeditor'];
 /** a test page's keyphrase token (claim=, or env=NFSU2_TEST_CLAIM=: a development server's only): its claimed name and
  *  friends without cloud saves */
 const testClaim = (): string | null => q.get('claim') ?? ENVIRONMENT.NFSU2_TEST_CLAIM ?? null;
 const addr = new URLSearchParams(location.search);
 let q = new URLSearchParams();
+let development = false;
+let gateEditorLoad: Promise<{ open(): void }> | null = null;
+async function loadGateEditor() {
+  if (!development || !session) throw Error('Gate editor requires a running development game.');
+  const current = session;
+  const editorModule = '/test/trap-editor.js';
+  return gateEditorLoad ??= import(editorModule).then(m => {
+    if (session !== current || current.exitCode !== null) throw Error('The game has ended.');
+    return m.attach(current, { isolated: q.has('trapeditor') });
+  }).catch(e => { gateEditorLoad = null; throw e; });
+}
 let SAVE = 'save';
 let ENVIRONMENT: Record<string, string> = {};
 /** the test aids the page address gives (taken on a development server only); their names, for the start page */
@@ -104,6 +116,10 @@ function takeParams(dev: boolean): string[] {
     .map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])
     // the mounts and the save overlay's own files stay the page's (settings.ts HOST_FIXED, PATH_VARS)
     .filter(([k, v]) => !HOST_FIXED.has(k) && !pageOnly(k, v, false)));
+  if (q.has('trapeditor')) {
+    SAVE = 'save-gate-editor';
+    Object.assign(ENVIRONMENT, { NFSU2_ROAM: '1', NFSU2_ROAM_ROOM: `gate-editor-${Date.now().toString(36)}`, NFSU2_AUTOSAVE: '0', NFSU2_GATE_EDITOR: '1' });
+  }
   return given;
 }
 /** a development server (--dev) serves the test pages' folder, and in it /test/dev.json; no other server does
@@ -639,6 +655,7 @@ async function startGame() {
     NFSU2_WIDTH: String(size.w & ~1), NFSU2_HEIGHT: String(size.h & ~1), NFSU2_DISPLAY_HZ: String(displayHz),
   };
   const r = resolved(host);
+  if (development) r.env.NFSU2_GATE_EDITOR = '1';
   // no profile yet: the game's name field for the first one starts with Your name, not NAME (overrides.c
   // sub_004ff3b0); the name typed, never the digits this game may play under instead
   const profiles = await listProfiles(SAVE).catch(() => []);
@@ -754,6 +771,7 @@ async function startGame() {
     const env = r.env.NFSU2_UI_TEXTURES !== undefined && !uiPack(r.env.NFSU2_UI_TEXTURES) ? { ...r.env, NFSU2_UI_TEXTURES: 'original' } : r.env;
     session = await GameSession.start({
       module: loaded!.module, info: loaded!.info, saveDir: SAVE, env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle, coop: coopMsg,
+      speedTrap: state => speedTrapPanel.receive(state),
       friend: friendMsg,
       netBack, netQueue, onSaved, onSaveGone: saveGone, onRemoved, onLost, onSaveTrouble,
       netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved, netRaces, netRename,
@@ -771,6 +789,11 @@ async function startGame() {
     download.resume();
     return;
   }
+  if (development) {
+    const current = session, syncModule = '/test/gate-sync.js';
+    void import(syncModule).then(m => { if (session === current && current.exitCode === null) m.attach(current); }).catch(e => log.add(`[gate sync] ${e}`));
+  }
+  if (q.has('trapeditor')) void loadGateEditor().catch(e => log.add(`[gate editor] ${e}`));
   startAudio = null;                      // the session's now
   setPhase('playing', T('Playing'), () => '');
   // counted for the server's day, with the settings changed from this device's defaults at its first Play (page-id.ts)
@@ -788,6 +811,7 @@ async function startGame() {
   pauseHint.start(session);
   titleMark.start(session);
   driftPanel.start(session);
+  speedTrapPanel.start(session);
   photo.start(session);
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
   friendMessages.start(session, net && r.env.NFSU2_ROAM === '1');
@@ -976,15 +1000,18 @@ let touch: TouchControls;                // the controls on the game while a fin
 let textField: TextField;               // the field for a phone's keyboard while the game asks for text (textentry.ts)
 let pauseHint: PauseHint;               // the line to the page's menu under the game's pause menu (pausehint.ts)
 let titleMark: TitleMark;               // the site's address under the title screen's copyright (titlemark.ts)
+let speedTrapPanel: SpeedTrapPanel;
 let driftPanel: DriftPanel;             // free roam's drift mode: its score under the game's Bank panel, a note at F2 (drift.ts)
 let photo: PhotoMode;                   // photo mode: F12 in the world, its panel and its keys (photo.ts)
 
 function endStage() {
+  gateEditorLoad = null;
   touch.stop();
   textField.stop();
   pauseHint.stop();
   titleMark.stop();
   driftPanel.stop();
+  speedTrapPanel.stop();
   photo.stop();
   quickChat.stop();
   friendPrompt.stop();
@@ -1520,6 +1547,7 @@ async function screenshot(photo = false) {
 function openMenu() {
   const m = $<HTMLDialogElement>('#menu');
   if (m.open) { $<HTMLDialogElement>('#playlist').close(); m.close(); return; }                // (its Crews popup too: the menu's close)
+  $('#menu-dev').hidden = !development || !session;
   const fsButton = m.querySelector<HTMLButtonElement>('[data-act="fullscreen"]')!;
   fsButton.textContent = isFullscreen() ? t('Leave full screen') : t('Full screen');
   fsButton.hidden = !canFullscreen() && fromHomeScreen();         // from an iPhone's Home Screen: already without bars
@@ -1845,6 +1873,11 @@ function setTrackMode(e: Event) {
 async function menuAction(act: string) {
   const m = $<HTMLDialogElement>('#menu');
   switch (act) {
+    case 'gate-editor':
+      if (!development || !session) break;
+      m.close();
+      try { (await loadGateEditor()).open(); } catch (e) { log.add(`[gate editor] ${e}`); }
+      break;
     case 'resume': m.close(); break;
     case 'fullscreen':
       m.close();
@@ -2139,9 +2172,9 @@ function showOverrides(given: string[], dev: boolean) {
 }
 
 export async function boot() {
-  // the address's test settings: asked about only when there are some (a player's page asks nothing)
+  // Development tools also need detection when the player opens the ordinary game URL.
   const asked = TEST_PARAMS.some(k => addr.has(k));
-  const dev = asked && await devServer();
+  const dev = development = await devServer();
   const given = takeParams(dev);
   // this browser's id, put back in a store that lost it before anything reads it (page-id.ts); counted for the day
   // (a test page is not)
@@ -2337,6 +2370,7 @@ export async function boot() {
     fullscreen: () => canFullscreen() || !fromHomeScreen(),
   });
   titleMark = new TitleMark($('#stage'));
+  speedTrapPanel = new SpeedTrapPanel($('#stage'));
   driftPanel = new DriftPanel($('#stage'), { toast, wide: () => hudWide, log: logLine });
   photo = new PhotoMode($('#stage'), { shoot: () => screenshot(true), screenshot: () => void screenshot(), log: logLine });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { void checkNewer(); vault.shown(); } });

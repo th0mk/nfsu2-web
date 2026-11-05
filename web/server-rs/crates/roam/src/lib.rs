@@ -124,6 +124,7 @@
 //!   snapshot too, so a slice near its limit gets fewer links before its players get them late.
 
 mod hub;
+pub mod speedtrap;
 mod jumps;
 mod links;
 mod results;

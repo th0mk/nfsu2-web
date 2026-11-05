@@ -204,6 +204,11 @@ void status_web_frame(void){
     static int slot = -2, last = -1, rslot = -2, rlast = -1, pslot = -2, plast = -1, sslot = -2, slast = -1, cslot = -2, clast = -1;
     if (slot == -2){ slot = host_status_slot("drive"); rslot = host_status_slot("rate"); pslot = host_status_slot("pause"); sslot = host_status_slot("sms");
                      cslot = host_status_slot("nocount"); }
+    /* Same live option used by the native speedometer: 1 km/h, 0 mph. */
+    static int uslot = -2, ulast = -1;
+    if (uslot == -2) uslot = host_status_slot("speed_kmh");
+    int units = MR8(0x0083aa1au) == 1;
+    if (units != ulast && uslot >= 0){ ulast = units; host_status_set(uslot, units); }
     int v = drive_state();
     if (v != last && slot >= 0){ last = v; host_status_set(slot, v); }
     int r = hfr_rate_now();

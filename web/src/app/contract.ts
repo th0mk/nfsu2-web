@@ -1,3 +1,4 @@
+import type { TrapState } from '../net/speedtrap';
 // The contract between the app shell and its subsystems (renderer, audio,
 // input, network), as the shell calls them.  subsystems.ts adapts the real
 // modules (web/src/gpu, web/src/audio, web/src/input, web/src/net) to these
@@ -69,6 +70,7 @@ export interface NetOptions extends CommonOptions {
   battle?: (json: string) => void;
   /** co-op free roam: player 2 online, as JSON from the game ({"name"}; "{}": its endpoint ended) */
   coop?: (json: string) => void;
+  speedTrap?: (state: TrapState) => void;
   /** free roam: a friend message from the server */
   friend?: (m: Record<string, unknown>) => void;
   /** the server's LAN took this page back after the link was lost (a server restart, as for a deploy) */
@@ -122,6 +124,7 @@ export interface RendererSubsystem extends Subsystem {
 }
 
 export interface AudioSubsystem extends Subsystem {
+  shutter?(): void;
   /** the AudioContext's state: 'running' once sound can play */
   state(): string;
 }

@@ -1412,5 +1412,6 @@
   "Your Discord": "あなたの Discord",
   "Only your friends see it, so they can add you on Discord.": "フレンドにだけ表示され、Discord であなたを追加できます。",
   "Not a Discord username: 2 to 32 small letters, digits, _ or .": "Discord のユーザー名ではありません。小文字の英字、数字、_、. で2～32文字。",
-  "Not saved: try again in a moment": "保存できませんでした。少ししてからもう一度お試しください"
+  "Not saved: try again in a moment": "保存できませんでした。少ししてからもう一度お試しください",
+  "Speed trap": "スピードトラップ"
 }

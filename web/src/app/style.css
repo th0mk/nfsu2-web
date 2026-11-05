@@ -1348,3 +1348,57 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   *, *::before, *::after { transition: none !important; animation: none !important; }
   .photo-flash { display: none !important; }          /* no white flash at all, rather than a still one */
 }
+
+/* Crossing feedback; navigation markers are drawn by the game's maps. */
+.speedtrap-result[hidden], .stage.photo .speedtrap-result, .stage.photo .speedtrap-flash { display:none; }
+.speedtrap-panel h3 { display:flex; align-items:center; gap:9px; margin:0; padding:10px 12px;
+  text-transform:uppercase; font-size:10px; letter-spacing:.15em; color:var(--lime); }
+.speedtrap-camera { display:inline-block; position:relative; box-sizing:border-box; width:18px; height:13px;
+  border:2px solid currentColor; border-radius:3px; }
+.speedtrap-camera:before { content:''; position:absolute; width:6px; height:3px; left:2px; top:-5px; background:currentColor; border-radius:2px; }
+.speedtrap-camera:after { content:''; position:absolute; width:5px; height:5px; border:1px solid currentColor;
+  border-radius:50%; top:2px; left:4px; }
+.speedtrap-radar { position:relative; width:136px; height:136px; margin:0 auto 8px; border:1px solid #b8efda44;
+  border-radius:50%; background:repeating-radial-gradient(circle,transparent 0 32px,#b8efda22 33px 34px),
+  linear-gradient(90deg,transparent 49.7%,#b8efda22 50%,transparent 50.3%),
+  linear-gradient(transparent 49.7%,#b8efda22 50%,transparent 50.3%); }
+.speedtrap-car { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:white; font-size:17px; text-shadow:0 1px 4px #000; }
+.speedtrap-range { position:absolute; bottom:3px; left:50%; transform:translateX(-50%); font-size:8px; opacity:.6; }
+.speedtrap-pin { position:absolute; display:grid; place-items:center; width:24px; height:24px; border-radius:50%;
+  background:#10282b; color:#a9bcb7; transform:translate(-50%,-50%); border:1px solid currentColor; }
+.speedtrap-pin .speedtrap-camera { transform:scale(.7); }
+.speedtrap-pin.selected { color:var(--lime); box-shadow:0 0 12px #b8efda55; z-index:1; }
+.speedtrap-card { padding:10px 12px; border-top:1px solid #b8efda28; }
+.speedtrap-name { font-weight:600; font-size:13px; }
+.speedtrap-nav { display:flex; align-items:center; gap:10px; margin:7px 0; }
+.speedtrap-arrow { display:inline-block; font-size:23px; line-height:1; color:var(--lime); }
+.speedtrap-nav b { font-size:20px; }
+.speedtrap-panel p { margin:4px 0; color:#bdc8d5; font-size:10px; }
+.speedtrap-scores > div, .speedtrap-panel li div { display:flex; justify-content:space-between; gap:8px; }
+.speedtrap-scores { font-size:10px; color:#bdc8d5; }
+.speedtrap-panel b { white-space:nowrap; font-variant-numeric:tabular-nums; color:#edf5f4; }
+.speedtrap-panel h4 { margin:10px 0 4px; font-size:9px; text-transform:uppercase; letter-spacing:.12em; }
+.speedtrap-panel ol { margin:0; padding-left:15px; font-size:10px; }
+.speedtrap-panel li span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:90px; }
+.speedtrap-panel .me, .speedtrap-panel .me b { color:var(--lime); }
+.speedtrap-flash { position:absolute; inset:0; background:#e6fff6; opacity:0; pointer-events:none; z-index:19; }
+.speedtrap-result { position:absolute; left:50%; top:16%; transform:translateX(-50%); min-width:240px;
+  padding:14px 28px; border-top:2px solid var(--lime); border-bottom:1px solid #b8efda55;
+  background:linear-gradient(90deg,#08131900,#081319e8 20%,#081319e8 80%,#08131900);
+  color:white; font:13px/1.5 system-ui,sans-serif; text-align:center; pointer-events:none; z-index:20; }
+.speedtrap-result-label { color:var(--lime); font-size:11px; letter-spacing:.2em; text-transform:uppercase; }
+.speedtrap-result strong { font-size:38px; font-style:italic; font-variant-numeric:tabular-nums; }
+@media (max-width:700px) { .speedtrap-result { min-width:180px; top:12%; padding:10px 16px; } .speedtrap-result strong { font-size:28px; } }
+@media (prefers-reduced-motion:reduce) { .speedtrap-flash { display:none; } }
+
+.speedtrap-leaders { margin:10px auto 0; padding:8px 0 0; list-style:none; counter-reset:trap-rank; border-top:1px solid #b8efda33; font-size:12px; text-align:left; }
+.speedtrap-leaders:empty { display:none; }
+.speedtrap-leaders li { display:flex; gap:10px; align-items:center; padding:2px 0; counter-increment:trap-rank; }
+.speedtrap-leaders li:before { content:counter(trap-rank); width:12px; color:#9aa9a5; }
+.speedtrap-leaders span { flex:1; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.speedtrap-leaders b { font-weight:500; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.speedtrap-leaders .me { color:var(--lime); }
+
+.menu-dev { margin-top:18px; padding-top:14px; border-top:1px solid #53646c; }
+.menu-dev h3 { margin:0 0 10px; color:#9ab0bb; font-size:11px; text-transform:uppercase; letter-spacing:.12em; }
+.menu-dev .btn { width:100%; }

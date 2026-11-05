@@ -873,7 +873,9 @@ static int8_t g_skin_ok[NSLOT + SKIN_GAME];   /* paint slot n: 1 its textures ar
 #if FLAGS
 static uint32_t flag_texinfo(uint32_t h);
 #endif
+static uint32_t g_trap_ti, g_trap_hash;
 uint32_t roam_game_texture(uint32_t h){
+    if (g_trap_ti && h == g_trap_hash) return g_trap_ti;
     if (!(g_texbits[(h & 0x1fffu) >> 3] & (1u << (h & 7u)))) return 0;
     for (int i = 0; i < g_ntex; i++) if (g_tex[i].hash == h) return g_tex[i].ti;
 #if FLAGS
@@ -3015,6 +3017,17 @@ static void tags_update_seat(CPU *c){
 #endif
 }
 
+/* Development catalog updates arrive through the page input queue, in centimetres. */
+static int g_dev_trap_n = -1, g_dev_trap_xy[64][2];
+void roam_game_trap_edit(int cmd,int a,int b){
+    if(cmd==21 && a>=0 && a<=64) __atomic_store_n(&g_dev_trap_n,a,__ATOMIC_RELEASE);
+    else if((cmd==19||cmd==20) && a>=0 && a<64 && b>-10000000 && b<10000000)
+        __atomic_store_n(&g_dev_trap_xy[a][cmd-19],b,__ATOMIC_RELAXED);
+}
+#if MPRACES
+#include "speedtrap_texture.inc"
+#endif
+
 /* ---- minimap arrows --------------------------------------------------------------------------------- */
 /* The minimap's icons (G_MM_ICONS, made by 0x4EC950 when the HUD is built
  * and again by 0x4F92A0) give an AI racer's arrow (type 3) to each car of the
@@ -3526,21 +3539,22 @@ static void ai_map_open(CPU *c, uint32_t map, uint32_t pkg, uint32_t w){
 #define WMF_RACES       1
 #define WMF_MEETS       2             /* car meets (meet_*) */
 #if MPRACES
-#define WMF_N           3
+#define WMF_TRAPS       3
+#define WMF_N           4
 #else
 #define WMF_N           1
 #endif
 #ifndef ROAM_HOST_WIN
 int  win32_reg_get_dword(const char *nm, uint32_t *out);
 void win32_reg_put_dword(const char *nm, uint32_t v);
-static const char *const wmf_reg[3] = { "MapPlayers", "MapRaces", "MapMeets" };   /* (the Windows plugin keeps them a session) */
+static const char *const wmf_reg[4] = { "MapPlayers", "MapRaces", "MapMeets", "MapSpeedTraps" };   /* (the Windows plugin keeps them a session) */
 #endif
-#define WMF_TEST0       3             /* rows of no kind for a test (NFSU2_ROAM_TEST_LEGEND_ROWS): a fuller legend */
+#define WMF_TEST0       4             /* rows of no kind for a test (NFSU2_ROAM_TEST_LEGEND_ROWS): a fuller legend */
 #define WMF_TEST_MAX    4
-static const char *const wmf_text[WMF_TEST0 + WMF_TEST_MAX] = { "Players", "Players' races", "Car meets", "Test row 1", "Test row 2", "Test row 3",
+static const char *const wmf_text[WMF_TEST0 + WMF_TEST_MAX] = { "Players", "Players' races", "Car meets", "Speed traps", "Test row 1", "Test row 2", "Test row 3",
                                                                 "Test row 4" };
-static int g_wmf_on[WMF_TEST0 + WMF_TEST_MAX] = { 1, 1, 1, 1, 1, 1, 1 }, g_wmf_loaded;
-static struct { uint32_t map, row[3]; int n; uint32_t m[WMF_MAX]; float x[WMF_MAX], y[WMF_MAX]; uint8_t what[WMF_MAX]; } g_wmf;
+static int g_wmf_on[WMF_TEST0 + WMF_TEST_MAX] = { 1, 1, 1, 1, 1, 1, 1, 1 }, g_wmf_loaded;
+static struct { uint32_t map, row[4]; int n; uint32_t m[WMF_MAX]; float x[WMF_MAX], y[WMF_MAX]; uint8_t what[WMF_MAX]; } g_wmf;
 static void wmf_load(void){
     if (g_wmf_loaded) return;
     g_wmf_loaded = 1;
@@ -3725,16 +3739,17 @@ static void wmf_open(CPU *c, uint32_t scr, uint32_t map, uint32_t pkg, uint32_t 
     if (like){
         uint32_t car = wm_find(c, pkg, "AIRACERINDICATOR_0"), ring = wm_find(c, pkg, "SPRINTEVENTINDICATOR_0");
         uint32_t rgb = g_wm.col_ok ? (uint32_t)(g_wm.col[2] & 0xff) << 16 | (uint32_t)(g_wm.col[1] & 0xff) << 8 | (uint32_t)(g_wm.col[0] & 0xff) : 0xffffffu;
-        uint32_t tex[3] = { car ? gcall1(c, FN_FE_TEX, 0, car) : 0, ring ? gcall1(c, FN_FE_TEX, 0, ring) : 0, 0 }, col[3] = { rgb, WMF_RACES_RGB, MEET_RGB };
+        uint32_t tex[4] = { car ? gcall1(c, FN_FE_TEX, 0, car) : 0, ring ? gcall1(c, FN_FE_TEX, 0, ring) : 0, 0, 0 }, col[4] = { rgb, WMF_RACES_RGB, MEET_RGB, 0xffffffu };
 #if MPRACES
         uint32_t mi = meet_icon(c, pkg);
         tex[2] = mi ? gcall1(c, FN_FE_TEX, 0, mi) : tex[0];
+        tex[3] = trap_texture(c);
 #endif
         for (int i = 0; i < WMF_N + test; i++){
             int what = i < WMF_N ? i : WMF_TEST0 + i - WMF_N, slot = rows + 1 + i;
             uint32_t o[4], bk = 0;
             int got = slot <= WMF_ROWS ? wmf_parts(c, pkg, slot, o, &bk) : wmf_copy_parts(c, pkg, i, o, &bk);
-            uint32_t r = got ? wmf_row(c, scr, pkg, o, bk, what, like, what < 3 ? tex[what] : tex[0], what < 3 ? col[what] : 0xffffffu) : 0;
+            uint32_t r = got ? wmf_row(c, scr, pkg, o, bk, what, like, what < 4 ? tex[what] : tex[0], what < 4 ? col[what] : 0xffffffu) : 0;
             if (i < WMF_N) g_wmf.row[i] = r;
             if (r) line[nl++] = r;
         }
@@ -3927,6 +3942,9 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
         crew_map_open(c, map, pkg, pk, w);
         ai_map_open(c, map, pkg, w);
         wmf_open(c, scr, map, pkg, w);
+#if MPRACES
+        trap_map_open(c, map, pkg, pk);
+#endif
         gcall0(c, FN_WM_PLACE, map);
         rlog("[roam] f=%ld world map open: %u car markers, %d of them friends' cars outside the car index; %d copies of AIRACERINDICATOR_0\n",
                 rh_frame(), MR32(G_WM_COUNT), n, copies);
@@ -4368,6 +4386,20 @@ static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
         }
     }
 }
+#if MPRACES
+#include "speedtrap_maps.inc"
+#endif
+/* Called after native minimap placement, which rotates player-type icons each frame. */
+void roam_game_trap_minimap_upright(uint32_t icons){
+#if MPRACES
+    if(icons!=g_trap_mm.icons || !trap_icons_live(icons)) return;
+    for(int k=0;k<g_trap_mm.n;k++) trap_upright(g_trap_mm.image[k]);
+#else
+    (void)icons;
+#endif
+}
+
+
 
 /* ---- horns, friends' engines, nitrous and hydraulics ----------------------------------------------- */
 /* N or the controller's left stick click sounds the player's horn in free
@@ -9244,6 +9276,9 @@ void roam_game_frame(CPU *c){
         if (w) park_all(c);
         g_pass.stay_since = g_pass.blocking = 0;
         near_update(c, w, host, 0);
+#if MPRACES
+        trap_minimap(c, 0);
+#endif
     } else {
         /* the outrun challengers' manager first: whether opponent cars are
          * free this frame depends on it (LEND_OPP) */
@@ -9338,6 +9373,9 @@ void roam_game_frame(CPU *c){
         arrows_update(c, w);
         arrow_colours(c, w);
         near_update(c, w, host, 1);
+#if MPRACES
+        trap_minimap(c, 1);
+#endif
         map_update(c, w, host);
 #if MPRACES
         meet_stay(w, host);
@@ -9938,7 +9976,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         if (!strcasecmp(a1, "parts")) fe_parts(pk + 0x4cu, 0, -60.f);
         /* the legend's rows (ours with their ticks) and the markers they hide */
         if (g_wmf.map == map){
-            int rows = 0, tracked[3] = { 0, 0, 0 }, away = 0;
+            int rows = 0, tracked[4] = { 0, 0, 0, 0 }, away = 0;
             for (uint32_t r = rd32(scr + WMF_SCR_ROWS); r && r != scr + WMF_SCR_ROWS && rows < 64 && ok(r, WMF_ROW_SZ); r = rd32(r)) rows++;
             for (int i = 0; i < g_wmf.n; i++){ tracked[g_wmf.what[i] < 3 ? g_wmf.what[i] : 0]++; away += MRF32(g_wmf.m[i] + 0x10u) == WMF_AWAY; }
             rlog("[roam] f=%ld mp map: legend %d rows, the picked one kind %d; Players %s, Players' races %s, Car meets %s; %d players' markers, %d lobbies', "

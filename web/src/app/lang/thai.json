@@ -1412,5 +1412,6 @@
   "Your Discord": "Discord ของคุณ",
   "Only your friends see it, so they can add you on Discord.": "เห็นได้เฉพาะเพื่อนของคุณ เพื่อให้เพิ่มคุณใน Discord ได้",
   "Not a Discord username: 2 to 32 small letters, digits, _ or .": "ไม่ใช่ชื่อผู้ใช้ Discord: ตัวอักษรพิมพ์เล็ก ตัวเลข _ หรือ . จำนวน 2 ถึง 32 ตัว",
-  "Not saved: try again in a moment": "บันทึกไม่สำเร็จ: ลองใหม่อีกครั้งในอีกสักครู่"
+  "Not saved: try again in a moment": "บันทึกไม่สำเร็จ: ลองใหม่อีกครั้งในอีกสักครู่",
+  "Speed trap": "จุดวัดความเร็ว"
 }

@@ -20,6 +20,7 @@
 //   - Hidden page: the output fades to silence (the game itself parks and
 //     mutes when it loses focus); optionally the context is suspended.
 //   - autotest "audioreset": the pump bumps AR_RESET and the context is rebuilt.
+import { shutterSamples } from './shutter';
 import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
 import {
@@ -54,6 +55,7 @@ export interface AudioCounters {
 export interface AudioHandle {
   readonly context: AudioContext | null;
   resume(): Promise<void>;
+  shutter(): void;
   setVolume(v: number): void;
   /** everything, for test pages and logs */
   status(): AudioStats;
@@ -218,6 +220,14 @@ export async function attachAudio(proc: GameProcess, opts: AudioOptions = {}): P
   const handle: AudioHandle = {
     get context() { return ctx; },
     resume,
+    shutter() {
+      const st = handle.status();
+      if (!ctx || !gain || closed || ctx.state !== 'running' || document.hidden || st.nosound || st.muted) return;
+      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.18), ctx.sampleRate);
+      buffer.copyToChannel(shutterSamples(ctx.sampleRate), 0);
+      const source = ctx.createBufferSource(); source.buffer = buffer;
+      source.connect(gain); source.onended = () => source.disconnect(); source.start();
+    },
     setVolume(v: number) { volume = Math.max(0, Math.min(1, v)); if (gain && ctx) gain.gain.setTargetAtTime(audible(), ctx.currentTime, 0.015); },
     stats(): AudioCounters {
       const st = handle.status();
