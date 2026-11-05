@@ -19,7 +19,7 @@ import { Help } from './help.mjs';
 import { COMMAND as FAQ, Faq, PREFIX as FAQ_BUTTON } from './faq.mjs';
 import { blocks, firstPass, investigate, newClient, overlap, picture, vet } from './investigate.mjs';
 import { Repo, defaultSource } from './repo.mjs';
-import { folderTops, samePlace } from './sigs.mjs';
+import { crashOf, folderTops, namedIn, samePlace, stackTops } from './sigs.mjs';
 import { Spend, metered } from './spend.mjs';
 import { Tags } from './tags.mjs';
 import { COMMAND as TRANSLATE, Translator } from './translate.mjs';
@@ -73,6 +73,8 @@ const SUGGESTION_DAYS = 365;                     // suggestions are kept in thre
 const VOTES_MS = 3 * 3600_000;                   // how often the suggestions' votes (reactions, messages, people) are counted
 const BUMP_QUIET_MS = 12 * 3600_000;             // the poster writing after this long a silence is a bump: they wait
 const REPEAT = 0.5;                              // a reply whose word pairs the bot's earlier messages hold this much of
+const MAX_ASKS = 2;                              // the bot's asks in a thread; a third is not posted
+const OTHER_DAYS = 7, OTHER_MAX = 5;             // the poster's other threads a look is told of: active this recently, at most
 
 fs.mkdirSync(CFG.state, { recursive: true });
 const STATE_FILE = path.join(CFG.state, 'threads.json');
@@ -80,9 +82,12 @@ const VERDICTS = path.join(CFG.state, 'verdicts.jsonl');
 const LIVE_FILE = path.join(CFG.state, 'live.json');      // the live version the bot saw last
 /** per thread: { title, forum, guild, owner, created, active, status: new|seen|none|asked|answered|staff|failed, replies,
  *  summary, category, snippet (its first post, for threads the bot only indexed), closed (archived, locked or deleted:
- *  not one to point people to), tops (where its logs crash or freeze, sigs.mjs); for a problem reported to the staff:
- *  staffMsg, staffThread (the report and its thread), report (on the first one: what its post shows, REPORT below),
- *  reportOf (on the later ones: the first thread's id); for a suggestion: votes ({ emoji: count } on its first post),
+ *  not one to point people to), tops (where its logs crash or freeze, sigs.mjs), asks (the bot's asks in it),
+ *  lastReply (the start of the bot's last reply); for a problem reported to the staff: staffMsg, staffThread (the
+ *  report and its thread), report (on the first one: what its post shows, REPORT below), reportOf (on the later ones:
+ *  the first thread's id), crash (the tops it gives its report: those of the crash it was reported for, sigs.mjs
+ *  crashOf), seenIn ({ report id: true }: another report its later logs were passed to), another (when its report
+ *  was told of another problem in it); for a suggestion: votes ({ emoji: count } on its first post),
  *  messages and members (Discord's counts for the thread; members stop at 50), counted (when) } */
 let threads = {};
 try { threads = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { /* first start */ }
@@ -176,7 +181,7 @@ async function pump() {
 function lookLater() {
   const later = Object.entries(threads).filter(([, t]) => t.later).sort((a, b) => a[1].later.at.localeCompare(b[1].later.at));
   for (const [id, t] of later) {
-    if (!timers.has(id)) enqueue(id, t.later.why, t.later.extra);
+    if (!timers.has(id)) enqueue(id, t.later.why, { ...(t.later.extra ?? {}), later: t.later.at });
     delete t.later;
   }
   if (later.length) { console.log(`[bot] ${later.length} look(s) the budget put off, now`); save(); }
@@ -224,10 +229,17 @@ async function look(threadId, why, extra) {
   const bump = bumped && openBump(msgs.filter(m => !m.system), thread.ownerId);
   if (bumped && (!bump || st.bump === bump.id)) return say('skipped: the bump was answered already');
   if (logged && sameLog(msgs, thread)) return say('skipped: the same log was posted before');
+  // staff said it themselves ("fix released") once the release was out: no notice on top
+  const releasedAt = fix && repo.releases.find(r => r.rev === extra?.rev)?.at;
+  if (releasedAt && msgs.some(m => m.author.id !== client.user.id && isStaff(m.member, thread) && m.createdTimestamp >= releasedAt - 60_000))
+    return say('skipped: staff wrote in the thread since the release');
+  // a look the budget put off, where the bot has replied since (a staff mention, a release's look): that one stands
+  if (extra?.later && msgs.some(m => m.author.id === client.user.id && m.createdTimestamp > Date.parse(extra.later)))
+    return say('skipped: put off, and the bot replied since');
 
   const workDir = path.join(CFG.state, 'work', threadId), staffDir = `${workDir}-staff`;
   for (const d of [workDir, staffDir]) { fs.rmSync(d, { recursive: true, force: true }); fs.mkdirSync(d, { recursive: true }); }
-  const { text, images } = await transcript(thread, msgs.filter(m => !m.system), workDir, staffDir, why, extra);
+  const { text, images } = await transcript(thread, msgs.filter(m => !m.system), workDir, staffDir, why, extra, standingOf(threadId, st, msgs));
   say(`"${st.title}" (${why}): ${msgs.length} message(s), ${fs.readdirSync(workDir).length} file(s), ` +
     `${fs.readdirSync(staffDir).filter(f => SAVES_ZIP.test(f.replace(/^\d+-/, ''))).length} save backup(s), ${images.length} picture(s)` +
     `${images.length ? ` (${images.reduce((s, p) => s + (p.tokens ?? 0), 0)} tokens)` : ''}`);
@@ -267,6 +279,8 @@ async function look(threadId, why, extra) {
   const said = msgs.filter(m => m.author.id === client.user.id).map(m => m.content).join('\n');
   const repeat = post && !byStaff && !fix && said ? overlap(post, said) : 0;
   if (repeat >= REPEAT) { post = null; outcome = `a repeat of an earlier reply (${repeat.toFixed(2)})`; }
+  // the bot asks twice in a thread at most (system.md "Decide"); the look is told how often it did (standingOf)
+  if (post && v.action === 'ask' && !byStaff && (st.asks ?? 0) >= MAX_ASKS) { post = null; outcome = `a third ask (${st.asks} before)`; }
   // stepping back is one line that a person will read the thread, never another round of the argument
   if (post && v.handoff && !byStaff && post.length > 300) { post = null; outcome = 'a handoff with a long reply'; }
   if (byStaff && !post) {                        // staff asked: always a reply, at least what the look found
@@ -295,6 +309,8 @@ async function look(threadId, why, extra) {
         });
       }
     } finally { clearInterval(typing); }
+    st.lastReply = post.replace(/\s+/g, ' ').slice(0, 200);   // for the looks at the poster's other threads
+    if (!fix && v?.action === 'ask') st.asks = (st.asks ?? 0) + 1;
   }
   clearInterval(typing);
   if (fix) {                                     // a fix notice changes nothing else about the thread
@@ -344,15 +360,36 @@ async function look(threadId, why, extra) {
   for (const d of [workDir, staffDir]) fs.rmSync(d, { recursive: true, force: true });
 }
 
+/** what a look knows of the thread besides its posts: the report it is in, how often the bot replied and asked in it,
+ *  and the poster's other threads with the bot's last reply in each (the same poster's two threads got opposite
+ *  answers in one minute, and "Frame rate 30 helps" turned into "can't help" and back across two of them) */
+function standingOf(threadId, st, msgs) {
+  const out = [];
+  const rootId = st.staffMsg ? st.reportOf ?? threadId : null, root = rootId && threads[rootId];
+  if (root) {
+    const fixed = root.report?.fix && !root.report.again ? `, ${root.report.fix.added ? 'added' : 'fixed'} by ${root.report.fix.commit}, live` : '';
+    out.push(`This thread is in the developer's report on ${rootId}${fixed}: ${(root.report?.title ?? root.summary ?? root.title ?? '').slice(0, 200)}`);
+  }
+  // a long reply goes out as several messages: one reply
+  const replies = msgs.filter((m, i) => m.author.id === client.user.id && msgs[i - 1]?.author.id !== client.user.id).length;
+  if (replies) out.push(`The bot replied ${replies} time(s) in this thread${st.asks ? `; it asked for more ${st.asks} time(s)` : ''}.`);
+  const since = new Date(Date.now() - OTHER_DAYS * 86400_000).toISOString();
+  const others = st.owner ? Object.entries(threads)
+    .filter(([id, t]) => id !== threadId && t.owner === st.owner && (t.active ?? t.created) >= since).sort(byActivity).slice(0, OTHER_MAX) : [];
+  if (others.length) out.push(`The poster's other threads (the newest first):\n${others.map(e =>
+    `${threadLine(e, 160, false)}${e[1].lastReply ? `\n  The bot's last reply there: ${e[1].lastReply}` : ''}`).join('\n')}`);
+  return out;
+}
+
 /** the thread as the model reads it: text attachments saved to workDir (whatever their name: a chrome://gpu report
  *  comes as .txt.phps, a long paste as message.txt), images inlined; save backups and the pictures as they were posted
  *  to staffDir, for the staff report */
-async function transcript(thread, msgs, workDir, staffDir, why, extra) {
+async function transcript(thread, msgs, workDir, staffDir, why, extra, facts = []) {
   const applied = (thread.appliedTags ?? []).map(id => thread.parent.availableTags?.find(t => t.id === id)?.name).filter(Boolean);
   const topics = Tags.of(thread.parent).topics.map(t => t.name);
   const lines = [`Forum: #${thread.parent.name}`, `Title: ${thread.name}`, `Tags: ${applied.join(', ') || 'none'}`,
     ...(topics.length ? [`Tags you may add: ${topics.join(', ')}`] : []),
-    `Why the bot looks now: ${WHY[why] ?? why}`, ...(extra?.text ? [extra.text] : []), ''];
+    `Why the bot looks now: ${WHY[why] ?? why}`, ...(extra?.text ? [extra.text] : []), ...facts, ''];
   const head = lines.length - 1, readable = [];  // the files the tools read, named in the header
   const images = [];
   let n = 0;
@@ -660,8 +697,34 @@ async function tellStaff(thread, st, v, post, dirs, posted) {
   const where = `#${st.forum}${v.category ? ` (${v.category})` : ''}`;
   const title = `Title: ${st.title}`, notes = (v.notes ?? '').trim() && `Notes: ${v.notes.trim()}`;
 
+  // a thread of one report whose newer log is another report's problem: that report hears of it (once), with the
+  // logs that stop where its own do; the thread stays in its report
+  const own = st.staffMsg ? st.reportOf ?? thread.id : null;
+  if (own && reported && rootId !== own) {
+    if (st.seenIn?.[rootId]) return;
+    const logs = logsFor(dirs[0], reportTops()[rootId] ?? []);
+    const text = part([`Also seen in ${where}, a thread of another report`, `Thread: ${link}`], [title, notes], logs);
+    const head = `**Also seen** in ${link} (a thread of another report)`;
+    await reportUpdate(staff, rootId, { line: `Also seen in ${link} (a thread of another report); the bot ${did}`, part: text,
+      files: logs, again: thread.id, content: [head, fence(text, 2000 - head.length - dry.length - 2), dry].filter(Boolean).join('\n') });
+    (st.seenIn ??= {})[rootId] = true;
+    console.log(`[staff] ${thread.id} (report ${own}): a log of it added to the report on ${rootId}`);
+    return;
+  }
+  // a reported thread whose look escalates something the developer has no report of ("the flicker is the main
+  // issue", under a report on the game closing): in its report, as another problem, once.  A thread is in one report
+  if (own && v.escalate && !v.handoff && !reported && !st.another) {
+    const text = part([`Another problem in ${where}, a thread of this report`, `Thread: ${link}`], [title, notes]);
+    const head = `**Another problem** in ${link}`;
+    await reportUpdate(staff, own, { line: `Another problem in ${link}; the bot ${did}`, part: text,
+      content: [head, fence(text, 2000 - head.length - dry.length - 2), dry].filter(Boolean).join('\n') });
+    st.another = new Date().toISOString();
+    console.log(`[staff] ${thread.id}: another problem, in its report ${own}`);
+    return;
+  }
+
   if (reported && !st.staffMsg) {                 // the same problem again: an update in its report
-    Object.assign(st, { staffMsg: reported.staffMsg, staffThread: reported.staffThread, reportOf: rootId });
+    Object.assign(st, { staffMsg: reported.staffMsg, staffThread: reported.staffThread, reportOf: rootId, crash: crashOf(v.crash, st.tops ?? []) });
     const text = part([`Also reported in ${where}`, `Thread: ${link}`], [title, notes], files);
     const head = `**${v.handoff ? 'Needs a person' : 'Also reported'}** in ${link}`;
     await reportUpdate(staff, rootId, {
@@ -701,7 +764,7 @@ async function tellStaff(thread, st, v, post, dirs, posted) {
     m = await staff.send(first);
     th = await m.startThread({ name, autoArchiveDuration: 10080 }).catch(e => { console.error(`[bot] report thread: ${e.message}`); return null; });
   }
-  Object.assign(st, { staffMsg: m.id, staffThread: th?.id, report: r });
+  Object.assign(st, { staffMsg: m.id, staffThread: th?.id, report: r, crash: crashOf(v.crash, st.tops ?? []) });
   if (earlier) Object.assign(root, { staffMsg: m.id, staffThread: th?.id, reportOf: thread.id });
   await inOrder(thread.id, async () => {          // the part for Claude with the files, then the post with their links
     const target = th ?? staff;
@@ -716,26 +779,48 @@ async function tellStaff(thread, st, v, post, dirs, posted) {
   }
 }
 
-/** a new log or picture in a thread that has a report: an update in the report, with the files */
+/** the thread's text files (a look's work folder) whose logs stop where `tops` do, or its newest one when none does:
+ *  for another report, only what is its problem */
+function logsFor(dir, tops) {
+  const files = fs.readdirSync(dir).sort((a, b) => parseInt(a) - parseInt(b));
+  const stops = f => { try { return stackTops(fs.readFileSync(path.join(dir, f), 'utf8')).some(a => tops.some(b => samePlace(a, b))); } catch { return false; } };
+  const hit = tops.length ? files.filter(stops) : [];
+  return (hit.length ? hit : files.slice(-1)).map(f => path.join(dir, f))
+    .map(f => ({ attachment: f, name: path.basename(f).replace(/^\d+-/, ''), size: fs.statSync(f).size }))
+    .filter(f => f.size <= MAX_UPLOAD).slice(-MAX_UPLOADS);
+}
+
+/** a new log or picture in a thread that has a report: an update in the report, with the files.  A log that stops
+ *  somewhere else than the report's logs is passed on as that, and is no "reported again": the look it gets (a log
+ *  look) tells the report it belongs to, if there is one (tellStaff) */
 async function relay(m, st) {
   const staff = await client.channels.fetch(CFG.staffChannel).catch(() => null);
   if (!staff) return;
-  const files = [];
+  const files = [], big = [];
   for (const a of m.attachments.values()) {
-    if (a.size > MAX_UPLOAD || files.length >= MAX_UPLOADS) continue;
+    if (a.size > MAX_UPLOAD) { big.push(`${a.name} (${bytes(a.size)})`); continue; }
+    if (files.length >= MAX_UPLOADS) continue;
     const data = await download(a.url);
     if (data) files.push({ attachment: data, name: a.name, size: data.length });
   }
   const all = [...m.attachments.values()], log = hasLog(m);
   const kind = (log ? 'log' : all.every(a => /^image\//.test(a.contentType ?? '')) ? 'picture' : 'file') + (all.length > 1 ? 's' : '');
   const who = m.author.id === m.channel.ownerId ? 'the poster' : 'a member';
-  const link = linkOf(m.guildId, m.channelId), head = `**New ${kind}** from ${who} in ${link}`;
-  const text = part([`New from ${who} in ${link}`],
+  const rootId = st.reportOf ?? m.channelId;
+  const tops = files.filter(f => LOG_FILE.test(f.name)).flatMap(f => stackTops(f.attachment.toString('utf8')));
+  const known = reportTops()[rootId] ?? [];
+  // a report from before st.crash whose title names no function: where its logs stop is not known, so no log is "else"
+  const judged = known.length > 0 || Object.entries(threads).some(([id, t]) => t.staffMsg && (t.reportOf ?? id) === rootId && Array.isArray(t.crash));
+  const other = judged && tops.length > 0 && !tops.some(a => known.some(b => samePlace(a, b)));
+  const elsewhere = other ? `: it stops somewhere else than ${known.length ? "this report's logs" : 'this report is about'} (${tops.slice(-2).join('; ')})` : '';
+  const link = linkOf(m.guildId, m.channelId), head = `**New ${kind}** from ${who} in ${link}${elsewhere}`;
+  const tooBig = big.length ? `Too big to attach here: ${big.join(', ')}, in ${linkOf(m.guildId, `${m.channelId}/${m.id}`)}` : '';
+  const text = part([`New from ${who} in ${link}${elsewhere}`, tooBig],
     [`Title: ${m.channel.name}`, m.content.trim() && `Message: ${m.content.trim().slice(0, 1200)}`], files);
-  // a log after the fix: it may still happen
-  await reportUpdate(staff, st.reportOf ?? m.channelId, { line: `New ${kind} from ${who} in ${link}`, part: text, files,
-    again: log ? m.channelId : null, content: `${head}\n${fence(text, 2000 - head.length - 1)}` });
-  console.log(`[staff] ${m.channelId}: ${files.length} file(s) from ${who} passed on to its report`);
+  // a log after the fix: it may still happen, unless it is another bug
+  await reportUpdate(staff, rootId, { line: `New ${kind} from ${who} in ${link}${other ? ', stopping somewhere else' : ''}`, part: text, files,
+    again: log && !other ? m.channelId : null, content: `${head}\n${fence(text, 2000 - head.length - 1)}` });
+  console.log(`[staff] ${m.channelId}: ${files.length} file(s) from ${who} passed on to its report${other ? ' (another place)' : ''}${big.length ? `, ${big.length} too big` : ''}`);
 }
 
 /** the poster of a thread that has a report says it works now (tags.mjs): the report says so */
@@ -999,13 +1084,19 @@ function reportList(except) {
       `last change ${new Date(at * 1000).toISOString().slice(0, 10)}] ${(r?.title ?? t.summary ?? t.title).slice(0, 150)}${logs}` };
   }).sort((a, b) => b.at - a.at).slice(0, 25).map(x => x.line).join('\n');
 }
-/** each report's (its first thread's id) stack tops: those of its threads' logs, but the thread `except`'s */
+/** each report's (its first thread's id) stack tops: those of the crash each of its threads was reported for (st.crash),
+ *  but the thread `except`'s.  Never a thread's later logs: a new log in a reported thread can be another bug (a
+ *  garage crash thread whose poster then crashed in free roam made the garage report "stop" in free roam too) */
 function reportTops(except) {
   const m = {};
   for (const [id, t] of Object.entries(threads)) {
-    if (id === except || !t.staffMsg || !t.tops) continue;
-    const list = m[t.reportOf ?? id] ??= [];
-    for (const s of t.tops) if (!list.includes(s)) list.push(s);
+    if (id === except || !t.staffMsg) continue;
+    const rootId = t.reportOf ?? id, root = threads[rootId];
+    // a thread joined before st.crash: its tops that the report's title names
+    const own = t.crash ?? namedIn(t.tops, root?.report?.title ?? root?.summary);
+    if (!own.length) continue;
+    const list = m[rootId] ??= [];
+    for (const s of own) if (!list.includes(s)) list.push(s);
   }
   return m;
 }

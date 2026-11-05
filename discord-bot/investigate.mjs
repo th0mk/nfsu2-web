@@ -21,7 +21,7 @@ const MAX_MISSES = 3;
 
 export const VERDICT = {
   type: 'object', additionalProperties: false,
-  required: ['action', 'category', 'language', 'reply', 'summary', 'notes', 'escalate', 'handoff', 'duplicate_of', 'confidence', 'tags'],
+  required: ['action', 'category', 'language', 'reply', 'summary', 'notes', 'escalate', 'handoff', 'duplicate_of', 'crash', 'confidence', 'tags'],
   properties: {
     action: { type: 'string', enum: ['none', 'ask', 'answer'] },
     category: { type: 'string', enum: ['crash', 'graphics', 'performance', 'controls', 'online', 'saves', 'audio', 'phone', 'suggestion', 'question', 'other'] },
@@ -32,6 +32,7 @@ export const VERDICT = {
     escalate: { type: 'boolean', description: 'the developer should look at this' },
     handoff: { type: 'boolean', description: 'a person should take the thread from here; the bot stays out of it after this reply' },
     duplicate_of: { type: 'string' },
+    crash: { type: 'string', description: 'the crash or freeze this thread reports: one of the tops the context lists under "Where this thread\'s logs crash or freeze", as written there; "" when the thread is not about one (a crash of another game in the log that the posts don\'t talk about is not it)' },
     confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
     tags: { type: 'array', items: { type: 'string' }, description: 'names from "Tags you may add" in the thread\'s header; [] for none' },
   },
@@ -133,6 +134,7 @@ function brief(name, i) {
     case 'git_show': return `git show ${i.rev}${i.patch ? ' with diff' : ''}`;
     case 'search_threads': return `threads /${i.pattern}/`;
     case 'discord_search': return `messages /${i.pattern}/ ${i.days} d`;
+    case 'labels': return `labels ${i.language}`;
     default: return name;
   }
 }

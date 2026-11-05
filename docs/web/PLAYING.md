@@ -63,8 +63,8 @@ before gets them once, unless a graphics option was changed there. Held sideways
 touch controls over it; held upright, it shows in a 4:5 picture at the top with the ☰ button and the touch controls
 below it. The screen stays on while the game runs. Chrome's menu, **Add to Home screen** (or **Install app**), puts
 the game on the home screen as an app that opens full screen; on a PC the same makes it an app with its own window. On
-an iPhone it is Safari's Share menu, **Add to Home Screen**. That copy keeps its own saves: a passphrase (Cloud saves)
-brings yours over.
+an iPhone it is Safari's Share menu, **Add to Home Screen**. On an iPhone or iPad that copy keeps its own saves: a
+passphrase (Cloud saves) brings yours over. An app added from Chrome, on Android or a PC, shares the browser's saves.
 
 **Touch controls** show on the game while you drive (races and free roam, in a race from the start line so you can
 rev in the countdown). In the menus, the pause menu and free roam's cutscenes they give way to arrows, **OK** and
@@ -282,7 +282,7 @@ that room.
 | Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, subtitles, songs (uncensored or original), music in drag and drift races, autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
-| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original, map only or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
+| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original, map only or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,

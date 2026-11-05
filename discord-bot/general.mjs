@@ -27,6 +27,7 @@ const SORT_BATCH = 40;                           // authors a sorting call: a bu
 const WAIT_MS = 4 * 60_000;                      // a message waits this long: others may answer, the author may add more
 const LATE_MS = 20 * 60_000;                     // a pointer this long after someone's first message is no help any more
 const TALKING_MS = 30 * 60_000;                  // someone in a conversation about it gets no pointer for this long
+const BROADCAST_MS = 10 * 60_000;                // a pointer to the whole channel answers who wrote of the same kind this recently
 const CONTEXT_MS = 3 * 60_000;                   // the chat the sorting reads: from this long before an author's first message
 const KEEP_MS = 30 * 60_000, MAX_LINES = 150;    // the recent messages kept a channel for that, and the most a call reads
 const MAX_PICTURES = 2, CALL_PICTURES = 8;       // pictures a sorted author, and a call (each ~1,500 tokens)
@@ -129,6 +130,23 @@ const FIXES = {
     re: /reach|no connection|not connected|ERR_|took too long|server|servidor|serwer|sunucu|сервер|conex|подключ|соедин/i,
     en: 'Your network is blocking the server (some providers block Cloudflare; in Spain they do during football matches, and it works again after the match): try mobile data or another Wi-Fi, or turn off an ad blocker, a web filter or private DNS.',
   },
+  'vpn-ban': {
+    when: 'the page or the game says "Someone who played from your network or VPN was banned, so you can\'t race other players from it" (not their own ban: that one says "You can\'t play with others any more" or names a "Ban #")',
+    re: /network or VPN|VPN was banned|someone who played from your network/i,
+    en: 'That ban is someone else\'s, on the same address (a VPN, iCloud Private Relay or a shared network): turn the VPN or Private Relay off, or use another network, and you can race again. Free roam stays open meanwhile.',
+  },
+  'old-windows': {
+    when: 'the game does not run on Windows 7, 8 or older (Vista, XP)',
+    words: true,
+    re: /\bwin(dows)? ?(7|8|8\.1|vista|xp)\b/i,
+    en: 'No browser on Windows 7 or 8 has WebGPU, which the game needs: their last Chrome and Firefox came before it. It runs on Windows 10 or 11, or on a phone.',
+  },
+  'iphone-sound': {
+    when: 'no sound at all in the game on an iPhone or iPad',
+    words: true,
+    re: /\b(iphone|ipad|ios)\b/i,
+    en: 'Reload the page: since 4 November the game plays its sound in Silent mode too (other apps\' music pauses while it plays).',
+  },
   'iphone-full-screen': {
     when: 'they say full screen does not work on an iPhone (Safari\'s bars stay); the page\'s yellow iPhone note in a screenshot is not this',
     words: true,
@@ -179,12 +197,12 @@ const SORT_SYSTEM = `You read the general chat of "Underground 2 Revived" (Need 
 For each marked author:
 - why: a few words on what they say in the chat.
 - kind: "report" when the author says something goes wrong for them, now, in the game or on the page: a crash, a freeze, an error message or code, the game or the site will not start, load or connect, a controller, sound, graphics or saves not working, something broken since an update. "Is anyone else having X?" counts when they have X and say what X is. A bare "is it just me?", "is the server down?" or "why can't I play?" with no detail and no picture is "other": the chat answers those. Asking how to fix or get past such a thing ("how do I fix this?", "how to get past this error?") is a report too. Everything else is "other": how-to questions (controls, settings, progress, cars, tuning, saves, multiplayer, "how do I ..."), wishes and suggestions, opinions about the game or a device, chat and jokes, a problem mentioned in passing ("lol it crashes on my phone") or one they explain themselves ("must be all the players"), how the career or the game is meant to work (no races left, unlocking parts, the map), an answer or advice to someone else, someone else's problem, a problem from long ago or one they solved, a line quoted from someone else. When unsure, "other".
-- handled: true when someone else in the chat already answered them with something that fits their problem (an explanation, something to try, a question back about it, a pointer to a channel), or they said it works now or found the cause themselves ("nvm", "got it", "found it", "it was my VPN"). A line to the whole channel counts too: staff or a member saying where such problems go (#bug-reports, a thread), that the problem is known, or that a fix is out answers every author with that same problem in the chat shown. A wild guess ("maybe a VPN? idk"), a joke or "same here" is not an answer.
+- handled: true when someone else in the chat already answered them with something that fits their problem (an explanation, something to try, a question back about it, a pointer to a channel), or they said it works now or found the cause themselves ("nvm", "got it", "found it", "it was my VPN"). A line to the whole channel counts too: staff or a member saying where such problems go (#bug-reports, a thread), that the problem is known, or that a fix is out answers every author with that same problem in the chat shown. Staff asking them about it ("you can't continue?"), with or without Discord's reply, is an answer. A wild guess ("maybe a VPN? idk"), a joke or "same here" is not an answer.
 - fix: the id of a fix below when their problem is unmistakably that one: the page's code or its message, or exactly the case the fix names, is in their words or their picture. Else "". Never on a guess: a fix that does not fit is worse than none.
 - fix_text: when fix or answer is set and they don't write in English, its text in their language, nothing added or left out; else "".
 - answer: the id of an answer below when the author asks it themselves, as a question of their own (any kind, "other" too): exactly what the answer names. Not when they tell others how it works, give an opinion, show their car, answer or quote someone else, or ask about something near it that the answer does not cover. Else "".
 - need: what a forum post about it needs: "log" (a crash, freeze, glitch, lag, disconnect or anything else in the game; a glitch on screen, such as flicker or a screen that will not go on, too), "screenshot" (only a message or error code the page or the game shows), "saves" (only when their saves or profile are already gone or will not load, not a worry about losing them).
-- thread: when their problem is clearly the one an open forum thread in the list is about, that thread's id; else "". Judge by what the thread is about, not by words its title shares with theirs ("Black screen" may be a black world in free roam, not a game that won't open). It must be the same symptom at the same moment (on start, in a shop, after a race) and, when either names one, the same kind of device: a crash thread does not fit a black screen, a loading screen or a page message.
+- thread: when their problem is clearly the one an open forum thread in the list is about, that thread's id; else "". Judge by what the thread is about, not by words its title shares with theirs ("Black screen" may be a black world in free roam, not a game that won't open). It must be the same symptom at the same moment (on start, in a shop, after a race) and, when either names one, the same kind of device: a crash thread does not fit a black screen, a loading screen or a page message. An error code or a word alone ("134", "GPU-LOST", "crash", "controller") is no match without the moment, and "not working" is not "turns off".
 - lang: the language their own words are written in, as a two-letter code (en, pt, es, ru, tr, pl, fr, de, it, ...). Words in English are "en", whatever the letters of their name; never a guess from their name or the channel, nor from the language of a screenshot.
 
 Fixes:
@@ -299,8 +317,21 @@ export class General {
     const pointer = pointsToForum(m);
     const to = [m.mentions?.repliedUser?.id, ...(m.mentions?.users?.keys() ?? []), ...(pointer ? [m.author.id] : [])].filter(Boolean);
     const member = to[0] && to[0] !== m.author.id && to[0] !== this.client?.user?.id;   // to someone else, not the bot
-    if (staff || pointer) for (const id of to) { this.pending.delete(id); this.saved.nudged[id] = now; }
-    else if (member && this.pending.has(to[0])) {
+    if (staff || pointer) {
+      for (const id of to) { this.pending.delete(id); this.saved.nudged[id] = now; }
+      // a pointer to the whole channel, to nobody in particular ("black screen after the update? post in <thread>"):
+      // it answers everyone waiting for a pointer about the same kind of problem there.  The bot's generic pointer came
+      // on top of a member's bold line to the channel
+      if (pointer && to.length === 1 && to[0] === m.author.id && kinds.length) {
+        for (const [id, p] of this.pending) {
+          if (id === m.author.id || p.msgs[0].channelId !== m.channelId || now - p.last > BROADCAST_MS) continue;
+          const theirs = p.msgs.map(x => x.content ?? '').join('\n');
+          if (!kinds.some(k => KINDS[k].test(theirs))) continue;
+          this.pending.delete(id); this.saved.nudged[id] = now;
+          console.log(`[general] ${id}: a pointer to the channel about it, no pointer`);
+        }
+      }
+    } else if (member && this.pending.has(to[0])) {
       const p = this.pending.get(to[0]);
       p.helpers.add(m.author.id); p.last = now;
       if (p.helpers.size >= 2) this.talking(to[0], now);

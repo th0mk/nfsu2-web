@@ -35,14 +35,18 @@ const NAMES = new Intl.DisplayNames(['en'], { type: 'language' });
 const nameOf = lang => { try { return lang === 'pt' ? 'Brazilian Portuguese' : NAMES.of(lang) ?? lang; } catch { return lang; } };
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const HELP_ONLY = /^only in #help$/i;            // the topic of answers without a button (parse)
+const PROBLEM_MARK = '\u0001for-problems';       // a question's "for: problems" comment line, while parsing
 
 /** faq.md: "# Title", lines of intro, then "## Topic" groups of "### Question" with its answer below it.  A question's
  *  "label:" line names its button (else the question itself); its id is its label's slug, so an answer can change
- *  without the button changing.  The topic "## Only in #help" has no buttons: its answers are only for help.mjs
+ *  without the button changing.  A "for: problems" comment line under it marks an answer to something going wrong
+ *  (problem): #help answers a problem only with one of those.  The topic "## Only in #help" has no buttons: its answers are only for help.mjs
  *  (faq.extra), beside the posted ones, as Discord takes no more parts in the FAQ's message */
 export function parse(md) {
   const faq = { title: '', intro: [], topics: [], extra: [] };
   let topic = null, q = null;
+  // the problem mark is a comment of its own line, so a parser from before it (the image lags the pushed faq.md) drops it
+  md = md.replace(/^[ \t]*<!--\s*for:\s*problems?\s*-->[ \t]*$/gim, PROBLEM_MARK);
   for (const line of md.replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/)) {
     let m;
     if ((m = line.match(/^# (.+)/))) faq.title = m[1].trim();
@@ -55,6 +59,7 @@ export function parse(md) {
       if (!topic) faq.topics.push(topic = { name: '', questions: [] });
       topic.questions.push(q = { q: m[1].trim(), label: '', a: [] });
     } else if (q && !q.a.length && (m = line.match(/^label:\s*(.+)/i))) q.label = m[1].trim();
+    else if (line === PROBLEM_MARK) { if (q && !q.a.length) q.problem = true; }
     else if (q) q.a.push(line);
     else if (!topic) faq.intro.push(line);
   }

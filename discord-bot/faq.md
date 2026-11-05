@@ -2,6 +2,8 @@
 The FAQ the bot posts with /faq (faq.mjs). A push changes the posted message within minutes.
 "# " the title, the lines under it the intro; "## " a topic; "### " a question, its answer below it.
 "label:" right under a question names its button (80 characters at most); without one the question is the label.
+A comment line "for: problems" under it (an HTML comment, so the posted FAQ never shows it) marks an answer to
+something going wrong: #help answers a problem only with one of those.
 A button keeps working while its label stays the same. #channel-name becomes a link to that channel.
 Answers go to each reader in their Discord language (translated once, kept until the answer changes).
 The bot also replies with an answer in #help (help.mjs) when a question there asks exactly that: keep each one whole on its own.
@@ -15,6 +17,7 @@ Pick a question: only you see the answer, in your Discord language.
 ## Starting
 ### Which devices and browsers can run it?
 label: Devices and browsers
+<!-- for: problems -->
 - **PC and Mac:** Chrome or Edge (the most tested), Brave, Opera, Firefox, or Safari 26.
 - **Android:** Chrome. Firefox for Android can't run it.
 - **iPhone and iPad:** Safari on iOS 26 or iPadOS 26.
@@ -22,6 +25,7 @@ label: Devices and browsers
 
 ### The game won't start
 label: It won't start
+<!-- for: problems -->
 The start page says what is wrong, with a code. The most common:
 - `GPU-ACCEL-OFF`: turn on "Use graphics acceleration when available" in `chrome://settings/system`, then restart Chrome.
 - `PAGE-NOT-ISOLATED`: an extension changes the page. Try a guest window; if it starts there, turn your extensions off one by one.
@@ -33,6 +37,7 @@ It worked yesterday? Reload the page (Ctrl+F5 on a PC). Something else: post a s
 
 ### The site or the server can't be reached
 label: Can't connect
+<!-- for: problems -->
 Your network blocks it: the game works wherever Cloudflare does. Try mobile data to see whether it is your network.
 - **Spain:** providers block Cloudflare during LaLiga matches. It works again after the match.
 - **Kaspersky, other antivirus, NordVPN Threat Protection:** allow `nfsu2.xyz`, or turn the web filter off.
@@ -40,10 +45,12 @@ Your network blocks it: the game works wherever Cloudflare does. Try mobile data
 
 ### There's no sound on my iPhone
 label: No sound on iPhone
-Turn off Silent mode: the switch on the side, or on newer iPhones the Action button or Control Center. In Silent mode Safari plays no sound from a page.
+<!-- for: problems -->
+Reload the page: since 4 November the game plays its sound in Silent mode too. Other apps' music pauses while the game plays.
 
 ### The game runs slowly
 label: Low frame rate
+<!-- for: problems -->
 - **Laptop with a graphics card:** Windows Settings, System, Display, Graphics: set Chrome to **High performance**, then quit Chrome completely and start it again.
 - **Phone that stutters:** on the start page, Game, Display, **Frame rate** 30 is the steady choice.
 - Keep the game's tab in front, and close other heavy tabs.
@@ -57,6 +64,7 @@ Your saves are in this browser on this device, not on the server. To take them a
 
 ### My saves are gone
 label: Saves gone
+<!-- for: problems -->
 - Most often the browser deleted the site's data (some do when they close). In Chrome, allow nfsu2.xyz in `chrome://settings/content/siteData`.
 - Lost saves can't be brought back, unless you had cloud saves or a backup.
 - The game says "Unable to load" with your profile's name: the profile is there, but the game can't read it. Post it in #bug-reports with the log (F9, **Download log**).
@@ -68,11 +76,13 @@ Yes. Zip the folder `%LOCALAPPDATA%\NFS Underground 2` (type that into Explorer'
 
 ### My progress isn't saved
 label: Progress not saved
+<!-- for: problems -->
 A new profile starts on the game's Save = Prompt: its "save?" question opens on **No**, so tapping through skips the save. Pick **Yes** there, or set the game's Options, Gameplay, Save to **Autosave**. "Progress saved" shows over the game each time it saves.
 
 ## Career
 ### There are no races left on my map
 label: No races left
+<!-- for: problems -->
 1. Press **T** or **F4** (D-pad Down on a controller): Career Status says what the stage still needs.
 2. Most often it is your car's stars. A sponsor's DVD shoot only shows once your car has enough: add body kits, paint, vinyls, rims, neons, tint, hydraulics or audio.
 3. Still nothing? The game's hidden races only show on the street when you drive near. On the start page, Game, More game settings, **Show hidden races** puts them on the map.
@@ -109,6 +119,7 @@ label: Chat
 ## Controls
 ### My controller doesn't work
 label: Controller
+<!-- for: problems -->
 - Press a button on it with the game's page in front: the browser shows a pad only after that.
 - On the start page, Controls, More controller settings: set **Controller** to **On** or **Hotplug** (not **Off**).
 - Close Steam, DS4Windows and other pad software. Still nothing? Try Edge.
@@ -148,6 +159,16 @@ On the start page: Saves, **Restore**, and pick the file: a backup (a zip) or on
 ### How do I keep my online name?
 label: Claim your name
 On the start page, Online, **Your name**: press **Claim**. Until a name is claimed anyone can play as it. Claiming makes an 8-word passphrase that holds the name and your cloud saves: keep it safe. Someone claimed yours first? Pick another name.
+
+### I lost my cloud saves passphrase
+label: Lost passphrase
+<!-- for: problems -->
+Nobody can look it up for you. Look in your browser's saved passwords under nfsu2.xyz (user name "Cloud saves"): clearing the cache keeps them. A browser that still syncs has it on the start page, Saves, Cloud saves, with a button to download it. The passphrase that claimed your name is the same one.
+
+### My name got four digits, or someone took it
+label: Name with four digits
+<!-- for: problems -->
+Someone else claimed or was using your name, so you play as it with four digits at its end. A claimed name stays with the passphrase that claimed it: if that was you, enter that passphrase on the start page, Saves, Cloud saves (**Stop syncing** first if another one is in the box) and press **Load**. Never claimed it? Claim another name: start page, Online, **Your name**, **Claim**.
 
 ### How do I rename or delete a profile?
 label: Rename or delete a profile

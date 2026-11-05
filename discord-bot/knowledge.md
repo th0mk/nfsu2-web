@@ -72,6 +72,33 @@ The log is the most useful thing in a bug report. Say exactly how:
 - Saves and cloud saves: what happened, which browsers, whether cloud saves are on. Never ask for the passphrase.
 - Sound: browser and system, the output latency setting (start page, Game, More game settings), what is wrong (none, late, crackling).
 
+## The start page and the log, exactly (checked 2026-11-05: web/index.html, web/src/app/settings-ui.ts)
+
+Replies named settings that don't exist ("Settings, Display", "Resolution scale 50% or lower"), left a step out, or
+misread the log's numbers:
+
+- Tabs: **Saves, Online, Friends & crews, Game, Controls, Other**. There is no "Settings" tab, and the game's own
+  Options hold none of the page's settings. Game has two parts, Game and Display; Controls has Keyboard (Touch on a
+  touch screen), Controller and Site.
+- A setting behind its part's "More … settings" button needs that step said. Controller (On, Hotplug, Off), the dead
+  zones and Trigger full press: Controls, Controller, More controller settings. Show hidden races, sound output
+  latency: Game, More game settings. Menus, HUD and maps, Race HUD, the frame-rate counter: Game, Display, More display
+  settings. The Controller part shows the buttons' layout, not the pad's name.
+- Resolution scale: 50%, 75%, 100%, 150%, 200%. 50% is the lowest (a quarter of the pixels); phones start at 75%.
+- Frame rate: Auto, 30, 60, 120, 240. Auto picks one of those from the screen's refresh rate (240 from 239 Hz, 120
+  from 119 Hz, 30 at 31 Hz or less, else 60; runtime/framerate.c). A 75 Hz screen gets 60 and a 144-165 Hz one 120,
+  and neither spaces those evenly: some frames show twice. No page setting matches such a screen exactly; Auto does not
+  "follow the screen" there.
+- Cloud saves while the browser syncs: the passphrase box is read-only and Load is hidden. To load another passphrase:
+  Stop syncing first (the saves stay), then paste it and press Load.
+- The page's menu in the game: F9 on a keyboard, Home on a controller, the ☰ button on a touch screen.
+- Frame rate in a log: the frames of a status line divided by its seconds is the real rate; compare it with the limit.
+  "GPU done" runs from a frame's submit to its finish, frames in flight included: high while the frame rate is full is
+  no slow GPU.
+- `[gpu] device lost: … A valid external Instance reference no longer exists` is Chrome's (Dawn's) general text for a
+  lost device, on every vendor: no match by itself. What comes before it (a GPU slowing down, canvas resizes, a driver
+  hang) tells the cases apart.
+
 ## Answers that keep coming up
 
 Checked against the guide or the code, and confirmed by players in threads:
@@ -240,10 +267,10 @@ Checked against the guide or the code, and confirmed by players in threads:
   head and what is in front of the player, which turned with every donut. Since 5 November (pending release) a player
   standing or rolling slowly gets the cars within 60 m first, and a car that came that near stays at least 30 s. A
   player's F9 log says why each car went ("car removed (...: the server: ...)", "car hidden (...)").
-- No sound at all on an iPhone, while the log's sound is fine: Silent mode is on, and Safari plays no page sound in
-  it. Turn it off (the switch on the side; on newer iPhones the Action button or Control Center). Posters confirmed it.
-  Since 4 November (pending release) the page plays its sound in Silent mode too (Safari's audio session "playback",
-  as a video plays; other apps' music pauses while the game plays): then a reload of the page is the answer.
+- No sound at all on an iPhone: the page played no sound in Silent mode until the release of 4 November (17:02 UTC,
+  c75e4c62). Since then it plays as a video does (Safari's audio session "playback"), Silent mode or not: a page
+  loaded before that needs a reload (Ctrl+F5 is a PC's: on the iPhone, reload the page). A side effect players
+  noticed: other apps' music (Apple Music, Spotify) pauses while the game plays; no setting lets both play.
 - "Error code 1" seconds after Play: the game's program file did not load, and the log says why. `HTTP 403` for it:
   a network or filter blocks it (another network, or allow nfsu2.xyz). `no PE signature`: the browser's copy is
   damaged: start page, Other, Delete game data, reload (Ctrl+F5), Play; saves stay (a poster confirmed it).
@@ -497,8 +524,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
 - No WebGPU, no game: Firefox for Android (play in Chrome), Samsung TV browsers, Windows PCs without Direct3D 12
   (Intel HD 4000, 4400, 4600 and older; NVIDIA cards whose last driver is 391.35, such as older GT 730s: Chrome offers them only
   its D3D11 backend). Chrome on Linux needs the Vulkan driver. Players report that the Xbox's browser does not run it
-  either.
-- CPUs without SSE4.1 (AMD Phenom II and older): browsers turn WebAssembly SIMD off ("WebAssembly SIMD unsupported";
+  either. Windows 7 and 8 (and older): their last Chrome (109) and Firefox (115 ESR) came before WebGPU.
+- CPUs without SSE4.1 (AMD Phenom II, Athlon II, the A4/A6/A8-3000 series "Llano", E- and C-series "Bobcat"; Intel
+  Core 2 before Penryn; other AMD A4 models have it): browsers turn WebAssembly SIMD off ("WebAssembly SIMD unsupported";
   Firefox: "v128 not enabled"), and the game is built with it. No build without it.
 - Samsung Xclipse graphics (some Galaxy phones; `GPU-ADAPTER-ANDROID`, chrome://gpu says "Limited support / testing
   currently available on Android"): Chrome blocklists them, and chrome://flags/#enable-unsafe-webgpu, then restarting
@@ -512,7 +540,8 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   function"; the page now says `STORAGE-OLD` there. It still can't run there. Say it once; don't change that answer
   later in the thread.
 - iPhone: a web page cannot go full screen. Adding the page to the Home Screen (Share menu) opens it without the
-  browser's bars. That copy has its own saves: cloud saves bring them over. Only controllers iOS knows (Xbox,
+  browser's bars. That copy has its own saves: cloud saves bring them over. Only on an iPhone or iPad: an app added
+  from Chrome on Android or a PC shares the browser's saves. Only controllers iOS knows (Xbox,
   PlayStation, Switch, MFi) reach the page.
 - Wheels: no force feedback in any browser; the clutch does nothing (the game has none).
 - Stuttering cars in races with other players: the game's updates go through the player who created the race (the
