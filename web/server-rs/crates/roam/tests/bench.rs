@@ -74,7 +74,9 @@ fn bench_with(
             let (c, room) = (crews(i), if rooms > 1 { 1 + i % rooms } else { 0 });
             let crews = (!c.is_empty()).then_some(&c[..]);
             let name = format!("p{i}");
-            let core = if links > 0 { 14 } else { 2 };
+            // (BENCH_CORE=15: one-way links; links 1: the live mix, 60 % 32, 10 % 24, 20 % 16, 5 % 48, 5 % 64)
+            let core = std::env::var("BENCH_CORE").ok().and_then(|v| v.parse().ok()).unwrap_or(if links > 0 { 14 } else { 2 });
+            let links = if links == 1 { [32u8, 32, 32, 32, 32, 32, 24, 16, 16, 48, 64, 32][i as usize % 12] } else { links };
             frame(vip(i), &hello_with(1000 + i, &HelloOpts { core, room, crews, name: name.as_bytes(), links, ..Default::default() }))
         })
         .collect();
@@ -205,6 +207,16 @@ fn bench_links_32_48_64() {
         bench_links(&format!("3000 players in one room of 1 km, 15 m/s, {links} links"), 3000, 1, 1000.0, 15.0, links);
         bench_links(&format!("2000 players on one spot of 10 m, {links} links"), 2000, 1, 10.0, 0.5, links);
     }
+}
+
+/// one-way links' cost (run with BENCH_CORE=15, and without for the links of before): the live mix of links
+#[test]
+#[ignore]
+fn bench_oneway() {
+    bench_links("3000 players in one room of 4 km, 15 m/s, the live mix", 3000, 1, 4000.0, 15.0, 1);
+    bench_links("3000 players in one room of 1 km, 15 m/s, the live mix", 3000, 1, 1000.0, 15.0, 1);
+    bench_links("2000 players on one spot of 10 m, the live mix", 2000, 1, 10.0, 0.5, 1);
+    bench_links("12000 players in one room of 4 km, 15 m/s, the live mix", 12000, 1, 4000.0, 15.0, 1);
 }
 
 #[test]
