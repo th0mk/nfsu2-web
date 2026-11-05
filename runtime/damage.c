@@ -30,7 +30,8 @@
  * so the windows crack as the game cracks them and a broken lamp only goes dark.  The game's own repair (SetDamageToZero: a race's start, the
  * garage) takes the damage away.
  * In free roam friends see the player's damage (RC_EXT_DAMAGE in the car record, roam_game.c): the player's dents
- * are published (damage_net_*), and a friend's car gets the dents its player's record has.
+ * are published (damage_net_*), and a friend's car gets the dents its player's record has, within limits that keep
+ * any other player's records from slowing this game down or filling its memory (damagecore.cpp's free roam part).
  *   Off unless NFSU2_DAMAGE=1 (the start page's Crash damage, off by default); NFSU2_DAMAGE_LOG=1 logs every
  *   impact. */
 #include "cpu.h"
@@ -43,6 +44,7 @@ void sub_005a0b00_orig(CPU *c);   /* CarCollisionBody::ApplyImpulse */
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
 uint32_t gheap_alloc(int heap, uint32_t n, int zero);
 void gheap_free(int heap, uint32_t p);
+uint32_t gheap_va_free(void);
 
 /* damagecore.cpp */
 int  dmg_init(void);
@@ -109,6 +111,7 @@ float dmg_thiscall_f(uint32_t fn, uint32_t self, int n, const uint32_t *a){
 uint32_t dmg_alloc(uint32_t n){ return gheap_alloc(1, n, 1); }
 void dmg_free(uint32_t p){ gheap_free(1, p); }
 int dmg_committed(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
+uint32_t dmg_va_free(void){ return gheap_va_free(); }
 
 /* ---- overrides ------------------------------------------------------------ */
 /* CarRenderInfo::Render (0x620AE0), before the game's: showoff.c overrides it and calls this first */

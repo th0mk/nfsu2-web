@@ -4587,7 +4587,8 @@ static void showoff_peers(CPU *c){
     }
 }
 /* friends' crash damage (damage.c): each shown car gets the dents its player's record has; damage.c makes only those it
- * has not made yet (one car's a frame), and takes them off a car that goes to another player */
+ * has not made yet (a few a frame, the nearest cars', within limits: damagecore.cpp), and takes them off a car that goes
+ * to another player */
 static void damage_peers(CPU *c){
     for (int k = 0; k < NSLOT; k++){
         const Slot *s = &g_sl[k];

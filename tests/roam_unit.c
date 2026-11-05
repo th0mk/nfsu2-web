@@ -386,6 +386,32 @@ static void t_roundtrip(void){
       cp.n_parts = RC_PART_SLOTS; cp.dmg_n = RC_DMG_MAX; n2 = rc_carcfg_encode(&cp, r2, sizeof r2);
       CHECK(n2 > 0 && n2 <= RC_CFG_MAX && rc_carcfg_decode(r2, n2, &d2) == RC_OK && d2.dmg_n > 0 &&
             d2.dmg_first == 100 + RC_DMG_MAX - d2.dmg_n, "a full record keeps the newest %d dents", d2.dmg_n); }
+    /* damage extensions no core of ours writes (another player's game may): a short one refuses the record, the rest
+     * are read only as far as they follow the rules (RC_DMG_MAX dents, one epoch, the numbers in a row) */
+    { rc_carcfg cp = cc, d2; cp.n_parts = 2;
+      uint8_t r2[RC_CFG_MAX]; const int base = rc_carcfg_encode(&cp, r2, sizeof r2);   /* its last byte: 0 extensions */
+      int at;
+      #define DMG_EXT(epoch, first, nd) do { r2[at++] = RC_EXT_DAMAGE; r2[at++] = (uint8_t)(3 + (nd) * RC_DMG_BYTES); \
+          r2[at++] = (uint8_t)(epoch); r2[at++] = (uint8_t)((first) & 0xff); r2[at++] = (uint8_t)((first) >> 8); \
+          for (int q = 0; q < (nd) * RC_DMG_BYTES; q++) r2[at++] = (uint8_t)(q * 31 + 7); } while (0)
+      at = base; r2[base - 1] = 1; DMG_EXT(5, 0, RC_DMG_CHUNK);
+      CHECK(rc_carcfg_decode(r2, at - 100, &d2) == RC_E_SHORT, "a cut damage extension refuses the record");
+      at = base; r2[base - 1] = 1; r2[at++] = RC_EXT_DAMAGE; r2[at++] = 3 + 5; for (int q = 0; q < 8; q++) r2[at++] = 1;
+      CHECK(rc_carcfg_decode(r2, at, &d2) == RC_OK && d2.dmg_n == 0, "a damage extension of a length no dents fill: skipped");
+      at = base; r2[base - 1] = 4;
+      for (int k = 0; k < 4; k++) DMG_EXT(9, 10 + k * RC_DMG_CHUNK, RC_DMG_CHUNK);
+      CHECK(rc_carcfg_decode(r2, at, &d2) == RC_OK && d2.dmg_n == RC_DMG_MAX && d2.dmg_epoch == 9 && d2.dmg_first == 10,
+            "88 dents: the first %d read, the rest skipped (%d)", RC_DMG_MAX, d2.dmg_n);
+      at = base; r2[base - 1] = 3; DMG_EXT(9, 10, 4); DMG_EXT(8, 14, 4); DMG_EXT(9, 20, 4);
+      CHECK(rc_carcfg_decode(r2, at, &d2) == RC_OK && d2.dmg_n == 4 && d2.dmg_epoch == 9,
+            "a damage extension of another epoch, or not next in the numbers: skipped (%d)", d2.dmg_n);
+      at = base; r2[base - 1] = 2; DMG_EXT(3, 0, 0); DMG_EXT(4, 65535, 2);
+      CHECK(rc_carcfg_decode(r2, at, &d2) == RC_OK && d2.dmg_n == 2 && d2.dmg_epoch == 4 && d2.dmg_first == 65535,
+            "an empty damage extension, then dents from the last number: read (%d)", d2.dmg_n);
+      at = base; r2[base - 1] = 200; DMG_EXT(1, 0, 1);
+      CHECK(rc_carcfg_decode(r2, at, &d2) == RC_E_SHORT, "more extensions counted than there are: refused");
+      #undef DMG_EXT
+    }
     CHECK(rc_carcfg_decode(rec, n, &c2) == RC_OK && c2.type_hash == cc.type_hash && !strcmp(c2.type_name, "350Z") && c2.n_parts == RC_PART_SLOTS &&
           !memcmp(c2.part, cc.part, sizeof cc.part), "car record round trip");
     /* record: version 1, type hash 4, name 16, ride bytes 4, count 1 = 26, then 9 per part */

@@ -45,6 +45,7 @@ float dmg_thiscall_f(uint32_t fn, uint32_t self, int n, const uint32_t* a);   //
 uint32_t dmg_alloc(uint32_t n);
 void dmg_free(uint32_t p);
 int dmg_committed(uint32_t a, uint32_t n);
+uint32_t dmg_va_free(void);                    // the guest address space still free, bytes
 extern const unsigned char dmg_scratches[];   // damage.c: runtime/damage/scratches.tpk
 extern const unsigned dmg_scratches_len;
 }
@@ -570,6 +571,7 @@ struct MarkerDrawn {
 };
 std::unordered_map<void*, std::vector<MarkerDrawn>> g_markerDraws;
 std::vector<Clone*> g_retired;
+int g_cloneFails = 0;   // clones that found no memory or buffers (a friend's car's damage is given up at one)
 uint32_t g_lastFrame = 0xFFFFFFFF;
 uint32_t g_lastWorldTime = 0;
 
@@ -1007,6 +1009,7 @@ Clone* MakeClone(uint8_t* model, void* renderInfo, int slot, int row, int lod, i
         !(c->vb = R32(g_out)) ||
         Com(device, kDevCreateIB, {ibBytes, 0, kFmtIndex16, kPoolManaged, g_out, 0}) != 0 || !(c->ib = R32(g_out))) {
         Log("slot %d: no memory or buffers for its clone", slot);
+        g_cloneFails++;
         Free(c);
         return nullptr;
     }
@@ -1333,6 +1336,59 @@ void EnsureClones(void* renderInfo) {
         }
         if (At<uint8_t*>(d.model, kModelSolid)) MakeClone(d.model, renderInfo, d.slot, d.row, 0, d.index, &d.place);
     }
+}
+
+// EnsureClones a part at a time (a friend's car, within the frame's budget): `more()` says whether another part may be
+// cloned now; `at` is where the next call goes on (the parts in ForEachPartModel's order, then the marker draws), so
+// a part that cannot be cloned is tried once. False while parts are left.
+template <typename More>
+bool CloneSome(void* renderInfo, int& at, More more) {
+    const auto cloned = [&](uint8_t* model, int instance) {
+        auto it = g_clones.find(CloneKey(model, instance));
+        return it != g_clones.end() && Live(it->second) && it->second->renderInfo == renderInfo;
+    };
+    int i = 0;
+    bool stop = false;
+    ForEachPartModel(renderInfo, [&](uint8_t* model, int slot, int row, int lod) {
+        const int me = i++;
+        if (stop || me < at) return;
+        if (!cloned(model, -1)) {
+            if (!more()) {
+                stop = true;
+                return;
+            }
+            CloneFor(model, renderInfo, slot, row, lod);
+        }
+        at = me + 1;
+    });
+    if (stop) return false;
+    auto drawn = g_markerDraws.find(renderInfo);
+    if (drawn == g_markerDraws.end()) return true;
+    uint8_t** table = (uint8_t**)((uint8_t*)renderInfo + kCriModels);
+    for (const MarkerDrawn& d : drawn->second) {
+        const int me = i++;
+        if (me < at) continue;
+        if (table[d.slot * 8 + d.row * 4] == d.model && !cloned(d.model, d.index)) {
+            if (!more()) return false;
+            auto it = g_clones.find(CloneKey(d.model, d.index));
+            if (it != g_clones.end()) Retire(it->second, false);
+            if (At<uint8_t*>(d.model, kModelSolid)) MakeClone(d.model, renderInfo, d.slot, d.row, 0, d.index, &d.place);
+        }
+        at = me + 1;
+    }
+    return true;
+}
+
+// The car's parts refined ahead (Prewarm), so that their clones are quick to make.
+bool PrewarmDone(void* renderInfo) {
+    bool done = true;
+    ForEachPartModel(renderInfo, [&](uint8_t* model, int, int, int lod) {
+        if (!done || lod >= g_settings.tessellateLods) return;
+        auto known = g_prewarmed.find(At<uint8_t*>(model, kModelSolid));
+        auto job = known == g_prewarmed.end() ? g_tessCache.end() : g_tessCache.find(known->second.key);
+        done = job != g_tessCache.end() && job->second.done;
+    });
+    return done;
 }
 
 int DentCar(void* renderInfo, const CarState& car, const Dent& dent) {
@@ -2005,6 +2061,9 @@ void BendWheels(void* renderInfo, uint32_t args) {
 // ---------------------------------------------------------------------------------------------------------
 // Once a frame (the first car render of the frame)
 
+constexpr int kNetSlots = 64;   // roam_game.c's slots of friends' cars
+int NetHeld(void* held[kNetSlots]);   // free roam (below): friends' cars whose dents are being made
+
 void OnFrame() {
     const uint32_t frame = Frame();
     if (frame == g_lastFrame) return;
@@ -2069,9 +2128,16 @@ void OnFrame() {
         }
     }
 
+    // A friend's car whose dents are being made (a few a frame) is drawn as it was until they are all made.
+    void* held[kNetSlots];
+    const int nheld = NetHeld(held);
     for (auto& kv : g_clones) {
-        if (kv.second->overlayDirty) RebuildOverlay(kv.second);
-        if (kv.second->dirty) Upload(kv.second);
+        Clone* c = kv.second;
+        bool hold = false;
+        for (int k = 0; k < nheld && !hold; k++) hold = c->renderInfo == held[k];
+        if (hold) continue;
+        if (c->overlayDirty) RebuildOverlay(c);
+        if (c->dirty) Upload(c);
     }
 }
 
@@ -2111,8 +2177,20 @@ int NextDrawIndex(void* model) {
 // log is published (a new revision, which roam_game.c puts in the record) at most every 1.5 s, 0.4 s after the last
 // dent: a crash's burst of contacts is one record. A repair, or another car, starts a new epoch. A friend's car gets
 // the dents its player's record has through the same steps as an impact here (dents, loose and lost parts, lights,
-// wheels, the scratches around the dent), only the ones not made yet, one car's a frame; when its parts are rebuilt
-// (or the game repairs it) they are made again from the first. Impacts on a friend's car here make nothing: theirs do.
+// wheels, the scratches around the dent), only the ones not made yet; when its parts are rebuilt (or the game repairs
+// it) they are made again from the first. Impacts on a friend's car here make nothing: theirs do.
+//
+// What another player's records can make this game do is kept within limits (any record may come from a game that
+// does not keep to the rules above):
+//  - the dents are made a few a frame, kNetMsPerFrame across all cars (one at least), the batch with the fewest left
+//    first; the car is drawn as it was until its batch is done;
+//  - a car's damage is made anew at most every kNetEveryMs (a crash's record comes no more often), its repair (a new
+//    epoch) at most every kNetRepairMs: what came in between waits, and the record then is made (the latest);
+//  - only the kNetCars nearest friends' cars with damage show it (and kNetKeep more that have it already), and no
+//    new one while the guest address space has less than kNetVaReserve free (the game's own cars and world come
+//    first); a car whose clones found no memory is left undamaged for kNetFailMs;
+//  - a dent no crash makes is not made: no push, or outside any car's body; the depth at most a hit's, the strength
+//    (the scratches) at most the one its depth came from.
 
 namespace {
 
@@ -2133,6 +2211,20 @@ struct NetMine {
     std::vector<NetDent> pub;
 } g_mine;
 
+constexpr double kNetMsPerFrame = 2.0;          // friends' dents made per frame, all cars (one dent at least)
+constexpr double kNetEveryMs = 1500.0;          // a car's damage made anew at most this often
+constexpr double kNetRepairMs = 4000.0;         // a car's repair (a new epoch) taken at most this often
+constexpr int kNetCars = 8;                     // friends' cars that show their damage, the nearest,
+constexpr int kNetKeep = 4;                     // and this many more that have it already (the cars move about)
+constexpr uint32_t kNetVaReserve = 128u << 20;  // guest address space left to the game: no new clones below it,
+constexpr uint32_t kNetVaLow = 64u << 20;       // and below this the farthest friend's car's damage goes (a second)
+constexpr double kNetFailMs = 30000.0;          // a car whose clones found no memory: undamaged for this long
+constexpr double kNetPrewarmMs = 5000.0;        // its parts refined ahead first, for at most this long
+constexpr double kNetFarMs = 3000.0;            // a car no longer among the nearest (or not shown) keeps its damage this long
+// The box a car's body is within, in its space (the game's largest car, with room): a dent's point outside it, or a
+// push of no direction, is no crash's.
+constexpr float kNetReachX = 3.5f, kNetReachY = 1.6f, kNetLowZ = -0.5f, kNetHighZ = 2.8f;
+
 struct NetSlot {
     uint32_t car = 0, peer = 0;
     void* renderInfo = nullptr;
@@ -2140,10 +2232,29 @@ struct NetSlot {
     uint32_t next = 0;            // the first dent not made yet
     bool any = false;             // dents made on the car
     uint32_t seen = 0;            // frame the slot last had this car
+    int dents = 0;                // the dents its record has
+    float dist = 0;               // from the player's car
+    bool near = false;            // among the kNetCars nearest with damage
+    // a batch: the dents up to `end` (the record's when it began), a few a frame
+    bool busy = false, ready = false;   // ready: the car's parts are refined ahead (or it had clones)
+    uint32_t end = 0, from = 0;
+    int cloneAt = 0;                    // CloneSome's place
+    int frames = 0, dropped = 0;
+    double work = 0, dentMs = 1.5;      // the batch's time, and a dent's (an average) for the budget
+    double batchAt = -1e9, repairAt = -1e9, waitAt = 0, failUntil = 0, farSince = 0;
+    bool noteWait = false, noteRoom = false, noteBad = false;   // logged once a car
+    int waitedEpoch = -1;               // the last repair that waited (counted once)
 };
-constexpr int kNetSlots = 64;
 NetSlot g_netSlots[kNetSlots];
-uint32_t g_netBusy = 0xFFFFFFFF;  // frame a car's dents were made last (one car's a frame)
+uint32_t g_netFrame = 0xFFFFFFFF;   // the frame g_netSpent is of
+double g_netSpent = 0;              // ms of the frame's budget used
+int g_netSteps = 0;                 // steps (a dent, a clone) made this frame
+int g_netBest = -1;                 // the slot whose batch goes first this frame (-1: whichever comes)
+struct NetStats {                   // logged every 30 s when there was any
+    int batches = 0, stopped = 0, dents = 0, dropped = 0, repairs = 0, waited = 0;
+    double ms = 0, worst = 0;       // the work, and the most of it in one frame
+} g_netStats;
+double g_netStatsAt = 0;
 
 // Player 1's car: Player* +4. The players' table is the game's 0x8900AC, which the browser build moves for split screen
 // (splitscreen_mem.h): read where the game's code reads it.
@@ -2158,6 +2269,22 @@ bool IsRemote(uint32_t car) {
     for (const NetSlot& s : g_netSlots)
         if (s.car == car && Frame() - s.seen < 120) return true;
     return false;
+}
+
+// A friend's car that is to show damage: its parts are refined ahead (only those: the others never need it).
+bool NetWants(uint32_t car) {
+    const NetSlot* now = nullptr;   // the slot that had the car last
+    for (const NetSlot& s : g_netSlots)
+        if (s.car == car && Frame() - s.seen < 120 && (!now || s.seen > now->seen)) now = &s;
+    return now && now->near && now->dents > 0 && NowMs() >= now->failUntil;
+}
+
+// The friends' cars whose batch is under way: drawn as they were until it is done (OnFrame).
+int NetHeld(void* held[kNetSlots]) {
+    int n = 0;
+    for (const NetSlot& s : g_netSlots)
+        if (s.busy && s.renderInfo && Frame() - s.seen <= 2) held[n++] = s.renderInfo;
+    return n;
 }
 
 void EncodeDent(const Dent& d, float magnitude, NetDent& o) {
@@ -2178,6 +2305,23 @@ void DecodeDent(const uint8_t* b, Dent& d, float& magnitude) {
     d.direction = Normalize(Vec3{(int8_t)b[6] / 127.0f, (int8_t)b[7] / 127.0f, (int8_t)b[8] / 127.0f});
     d.depth = b[9] * RC_DMG_DEPTH / 255.0f;
     magnitude = b[10];
+}
+// A dent of a friend's record, as a crash here would make it; false for one no crash makes (not made).
+bool NetDecode(const uint8_t* b, Dent& d, float& magnitude) {
+    const int px = (int8_t)b[6], py = (int8_t)b[7], pz = (int8_t)b[8];
+    if (px * px + py * py + pz * pz < 64 * 64) return false;   // a push is a unit vector (x 127)
+    DecodeDent(b, d, magnitude);
+    if (!(fabsf(d.point.x) <= kNetReachX && fabsf(d.point.y) <= kNetReachY && d.point.z >= kNetLowZ &&
+          d.point.z <= kNetHighZ))
+        return false;
+    const Settings& st = g_settings;
+    if (d.depth > st.maxDepthPerHit) d.depth = st.maxDepthPerHit;
+    // Below the most one hit makes, the depth follows from the strength (dmg_impulse): the strength no more than that.
+    if (d.depth < st.maxDepthPerHit - 0.002f) {
+        const float most = st.impulseThreshold + d.depth / st.depthPerImpulse + 1.0f;
+        if (magnitude > most) magnitude = most;
+    }
+    return true;
 }
 
 void NetReset(void* renderInfo) {
@@ -2247,6 +2391,90 @@ void ApplyNetDent(void* renderInfo, uint8_t* car, const Dent& dent, float magnit
     }
 }
 
+// The slot's damage taken off its car (made again from its first dent when it may be). A car that went has nothing
+// to put back: its clones are no longer live, and OnFrame lets them go.
+void NetDrop(NetSlot& s) {
+    if (s.renderInfo && CarHas(G(s.car), s.renderInfo)) RepairRenderInfo(s.renderInfo);
+    s.any = s.busy = false;
+    s.next = 0;
+}
+
+// Once a frame, at its first slot: the frame's budget, the nearest cars with damage, the batch that goes first, and
+// the farthest car's damage let go while the address space is short.
+void NetBeginFrame(double now) {
+    if (g_netFrame == Frame()) return;
+    g_netFrame = Frame();
+    NetStats& st = g_netStats;
+    if (g_netSpent > st.worst) st.worst = g_netSpent;
+    if (now - g_netStatsAt >= 30000.0) {
+        if (st.batches || st.stopped || st.dents || st.dropped || st.repairs || st.waited)
+            Log("free roam: friends' damage in %.0f s: %d batches made, %d stopped (a repair, or the car went), %d dents "
+                "made, %d no crash makes left out, %d repairs, %d changes waited; %.0f ms of work, at most %.2f ms in a "
+                "frame", (now - g_netStatsAt) / 1000.0, st.batches, st.stopped, st.dents, st.dropped, st.repairs,
+                st.waited, st.ms, st.worst);
+        st = NetStats{};
+        g_netStatsAt = now;
+    }
+    g_netSpent = 0;
+    g_netSteps = 0;
+    int order[kNetSlots], n = 0;
+    for (int k = 0; k < kNetSlots; k++) {
+        NetSlot& s = g_netSlots[k];
+        s.near = false;
+        if (s.car && Frame() - s.seen <= 2 && s.dents > 0 && now >= s.failUntil) order[n++] = k;
+    }
+    for (int i = 1; i < n; i++)   // nearest first
+        for (int j = i; j > 0 && g_netSlots[order[j]].dist < g_netSlots[order[j - 1]].dist; j--) {
+            const int t = order[j];
+            order[j] = order[j - 1], order[j - 1] = t;
+        }
+    for (int i = 0; i < n; i++) {
+        NetSlot& s = g_netSlots[order[i]];
+        s.near = i < kNetCars || (i < kNetCars + kNetKeep && (s.any || s.busy));   // a car made stays further out
+    }
+    for (NetSlot& s : g_netSlots) {   // a car no longer among the nearest, or not shown: its damage off after a while
+        if (s.near || !(s.any || s.busy)) {
+            s.farSince = 0;
+            continue;
+        }
+        if (!s.farSince) s.farSince = now;
+        if (now - s.farSince < kNetFarMs) continue;
+        NetDrop(s);
+        s.farSince = 0;
+    }
+    // The batch with the fewest dents left goes first (a crash's few before a whole car's), then the nearest.
+    g_netBest = -1;
+    uint32_t bestLeft = 0xFFFFFFFF;
+    float bestDist = 0;
+    for (int k = 0; k < kNetSlots; k++) {
+        const NetSlot& s = g_netSlots[k];
+        if (!s.busy || !s.ready || Frame() - s.seen > 2) continue;
+        const uint32_t left = s.end > s.next ? s.end - s.next : 0;
+        if (left < bestLeft || (left == bestLeft && s.dist < bestDist)) g_netBest = k, bestLeft = left, bestDist = s.dist;
+    }
+    static double lastLow = 0;
+    if (now - lastLow < 1000.0) return;
+    lastLow = now;
+    const uint32_t room = dmg_va_free();
+    if (room >= kNetVaLow) return;
+    int far = -1;
+    for (int k = 0; k < kNetSlots; k++) {
+        const NetSlot& s = g_netSlots[k];
+        if ((s.any || s.busy) && (far < 0 || s.dist > g_netSlots[far].dist)) far = k;
+    }
+    if (far < 0) return;
+    NetSlot& s = g_netSlots[far];
+    Log("free roam: friend's car %08X: its damage taken off (%u MB of address space free)", s.car, room >> 20);
+    NetDrop(s);
+    s.failUntil = now + kNetFailMs;
+}
+
+// The frame's budget for friends' dents: whether another step of about `est` ms fits (the frame's first always does).
+bool NetMore(double t0, double est) {
+    if (g_netSteps++ == 0) return true;
+    return g_netSpent + (NowMs() - t0) + est <= kNetMsPerFrame;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------------------
@@ -2267,9 +2495,11 @@ extern "C" void dmg_render_entry(uint32_t cri, uint32_t args) {
     if (!dmg_committed(cri, kCriModels + 63 * 8 * 4)) return;
     OnFrame();
     BendWheels(renderInfo, args);
-    // A racer (it owns a CarDamage) gets its parts refined ahead of its first impact.
+    // A racer (it owns a CarDamage) gets its parts refined ahead of its first impact; a friend's car (free roam) when it
+    // is to show the damage its record has.
     if (uint8_t* car = At<uint8_t*>(renderInfo, kCriCar))
-        if (CarHas(car, renderInfo) && (At<void*>(car, kCarDamage) || IsRemote(A(car)))) Prewarm(renderInfo);
+        if (CarHas(car, renderInfo) && (IsRemote(A(car)) ? NetWants(A(car)) : At<void*>(car, kCarDamage) != nullptr))
+            Prewarm(renderInfo);
     g_drawCar = renderInfo;
     g_bodyKnown = false;
     g_drawCountUsed = 0;
@@ -2523,34 +2753,135 @@ extern "C" int dmg_net_mine(uint8_t* epoch, uint16_t* first, uint8_t* dents, int
 
 extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t first, int n, const uint8_t* dents) {
     if (k < 0 || k >= kNetSlots) return;
+    const double now = NowMs();
+    NetBeginFrame(now);
     NetSlot& s = g_netSlots[k];
-    if (!car || !dmg_committed(car, kCarRenderInfo + 4)) return;   // not shown now: kept as it is
+    struct Turn {   // the slot whose batch was to go first and made nothing: the frame's budget to another
+        int k;
+        bool used = false;
+        ~Turn() {
+            if (!used && g_netBest == k) g_netBest = -1;
+        }
+    } turn{k};
+    if (!car || !dmg_committed(car, kCarRenderInfo + 4)) return;   // not shown now: kept as it is (for a while)
     void* renderInfo = At<void*>(G(car), kCarRenderInfo);
     if (!renderInfo || !dmg_committed(A(renderInfo), kCriModels + 63 * 8 * 4)) return;
     s.seen = Frame();
     // another car or another player in the slot: the old one's damage off it (a parked car is reused)
     if (car != s.car || peer != s.peer || renderInfo != s.renderInfo) {
-        if (s.any && s.renderInfo && g_cars.count(s.renderInfo) && CarHas(G(s.car), s.renderInfo)) RepairRenderInfo(s.renderInfo);
+        NetDrop(s);
         s = NetSlot{};
         s.car = car, s.peer = peer, s.renderInfo = renderInfo, s.epoch = epoch, s.seen = Frame();
     }
-    if (epoch != s.epoch) {   // the friend's car was repaired
-        if (s.any && g_cars.count(renderInfo)) RepairRenderInfo(renderInfo);
-        s.epoch = epoch, s.next = 0, s.any = false;
+    n = n < 0 ? 0 : n > RC_DMG_MAX ? RC_DMG_MAX : n;
+    s.dents = n;
+    uint8_t* rigid = world::RigidOf(G(car));
+    uint8_t* mine = world::RigidOf(PlayerCar());
+    s.dist = rigid && mine && dmg_committed(A(rigid) + world::kRigidPosition, 12) &&
+                     dmg_committed(A(mine) + world::kRigidPosition, 12)
+                 ? Length(At<Vec3>(rigid, world::kRigidPosition) - At<Vec3>(mine, world::kRigidPosition))
+                 : 0.0f;
+    if (now < s.failUntil) return;
+    const auto wait = [&] {   // a change sooner than a crash's next record: made when it may be, as it is then
+        if (s.waitedEpoch != epoch) g_netStats.waited++;
+        s.waitedEpoch = epoch;
+        if (!s.noteWait)
+            Log("free roam: friend's car %08X: a change of its damage waits (made at most every %.1f s, a repair every "
+                "%.0f s)", car, kNetEveryMs / 1000.0, kNetRepairMs / 1000.0);
+        s.noteWait = true;
+    };
+    if (epoch != s.epoch) {   // the friend's car was repaired: the car as it is till the repair may be taken
+        if (now - s.repairAt < kNetRepairMs) {
+            if (s.busy) s.busy = false, s.any = s.any || s.next > s.from, g_netStats.stopped++;
+            wait();
+            return;
+        }
+        s.repairAt = now;
+        NetDrop(s);
+        s.epoch = epoch;
+        g_netStats.repairs++;
     }
-    if (s.any && !g_cars.count(renderInfo)) s.next = 0, s.any = false;   // rebuilt or repaired here: again from the first
+    if (s.any && !s.busy && !g_cars.count(renderInfo)) s.next = 0, s.any = false;   // rebuilt or repaired here: again from the first
+    if (!s.near) {   // not among the nearest: none made (NetBeginFrame takes what it has off after a while)
+        if (s.busy) s.busy = false, s.any = s.any || s.next > s.from, g_netStats.stopped++;
+        return;
+    }
     const uint32_t last = (uint32_t)first + (uint32_t)n;
-    if (n <= 0 || s.next >= last || g_netBusy == Frame()) return;
-    g_netBusy = Frame();
+    if (s.next < first) s.next = first;   // dents that left the record before they were made: gone
+    if (!s.busy) {
+        if (s.next >= last) return;   // nothing new
+        if (now - s.batchAt < kNetEveryMs) return wait();
+        int made = 0;   // the dents a crash makes (none: nothing to clone the car for)
+        for (uint32_t i = s.next; i < last; i++) {
+            Dent d;
+            float m;
+            made += NetDecode(dents + (i - first) * RC_DMG_BYTES, d, m);
+        }
+        if (!made) {
+            g_netStats.dropped += (int)(last - s.next);
+            if (!s.noteBad)
+                Log("free roam: friend's car %08X: dents %u..%u left out (epoch %u): no crash makes them", car, s.next,
+                    last, epoch);
+            s.noteBad = true;
+            s.next = last;
+            return;
+        }
+        if (!s.any && !g_cars.count(renderInfo)) {   // a car to clone: kNetCars + kNetKeep at most
+            int have = 0;
+            for (const NetSlot& o : g_netSlots) have += &o != &s && (o.any || o.busy);
+            if (have >= kNetCars + kNetKeep) return;   // till the farthest one's damage goes (kNetFarMs)
+        }
+        if (!s.any && !g_cars.count(renderInfo) && dmg_va_free() < kNetVaReserve) {   // the game's own memory first
+            if (!s.noteRoom)
+                Log("free roam: friend's car %08X: shown undamaged (%u MB of address space free)", car, dmg_va_free() >> 20);
+            s.noteRoom = true;
+            return;
+        }
+        s.busy = true, s.ready = s.any, s.from = s.next, s.end = last, s.batchAt = now, s.waitAt = now;
+        s.frames = 0, s.dropped = 0, s.work = 0, s.cloneAt = 0;
+    }
+    if (s.end > last) s.end = last;
+    if (!s.ready) {   // its parts refined ahead first (a few ms a frame), so that its clones are quick to make
+        if (!PrewarmDone(renderInfo) && now - s.waitAt < kNetPrewarmMs) return;
+        s.ready = true;
+    }
+    if ((g_netBest >= 0 && g_netBest != k) || (g_netSteps && g_netSpent >= kNetMsPerFrame)) return;   // another's turn
+    g_netBest = k;
+    turn.used = true;
     const double t0 = NowMs();
-    for (uint32_t i = s.next > first ? s.next : first; i < last; i++) {
+    const int fails = g_cloneFails;
+    const bool cloned = CloneSome(renderInfo, s.cloneAt, [&] { return NetMore(t0, 0.2); });
+    while (cloned && s.next < s.end && g_cloneFails == fails) {
         Dent d;
         float magnitude;
-        DecodeDent(dents + (i - first) * RC_DMG_BYTES, d, magnitude);
+        if (!NetDecode(dents + (s.next - first) * RC_DMG_BYTES, d, magnitude)) {
+            s.next++, s.dropped++, g_netStats.dropped++;
+            continue;
+        }
+        if (!NetMore(t0, s.dentMs)) break;
+        const double t = NowMs();
         ApplyNetDent(renderInfo, G(car), d, magnitude);
+        s.next++;
+        g_netStats.dents++;
+        s.dentMs = s.dentMs * 0.75 + (NowMs() - t) * 0.25;
     }
-    Log("free roam: friend's car %08X: dents %u..%u made (epoch %u) in %.1f ms", car,
-                                s.next > first ? s.next : first, last, epoch, NowMs() - t0);
-    s.next = last;
+    const double spent = NowMs() - t0;
+    g_netSpent += spent;
+    g_netStats.ms += spent;
+    s.work += spent;
+    s.frames++;
+    if (g_cloneFails != fails) {
+        Log("free roam: friend's car %08X: no memory for its clones: undamaged for %.0f s", car, kNetFailMs / 1000.0);
+        NetDrop(s);
+        s.failUntil = now + kNetFailMs;
+        g_netBest = -1;
+        return;
+    }
+    if (s.next < s.end) return;
+    Log("free roam: friend's car %08X: dents %u..%u made (epoch %u) in %.1f ms over %d frames%s", car, s.from, s.end,
+        epoch, s.work, s.frames, s.dropped ? ", some no crash makes left out" : "");
+    s.busy = false;
     s.any = true;
+    g_netStats.batches++;
+    g_netBest = -1;   // the frame's rest to another
 }
