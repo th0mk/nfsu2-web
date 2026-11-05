@@ -11,9 +11,12 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-05 (7225898)
+## 2026-11-05 (28d4d87)
 
 - **Languages:** Czech, Slovak and Greek, the game and the start page.
+- **Free roam:** a second player on the same computer joins your career's free roam, the screen split in two: pause, Add Player 2, then START on a controller or the keyboard's left half, and a car from your garage. Online they show as your name and " 2".
+- **Free roam:** with player 2 in, a career race asks Together or Alone (only player 1's place counts), and the two of you can outrun each other.
+- **Free roam:** at a busy car meet the cars around you stay shown, and on a slow connection they show up sooner.
 - **Free roam:** the cars of the players nearest you stay shown instead of coming and going, and friends' cars load faster.
 - **Photo mode:** the panel in tabs: Camera, Picture, Scene and Controls. The camera can glide, turn by itself, keep its height and play through up to 8 points for clips. Shutter blurs what moves, Fisheye bends the picture, and pictures can be up to 4 times as big. Scene picks which cars show (yours, friends, crews, players, traffic, racers), their headlights, and dry or rain.
 - **Races:** other players' cars no longer bounce, stand on their tails or flip over.
