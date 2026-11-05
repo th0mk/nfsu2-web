@@ -154,7 +154,7 @@ const GROUP_OF = new Map(GROUPS.flatMap(g => g.items.map(i => [i.key, g] as cons
 const boolOn = (v: string) => v === 'on';
 const READ_ONLY = N('Read only: the game runs in another tab. Change settings there; this tab takes over when it closes.');
 const NOTE = N('Changes apply the next time you press Play.');
-const MODS_NOTE = N('The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.');
+const MODS_NOTE = N('The core gameplay is the original\'s, with a few improvements, fixes and multiplayer on top.');
 /** a row's label as shown (a mod's row: its name, mods-ui.ts rowName) */
 const labelOf = (it: Item) => it.mod ? rowName(it.mod) : t(it.label);
 

@@ -67,14 +67,14 @@ export interface Mod {
   pending?: true;
 }
 
-export const KINDS: readonly { kind: ModKind; title: string; hint: string }[] = [
-  { kind: 'screen', title: N('On your screen'), hint: N('Looks, sounds and HUD.') },
-  { kind: 'shared', title: N('Seen by others'), hint: N('Cars, vinyls and lights other players see too.') },
-  { kind: 'rules', title: N('Game rules'), hint: N('Career, races and unlocks.') },
-  { kind: 'car', title: N('Cars'), hint: N('Cars added to the game.') },
+export const KINDS: readonly { kind: ModKind; title: string }[] = [
+  { kind: 'screen', title: N('On your screen') },
+  { kind: 'shared', title: N('Seen by others') },
+  { kind: 'rules', title: N('Game rules') },
+  { kind: 'car', title: N('Cars') },
 ];
 /** the tab's last section: our own changes (ADDED) */
-export const OURS = { title: N('Our changes'), hint: N('Where this site differs from the original game.') };
+export const OURS = { title: N('Our changes') };
 
 /** a popup's fact where the row has no control of its own: where its settings are (the tab's own words for the page's
  *  places, the game's for its menus) */
@@ -120,7 +120,7 @@ export const MODS: readonly Mod[] = [
   {
     id: 'uhud', name: 'Upscaled HUD', authors: [{ name: 'LunicAura106' }], links: { page: 'https://nfsmods.xyz/mod/4319' },
     kind: 'screen', uses: 'data', control: { setting: 'ui_textures', values: ['uhud'] },
-    line: N('Sharp menus, HUD and maps at high resolutions. Map only: just the Detailed Map.'),
+    line: N('Sharp menus, HUD and maps.'),
     details: 'The menus, the race HUD, the fonts and the car and brand logos, redrawn at four times their size. The game\'s layout stays as it is, and a language with fonts of its own keeps them. Most phones need four times the memory for them.',
     online: 'mine', sizeMB: 5, files: ['tools/texpacks.py', 'runtime/web/texrep_web.c'],
   },
@@ -141,10 +141,10 @@ export const MODS: readonly Mod[] = [
     online: 'mine', files: ['runtime/widescreen.c', 'licenses/WidescreenFixesPack.txt'],
   },
   {
-    id: 'splitscreen', name: 'NFSU2-SplitScreen', authors: [{ name: 'mihaits', url: 'https://github.com/mihaits' }, { name: 'BirdSentinel (Zack)', port: true }],
+    id: 'splitscreen', name: 'Split Screen', mod: 'NFSU2-SplitScreen', authors: [{ name: 'mihaits', url: 'https://github.com/mihaits' }, { name: 'BirdSentinel (Zack)', port: true }],
     links: { source: 'https://github.com/mihaits/NFSU2-SplitScreen' },
     kind: 'screen', uses: 'code', licence: 'MIT', control: { menu: 'mainMenu' },
-    line: N('Quick Race for 2 to 4 players on one screen.'),
+    line: N('2 to 4 players on one screen.'),
     details: 'The main menu\'s item after Quick Race. Each player gets their own view, HUD, minimap and camera, with a controller each, or two on one keyboard. 3 or 4 players need a fast computer.',
     online: 'offline', files: ['runtime/splitscreen.c', 'runtime/splitscreen_layout.h', 'runtime/splitscreen_mem.h', 'runtime/split_minimap.inc',
       'runtime/split_post.inc', 'runtime/split_reflections.inc', 'tools/split_reloc.py', 'licenses/NFSU2-SplitScreen.txt'],
@@ -152,40 +152,32 @@ export const MODS: readonly Mod[] = [
   {
     id: 'subtitles', name: 'English Subtitles Fixed', authors: [{ name: 'VileStuff' }], links: { page: 'https://nfsmods.xyz/mod/5286' },
     kind: 'screen', uses: 'data', control: { setting: 'subtitles' }, off: false,
-    line: N('The movies\' English subtitles whole, with who says each line. Off: no subtitles at all.'),
+    line: N('Complete English subtitles in the movies.'),
     details: 'The game\'s own English lines stop at their first apostrophe. These are whole, with each speaker\'s name. Other languages keep their own; the dubbed French, German, Italian and Spanish movies have none. Off: no subtitles in any language.',
     online: 'mine', files: ['tools/langpacks.py', 'runtime/language.c'],
   },
   {
     id: 'songs', name: 'Uncensored & Restored Soundtrack', authors: [{ name: 'xGMVx' }], links: { page: 'https://nfsmods.xyz/mod/3649' },
     kind: 'screen', uses: 'data', control: { setting: 'songs', values: ['uncensored'] },
-    line: N('The EA Trax songs unedited, some in longer versions. Original: as the game shipped them.'),
+    line: N('The EA Trax songs unedited.'),
     details: 'Every EA Trax song in its full, unedited version, some from their newer remastered releases, made with BadHairDay\'s NFS U2 Music Importer. Uncensored, the default, plays them; Original plays the versions the game shipped with.',
     online: 'you', files: ['tools/musicpack.py', 'web/src/host/io-worker.ts'],
   },
   {
-    id: 'shadow', name: 'NFSU2 Shadow Fix', authors: [{ name: 'TerminatorVasya', url: 'https://github.com/TVasya' }],
-    links: { page: 'https://nfsmods.xyz/mod/7328', source: 'https://github.com/TVasya/NFSU2ShadowFix' },
-    kind: 'screen', uses: 'findings', licence: 'MIT', control: { always: true },
-    line: N('Car shadows no longer cut into the tyres.'),
-    details: 'A car\'s shadow lies 1.5 cm above the road instead of 4, so its edge no longer cuts into the bottom of the tyres. Garages draw their shadows as before.',
-    online: 'mine', files: ['runtime/carshadow.c'],
-  },
-  {
-    id: 'high-fps-audio', name: 'NFSU2 High FPS Audio Fix', authors: [{ name: 'dstudnicki' }],
+    id: 'high-fps-audio', name: 'High FPS Audio Fix', mod: 'NFSU2 High FPS Audio Fix', authors: [{ name: 'dstudnicki' }],
     links: { source: 'https://github.com/dstudnicki/NFSU2HighFPSAudioFix' },
     kind: 'screen', uses: 'findings', control: { always: true },
-    line: N('Engine and gear-shift sounds at their own speed above 60 fps.'),
+    line: N('Engine sounds right above 60 fps.'),
     details: 'The game updates its sounds at most every 15 ms, and then by one frame\'s time only: above 60 fps the engine\'s pitch and the gear shifts ran slow, at 120 fps at half speed. Here an update also gets the time of the frames it skipped. At 60 fps and below nothing changes.',
     online: 'you', files: ['runtime/framerate.c'],
   },
 
   // ---- Seen by others
   {
-    id: 'extra-options', name: 'NFSU2 Extra Options', authors: [{ name: 'ExOpts Team' }],
+    id: 'extra-options', name: 'Extra Options', mod: 'NFSU2 Extra Options', authors: [{ name: 'ExOpts Team' }],
     links: { page: 'https://nfsmods.xyz/mod/290', source: 'https://github.com/ExOptsTeam/NFSU2ExOpts' },
     kind: 'shared', uses: 'findings', licence: 'GPL-3.0', control: { always: true },
-    line: N('Drift camera, high beam, the European cars, Special vinyls and bigger Quick Races.'),
+    line: N('Drift camera, high beam, EU cars and more.'),
     details: 'Five of the mod\'s parts, written anew from what it found out about the game. All five are always on, and the rest of the game stays as in the original.',
     parts: [
       { name: 'Drift camera', online: 'mine',
@@ -205,16 +197,16 @@ export const MODS: readonly Mod[] = [
     id: 'art-factory', name: 'Art Factory 28 to 34', authors: [{ name: 'underground2.net Team & Contributors', port: true }],
     links: { page: 'https://nfsmods.xyz/mod/2004' },
     kind: 'shared', uses: 'data', control: { always: true },
-    line: N('Seven Art Factory vinyls from the Japanese release.'),
+    line: N('Seven vinyls from the Japanese release.'),
     details: 'Designs only the Japanese release (Sha_Do) had, after Art Factory 27 on every car. The game\'s own vinyls stay as they are.',
     online: 'seen', files: ['runtime/vinylpacks.c', 'tools/vinylpacks.py'],
   },
 
   // ---- Game rules
   {
-    id: 'hidden-races', name: 'Show Hidden Races Mod', authors: [{ name: 'MaxHwoy' }], links: { page: 'https://nfsmods.xyz/mod/1583' },
+    id: 'hidden-races', name: 'Show Hidden Races', mod: 'Show Hidden Races Mod', authors: [{ name: 'MaxHwoy' }], links: { page: 'https://nfsmods.xyz/mod/1583' },
     kind: 'rules', uses: 'findings', control: { setting: 'show_hidden_races' },
-    line: N('The career\'s 33 hidden races on the map and radar.'),
+    line: N('The 33 hidden races on the map.'),
     details: 'In the original game a hidden race shows only when you drive near it. On, they are on the map like the others, and the map offers up to 8 races of each kind at once, not 1 to 4. Turned off again, your career is as it was. oldman777\'s script does the same.',
     online: 'career', files: ['runtime/hiddenraces.c'],
   },
@@ -222,7 +214,7 @@ export const MODS: readonly Mod[] = [
     id: 'visual-rep', name: 'Visual Reputation Remover', authors: [{ name: 'thelink2012', url: 'https://github.com/thelink2012' }],
     links: { page: 'https://nfsmods.xyz/mod/2773', source: 'https://github.com/thelink2012/novisualrep' },
     kind: 'rules', uses: 'findings', licence: 'MIT', control: { setting: 'visual_rep_remover' },
-    line: N('DVD cover shoots by stage, not by your car\'s visual parts.'),
+    line: N('DVD covers by stage, not by your car\'s parts.'),
     details: 'In the original game a stage\'s DVD cover shoots come only once your car\'s parts rate enough stars, and pay more for more stars. On, the rating is the stage\'s: 0, 1, 3, 5.5 and 8 stars in stages 0 to 4, 10 from stage 5, so the stage\'s cover shoots come and pay by it. The shops show no Visual Rating box.',
     online: 'career', files: ['runtime/visualrep.c', 'licenses/novisualrep.txt'],
   },

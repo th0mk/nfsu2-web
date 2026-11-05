@@ -88,13 +88,12 @@ export function modName(label: HTMLElement, id: string): HTMLElement {
   return withInfo(label, infoButton(id, t(LABELS.about, { name: rowName(id) })));
 }
 
-/** a section of the tab: its heading, its hint and its rows */
-function section(id: string, title: string, hint: string, rows: HTMLElement[]): HTMLElement {
+/** a section of the tab: its heading and its rows */
+function section(id: string, title: string, rows: HTMLElement[]): HTMLElement {
   const box = document.createElement('div'); box.className = 'group mods-group';
   const h = document.createElement('h3'); h.id = `mods-${id}`; h.textContent = t(title);
-  const p = document.createElement('p'); p.className = 'hint'; p.textContent = t(hint);
   box.setAttribute('role', 'group'); box.setAttribute('aria-labelledby', h.id);
-  box.append(h, p, ...rows);
+  box.append(h, ...rows);
   return box;
 }
 
@@ -105,9 +104,9 @@ function section(id: string, title: string, hint: string, rows: HTMLElement[]): 
 export function modSections(settingRow: (key: string) => HTMLElement): HTMLElement[] {
   const mods = KINDS.flatMap(k => {
     const ms = MODS.filter(m => m.kind === k.kind && !m.row);
-    return ms.length ? [section(k.kind, k.title, k.hint, ms.map(m => 'setting' in m.control ? settingRow(m.control.setting) : modRow(m)))] : [];
+    return ms.length ? [section(k.kind, k.title, ms.map(m => 'setting' in m.control ? settingRow(m.control.setting) : modRow(m)))] : [];
   });
-  return [...mods, section('ours', OURS.title, OURS.hint, ADDED.map(g =>
+  return [...mods, section('ours', OURS.title, ADDED.map(g =>
     plainRow(g.id, t(g.title), t(LABELS.ours, { name: t(g.title) }), groupHelp(g.items))))];
 }
 

@@ -52,6 +52,9 @@ const NOT_THE_TABS = {
   'nfsmods.xyz/mod/5749': true,
   // oldman777's script, the same change as Show Hidden Races Mod: that entry's popup names it
   'nfsmods.xyz/mod/5048': true,
+  // TerminatorVasya's Shadow Fix: a fix of a few lines (runtime/carshadow.c), always on, not a row of its own
+  'nfsmods.xyz/mod/7328': true,
+  'github.com/tvasya/nfsu2shadowfix': true,
   // a library (runtime/xxhash.h), not a mod of the game
   'github.com/cyan4973/xxhash': true,
   'github.com/google/highwayhash': true,
@@ -82,13 +85,13 @@ test('the entries: ids once each, in the sections\' order', () => {
     assert.ok(k >= at, `${m.id}: in its section's place (${m.kind} after ${kinds[at]})`);
     at = k;
   }
-  for (const k of M.KINDS) assert.ok(k.title && k.hint, k.kind);
+  for (const k of M.KINDS) assert.ok(k.title, k.kind);
 });
 
 test('our changes: a row per group, every change in one, none named as a mod\'s row', () => {
   // none of the mods' rows is ours any more: our changes are ADDED's
   assert.deepEqual(MODS.filter(m => m.kind === 'ours').map(m => m.id), [], 'no \'ours\' rows');
-  assert.ok(M.OURS.title && M.OURS.hint, 'OURS');
+  assert.ok(M.OURS.title, 'OURS');
   assert.deepEqual(M.ADDED.map(g => g.title), ['Driving', 'Free roam', 'Photos and screen', 'Career and garage', 'Controls', 'Saves']);
   const ids = M.ADDED.map(g => g.id), modIds = new Set(MODS.map(m => m.id));
   assert.equal(new Set(ids).size, ids.length, 'group ids unique');
@@ -154,7 +157,7 @@ test('the texts: a line, a short popup, no words the repo must not have', () => 
     if ('setting' in m.control && m.off !== false) assert.doesNotMatch(m.details, /\bOff: as in the original game\b/, `${m.id}: the facts say it`);
   }
   const all = [...MODS.flatMap(m => [...texts(m), ...Object.values(m.links), ...m.authors.map(a => a.url ?? '')]),
-    ...M.KINDS.flatMap(k => [k.title, k.hint]), M.OURS.title, M.OURS.hint, ...M.ADDED.flatMap(g => [g.title, ...g.items.flatMap(c => [c.name, c.key, c.line])]),
+    ...M.KINDS.map(k => k.title), M.OURS.title, ...M.ADDED.flatMap(g => [g.title, ...g.items.flatMap(c => [c.name, c.key, c.line])]),
     ...Object.values(M.PLACES), ...Object.values(M.ONLINE), ...Object.values(M.USES), ...Object.values(M.LABELS)];
   for (const s of all) for (const bad of [/permission/i, /http:\/\//i]) assert.doesNotMatch(s, bad);
 });

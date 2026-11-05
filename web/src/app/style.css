@@ -431,7 +431,6 @@ summary:hover { color: var(--text); }
  * focus ring clear of it) and on that word's line (.set-name-end: the two never part), as tall as the name's 24 px line
  * (the header's icon style: muted, lime when pointed at or focused).  It takes a touch 4 px around it as the icon
  * buttons' 32 px do (::before: no box of its own, so the line stays 24) */
-.mods-group > h3 + .hint { margin-top: -4px; }
 .set-plain { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "help"; }
 .set-name-end { white-space: nowrap; }
 .set-name-end > .mod-about { position: relative; display: inline-grid; width: 24px; height: 24px; margin-left: 8px; vertical-align: top; border-radius: 50%; }
