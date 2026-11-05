@@ -19,6 +19,12 @@ services:
     image: registry.k8s.io/pause:3.10
     restart: unless-stopped
     cgroup_parent: ${NFSU2_SLICE:-nfsu2.slice}
+    # Docker's own bridge, not the project's network: on a network of its own Docker answers names at 127.0.0.11
+    # through NAT rules inside this namespace, and with them Linux tracks every connection and runs the firewall's
+    # hooks for every packet here, the ~14000 between cloudflared and the server on 127.0.0.1 too: a twentieth of the
+    # server's kernel time and of cloudflared's on that hop (nfsu2.xyz, 2026-11-05).  On this bridge the namespace has
+    # no rules at all, and names come from the VPS's own servers.  Nothing reaches this namespace by its name.
+    network_mode: bridge
     # the receive buffers of this namespace's sockets at most 128 KiB, not Linux's 32 MiB: what a player's path does
     # not take then waits at the server, which leaves out free roam's snapshots for it, instead of unread at
     # cloudflared, out of the server's sight (nfsu2.xyz, 2026-10-22: 132 MB there, up to 1 MB for one player).  The
