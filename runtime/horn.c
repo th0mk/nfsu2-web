@@ -36,8 +36,9 @@
  *   broken     a broken car horn's honk
  *   thecar     the horn of the film The Car (1977), a short honk and a long one
  *   thecar_long  the same horn held: it sounds while the key is held
- * A recorded horn but thecar_long plays to its end once it starts, let go or
- * not, and again while it is held.
+ * A recorded horn sounds while it is held, as the others do: from its start,
+ * again after a moment while it is still held (thecar_long loops instead),
+ * and it fades out when let go.
  * Each player's horn is pitched one of five ways (from the name), so players
  * with the same kind can still tell who honks.
  *
@@ -171,7 +172,7 @@ static const Kind KINDS[HORN_KINDS] = {
       TUNE(TROMBONE), .gate = .040f, .vib = .02f },
     { .name = "dixie", .clip = 1, .att = .002f, .rel = .030f, .again = .30f, .level = .566f },
     { .name = "oldcar", .clip = 1, .att = .002f, .rel = .030f, .again = .15f, .level = 1.318f },
-    { .name = "broken", .clip = 1, .att = .002f, .rel = .030f, .again = .15f, .level = 1.24f },
+    { .name = "broken", .clip = 1, .att = .002f, .rel = .030f, .again = .15f, .level = 1.223f },
     { .name = "sputter", .n = 1, .f = { 360.f }, .a = { 1.f },
       .nh = 28, .roll = .7f, .form = 2400.f, .width = 900.f, .lift = 2.f, .top = 8000.f,
       .att = .010f, .rel = .030f, .drive = 3.f, .hiss = .05f, .level = 1.084f, TUNE(SPUTTER), .gate = .010f, .nsag = .15f, .vib = .03f },
@@ -230,14 +231,8 @@ int horn_mine(void){
     }
     return mine;
 }
-/* how long a voice let go takes to fade out (to -80 dB) before another horn takes it; a recorded one may still
- * play to its end (at the lowest of the five pitches) */
-static uint32_t tail_ms(int kind){
-    uint32_t ms = (uint32_t)(9.3f * KINDS[kind].rel * 1000.f) + 120u;
-    Clip c;
-    if (KINDS[kind].clip && clip_find(KINDS[kind].name, &c) && !c.l1) ms += (uint32_t)(1000.f * (float)c.n / c.rate / 0.89f);
-    return ms;
-}
+/* how long a voice let go takes to fade out (to -80 dB) before another horn takes it */
+static uint32_t tail_ms(int kind){ return (uint32_t)(9.3f * KINDS[kind].rel * 1000.f) + 120u; }
 
 static uint32_t now_ms(void){
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -317,11 +312,6 @@ int horn_sound(uint32_t who, const char *name, int kind, const float *p, const f
     int k = 0, start = 0;
     uint32_t now = now_ms();
     while (k < HORN_VOICES && !(g_vo[k].used && g_vo[k].who == who)) k++;
-    if (k == HORN_VOICES){                                 /* a recorded horn let go a moment ago, maybe still playing: it goes on */
-        for (k = 0; k < HORN_VOICES; k++)
-            if (!g_vo[k].used && g_vo[k].who == who && KINDS[g_vo[k].kind].clip && g_vo[k].free_at && (int32_t)(now - g_vo[k].free_at) < 0) break;
-        if (k < HORN_VOICES){ g_vo[k].used = 1; g_vo[k].free_at = 0; }
-    }
     if (k == HORN_VOICES){
         for (k = 0; k < HORN_VOICES; k++) if (!g_vo[k].used && (!g_vo[k].free_at || (int32_t)(now - g_vo[k].free_at) >= 0)) break;
         if (k == HORN_VOICES) return -1;
@@ -389,7 +379,7 @@ static struct {
     float ratio, gate, gs, vph;                          /* its pitch, on/off, that smoothed, the vibrato's phase (cycles) */
     uint32_t rng;
     uint32_t cpos, cwait; float cfrac;                   /* a clip: where it is (sample and fraction); samples of silence before it plays again */
-    int   cplay; float cgain, cpan;                      /* it plays; the gain and side it plays to its end with once let go */
+    int   cplay;                                         /* it plays */
     uint32_t frames; float peak[2];                      /* the log line at the end */
 } g_v[HORN_VOICES];
 
@@ -429,11 +419,9 @@ void horn_mix(float *acc, unsigned frames, unsigned rate){
         float pan = bitsf(GET(g_in[v].pan)), tp = bitsf(GET(g_in[v].pitch));
         const Clip *C = K->clip ? &g_clip[g_v[v].kind] : 0;
         uint32_t again = C ? (uint32_t)(K->again * fs) + 1u : 0u;
-        if (C && !C->l1){                                  /* a clip without a loop plays to its end, let go or not */
-            if (!held) g_v[v].cwait = 0;                   /* (but not again) */
+        if (C && !C->l1){                                  /* a clip without a loop plays again only while held; */
+            if (!held) g_v[v].cwait = 0;                   /* let go, it fades out as the others do (env) */
             else if (!g_v[v].cplay && !g_v[v].cwait){ g_v[v].cpos = 0; g_v[v].cfrac = 0.f; g_v[v].cplay = 1; }
-            if (held){ g_v[v].cgain = gain; g_v[v].cpan = pan; }
-            else if (g_v[v].cplay){ gain = g_v[v].cgain; pan = g_v[v].cpan; }   /* where it was last heard */
         }
         float th = (pan + 1.f) * (float)M_PI * 0.25f;     /* equal power */
         float tgl = gain * cosf(th) * vol, tgr = gain * sinf(th) * vol, te = gain > 0.f ? 1.f : 0.f;

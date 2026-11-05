@@ -559,9 +559,8 @@ Good to know:
   hydraulics: honk with N). The others hear it from your car: louder the nearer they are, from the side your car is on, and lower in pitch as you drive away from them. Pick yours in
   Online, Your horn (the play button next to it lets you hear each one): dual tone, single tone, air horn, train horn,
   Klaxon, La Cucaracha (it plays while you hold it), clown horn, sad trombone, Dixie horn, old car horn, broken horn,
-  sputtering horn, or the horn of the film The Car (1977), short or held. The Dixie, old car, broken and The Car horns
-  are recordings and play to their end once you honk. The others hear the one you picked;
-  players on an older version hear the dual tone.
+  sputtering horn, or the horn of the film The Car (1977), short or held. Each sounds only while you hold it. The others
+  hear the one you picked; players on an older version hear the dual tone.
   Each player's horn is also pitched a little differently by their name, so two players with the same horn sound
   apart. It sounds while the game runs, not in the pause menu or on the map. It works in Online and LAN races too.
   How loud the horns are (yours and the others'): the game's Options, Audio, Horn Volume, also in the pause menu's

@@ -51,7 +51,7 @@ const KINDS: Record<string, Kind> = {
     level: 1.22, tune: TROMBONE, gate: 0.040, vib: 0.02 },
   dixie: { f: [], a: [], nh: 0, roll: 0, width: 1, att: 0.002, rel: 0.030, drive: 0, level: 0.566, clip: 1, again: 0.30 },
   oldcar: { f: [], a: [], nh: 0, roll: 0, width: 1, att: 0.002, rel: 0.030, drive: 0, level: 1.318, clip: 1, again: 0.15 },
-  broken: { f: [], a: [], nh: 0, roll: 0, width: 1, att: 0.002, rel: 0.030, drive: 0, level: 1.24, clip: 1, again: 0.15 },
+  broken: { f: [], a: [], nh: 0, roll: 0, width: 1, att: 0.002, rel: 0.030, drive: 0, level: 1.223, clip: 1, again: 0.15 },
   sputter: { f: [360], a: [1], nh: 28, roll: 0.7, form: 2400, width: 900, lift: 2, top: 8000, att: 0.010, rel: 0.030, drive: 3, hiss: 0.05,
     level: 1.084, tune: SPUTTER, gate: 0.010, nsag: 0.15, vib: 0.03 },
   thecar: { f: [], a: [], nh: 0, roll: 0, width: 1, att: 0.002, rel: 0.030, drive: 0, level: 1.246, clip: 1, again: 0.30 },
@@ -117,10 +117,10 @@ export function loadHornClips(): Promise<void> {
 const clipOf = (name: string): Clip | null => KINDS[name]?.clip ? clips?.get(name) ?? null : null;
 
 /** How long renderHorn holds a horn by default: a moment, a tune once through (twice, a short one), to its last rest;
- * a recorded one just short of its end (it plays to its end), or a moment and a half when it loops. */
+ * a recorded one to its end, or a moment and a half when it loops. */
 export function previewHold(name: string): number {
   const K = KINDS[name] ?? KINDS.dual, c = clipOf(name);
-  if (c) return c.l1 ? 1.5 : c.pcm.length / c.rate - 0.05;
+  if (c) return c.l1 ? 1.5 : c.pcm.length / c.rate;
   if (!K.tune) return 1.0;
   const len = K.tune.reduce((n, x) => n + x.cs / 100, 0), last = K.tune[K.tune.length - 1];
   return (len < 1.5 ? 2 * len : len) - (last.st === REST ? last.cs / 100 : 0) + 0.05;
@@ -144,9 +144,9 @@ export function renderHorn(name: string, held = previewHold(name), rate = 48000)
   const on = K.f.map((_, t) => Math.floor(f32(f32(K.dly?.[t] ?? 0) * fs)));
   let env = 0, gl = 0, hx = 0, hy = 0, lp = 0, lo = 0, bd = 0, age = 0, note = -1, left = 0, inN = 0, ratio = 1, gate = 0, gs = 0, vph = 0;
   let rng = 0x9e3779b9;
-  // a clip (horn.c's cpos..cpan): samples per sample, where it is, the silence before it plays again, playing, the gain
+  // a clip (horn.c's cpos..cplay): samples per sample, where it is, the silence before it plays again, playing
   const cstep = C ? f32(f32(C.rate) / fs) : 0, again = C ? Math.floor(f32(f32(K.again ?? 0) * fs)) + 1 : 0;
-  let cpos = 0, cfrac = 0, cwait = 0, cplay = C ? 1 : 0, cgain = 0;
+  let cpos = 0, cfrac = 0, cwait = 0, cplay = C ? 1 : 0;
   const cs = (i: number) => {                       // horn.c's clip_s
     if (C!.l1 && i >= C!.l1) i -= C!.l1 - C!.l0;
     return i < 0 || i >= C!.pcm.length ? 0 : C!.pcm[i] / 32768;
@@ -158,12 +158,11 @@ export function renderHorn(name: string, held = previewHold(name), rate = 48000)
   const svf = K.res ? f32(2 * f32(Math.sin(f32(f32(PI * f32(K.res)) / fs)))) : 0, wah = f32(f32(f32(2 * PI) * wahHz) / fs);
   const th = f32(f32(1 * PI) * 0.25), lvl = f32(LEVEL);     // in the middle
   for (let b = 0; b < 60 * 100; b++) {
-    let gain = b * blk < held * rate ? f32(SELF) : 0;
+    const gain = b * blk < held * rate ? f32(SELF) : 0;
     const pressed = gain > 0;
-    if (C && !C.l1) {                                // a clip without a loop plays to its end, let go or not
+    if (C && !C.l1) {                                // a clip without a loop plays again only while held; let go, it fades out
       if (!pressed) cwait = 0;
       else if (!cplay && !cwait) { cpos = 0; cfrac = 0; cplay = 1; }
-      if (pressed) cgain = gain; else if (cplay) gain = cgain;
     }
     const tgl = f32(gain * f32(Math.cos(th))), te = gain > 0 ? 1 : 0;
     const kLp = f32(f32(0.15) + f32(f32(0.85) * (f32(gain * f32(1.7)) > 1 ? 1 : f32(gain * f32(1.7)))));

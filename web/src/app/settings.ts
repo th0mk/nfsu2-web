@@ -486,9 +486,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # while you hold it), clown (a bulb horn's honk-honk), trombone (a sad
 # trombone), dixie (a Dixie air horn), oldcar (an old car's horn), broken (a
 # broken horn), sputter (a dying horn), thecar (the horn of the film The Car,
-# 1977) or thecar_long (the same, held).  dixie, oldcar, broken and thecar
-# play to their end once you honk.  Players on an older version hear the
-# dual one.  [NFSU2_HORN]
+# 1977) or thecar_long (the same, held).  Players on an older version hear
+# the dual one.  [NFSU2_HORN]
 #horn = dual
 
 # The game's own Online mode (main menu, Online) against this server's

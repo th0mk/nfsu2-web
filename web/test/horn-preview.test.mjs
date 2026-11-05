@@ -1,7 +1,7 @@
 // The start page's horns (web/src/app/horn-preview.ts, Settings' Listen button) against the game's (runtime/horn.c):
 //   node --test web/test/horn-preview.test.mjs        (the comparison needs wasi-sdk in deps/)
-// 1. every kind renders: sound, no overload, and as long as it should be; a recorded one plays to its end when let go
-//    early, and sounds as the dual horn without its clip;
+// 1. every kind renders: sound, no overload, and as long as it should be; tapped, every one (a recorded one too) fades
+//    out within the first eight's release, and a recorded one sounds as the dual horn without its clip;
 // 2. every kind as horn.c renders it (tests/horn_render.c, built for wasm as the game is) and as the port does, held
 //    the same time: the same length, and the same sound sample for sample (the port does horn.c's float arithmetic:
 //    identical but where expf, sinf, cosf or exp2f round a last bit differently), so a horn changed in one and not
@@ -39,11 +39,13 @@ test('every horn renders', () => {
     assert.ok(pcm.length / 48000 > held && pcm.length / 48000 < held + 1.6, `${name}: ${(pcm.length / 48000).toFixed(2)} s for ${held.toFixed(2)} s held`);
   }
   assert.deepEqual(H.renderHorn('kazoo', 0.5), H.renderHorn('dual', 0.5), 'a kind the game does not have: the dual horn');
-  for (const name of ['dixie', 'thecar']) {
-    const len = H.renderHorn(name, 0.2).length / 48000;
-    assert.ok(len > H.previewHold(name), `${name} let go after 0.2 s: plays to its end (${len.toFixed(2)} s)`);
-  }
-  assert.ok(H.renderHorn('thecar_long', 0.2).length / 48000 < 1.2, 'thecar_long stops when let go');
+  // tapped for 0.1 s: silent as soon as the first eight are (those but the Klaxon under 0.7 s, the Klaxon 1.36 s: its
+  // pitch sweeps down when let go), a recorded one as soon as the dual horn
+  const tap = name => H.renderHorn(name, 0.1).length / 48000, slowest = tap('klaxon');
+  for (const name of H.HORN_NAMES) assert.ok(tap(name) <= slowest, `${name} let go after 0.1 s: ${tap(name).toFixed(2)} s`);
+  for (const name of ['dixie', 'oldcar', 'broken', 'thecar'])
+    assert.ok(tap(name) <= tap('dual') + 0.01, `${name} let go after 0.1 s: stops (${tap(name).toFixed(2)} s, dual ${tap('dual').toFixed(2)} s)`);
+  assert.ok(tap('thecar_long') < 0.9, 'thecar_long stops when let go');
   H.setHornClips(new Uint8Array(0));
   assert.deepEqual(H.renderHorn('dixie', 0.5), H.renderHorn('dual', 0.5), 'a recorded kind without its clip: the dual horn');
   H.setHornClips(BIN);

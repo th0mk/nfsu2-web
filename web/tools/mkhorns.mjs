@@ -22,7 +22,7 @@ const RATE = 32000;
 const CLIPS = [
   { name: 'dixie', src: '-wllulJyJa8', from: 1.0, to: 4.2 },   // "Goofy ahh car honk sound effect": a Dixie horn
   { name: 'oldcar', src: 'wrmQ2KHHQPc', from: 0.3, to: 2.0 },  // "Old Car Horn - Sound Effect(HD)"
-  { name: 'broken', src: 'RtQN0sRRbvM', from: 0.3, to: 1.7 },  // "1990 Manual Toyota Corolla Broken Horn Honks": its first
+  { name: 'broken', src: 'RtQN0sRRbvM', from: 0.5, to: 1.7 },  // "1990 Manual Toyota Corolla Broken Horn Honks": its first, from the honk
   { name: 'thecar', src: 'ds3r2nT7YeU', from: 1.8, to: 4.6 },  // "The car (1977) horn SFX": a short and a long honk
   { name: 'thecar_long', src: 'ds3r2nT7YeU', from: 13.5, to: 16.6, loop: [0.5, 2.5], soft: 0.45 },   // the same, its held blast
 ];
