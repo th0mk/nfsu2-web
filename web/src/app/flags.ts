@@ -1,7 +1,7 @@
 // The flag a player shows before their name over their car in free roam (settings.ini roam_flag; the start page's
 // Your flag row): none until they pick one, and the list puts the country their connection comes from first (the
 // server's /country, Cloudflare's guess, which nobody else sees).  On the wire and in settings.ini a flag is its code
-// here, lower case; the game draws it from runtime/flags.bin (web/tools/mkflags.mjs, the same list in the same order)
+// here, lower case; the game draws it from runtime/flags.dat (web/tools/mkflags.mjs, the same list in the same order)
 // and shows none for a code it does not have.  Pure (no DOM): settings.ts checks the setting with it.
 import { N, t, LOCALE, language } from './i18n';
 
@@ -25,7 +25,7 @@ export const FLAG_CODES = [
 ] as const;
 export type FlagCode = typeof FLAG_CODES[number];
 const CODES = new Set<string>(FLAG_CODES);
-/** /flags.png (web/build.mjs, from runtime/flags.bin): every flag at 48x36 in FLAG_CODES' order, this many a row */
+/** /flags.png (web/build.mjs, from runtime/flags.dat): every flag at 48x36 in FLAG_CODES' order, this many a row */
 export const FLAG_SHEET_COLS = 16;
 export const FLAG_W = 48, FLAG_H = 36;
 /** where a flag is in /flags.png, in its pixels ([x, y] of its top left), or null for none */

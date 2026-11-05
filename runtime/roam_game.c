@@ -406,7 +406,7 @@ static struct {
     int cars_auto;                            /* NFSU2_ROAM_MAX_CARS=auto: max_cars starts at DEF_CARS and follows the frames
                                                  (cars_auto) */
     char name[RC_NAME_MAX + 1], room[64];
-    int flag;                                 /* NFSU2_ROAM_FLAG: the flag before our name (flags.bin's, -1 none: flag_*) */
+    int flag;                                 /* NFSU2_ROAM_FLAG: the flag before our name (flags.dat's, -1 none: flag_*) */
     char crew[RC_CREW_MAX][100]; int ncrew;   /* NFSU2_ROAM_CREW: the crews' names, in the player's order (crews_parse; the
                                                  page's 24 characters are up to 96 bytes of UTF-8) */
     uint32_t crew_rgb[RC_CREW_MAX + 1];       /* ...and their colours (NFSU2_ROAM_CREW_RGB, the player's picks; else CREW_RGB);
@@ -449,7 +449,7 @@ typedef struct {
     int      peer; uint32_t peer_id;          /* session table index and id */
     char     name[RC_NAME_MAX + 1];
     char     flagcode[RC_FLAG_MAX + 1];       /* the flag before the name, as the peer's HELLO has it ("" none) */
-    int      flag;                            /* ...flags.bin's (-1 none: flag_find) */
+    int      flag;                            /* ...flags.dat's (-1 none: flag_find) */
     uint32_t car, world;                      /* the slot's car in this world */
     int      created;                         /* one of our own cars (k >= NOPP) */
     int      unindexed;                       /* ...past World::IndexCars' 22: record kind KIND_OUT */
@@ -2532,7 +2532,7 @@ static int hud_on_top(uint32_t pkg){
 }
 /* ---- flags before the names ------------------------------------------------------------------- */
 /* The flag a player picked (settings.ini roam_flag, the page's Your flag; its code on the wire: roam_core.c's HELLO to
- * each peer, core 13) before their name over their car.  The flags are runtime/flags.bin (web/tools/mkflags.mjs:
+ * each peer, core 13) before their name over their car.  The flags are runtime/flags.dat (web/tools/mkflags.mjs:
  * flag-icons' at 48x36, in runs), each made a texture of our own when a name first needs it (64x64 and its mipmaps,
  * the corners rounded), handed out by the port's override of GetTextureInfo as the paint slots' are
  * (roam_game_texture): a copy of the HUD's plain white texture's TextureInfo (32-bit, with the HUD's alpha blending),
@@ -2545,10 +2545,10 @@ static int hud_on_top(uint32_t pkg){
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wc23-extensions"
 static const uint8_t g_flags_bin[] = {
-#embed "flags.bin"
+#embed "flags.dat"
 };
 #pragma clang diagnostic pop
-#define FLAG_N_MAX      300           /* flags.bin's at most (255 now) */
+#define FLAG_N_MAX      300           /* flags.dat's at most (255 now) */
 #define FLAG_TEX        64u           /* a flag's texture: FLAG_TEX square (it shows 4:3), and its mipmaps down to 8 */
 #define FLAG_MIPS       4u
 #define FLAG_TEX_BYTES  (4u * (64u * 64u + 32u * 32u + 16u * 16u + 8u * 8u))
@@ -2567,7 +2567,7 @@ static uint32_t flags_n(void){
     return n <= FLAG_N_MAX && 8u + 16u * n <= sizeof g_flags_bin ? n : 0;
 }
 static const char *flag_code(int i){ return (const char *)g_flags_bin + 8 + 16 * i; }
-/* a flag by its code (flags.bin's are in order), -1 for none or one it does not have */
+/* a flag by its code (flags.dat's are in order), -1 for none or one it does not have */
 static int flag_find(const char *code){
     if (!code || !code[0]) return -1;
     uint32_t lo = 0, hi = flags_n();
@@ -2608,7 +2608,7 @@ static uint8_t flag_cover(uint32_t x, uint32_t y){
     return (uint8_t)(in * 255 / 16);
 }
 /* flag i's texture's pixels (blue, green, red, alpha, as D3DFMT_A8R8G8B8 lies in memory): the flag stretched to the
- * square (bilinear), then each mipmap the average of the level before; 0 when flags.bin's are not as they should be */
+ * square (bilinear), then each mipmap the average of the level before; 0 when flags.dat's are not as they should be */
 static int flag_pixels(int i, uint8_t *out){
     uint8_t rgb[3 * 64 * 64];
     int W = g_flags_bin[6], H = g_flags_bin[7];
@@ -2652,7 +2652,7 @@ static uint32_t flag_texture(CPU *c, int i){
     uint32_t sz = TI_SZ + PLAT_SZ + FLAG_TEX_BYTES + 64u, ti = rh_call(c, FN_MALLOC, 0, 0, 1, &sz), pl = ti + TI_SZ;
     if (!ti){ g_flag_bad[i] = 1; rlog("[roam] f=%ld flag %s: no memory for it\n", rh_frame(), flag_code(i)); return 0; }
     uint32_t pix = (pl + PLAT_SZ + 63u) & ~63u;
-    if (!flag_pixels(i, GPTR(pix))){ g_flag_bad[i] = 1; rlog("[roam] f=%ld flag %s: flags.bin is broken\n", rh_frame(), flag_code(i)); return 0; }
+    if (!flag_pixels(i, GPTR(pix))){ g_flag_bad[i] = 1; rlog("[roam] f=%ld flag %s: flags.dat is broken\n", rh_frame(), flag_code(i)); return 0; }
     memcpy(GPTR(ti), GPTR(src), TI_SZ); memcpy(GPTR(pl), GPTR(rd32(src)), PLAT_SZ);
     MR32(pl) = 0; MR32(pl + 4u) = 0; MR32(pl + 0x18u) = 0;
     char nm[24]; snprintf(nm, sizeof nm, "ROAM_FLAG_%s", flag_code(i));

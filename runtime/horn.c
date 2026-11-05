@@ -29,7 +29,7 @@
  *              note, the last one shaking), through a mute that opens with
  *              each note
  *   sputter    a dying horn: it catches, cuts out and sags flat, then wobbles
- * and recorded (web/src/static/horns.bin, web/tools/mkhorns.mjs cuts them;
+ * and recorded (web/src/static/horns.dat, web/tools/mkhorns.mjs cuts them;
  * the start page plays the same file):
  *   dixie      a Dixie air horn's twelve notes
  *   oldcar     an old car's horn
@@ -135,7 +135,7 @@ typedef struct {
     int   swell;                     /* the level follows the envelope's 1.5th power (the Klaxon) */
     const Note *tune; int ntune;     /* the tones play this tune, over again */
     float gate, nsag, vib;           /* the tune: each note's rise and fall (s, 0: 4 ms), its pitch x (1 - nsag (1 - that)), the vibrato's depth */
-    /* 1: no tones but horns.bin's clip of this name (only att, rel and level
+    /* 1: no tones but horns.dat's clip of this name (only att, rel and level
      * count); again: s of silence before it plays again while held (a clip
      * with a loop loops instead) */
     int   clip; float again;
@@ -179,17 +179,17 @@ static const Kind KINDS[HORN_KINDS] = {
     { .name = "thecar_long", .clip = 1, .att = .005f, .rel = .080f, .level = 1.171f },
 };
 
-/* ---- the recorded horns: web/src/static/horns.bin (web/tools/mkhorns.mjs) ---------- */
+/* ---- the recorded horns: web/src/static/horns.dat (web/tools/mkhorns.mjs) ---------- */
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wc23-extensions"
 static const uint8_t g_horns_bin[] = {
-#embed "../web/src/static/horns.bin"
+#embed "../web/src/static/horns.dat"
 };
 #pragma clang diagnostic pop
 typedef struct { const uint8_t *pcm; uint32_t n, l0, l1; float rate; } Clip;   /* l1: 0, no loop */
 static uint32_t rd16(const uint8_t *p){ return (uint32_t)p[0] | (uint32_t)p[1] << 8; }
 static uint32_t rd32(const uint8_t *p){ return rd16(p) | rd16(p + 2) << 16; }
-/* the clip of that name; 0 (n 0) when horns.bin has none (the kind sounds as the dual horn) */
+/* the clip of that name; 0 (n 0) when horns.dat has none (the kind sounds as the dual horn) */
 static int clip_find(const char *name, Clip *c){
     const uint8_t *b = g_horns_bin;
     uint32_t len = (uint32_t)sizeof g_horns_bin, cnt = len >= 8 ? rd16(b + 4) : 0, head = 8u + 32u * cnt;
@@ -353,7 +353,7 @@ static void tbl_init(void){
     for (int h = 0; h < HORN_KINDS; h++){
         const Kind *K = &KINDS[h];
         if (K->clip){
-            if (!clip_find(K->name, &g_clip[h])) fprintf(stderr, "[horn] horns.bin has no %s: the dual horn instead\n", K->name);
+            if (!clip_find(K->name, &g_clip[h])) fprintf(stderr, "[horn] horns.dat has no %s: the dual horn instead\n", K->name);
             continue;
         }
         double peak = 0.0;

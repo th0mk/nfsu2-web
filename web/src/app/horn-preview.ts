@@ -9,7 +9,7 @@
 // player's horn has (distance, side, Doppler) and the game's choice of voices are not here, nor the pitch each
 // player's name gives their horn: the preview is at the kind's own.
 //
-// The recorded horns' clips are web/src/static/horns.bin, the file horn.c embeds: playHorn fetches it (loadHornClips),
+// The recorded horns' clips are web/src/static/horns.dat, the file horn.c embeds: playHorn fetches it (loadHornClips),
 // the test hands it over (setHornClips).
 //
 // This module is pure but for playHorn and loadHornClips (no DOM), so it can be checked under node.
@@ -86,10 +86,10 @@ function table(name: string): Float32Array {
   return tb;
 }
 
-/** horns.bin's clips (horn.c's clip_find), by name */
+/** horns.dat's clips (horn.c's clip_find), by name */
 interface Clip { pcm: Int16Array; l0: number; l1: number; rate: number }
 let clips: Map<string, Clip> | null = null;
-/** Takes horns.bin (web/tools/mkhorns.mjs's format); one that is not: no clips (those kinds sound as the dual horn). */
+/** Takes horns.dat (web/tools/mkhorns.mjs's format); one that is not: no clips (those kinds sound as the dual horn). */
 export function setHornClips(bin: Uint8Array): void {
   clips = new Map();
   const dv = new DataView(bin.buffer, bin.byteOffset, bin.byteLength), len = bin.byteLength;
@@ -107,9 +107,9 @@ export function setHornClips(bin: Uint8Array): void {
   }
 }
 let loading: Promise<void> | null = null;
-/** Fetches horns.bin once (the recorded horns' clips); a failure leaves them out. */
+/** Fetches horns.dat once (the recorded horns' clips); a failure leaves them out. */
 export function loadHornClips(): Promise<void> {
-  loading ??= fetch('/horns.bin').then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status))))
+  loading ??= fetch('/horns.dat').then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status))))
     .then(b => setHornClips(new Uint8Array(b)), () => { loading = null; });
   return loading;
 }

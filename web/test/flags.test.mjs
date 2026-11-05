@@ -1,9 +1,9 @@
-// The flags before players' names (web/src/app/flags.ts; settings.ts roam_flag; runtime/flags.bin, made by
+// The flags before players' names (web/src/app/flags.ts; settings.ts roam_flag; runtime/flags.dat, made by
 // web/tools/mkflags.mjs; runtime/roam_game.c flag_*):
 //   node --test web/test/flags.test.mjs
 // - the list: in order (the game looks a code up by halves), each code once, as roam_core.c sends it (lower case
 //   letters and '-', at most RC_FLAG_MAX); the countries of ISO 3166-1, Kosovo, the United Kingdom's nations and Quebec
-// - flags.bin: the same codes in the same order, each flag's runs whole (48x36 pixels), as flag_rgb reads them
+// - flags.dat: the same codes in the same order, each flag's runs whole (48x36 pixels), as flag_rgb reads them
 // - /flags.png (web/build.mjs): each flag at its place in the sheet, the sheet as big as the flags take
 // - the setting: a code in any case is the code; anything else refused (none at Play); its row's names in the page's
 //   language, the nations translated
@@ -31,8 +31,8 @@ test('the list: in order, each once, codes the wire takes', () => {
   for (const x of ['eu', 'un', 'es-ct', 'es-pv', 'xx', 'arab']) assert.ok(!c.includes(x), `${x} left out`);
 });
 
-test('flags.bin: the same codes, each flag whole', () => {
-  const b = fs.readFileSync(path.join(ROOT, 'runtime/flags.bin'));
+test('flags.dat: the same codes, each flag whole', () => {
+  const b = fs.readFileSync(path.join(ROOT, 'runtime/flags.dat'));
   assert.equal(b.toString('latin1', 0, 4), 'FLG1');
   const n = b.readUInt16LE(4), w = b[6], h = b[7];
   assert.equal(n, F.FLAG_CODES.length); assert.deepEqual([w, h], [48, 36]);

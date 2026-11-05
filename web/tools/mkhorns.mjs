@@ -1,4 +1,4 @@
-// The recorded horns (runtime/horn.c's kinds with a clip): cut from their recordings, as web/src/static/horns.bin,
+// The recorded horns (runtime/horn.c's kinds with a clip): cut from their recordings, as web/src/static/horns.dat,
 // which the game embeds (horn.c) and the start page fetches for Settings' Listen button (horn-preview.ts).
 //   node web/tools/mkhorns.mjs <folder> [out]
 // <folder> holds the recordings as <YouTube id>.<any extension ffmpeg reads>, e.g. from
@@ -9,7 +9,7 @@
 // (loop: seconds after its start) ends at the loop's end, which is cross-faded with what comes before the loop's
 // start, so the jump back is seamless.
 //
-// horns.bin, little-endian: "HRN1", u16 count, u16 rate; count entries of { char name[16] (NUL-padded), u32 offset,
+// horns.dat, little-endian: "HRN1", u16 count, u16 rate; count entries of { char name[16] (NUL-padded), u32 offset,
 // u32 samples, u32 loop start, u32 loop end (0, 0: none) } (offsets and points in samples, from the data's start);
 // then the data, int16.
 import { execFileSync } from 'node:child_process';
@@ -29,7 +29,7 @@ const CLIPS = [
 const XFADE_S = 0.15, FADE_IN_S = 0.005, FADE_OUT_S = 0.03, GATE_DB = -40, PEAK_DB = -1;
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const [dir, out = path.join(REPO, 'web/src/static/horns.bin')] = process.argv.slice(2);
+const [dir, out = path.join(REPO, 'web/src/static/horns.dat')] = process.argv.slice(2);
 if (!dir) { console.error('usage: node web/tools/mkhorns.mjs <folder of recordings> [out]'); process.exit(2); }
 
 function clip(c) {

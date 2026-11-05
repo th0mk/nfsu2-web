@@ -59,12 +59,12 @@ fs.rmSync(path.join(DIST, 'lang'), { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'lang'));
 for (const f of fs.readdirSync('src/app/lang')) if (f.endsWith('.json'))
   fs.writeFileSync(path.join(DIST, 'lang', f), JSON.stringify(JSON.parse(fs.readFileSync(path.join('src/app/lang', f), 'utf8'))));
-// the flags' pictures beside Your flag (settings-ui.ts): the game's own (runtime/flags.bin, web/tools/mkflags.mjs) as
+// the flags' pictures beside Your flag (settings-ui.ts): the game's own (runtime/flags.dat, web/tools/mkflags.mjs) as
 // one picture, /flags.png, FLAG_SHEET_COLS flags a row in src/app/flags.ts FLAG_CODES' order, which is the file's
 // (a flag out of its place stops the build); the browser fetches it when the row shows
-fs.writeFileSync(path.join(DIST, 'flags.png'), flagSheet(fs.readFileSync('../runtime/flags.bin'), fs.readFileSync('src/app/flags.ts', 'utf8')));
+fs.writeFileSync(path.join(DIST, 'flags.png'), flagSheet(fs.readFileSync('../runtime/flags.dat'), fs.readFileSync('src/app/flags.ts', 'utf8')));
 function flagSheet(bin, src) {
-  const bad = what => { throw new Error(`runtime/flags.bin: ${what}`); };
+  const bad = what => { throw new Error(`runtime/flags.dat: ${what}`); };
   if (bin.toString('latin1', 0, 4) !== 'FLG1') bad('not FLG1');
   const n = bin.readUInt16LE(4), w = bin[6], h = bin[7];
   const codes = [...(/FLAG_CODES\s*=\s*\[([^\]]*)\]/.exec(src)?.[1] ?? '').matchAll(/'([a-z-]+)'/g)].map(m => m[1]);

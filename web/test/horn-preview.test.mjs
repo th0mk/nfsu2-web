@@ -5,7 +5,7 @@
 // 2. every kind as horn.c renders it (tests/horn_render.c, built for wasm as the game is) and as the port does, held
 //    the same time: the same length, and the same sound sample for sample (the port does horn.c's float arithmetic:
 //    identical but where expf, sinf, cosf or exp2f round a last bit differently), so a horn changed in one and not
-//    the other fails here.  The recorded kinds' clips: web/src/static/horns.bin, which horn.c embeds.
+//    the other fails here.  The recorded kinds' clips: web/src/static/horns.dat, which horn.c embeds.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -26,7 +26,7 @@ const FLAGS = ['--target=wasm32-wasip1-threads', '-pthread', '-O3', '-msimd128',
 const LINK = ['-Wl,--import-memory,--export-memory,--shared-memory,--initial-memory=67108864,--max-memory=268435456'];
 const dB = x => 20 * Math.log10(Math.max(x, 1e-9));
 const peak = a => a.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
-const BIN = fs.readFileSync(path.join(REPO, 'web/src/static/horns.bin'));
+const BIN = fs.readFileSync(path.join(REPO, 'web/src/static/horns.dat'));
 H.setHornClips(BIN);
 
 test('every horn renders', () => {

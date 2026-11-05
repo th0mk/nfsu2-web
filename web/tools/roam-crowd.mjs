@@ -32,7 +32,7 @@
 //          announce it (RC_ST_EVENT) and send no car meanwhile, as a game in a race does.
 // --paused players first to last (1-3) are paused (RC_ST_PAUSED, as a game in its pause menu): "(paused)" by their names.
 // --prefix the players' names: <prefix>01, <prefix>02, ... (Bot); a long one shows how a long name reads.
-// --flags  the flags before the players' names in turn (runtime/flags.bin's codes; '-' for none): each player's HELLOs
+// --flags  the flags before the players' names in turn (runtime/flags.dat's codes; '-' for none): each player's HELLOs
 //          to its peers name its flag (roam_core version 13), as a page's with settings.ini roam_flag.
 // --lobbies every n-th player hosts a race lobby where it is at its first tick, one of these career races in turn (their
 //          names: the hub keeps the race's name hash), with 1 to 5 players, its advert to the hub once a second: the world
