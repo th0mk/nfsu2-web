@@ -102,6 +102,15 @@ test('free roam with free roam on: keys, Esc, the stick', async () => {
   assert.equal(await flick(p, 0, 1), true, 'a flick down says its third phrase');
   assert.deepEqual(await said(p), [[0, false], [6, false]]);
   assert.equal(await open(p), -1);
+  assert.deepEqual(await p.evaluate(() => {
+    const q = /** @type {any} */ (window).qc;
+    q.click(); q.stick(0, 0); q.stick(0, -1); q.stick(0, 0);
+    const out = [q.stick(0, -1), q.state().open, q.stick(0, -0.9), q.stick(0, 0), q.stick(0, -1)];
+    q.stick(0, 0);
+    return out;
+  }), [true, -1, true, false, false], 'the flick that says the phrase stays the picker\'s until back at rest (else the game '
+    + 'took it as a tap of the headlights), then the stick is the game\'s again');
+  assert.deepEqual((await said(p)).length, 3);
   assert.equal(await click(p), true);
   assert.equal(await click(p), true, 'a second click closes it');
   assert.equal(await open(p), -1);

@@ -1,0 +1,33 @@
+# Co-op free roam online, instance A: player 1 and player 2 (the keyboard's WASD half) in career free roam, from a
+# career save; B (coop_online_b.txt) plays alone beside them.  Player 2's endpoint goes online (a second endpoint of
+# this browser, roam_game.c c2_*) and the hub links it with B; A shows B's car once and never its own player 2 as
+# another player's car; player 2 drives off, leaves, and its endpoint ends (B sees its car go).
+#   node web/tools/roam-pair.mjs --seed ~/projects/nsfu2/work/seed/career/s2_r7 --a Alma:coop_online_a.txt \
+#        --b Boris:coop_online_b.txt:COOP_PEER=Alma
+0     roam fe2roam 14000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp coop
++0    status coop_online_solo
++0    roam coop join kb
++0    waitmem 0xd00030 2 1200
++150  roam coop state
++0    roam mp waitpeers2 1 3000
++120  roam mp coop
++0    roam mp expectcars 1
++0    roam mp expectnoname ${ROAM_PROFILE} 2
++0    roam mp status
++0    status coop_online_joined
++0    down W
++240  up W
++120  roam coop state
++0    roam mp coop
++0    roam mp expectcars 1
++600  roam mp coop
++0    roam coop leave
++300  roam mp coop
++0    roam mp expectcars 1
++0    status coop_online_left
++${ROAM_WATCH_FRAMES} roam mp status
++10   quit

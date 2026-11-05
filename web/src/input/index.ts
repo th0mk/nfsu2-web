@@ -41,7 +41,7 @@ import { PadPoller, type PadPage, type TouchPad } from './gamepad';
 import { SynthDriver } from './synth';
 import {
   IEV_FOCUS, IEV_KEY_DOWN, IEV_KEY_TAP, IEV_KEY_UP, IEV_LOG, IEV_MOUSE_DOWN, IEV_MOUSE_MOVE, IEV_MOUSE_UP, IEV_QUIT, IEV_SMS,
-  IEV_PHOTO, IEV_NAME, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
+  IEV_PHOTO, IEV_NAME, INAME_SEAT2, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
   IM_EV_DROP, IM_EV_R, IM_EV_W, IM_EVENTS, IM_GAME_INACTIVE, IM_HDR_WORDS, IM_KEYS_HELD, IM_MAGIC, IM_MOUSE_X,
   IM_MOUSE_Y, IM_NAMES_GEN, IM_OFF_EV, IM_OFF_NAMES, IM_OFF_SYN, IM_QUIT_REQ, IM_SYN_R, IM_SYN_W, IM_TEXT,
   IM_TEXT_KIND, IM_TEXT_LEN, IM_TEXT_MAX, IM_TEXT_SEQ, IM_MENU_SCALE, IM_VERSION, IM_VIEW_ROLL, INPUT_EV_N, INPUT_MAGIC, INPUT_NAME_LEN,
@@ -94,8 +94,8 @@ export interface InputHandle {
   /** photo mode (runtime/photo.c): what (its PH_* number) and its values.  false: it cannot reach the game */
   photo(what: number, a?: number, b?: number): boolean;
   /** a new name for free roam and Online mode, now (the operator took the old one away: runtime/web/roam_web.c
-   *  roam_plat_name).  false: it cannot reach the game */
-  name(name: string): boolean;
+   *  roam_plat_name), or (seat2) co-op player 2's in free roam (roam_plat_name2).  false: it cannot reach the game */
+  name(name: string, seat2?: boolean): boolean;
   enterFullscreen(): Promise<boolean>;
   exitFullscreen(): Promise<void>;
   toggleFullscreen(): Promise<void>;
@@ -177,7 +177,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     const o = base + IM_OFF_EV + (w & (INPUT_EV_N - 1)) * 16;
     u8[o] = type; u8[o + 1] = dik; u8[o + 2] = vk; u8[o + 3] = flags;
     u8[o + 4] = Math.min(chars.length, 3); u8[o + 5] = chars[0] ?? 0; u8[o + 6] = chars[1] ?? 0; u8[o + 7] = chars[2] ?? 0;
-    i32[(o + 8) >> 2] = a | 0; i32[(o + 12) >> 2] = b | 0;
+    i32[(o + 8) >>> 2] = a | 0; i32[(o + 12) >>> 2] = b | 0;
     Atomics.store(h, IM_EV_W, (w + 1) | 0);       // publishes the record (a sequentially consistent store)
     Atomics.notify(h, IM_EV_W, 1);
   }
@@ -414,7 +414,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
       push(IEV_PHOTO, what, 0, 0, [], a, b);
       return true;
     },
-    name(name) {
+    name(name, seat2 = false) {
       if (!h || !api.canQuit()) return false;
       // its printable ASCII (Your name's own rule), in pieces of 11 bytes: three chars, then a and b (little-endian)
       const b = [...name].map(c => c.charCodeAt(0)).filter(c => c >= 0x20 && c < 0x7f).slice(0, 32);
@@ -423,7 +423,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
         const p = b.slice(off, off + 11);
         while (p.length < 11) p.push(0);
         const le = (i: number) => p[i] | p[i + 1] << 8 | p[i + 2] << 16 | p[i + 3] << 24;
-        push(IEV_NAME, off, b.length, 0, p.slice(0, 3), le(3), le(7));
+        push(IEV_NAME, off, b.length, seat2 ? INAME_SEAT2 : 0, p.slice(0, 3), le(3), le(7));
       }
       return true;
     },

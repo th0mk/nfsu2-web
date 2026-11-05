@@ -246,6 +246,7 @@ pub async fn run(o: Options, cores: usize) {
         lan_sndbuf,
         compress_threads,
     ));
+    log::line(if app.lastfm.is_some() { "[lastfm] scrobbles on" } else { "[lastfm] scrobbles off (no NFSU2_LASTFM_KEY and NFSU2_LASTFM_SECRET)" });
     // the pages' friend messages (friends.rs)
     if let Some(f) = &app.friends {
         f.attach();
@@ -256,6 +257,7 @@ pub async fn run(o: Options, cores: usize) {
     // the switch's players, every 5 minutes while any are on
     {
         let lan = lan.clone();
+        let roam = app.roam.clone();
         tokio::spawn(async move {
             let mut shown = false;
             let mut thinned = 0;
@@ -292,6 +294,10 @@ pub async fn run(o: Options, cores: usize) {
                     b.thinning,
                     b.thinned - thinned
                 ));
+                // co-op free roam's second players (nfsu2-roam `coop_seats`): one more endpoint on their page's place each
+                if let Some(n) = roam.as_ref().map(|r| r.coop_seats()).filter(|&n| n > 0) {
+                    log::line(&format!("[players] of them in free roam, {n} with a second player beside them (co-op)"));
+                }
                 // LAN broadcasts (server.dll's adverts) not sent to pages with LAN play open but no socket on their port
                 // (nfsu2-lan Peer::takes_udp)
                 let skipped = b.bcast_skipped - was.bcast_skipped;
@@ -416,6 +422,9 @@ pub async fn run(o: Options, cores: usize) {
                 }
                 if let Some(f) = &app.friends {
                     f.prune();
+                }
+                if let Some(l) = &app.lastfm {
+                    l.prune();
                 }
                 // the claimed names: the ended ones go, names.json written when anything changed
                 if let Some(n) = &app.names {
@@ -596,9 +605,9 @@ pub async fn run(o: Options, cores: usize) {
     lines.push(format!(
         "  free roam : {}",
         if o.roam_hub {
-            "the hub at 10.77.0.253 on the switch links each player to the 32 nearest (--roam-hub off: groups of 33 by broadcast)"
+            "the hub at 10.77.0.253 on the switch gives each player the cars of its nearest, as many as its game shows (64 at most), one way where they show fewer (core 15; --roam-hub off: groups of 65 by broadcast)"
         } else {
-            "no hub (--roam-hub off): players find each other by broadcast, groups of 33"
+            "no hub (--roam-hub off): players find each other by broadcast, groups of 65"
         }
     ));
     if o.roam_hub {

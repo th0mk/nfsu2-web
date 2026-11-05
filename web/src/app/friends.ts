@@ -11,7 +11,9 @@
 //   page menu's Friends popup (Join a friend's room).
 // - FriendsPanel, on the start page (its Friends & crews tab): one line a friend, where it plays after its name and a
 //   Join in free roam, the requests to answer, the ones sent; icons for what each line does, a friend's Message among
-//   them (lime with a dot while messages wait to be read: messages.ts); under them a field to ask a player by name.
+//   them (lime with a dot while messages wait to be read: messages.ts), and a friend's Discord icon, which copies its
+//   Discord username (copy.ts: a toast at it says so); under them a field to ask a player by name, and the player's own Discord username ("Your
+//   Discord": only its friends both ways see it, as Discord allows one: discordName).
 // - FriendsApi: /friends, asked with the keyphrase's token (claim.ts NameClaims does the same for /names).
 import type { GameSession } from './game';
 import { touchFirst } from './device';
@@ -21,7 +23,8 @@ import { keyName, siteKey } from './sitekeys';
 import { pageDialog } from './padnav';
 import { onlineName } from './claim';
 import { roomHash } from './players';
-import { iconButton } from './settings-ui';
+import { iconButton, TRASH } from './settings-ui';
+import { copyText, copyToast, READ_MS } from './copy';
 import { mailOf, type MessageStore } from './messages';
 
 /** two names of one player: the same Online form, in any case (the name over a car, a claimed name) */
@@ -37,6 +40,18 @@ export interface Friend { name: string; where: 'roam' | 'online' | ''; room?: st
  *  last change did (friends.rs) */
 export interface FriendLists {
   me: string | null; friends: Friend[]; asks: string[]; sent: string[]; mail: { from: string; body: string; t: number }[]; done?: string;
+  /** the player's own Discord username (null: none) */
+  contact?: string | null;
+}
+
+/** A Discord username as Discord allows one (2 to 32 of a-z, 0-9, _ and ., never two . together), from what the
+ *  player typed: the spaces around it, a leading @ and capitals let go (as the server's buddy.rs discord_name).
+ *  null: not one. */
+export function discordName(typed: string): string | null {
+  let s = typed.trim();
+  if (s.startsWith('@')) s = s.slice(1);
+  s = s.replace(/[A-Z]/g, c => c.toLowerCase());
+  return /^[a-z0-9_.]{2,32}$/.test(s) && !s.includes('..') ? s : null;
 }
 
 /** the friends of an answer of the server's (GET /friends, "where"), read leniently */
@@ -60,13 +75,17 @@ export class FriendsApi {
     const names = (v: unknown) => Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
     return {
       me: typeof j.me === 'string' ? j.me : null, friends: friendsOf(j.friends), asks: names(j.asks), sent: names(j.sent), mail: mailOf(j.mail),
-      done: typeof j.done === 'string' ? j.done : undefined,
+      done: typeof j.done === 'string' ? j.done : undefined, contact: typeof j.contact === 'string' ? j.contact : null,
     };
   }
 
   list(): Promise<FriendLists | null> { return this.ask(); }
   act(op: 'accept' | 'decline' | 'remove' | 'block' | 'ask', name: string): Promise<FriendLists | null> {
     return this.ask({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op, name }) });
+  }
+  /** the player's Discord username from now on ('' none): the lists after it, `done` "ok", "name" (refused), "rate" */
+  discord(name: string): Promise<FriendLists | null> {
+    return this.ask({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'discord', name }) });
   }
   /** a message to friend `name` (messages.ts): the lists after it, `done` what became of it */
   send(name: string, body: string): Promise<FriendLists | null> {
@@ -90,12 +109,14 @@ export function whereText(f: Friend, mine?: string): string {
 }
 
 /** the signs of the friends' icons (24-unit boxes, as settings-ui.ts's) */
-const CHECK = 'M5 12.5l4.5 4.5L19 7.5', CROSS = 'M6 6l12 12M18 6L6 18', TRASH = 'M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13';
+const CHECK = 'M5 12.5l4.5 4.5L19 7.5', CROSS = 'M6 6l12 12M18 6L6 18';
 const JOIN = 'M10 17l5-5-5-5M15 12H3M14 4h6v16h-6', ENVELOPE = 'M3 6h18v12H3zM3 7l9 6 9-6', PLUS = 'M12 5v14M5 12h14';
+/** Discord's mark (as the start page's Discord button has it): a filled shape, the icon's class says so (style.css) */
+const DISCORD = 'M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z';
 
 /** a line of a friends list: the name, where it plays (or the request's state) after it in small text, lime while it
- *  plays; dimmed while it does not; the icons at its end; the friend's own line under it, when it has one */
-interface Line { name: string; state: string; ok?: boolean; off?: boolean; acts: HTMLButtonElement[]; contact?: string }
+ *  plays; dimmed while it does not; the icons at its end */
+interface Line { name: string; state: string; ok?: boolean; off?: boolean; acts: HTMLButtonElement[] }
 
 function icon(cls: string, name: string, path: string, f: () => void): HTMLButtonElement {
   const b = iconButton(cls, name, path);
@@ -119,15 +140,18 @@ function friendList(lines: Line[]): HTMLUListElement {
     acts.className = 'fl-act';
     acts.append(...l.acts);
     li.append(name, acts);
-    if (l.contact) {
-      const c = document.createElement('span');
-      c.className = 'fl-contact';
-      c.textContent = l.contact;
-      li.append(c);
-    }
     ul.append(li);
   }
   return ul;
+}
+
+/** a friend's Discord icon: a click copies its username, and a toast at it says so with the name (for long enough to
+ *  read it; the name alone where the browser would not copy, so it can still be typed) */
+function discordIcon(name: string): HTMLButtonElement {
+  const b = icon('fl-discord', t('Copy Discord name {name}', { name }), DISCORD, async () => {
+    copyToast(b, await copyText(name, b) ? t('Copied {name}', { name }) : t('Discord: {name}', { name }), READ_MS);
+  });
+  return b;
 }
 
 /** how often the list is tried until the game's link to the server is up (ms) */
@@ -325,7 +349,8 @@ export class FriendPrompt {
   }
 
   /** The page menu's Friends popup, in box: the friends in free roam, a Join for each one in another room (join: the
-   *  room's name, '' the room of everyone); the others in a line */
+   *  room's name, '' the room of everyone), a Discord icon for one that gave its Discord username; the others in a
+   *  line */
   drawPlaced(box: HTMLElement, join: (room: string) => void) {
     const p = (text: string) => Object.assign(document.createElement('p'), { className: 'hint', textContent: text });
     const all = this.where, room = this.deps.room();
@@ -335,7 +360,10 @@ export class FriendPrompt {
     if (roam.length) {
       nodes.push(friendList(roam.map(f => ({
         name: f.name, state: whereText(f, room), ok: true,
-        acts: f.room !== undefined && !inRoom(f, room) ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : [],
+        acts: [
+          ...(f.contact ? [discordIcon(f.contact)] : []),
+          ...(f.room !== undefined && !inRoom(f, room) ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : []),
+        ],
       }))));
     } else {
       nodes.push(p(t('None of your friends is in free roam now.')));
@@ -483,6 +511,53 @@ export class FriendsPanel {
   private addInput: HTMLInputElement | null = null;
   private addBox: HTMLElement | null = null;
   private addNote = { text: '', warn: false };
+  /** the Your Discord row (kept over renders, as the field above), and what the last change of it did ('' fine) */
+  private discordInput: HTMLInputElement | null = null;
+  private discordRow: HTMLElement | null = null;
+  private discordState = { text: '', bad: false };
+
+  private discordField(): HTMLElement {
+    const inp = this.discordInput ??= Object.assign(document.createElement('input'), {
+      type: 'text', id: 'set-discord', placeholder: t('Discord username'), maxLength: 40, autocomplete: 'off', spellcheck: false,
+    });
+    if (!this.discordRow) {
+      inp.enterKeyHint = 'done';
+      inp.setAttribute('aria-describedby', 'set-discord-help set-discord-state');
+      inp.onchange = () => void this.setDiscord();   // (Enter, or leaving the field: as the Room setting's)
+    }
+    const r = this.discordRow ??= document.createElement('div');
+    r.className = 'set';
+    const label = Object.assign(document.createElement('label'), { className: 'set-label', htmlFor: 'set-discord', textContent: t('Your Discord') });
+    const help = Object.assign(document.createElement('p'), { className: 'set-help', id: 'set-discord-help', textContent: t('Only your friends see it, so they can add you on Discord.') });
+    const ctl = Object.assign(document.createElement('div'), { className: 'set-control' });
+    ctl.append(inp);
+    const st = Object.assign(document.createElement('p'), { className: 'set-state bad', id: 'set-discord-state', textContent: this.discordState.text });
+    st.setAttribute('aria-live', 'polite');
+    st.hidden = !this.discordState.text;
+    inp.placeholder = t('Discord username');
+    r.replaceChildren(label, help, ctl, st);
+    return r;
+  }
+
+  /** the field's username to the server (friends.rs "discord"): as Discord allows one, or none */
+  private async setDiscord() {
+    const inp = this.discordInput;
+    if (!inp) return;
+    const typed = inp.value.trim(), name = typed ? discordName(typed) : '';
+    const say = (text: string) => { this.discordState = { text, bad: !!text }; };
+    if (name === (this.lists?.contact ?? '')) { inp.value = name; say(''); this.render(); return; }
+    if (name === null) { say(t('Not a Discord username: 2 to 32 small letters, digits, _ or .')); this.render(); return; }
+    let r: FriendLists | null = null;
+    try { r = await this.deps.api.discord(name); } catch (e) { this.deps.log(`[friends] Discord name failed: ${e}`); }
+    this.deps.log(`[friends] Discord name ${name ? 'set' : 'taken away'}: ${r?.done ?? 'no answer'}`);
+    this.took(r);
+    const done = r?.done ?? '';
+    if (done === 'ok') { inp.value = r?.contact ?? ''; say(''); }
+    else if (done === 'name') say(t('{name} isn\'t allowed here.', { name }));
+    else if (done === 'rate') say(t('Wait a moment'));
+    else say(t('Not saved: try again in a moment'));
+    this.render();
+  }
 
   private addField(): HTMLElement {
     if (this.addBox) return this.addBox;
@@ -511,6 +586,8 @@ export class FriendsPanel {
     const say = (text: string, warn: boolean) => { this.addNote = { text, warn }; };
     if (done === 'asked') say(t('Friend request sent to {name}', { name: shown }), false);
     else if (done === 'friends') say(t('You and {name} are friends', { name: shown }), false);
+    // (the server says "claim" for this player's own name too: its claim gone since the list was drawn)
+    else if (done === 'claim' && !r?.me) say(t('Claim your name (Online, Your name) to add friends.'), true);
     else if (done === 'claim') say(t('{name} has no claimed name, so can\'t add friends yet', { name }), true);
     else if (done === 'self') say(t('That\'s your own name'), true);
     else if (done === 'name') say(t('Not a player\'s name'), true);
@@ -557,13 +634,14 @@ export class FriendsPanel {
     }
     for (const f of [...l.friends].sort((a, b) => ORDER[a.where] - ORDER[b.where])) {
       const acts: HTMLButtonElement[] = [];
+      if (f.contact) acts.push(discordIcon(f.contact));
       if (f.where === 'roam' && f.room !== undefined) acts.push(icon('fl-join', t('Join'), JOIN, () => this.deps.join(f.room!)));
       const unread = this.deps.store.unread(f.name);
       acts.push(icon(unread ? 'fl-msg unread' : 'fl-msg', unread ? t('Message ({n})', { n: unread }) : t('Message'), ENVELOPE, () => this.deps.chat(f.name)));
       acts.push(icon('fl-del', t('Remove'), TRASH, async () => {
         if (await this.deps.confirm(t('Remove {name}?', { name: f.name }), t('You are friends no more, on both lists.'), t('Remove'))) void this.act('remove', f.name);
       }));
-      lines.push({ name: f.name, state: whereText(f), ok: !!f.where, off: !f.where, acts, contact: f.contact });
+      lines.push({ name: f.name, state: whereText(f), ok: !!f.where, off: !f.where, acts });
     }
     for (const name of l.sent) {
       lines.push({ name, state: t('request sent'), off: true, acts: [icon('fl-del', t('Take back'), CROSS, () => this.act('remove', name))] });
@@ -574,8 +652,13 @@ export class FriendsPanel {
     const ctl = [...(lines.length ? [friendList(lines)] : []), this.addField(), note];
     // the field stays the same element: a player typing in it keeps the keyboard and the caret
     const inp = this.addInput!, typing = document.activeElement === inp, at = [inp.selectionStart, inp.selectionEnd];
-    root.replaceChildren(row(t('Touch front bumpers in free roam for 3 s to add a player.'), ...ctl));
+    // (the Your Discord field shows the server's name unless the player is changing it)
+    const dIn = this.discordInput, dTyping = !!dIn && document.activeElement === dIn;
+    const dRow = this.discordField();
+    if (!dTyping && !this.discordState.text) this.discordInput!.value = l.contact ?? '';
+    root.replaceChildren(row(t('Touch front bumpers in free roam for 3 s to add a player.'), ...ctl), dRow);
     if (typing) { inp.focus({ preventScroll: true }); inp.setSelectionRange(at[0], at[1]); }
+    if (dTyping) this.discordInput!.focus({ preventScroll: true });
   }
 
   dispose() { clearInterval(this.timer); }

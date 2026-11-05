@@ -6,12 +6,14 @@
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { bootTexts } from './tools/i18n-keys.mjs';
 const watch = process.argv.includes('--watch');
 const DIST = 'dist', DEV = 'dist-dev';
 const opts = {
   entryPoints: {
     'main': 'src/main.ts',
+    'lastfm': 'src/lastfm-callback.ts',
     'host/game-worker': 'src/host/game-worker.ts',
     'host/io-worker': 'src/host/io-worker.ts',
     'host/predownload-worker': 'src/host/predownload-worker.ts',
@@ -58,6 +60,47 @@ fs.rmSync(path.join(DIST, 'lang'), { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'lang'));
 for (const f of fs.readdirSync('src/app/lang')) if (f.endsWith('.json'))
   fs.writeFileSync(path.join(DIST, 'lang', f), JSON.stringify(JSON.parse(fs.readFileSync(path.join('src/app/lang', f), 'utf8'))));
+// the flags' pictures beside Your flag (settings-ui.ts): the game's own (runtime/flags.dat, web/tools/mkflags.mjs) as
+// one picture, /flags.png, FLAG_SHEET_COLS flags a row in src/app/flags.ts FLAG_CODES' order, which is the file's
+// (a flag out of its place stops the build); the browser fetches it when the row shows
+fs.writeFileSync(path.join(DIST, 'flags.png'), flagSheet(fs.readFileSync('../runtime/flags.dat'), fs.readFileSync('src/app/flags.ts', 'utf8')));
+function flagSheet(bin, src) {
+  const bad = what => { throw new Error(`runtime/flags.dat: ${what}`); };
+  if (bin.toString('latin1', 0, 4) !== 'FLG1') bad('not FLG1');
+  const n = bin.readUInt16LE(4), w = bin[6], h = bin[7];
+  const codes = [...(/FLAG_CODES\s*=\s*\[([^\]]*)\]/.exec(src)?.[1] ?? '').matchAll(/'([a-z-]+)'/g)].map(m => m[1]);
+  const cols = Number(/FLAG_SHEET_COLS\s*=\s*(\d+)/.exec(src)?.[1]);
+  if (codes.length !== n) bad(`${n} flags, src/app/flags.ts has ${codes.length}`);
+  if (!(cols > 0)) bad('src/app/flags.ts has no FLAG_SHEET_COLS');
+  const W = cols * w, H = Math.ceil(n / cols) * h, px = Buffer.alloc(W * H * 3);
+  for (let i = 0; i < n; i++) {
+    // { char code[8], u32 offset, u32 length } after the 8-byte head; the pixels in runs (mkflags.mjs)
+    const e = 8 + 16 * i, code = bin.toString('latin1', e, e + 8).replace(/\0+$/, '');
+    if (code !== codes[i]) bad(`flag ${i} is ${code}, src/app/flags.ts has ${codes[i]} there`);
+    let p = bin.readUInt32LE(e + 8), k = 0;
+    const end = p + bin.readUInt32LE(e + 12), x0 = (i % cols) * w, y0 = Math.floor(i / cols) * h;
+    const put = at => { if (k < w * h) bin.copy(px, ((y0 + Math.floor(k / w)) * W + x0 + k % w) * 3, at, at + 3); k++; };
+    while (p < end) {
+      const r = bin[p++];
+      if (r < 128) for (let j = 0; j <= r; j++, p += 3) put(p);
+      else { for (let j = 0; j < r - 126; j++) put(p); p += 3; }
+    }
+    if (k !== w * h) bad(`${code}: ${k} pixels, not ${w * h}`);
+  }
+  // PNG, 8-bit RGB, each row unfiltered
+  const raw = Buffer.alloc(H * (1 + W * 3));
+  for (let y = 0; y < H; y++) px.copy(raw, y * (1 + W * 3) + 1, y * W * 3, (y + 1) * W * 3);
+  const chunk = (type, data) => {
+    const head = Buffer.alloc(8), tail = Buffer.alloc(4);
+    head.writeUInt32BE(data.length, 0); head.write(type, 4, 'latin1');
+    tail.writeUInt32BE(zlib.crc32(Buffer.concat([head.subarray(4), data])) >>> 0, 0);
+    return Buffer.concat([head, data, tail]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
+}
 // the changelog (CHANGELOG.md at the top of the repo): /changelog.json, fetched when a player opens it (changelog.ts):
 // [{ date, commit, changes: [[area, text]] }], newest first, one release a day.  A line that looks like a release or a
 // change but is neither stops the build, so a typo never reaches the page as a missing release; so does a day twice

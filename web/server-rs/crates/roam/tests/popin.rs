@@ -101,6 +101,9 @@ struct Way {
     rank: Rank,
     /// a peer the hub left out gives its slot to one it lists (else it keeps it until it goes, or the game's step 5)
     give_way: bool,
+    /// the games' core and links (core 4: 32 links, as before version 10)
+    core: u16,
+    links: u8,
 }
 
 struct Scene {
@@ -154,7 +157,7 @@ fn run(scene: &Scene, way: &Way) {
         })
         .collect();
     for i in 0..scene.n {
-        k.from(vip(i), &hello_with(1000 + i as u32, &HelloOpts { core: 4, ..Default::default() }));
+        k.from(vip(i), &hello_with(1000 + i as u32, &HelloOpts { core: way.core, links: way.links, ..Default::default() }));
     }
     let mut games: Vec<HashMap<usize, Peer>> = (0..scene.n).map(|_| HashMap::new()).collect();
     let mut last_list = vec![f64::NEG_INFINITY; scene.n];
@@ -200,7 +203,7 @@ fn run(scene: &Scene, way: &Way) {
             next_tick += way.tick_ms / 1000.0;
             k.clear();
             k.hub.tick();
-            for (key, list) in k.lists() {
+            for (key, list) in k.lists_in() {
                 let me = (key.split(':').next().unwrap().parse::<u32>().unwrap() - vip(0)) as usize;
                 last_list[me] = t;
                 for e in list {
@@ -382,11 +385,11 @@ fn popin() {
     let game_old = Rank { soon: 0.0, look: 3.0, view: 0.0 };
     let new = RoamOptions::default();
     let game = |o: &RoamOptions| Rank { soon: o.soon_ms / 1000.0, look: o.look_ms / 1000.0, view: o.view_m };
-    let way = |name, o: RoamOptions, give_way| Way { name, tick_ms: o.tick_ms as f64, rank: game(&o), o, give_way };
+    let way = |name, o: RoamOptions, give_way| Way { name, tick_ms: o.tick_ms as f64, rank: game(&o), o, give_way, core: 4, links: 0 };
     let ways = [
-        Way { name: "before", tick_ms: 1000.0, rank: game_old, o: old, give_way: false },
+        Way { name: "before", tick_ms: 1000.0, rank: game_old, o: old, give_way: false, core: 4, links: 0 },
         way("now", new.clone(), true),
-        Way { name: "now, the game as before", tick_ms: 500.0, rank: game_old, o: new.clone(), give_way: false },
+        Way { name: "now, the game as before", tick_ms: 500.0, rank: game_old, o: new.clone(), give_way: false, core: 4, links: 0 },
         way("now, tick 1 s", RoamOptions { tick_ms: 1000, ..new.clone() }, true),
         way("now, no view point", RoamOptions { view_m: off, ..new.clone() }, true),
         way("now, view 100 m", RoamOptions { view_m: 100.0, ..new.clone() }, true),
@@ -396,7 +399,15 @@ fn popin() {
         way("now, look 5 s", RoamOptions { look_ms: 5000.0, ..new.clone() }, true),
         way("now, nobody away", RoamOptions { away_m: off, ..new.clone() }, true),
         way("now, keep 0.7", RoamOptions { keep: 0.7, ..new.clone() }, true),
+        Way { core: 14, links: 32, ..way("now, core 14", new.clone(), true) },
+        Way { core: 15, links: 32, ..way("now, one-way (core 15)", RoamOptions { near_m: off, ..new.clone() }, true) },
+        Way { core: 15, links: 32, ..way("one-way, near first", new.clone(), true) },
+        Way { core: 15, links: 32, ..way("one-way, near 100 m", RoamOptions { near_m: 100.0, ..new.clone() }, true) },
+        Way { core: 15, links: 32, ..way("one-way, near hold 15 s", RoamOptions { near_hold_ms: 15_000.0, ..new.clone() }, true) },
+        Way { core: 15, links: 32, ..way("one-way, near first at any speed", RoamOptions { near_fast: 1e9, ..new.clone() }, true) },
     ];
+    let only = std::env::var("POPIN_ONLY").unwrap_or_default();
+    let ways: Vec<&Way> = ways.iter().filter(|w| only.is_empty() || only.split('|').any(|o| w.name == o)).collect();
     for s in &scenes {
         for w in &ways {
             run(s, w);

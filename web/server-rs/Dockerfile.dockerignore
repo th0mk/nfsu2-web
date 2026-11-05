@@ -3,6 +3,7 @@
 *
 !app/registry-defaults.txt
 !CHANGELOG.md
+!runtime/flags.dat
 !web/package.json
 !web/package-lock.json
 !web/build.mjs

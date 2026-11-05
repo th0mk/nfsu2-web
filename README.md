@@ -41,10 +41,12 @@ web/start.sh --data "/path/to/Need for Speed Underground 2"
 
 Open **http://localhost:8080/** in Chrome or Firefox and press **Play**. The start page has the settings, your saves
 and the controls. The player's guide is [docs/web/PLAYING.md](docs/web/PLAYING.md). The game plays in any of its
-thirteen languages, in Brazilian Portuguese, in Polish, in Turkish, in Hungarian, in Ukrainian or in Bulgarian; the dubbed
-voices and movies and the Portuguese, Polish, Hungarian, Ukrainian and Bulgarian text come from mods, the Turkish text is
-this repository's own translation
-(`tools/lang/turkish.json`, with a mod's fonts), as language packs. The menus and HUD can be redrawn at four times
+thirteen languages, in Brazilian Portuguese, in Polish, in Turkish, in Hungarian, in Ukrainian, in Czech, in Slovak, in
+Greek or in Bulgarian; the dubbed voices and movies and the Portuguese, Polish, Hungarian, Ukrainian, Czech, Slovak and
+Bulgarian text come from mods (Czech's with this repository's own texts for what it left in German or empty,
+`tools/lang/czech.json`), the Turkish text is this repository's own translation (`tools/lang/turkish.json`, with a mod's
+fonts), the Greek text a contributor's (`tools/lang/greek.json`, with Greek letters drawn into the game's fonts by
+`tools/greekfont`), as language packs. The menus and HUD can be redrawn at four times
 their size, from a mod as a texture pack.
 
 To play with friends, run the server behind HTTPS (other PCs need a secure context): `web/deploy/` has a Docker setup.
@@ -75,9 +77,19 @@ translation (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro), fr
 [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), from muntazam's
 [Turkish translation](https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch) (its fonts), from
 GameHunter's [Hungarian translation](http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html)
-(L_zooltan), from Clark X.'s [Ukrainian translation](https://kuli.com.ua/need-for-speed-underground-2) and from
-StoyanKolev (IVANOFF)'s [Bulgarian translation](https://ivanoff.free.bg). The texture pack is built from LunicAura106's
-[Upscaled HUD](https://nfsmods.xyz/mod/4319). Built with the help of Claude Code.
+(L_zooltan), from Clark X.'s [Ukrainian translation](https://kuli.com.ua/need-for-speed-underground-2), from ROXOR's and
+PINĎA & syn's Czech translation and from MixerX's Slovak one ([abcgames.cz](https://www.abcgames.cz/?p=preklady_zobraz&id=7774)) and from
+StoyanKolev (IVANOFF)'s [Bulgarian translation](https://ivanoff.free.bg). The texture packs are built from LunicAura106's
+[Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485), the
+uncensored songs from xGMVx's [Uncensored & Restored Soundtrack](https://nfsmods.xyz/mod/3649), and Art Factory 28 to
+34 from the underground2.net Team & Contributors' [PC port](https://nfsmods.xyz/mod/2004) of the Japanese release's
+vinyls. Split screen is BirdSentinel (Zack)'s port of mihaits'
+[NFSU2-SplitScreen](https://github.com/mihaits/NFSU2-SplitScreen). Other changes follow what these mods found out
+about the game: ThirteenAG's, Aero_'s and xan1242's [Widescreen Fixes Pack](https://nfsmods.xyz/mod/3327), dstudnicki's
+[NFSU2 High FPS Audio Fix](https://github.com/dstudnicki/NFSU2HighFPSAudioFix), the ExOpts Team's
+[NFSU2 Extra Options](https://nfsmods.xyz/mod/290), MaxHwoy's [Show Hidden Races Mod](https://nfsmods.xyz/mod/1583)
+and thelink2012's [Visual Reputation Remover](https://nfsmods.xyz/mod/2773). The start page's Mods tab lists them all.
+Built with the help of Claude Code.
 
 ## License
 

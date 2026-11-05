@@ -1,7 +1,7 @@
 # Show-off between players of two car types, instance B (watches; with showoff_seed_a.txt): new career -> prologue
 # free roam; jumps behind A's car ("mp follow", onto A's road) and saves the page every 4 s (c_back_*) as A opens its
-# trunk, hood and doors, then from A's left side (c_side_*).  Its log: A's car type's part animations loading, and
-# A's parts opening ("[showoff] ... slot K: trunk opens").  roam-pair --page app.
+# hood, trunk and doors, one at a time, then from A's left side (c_side_*).  Its log: A's car type's part animations
+# loading, and A's parts opening ("[showoff] ... slot K: hood opens").  roam-pair --page app.
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
 +30   tap RETURN

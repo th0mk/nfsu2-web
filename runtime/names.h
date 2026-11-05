@@ -29,9 +29,10 @@
  *    starts or ends with a word of edge_ok_start/edge_ok_end ("Nigar",
  *    "Zuniga", "Hooniga")
  * The other offensive names go the same way (picked from the live server's
- * names, 2026-10-26 and 2026-11-02): Nazi ones and their nicknames, hate
+ * names, 2026-10-26, 11-02 and 11-05): Nazi ones and their nicknames, hate
  * aimed at a group, terror, sexual violence; and a name with 1488 in it (the
- * neo-Nazi code).  A swear word is no such name.  A "pid" word (pidor,
+ * neo-Nazi code); and hate aimed at a group as a phrase (name_hate: a verb, a
+ * word between or none, the group).  A swear word is no such name.  A "pid" word (pidor,
  * pidar, pidr) right after the start of an English word that ends in "pid"
  * (rapid, cupid, stupid), or after a vowel when it runs into the next part
  * ("TopiDrift"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
@@ -129,6 +130,31 @@ static inline int name_english_pid(const char *s, int i, const char *w, const ch
     for (int j = i + 1, e = name_at(s, i, w); j < e; j++) if (st[j]) return 1;
     return 0;
 }
+/* a phrase of hate aimed at a group (a verb, one of the words that may come
+ * between or none, a group: "GasJews", "Kill_All_Jews") anywhere in s, the
+ * name's n letters; as the anywhere list's words are matched */
+static inline int name_hate(const char *s, int n){
+    static const char *const hate_verbs[] = { "gas", "kill", "hate", "hunt", "slay", "burn", "shoot", "nuke", "bomb", "dead", "death", "fck",
+        "fuck", "fuk", "destroy", "exterminate", 0 };
+    static const char *const hate_between[] = { "s", "the", "all", "allthe", "da", "dem", "them", "those", "every", "dirty", "to", 0 };
+    static const char *const hate_groups[] = { "jew", "kike", "colored", "coloured", 0 };
+    char v[64], w[192], x[64];
+    for (int a = 0; hate_verbs[a]; a++){
+        name_word(hate_verbs[a], v);
+        for (int i = 0; i < n; i++){
+            if (name_at(s, i, v) < 0) continue;
+            /* b = -1: no word between */
+            for (int b = -1; b < 0 || hate_between[b]; b++)
+                for (int g = 0; hate_groups[g]; g++){
+                    strcpy(w, v);
+                    if (b >= 0){ name_word(hate_between[b], x); strcat(w, x); }
+                    name_word(hate_groups[g], x); strcat(w, x);
+                    if (name_at(s, i, w) >= 0) return 1;
+                }
+        }
+    }
+    return 0;
+}
 static inline int name_blocked(const char *name){
     static const char *const anywhere[] = { "nigg", "niqq", "faggot", "tranny", "trannie", "retard", "ibne", "wetback", "beaner",
         "raghead", "towelhead", "chingchong", "jigaboo", "porchmonkey", "junglebunny",
@@ -137,15 +163,16 @@ static inline int name_blocked(const char *name){
         "hitler", "gitler", "zitler", "adolfh", "himler", "fuhrer", "fuehrer", "siegheil", "zighael", "goebbels",
         "mengele", "mussolini", "jewhunt", "jewshunt", "nigahunt", "zenciav", "natehig", "binladen", "benladen",
         "rapist", "molester",
-        "niger", "higger", "chigga", "negroid", "zencigot", "kacap", "rusnya", "pideras", "frocio", "pretomacaco",
+        "niger", "higger", "figger", "chigga", "negroid", "zencigot", "kacap", "rusnya", "pideras", "frocio", "pretomacaco",
         "kitler", "fitler", "ritler", "sitler", "xitler", "heitler", "nitler", "neonazi", "nazist", "uncleadolf",
         "austrianartist", "austrianpainter", "pintoraustria", "zyklonb", "kristalnacht", "ovendodger",
-        "hatejew", "killjew", "jewkill", "gasjew", "deadjew", "jewslay", "jewdestroy", "fckjew", "fuckjew", "huntjew",
-        "jebaczyd", "zydzidopieca", "osamabin", "alqaeda", "pedophil", "pedofil", 0 };
+        "jewkill", "jewslay", "jewdestroy", "jebaczyd", "zydzidopieca", "osamabin", "alqaeda", "pedophil", "pedofil",
+        "wigger", "niglet", "nignog", "nibber", "iggernay", "neegr", "nigoger", "nigrigg", "nigler", "nigcer", "nigwer",
+        "poofter", "binladin", "htler", "hitlr", "hitlur", "gasthejuice", "goyim", "goyslop", "rapegod", "rapedog", "rapeloli", "biraped", 0 };
     static const char *const whole[] = { "fag", "dyke", "coon", "spic", "paki", "kike", "gook", "chink",
         "niga", "nyga", "ngga", "neger", "xach", "xoxol", "hohol", "ukrop", "pider", "pedik", "nazi", "taliban", "rape",
-        "nig", 0 };
-    static const char *const edge[] = { "niga", "nyga", 0 };
+        "nig", "killnig", "fucknig", "hatenig", "pedo", "goy", 0 };
+    static const char *const edge[] = { "niga", "nyga", "hitla", "hitle", 0 };
     static const char *const edge_ok_start[] = { "nigam", "nigar", "nigak", "nygar", 0 };
     static const char *const edge_ok_end[] = { "zuniga", "kniga", "kuniga", "miniga", "hooniga", "shiniga", "bronyga", "manyga", 0 };
     static const char *const dyke[] = { "dyke", 0 };
@@ -181,7 +208,7 @@ static inline int name_blocked(const char *name){
         for (int i = 0; i < n; i++)
             if (name_at(s, i, w) >= 0 && !name_english_pid(s, i, w, st) && !(niger && !strncmp(s + i, "nigeri", 6))) return 1;
     }
-    return name_whole(s, whole) || name_edge(s, edge, edge_ok_start, edge_ok_end);
+    return name_hate(s, n) || name_whole(s, whole) || name_edge(s, edge, edge_ok_start, edge_ok_end);
 }
 
 #endif

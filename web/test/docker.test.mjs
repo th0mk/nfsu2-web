@@ -16,7 +16,7 @@ const GAME_NAMES = /(^|\/)SPEED2\.EXE$|\.(BUN|BIN|LZC|VIV|MUS|ASF|VP6|ABK|GIN|CS
 // the Dockerfile, its ignore file, and what may go into its build (sources only, never gen/ (the lifted game code),
 // out/ (the module) or the game folder)
 const DOCKERFILE = 'web/server-rs/Dockerfile', IGNORE = 'web/server-rs/Dockerfile.dockerignore';
-const ALLOWED = ['app/registry-defaults.txt', 'CHANGELOG.md', 'web/package.json', 'web/package-lock.json', 'web/build.mjs', 'web/index.html',
+const ALLOWED = ['app/registry-defaults.txt', 'CHANGELOG.md', 'runtime/flags.dat', 'web/package.json', 'web/package-lock.json', 'web/build.mjs', 'web/index.html',
   'web/tools/i18n-keys.mjs', 'web/src/', 'web/server-rs/'];
 
 const ignore = fs.readFileSync(path.join(REPO, IGNORE), 'utf8').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));

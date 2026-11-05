@@ -1,0 +1,21 @@
+# Co-op free roam with player 2 on a controller (local seat 0, "localpad 1"): player 2's throttle from its controller only,
+# player 1's from the keyboard (the game's own input), player 2 leaves.
+0     roam fe2roam 14000
++0    roam smsauto on
++120  localpad 1 connect 1
++30   roam coop join pad 0
++0    waitmem 0xd00030 2 1200
++150  roam coop state
++0    expect i:0xd00030 == 2
++0    localpad 1 RT 1
++100  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0    localpad 1 RT 0
++30   down UP
++100  expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0    up UP
++0    roam coop leave
++60   expect i:0xd00030 == 1
++0    status coop_pad_complete
++10   quit

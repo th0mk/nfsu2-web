@@ -350,6 +350,11 @@ static int get_state(rc_r *r, rc_state *s){
     q_norm(s->q);
     return RC_OK;
 }
+void rc_state_put(rc_w *w, const rc_state *s, int ext){ put_state(w, s); if (ext) put_statex(w, s); }
+int rc_state_get(rc_r *r, rc_state *s, int ext){
+    int e = get_state(r, s);
+    return e ? e : ext ? get_statex(r, s) : RC_OK;
+}
 
 /* ---- messages ------------------------------------------------------------------- */
 /* a flag's code: lower case letters and '-' (roam_game.c looks it up; one it does not have shows none) */
@@ -419,7 +424,7 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         }
         break; }
     case RC_MSG_PEERS:
-        if (m->u.peers.n > RC_MAX_PEERS) return -1;
+        if (m->u.peers.n > RC_LIST_MAX) return -1;
         rc_put8(&w, m->u.peers.n);
         for (int i = 0; i < m->u.peers.n; i++){
             uint32_t ip = m->u.peers.e[i].ip;
@@ -431,6 +436,16 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
             rc_put8(&w, m->u.peers.n_mine);
             for (int i = 0; i < m->u.peers.n_mine; i++){ if (!m->u.peers.mine[i]) return -1; rc_put32(&w, m->u.peers.mine[i]); }
             for (int i = 0; i < m->u.peers.n; i++) rc_put8(&w, m->u.peers.crew[i]);
+            if (m->u.peers.hints){                                     /* the hints (a hub's, core 16) */
+                int nf = 0;
+                for (int i = 0; i < m->u.peers.n; i++) nf += m->u.peers.far[i] > 1;
+                rc_put8(&w, (uint32_t)nf);
+                for (int i = 0; i < m->u.peers.n; i++)
+                    if (m->u.peers.far[i] > 1) rc_put8(&w, (uint32_t)i | (m->u.peers.far[i] > 4 ? RC_HINT_VERYFAR : 0));
+                if (m->u.peers.n_gone > RC_GONE_MAX) return -1;
+                rc_put8(&w, m->u.peers.n_gone);
+                for (int i = 0; i < m->u.peers.n_gone; i++){ rc_put32(&w, m->u.peers.gone[i].id); rc_put8(&w, m->u.peers.gone[i].why); }
+            }
         }
         break;
     case RC_MSG_SNAP:
@@ -565,7 +580,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         break; }
     case RC_MSG_PEERS:
         m->u.peers.n = (uint8_t)rc_get8(&r);
-        if (m->u.peers.n > RC_MAX_PEERS) return RC_E_FIELD;
+        if (m->u.peers.n > RC_LIST_MAX) return RC_E_FIELD;
         for (int i = 0; i < m->u.peers.n; i++){
             uint32_t a = rc_get8(&r), b = rc_get8(&r), c = rc_get8(&r), d = rc_get8(&r);
             m->u.peers.e[i].ip = a << 24 | b << 16 | c << 8 | d;
@@ -579,6 +594,23 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
             for (int i = 0; i < m->u.peers.n; i++) m->u.peers.crew[i] = (uint8_t)rc_get8(&r);
             if (r.err) return RC_E_SHORT;
             for (int i = 0; i < m->u.peers.n_mine; i++) if (!m->u.peers.mine[i]) return RC_E_FIELD;
+            /* the hints (a hub of core 16's); ones that do not read as hints are none (the list stands) */
+            if (r.n < r.len){
+                int ok = 1, nf = (int)rc_get8(&r);
+                for (int i = 0; i < m->u.peers.n; i++) m->u.peers.far[i] = 1;
+                for (int k = 0; k < nf && ok; k++){
+                    uint32_t b = rc_get8(&r), i = b & ~(uint32_t)RC_HINT_VERYFAR;
+                    if (r.err || i >= m->u.peers.n) ok = 0;
+                    else m->u.peers.far[i] = b & RC_HINT_VERYFAR ? 10 : 4;
+                }
+                m->u.peers.n_gone = ok ? (uint8_t)rc_get8(&r) : 0;
+                if (r.err || m->u.peers.n_gone > RC_GONE_MAX) ok = 0;
+                for (int i = 0; ok && i < m->u.peers.n_gone; i++){
+                    m->u.peers.gone[i].id = rc_get32(&r); m->u.peers.gone[i].why = (uint8_t)rc_get8(&r); }
+                if (r.err) ok = 0;
+                m->u.peers.hints = (uint8_t)ok;
+                if (!ok){ memset(m->u.peers.far, 0, sizeof m->u.peers.far); m->u.peers.n_gone = 0; }
+            }
             r.n = r.len;                                              /* (a newer hub's additions) */
         }
         break;
@@ -862,12 +894,18 @@ int rc_extrap_arc = 1;
  * its velocity turned from the state before (what its path did), when the two are close in time and it moves; else
  * its own yaw rate, which in a slide is more than its path turns */
 #define ARC_MAX_RAD_S  3.f
+#define TURN_BASE_US   40000
 static float turn_rate(const rc_interp *ip){
     const rc_state *b = &ip->s[ip->n - 1];
     float k = b->w[2];
     if (rc_extrap_arc != 2 && ip->n >= 2){
-        const rc_state *a = &ip->s[ip->n - 2];
-        int64_t dt = ip->t[ip->n - 1] - ip->t[ip->n - 2];
+        /* the turn over the newest state at least TURN_BASE_US older: a race's car states come every frame (racecars.c,
+         * 16 ms apart), and its turn over one frame is mostly noise, carried on 150 ms.  Free roam's (50 ms apart): the
+         * state before, as ever */
+        int j = ip->n - 2;
+        while (j > 0 && ip->t[ip->n - 1] - ip->t[j] < TURN_BASE_US) j--;
+        const rc_state *a = &ip->s[j];
+        int64_t dt = ip->t[ip->n - 1] - ip->t[j];
         float sa = a->v[0] * a->v[0] + a->v[1] * a->v[1], sb = b->v[0] * b->v[0] + b->v[1] * b->v[1];
         if (dt >= 10000 && dt <= 150000 && sa > 9.f && sb > 9.f)
             k = rc_atan2f(a->v[0] * b->v[1] - a->v[1] * b->v[0], a->v[0] * b->v[0] + a->v[1] * b->v[1]) / ((float)(int32_t)dt * 1e-6f);
@@ -1286,8 +1324,21 @@ int rc_peer_crew(const rc_session *s, int i){
     }
     return -1;
 }
+int rc_peer_way(const rc_session *s, int i){
+    return i >= 0 && i < RC_TABLE && s->conf.hub_ip && in_group(s, &s->peer[i]) ? s->peer[i].hub_way : 0;
+}
+int rc_hub_gone(const rc_session *s, uint32_t id, int64_t now_us){
+    for (int k = s->n_hub_gone - 1; k >= 0; k--)
+        if (s->hub_gone[k].id == id) return now_us - s->hub_gone[k].at < 10000000 ? s->hub_gone[k].why : RC_GONE_NONE;
+    return RC_GONE_NONE;
+}
 int rc_peer_friend(const rc_session *s, int i){
     return i >= 0 && i < RC_TABLE && s->peer[i].hub_friend;
+}
+/* the group's most players: with the server's hub answering, its lists (RC_LIST_MAX, ours past it: the players
+ * we get cars from and the ones we send ours to, one-way links), else max_players (a LAN's group by broadcast) */
+static int group_max(const rc_session *s){
+    return s->hub_was == 2 && s->conf.max_players < RC_LIST_MAX + 1 ? RC_LIST_MAX + 1 : s->conf.max_players;
 }
 static int group_count(const rc_session *s){
     int n = 0;
@@ -1364,6 +1415,7 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
     if (s->conf.duels && s->conf.drifts) m->h.flags |= RC_HF_DRIFT;
     if (s->conf.lobbies) m->h.flags |= RC_HF_LOBBY;
     if (s->conf.say) m->h.flags |= RC_HF_SAY;
+    if (s->conf.seat2) m->h.flags |= RC_HF_SEAT2;
     if (!to) m->h.flags |= RC_HF_ALL;
     m->u.hello.core_ver = RC_CORE_VER; m->u.hello.platform = s->conf.platform; m->u.hello.status = s->status;
     m->u.hello.listen_port = s->conf.port; m->u.hello.cfg_rev = s->cfg_rev; m->u.hello.room = s->conf.room;
@@ -1378,7 +1430,7 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
      * once established, or heard while the group has room (with the group full
      * not: with a larger max_players of its own it would join one-sidedly, and
      * never get a snapshot) */
-    int full = group_count(s) + 1 >= s->conf.max_players;
+    int full = group_count(s) + 1 >= group_max(s);
     if (to){
         /* to one peer: its own id or none.  Whether its id is among them is all
          * a receiver of any core version reads of a HELLO's ids (rc_receive; the
@@ -1501,6 +1553,14 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
             for (int c = 0; marks && c < m.u.peers.n_mine; c++)
                 if (m.u.peers.crew[k] >> c & 1u) q->hub_crews[q->n_hub_crews++] = m.u.peers.mine[c];
             q->hub_friend = marks && (m.u.peers.crew[k] & RC_MARK_FRIEND);
+            q->hub_way = marks ? m.u.peers.crew[k] & (RC_MARK_RXONLY | RC_MARK_TXONLY) : 0;
+            q->hub_far = m.u.peers.hints ? m.u.peers.far[k] : 0;
+        }
+        /* why the cars near us that it left out went (rc_hub_gone), the oldest out first */
+        for (int k = 0; k < m.u.peers.n_gone; k++){
+            if (s->n_hub_gone == RC_GONE_MAX){ memmove(&s->hub_gone[0], &s->hub_gone[1], sizeof s->hub_gone[0] * (RC_GONE_MAX - 1)); s->n_hub_gone--; }
+            s->hub_gone[s->n_hub_gone].id = m.u.peers.gone[k].id; s->hub_gone[s->n_hub_gone].why = m.u.peers.gone[k].why;
+            s->hub_gone[s->n_hub_gone++].at = now;
         }
         return;
     }
@@ -1570,7 +1630,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (p->state != RC_PS_EST){
             if (p->state == RC_PS_CANDIDATE) p->state = RC_PS_HEARD;
             if (p->hears_us){
-                if (group_count(s) + 1 >= s->conf.max_players){
+                if (group_count(s) + 1 >= group_max(s)){
                     if (first) note(s, RC_EV_NOTE, i, p->name, ": the group is full", "");
                 } else {
                     p->state = RC_PS_EST; s->peers_dirty = 1;
@@ -1604,6 +1664,9 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         break;
     case RC_MSG_SNAP:
         if (p->state != RC_PS_EST) return;
+        /* the hub links us one way to it: it gets our car and sends none of its own (a game that sends anyway
+         * would show its car among the ones we get, in place of one nearer) */
+        if (s->conf.hub_ip && (p->hub_way & RC_MARK_TXONLY)){ s->rx_policy++; return; }
         p->rx_snap++; p->last_snap_rx = now; p->status = m.u.snap.status; p->cfg_rev_seen = m.u.snap.cfg_rev;
         /* the sender's snapshot sequence: a gap is snapshots lost on the way */
         if (p->seq_init){
@@ -1741,9 +1804,11 @@ void rc_tick(rc_session *s, int64_t now){
             if (p->state != RC_PS_EST) continue;
             m.u.peers.e[n].ip = p->ip; m.u.peers.e[n].port = p->port; m.u.peers.e[n].id = p->id; n++;
         }
-        /* a core of version 1 gets the first 7, one of versions 2 to 9 the first 32 (each drops a longer list) */
+        /* a core of version 1 gets the first 7, one of versions 2 to 9 the first 32, one of 10 to 13 the first 48 (each
+         * drops a longer list) */
         for (int i = 0; i < RC_TABLE && n; i++) if (s->peer[i].state == RC_PS_EST){
-            int most = s->peer[i].core_ver >= 10 ? RC_MAX_PEERS : s->peer[i].core_ver >= 2 ? RC_PEERS_V9 : RC_PEERS_V1;
+            int v = s->peer[i].core_ver;
+            int most = v >= 14 ? RC_MAX_PEERS : v >= 10 ? RC_PEERS_V13 : v >= 2 ? RC_PEERS_V9 : RC_PEERS_V1;
             m.u.peers.n = (uint8_t)(n < most ? n : most);
             tx(s, &s->peer[i], &m);
         }
@@ -1757,7 +1822,8 @@ void rc_set_status(rc_session *s, uint8_t st){
     for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state == RC_PS_EST){ rc_msg m; fill_hello(s, &m, &s->peer[i], s->peer[i].reads_crews); tx(s, &s->peer[i], &m); }
     if (s->conf.hub_ip){ rc_msg m; fill_hello(s, &m, 0, 1); tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m); }
 }
-void rc_bump_epoch(rc_session *s){ s->epoch++; s->nlast = 0; }
+/* (and the hub hears where we are at the next snapshot, not up to T_HUB_SNAP later: a jump's list comes sooner) */
+void rc_bump_epoch(rc_session *s){ s->epoch++; s->nlast = 0; s->hub_snap_tx = INT64_MIN / 4; }
 void rc_bump_clock(rc_session *s){ s->clock++; s->nlast = 0; }
 void rc_set_cfg(rc_session *s, const uint8_t *rec, int len, int64_t now){
     (void)now;
@@ -1765,12 +1831,16 @@ void rc_set_cfg(rc_session *s, const uint8_t *rec, int len, int64_t now){
     if (len == s->cfg_len && !memcmp(rec, s->cfg, (size_t)len)) return;
     memcpy(s->cfg, rec, (size_t)len); s->cfg_len = len;
     s->cfg_rev++; if (!s->cfg_rev) s->cfg_rev = 1;
-    for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state == RC_PS_EST) send_cfg(s, &s->peer[i], 0);
+    for (int i = 0; i < RC_TABLE; i++)
+        if (s->peer[i].state == RC_PS_EST && !(s->conf.hub_ip && (s->peer[i].hub_way & RC_MARK_RXONLY))) send_cfg(s, &s->peer[i], 0);
 }
 /* Every how many snapshots peer p gets one: a car hundreds of metres away is
  * out of sight, and with the hub's 32 nearest players most of a crowd's
  * links cross the map.  Our position against its newest state's. */
 static int snap_every(const rc_peer *p, const rc_state *st){
+    /* a player who only gets our car sends none (or one of before, from when the link went both ways): how far it is
+     * is what the hub's hints say (hub_far; none: every one, as before them) */
+    if (p->hub_far && (!p->mo.n || (p->hub_way & RC_MARK_TXONLY))) return p->hub_far;
     if (!p->mo.n) return 1;
     const float *q = p->mo.s[p->mo.n - 1].p;
     float dx = q[0] - st->p[0], dy = q[1] - st->p[1], d2 = dx * dx + dy * dy;
@@ -1809,6 +1879,8 @@ int rc_push_state(rc_session *s, const rc_state *st, int64_t now){
     for (int i = 0; i < RC_TABLE; i++){
         rc_peer *p = &s->peer[i];
         if (p->state != RC_PS_EST || !s->io.send) continue;
+        /* a one-way link of the hub's: that player shows fewer than we do, and gets nothing of ours (rc_peer_way) */
+        if (s->conf.hub_ip && (p->hub_way & RC_MARK_RXONLY)) continue;
         int e = snap_every(p, &s->last[0]), x = ext && p->statex;
         if (e == 1 && p->far > 1) p->last_ping_tx = INT64_MIN / 4;   /* come near: its round trip now (rc_tick) */
         p->far = (uint8_t)e;

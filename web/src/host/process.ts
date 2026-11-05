@@ -62,9 +62,10 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   // which movies the I/O worker opens (the page decides before the game starts: shell.ts; a test page here)
   cfg.env.NFSU2_MOVIE_CODEC = await movieCodec(cfg.env);
   const initial = o.initialPages ?? memoryPagesOf(o.module) ?? 16384;
-  // the build's size, able to grow to 4 GB, or not growing where the browser refuses that (memory.ts); the log says which
+  // the build's size, able to grow to 4 GB, or not growing where the browser refuses that (memory.ts); on a computer
+  // 2 GB first, for the guest heap's window (NFSU2_HEAP_WINDOW=1: app/shell.ts, or a test page's env); the log says which
   let got: ReturnType<typeof allocMemory>;
-  try { got = allocMemory(memoryTries(initial)); }
+  try { got = allocMemory(memoryTries(initial, cfg.env.NFSU2_HEAP_WINDOW === '1')); }
   catch (e) { const n = (e as { note?: string } | null)?.note; if (n) o.onNote?.(n); throw e; }
   const { memory, note } = got;
   o.onNote?.(note);

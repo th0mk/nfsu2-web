@@ -10,6 +10,7 @@
 //        [--http-port 8643] [--base http://localhost:8623] [--timeout <s>] [--stagger <s>]
 //        [--env K=V ...] [--host-env K=V ...] [--join-env K=V ...] [--headed] [--bounce <s>]
 //        [--host-arg X ...] [--join-arg X ...]   more tools/gen_lan_race.py options, e.g. --join-arg --confirm-join
+//        [--joinN-arg X ...]   the same for instance N alone (2..6), e.g. its own --after lines
 //                    (a slow link: the joiner answers the game's "connection quality below average" question)
 //        [--impair delay=MS,jitter=MS,loss=PCT,reorder=PCT,hold=PCT,holdms=MS,seed=N]   (own server only: the
 //                    switch's --lan-impair, vlanhub.py's impairments on LAN play's frames; hold: a link held for
@@ -88,7 +89,7 @@ const NAMES = ['HOSTWEB', 'JOINWEB', 'JOINWEB3', 'JOINWEB4', 'JOINWEB5', 'JOINWE
 const gen = (role, name, car, extra) => execFileSync(PY, [path.join(REPO, 'tools/gen_lan_race.py'), role, '--name', name, '--car', String(car),
   '--races', String(RACES), ...extra], { encoding: 'utf8' });
 const scripts = [gen('host', NAMES[0], 0, [...MODES[MODE].h, ...opts('host-arg')])];
-for (let i = 1; i < PLAYERS; i++) scripts.push(gen('join', NAMES[i], i, [...MODES[MODE].j, ...opts('join-arg')]));
+for (let i = 1; i < PLAYERS; i++) scripts.push(gen('join', NAMES[i], i, [...MODES[MODE].j, ...opts('join-arg'), ...opts(`join${i + 1}-arg`)]));
 fs.writeFileSync(path.join(OUT, 'host.txt'), scripts[0]);
 fs.writeFileSync(path.join(OUT, 'join.txt'), scripts[1]);
 

@@ -27,7 +27,7 @@ import { LogRing, downloadBlob, stamp } from './logs';
 import { LastGameKeeper, lastGameEnd, lastGameLine, lastGameToOffer, type LastGame } from './lastgame';
 import { androidMajor, browserBrief, deviceBrief } from './devicelog';
 import { canFullscreen, enterFullscreen, exitFullscreen, fromHomeScreen, homeScreenInstead, isFullscreen, keepScreenOn, measureRefresh, settledSize, trackCanvasSize } from './display';
-import { deviceDefaults, deviceKind, isPhone, markTouch, noPinchZoom, padSeen, phoneScreen, touchFirst } from './device';
+import { deviceDefaults, deviceKind, heapWindow, isPhone, markTouch, noPinchZoom, padSeen, phoneScreen, touchFirst } from './device';
 import { phoneSeed, phoneUpgrade } from './phonegraphics';
 import { markPad, padPress, pageDialog } from './padnav';
 import { controlsSheet, type ControlsSheet, type Tab } from './controls';
@@ -38,15 +38,15 @@ import { TitleMark } from './titlemark';
 import { DriftPanel } from './drift';
 import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
-import type { NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
-import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
+import type { NetBanCase, NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
+import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, uiPack, type Resolved } from './settings';
 import { checkSaves, exists, filesOf, listProfiles, NO_SAVE, PROFILES_DIR, readText, removeSaveDir, SavesOff, setWritesOff, settleStaged, UNREADABLE, writeFile, type SavesCheck } from './savefs';
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, PlayersPanel, queueText, roomHash, roomLine, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
-import { panelTabs } from './tabs';
+import { panelTabs, type PanelTabs } from './tabs';
 import { CREW_MAX, crewList, crewsOf, crewsValue, freeColour, rgbsValue, rgbWords, type Crew } from './crews';
-import { checkInvite, inviteLink, readInvite, sameName, type Invite } from './invite';
+import { checkInvite, inviteLink, readInvite, sameName, tidyInvite, type Invite } from './invite';
 import { privacy, SCRUB_NOTE } from './privacy';
 import { oneWriter, SavesPanel, snapshotFile, snapshotSaves, type FileIn } from './saves-ui';
 import { zip } from './zip';
@@ -55,6 +55,8 @@ import { forgetLink, VaultPanel } from './vault-ui';
 import { Radio, MODES, radioWasOn, type Mode } from '../radio';
 import { canPickMusic, pickMusic } from '../radio-folder';
 import { RadioLink } from './radio-link';
+import { LastfmApi, readSession, Scrobbler, scrobbleWhilePlaying } from './lastfm';
+import { LastfmRow } from './lastfm-ui';
 import { FpsOverlay, FPS_MODES, type FpsMode } from './overlay';
 import { LobbyPanel } from './lobby';
 import { ICON as CHAT_ICON, QuickChat } from './quickchat';
@@ -66,16 +68,17 @@ import { PAD_LS, PAD_RS } from '../input/proto';
 import { GameSession } from './game';
 import { AwayCheck, AWAY_LIMITS, type AwayLimits } from './away';
 import { changelog } from './changelog';
-import { gamesStarted, playedMs, PlayTime, SMS_AFTER_MS } from './playtime';
+import { gamesStarted, lastGameMs, playedMs, playedText, PlayTime, SMS_AFTER_MS } from './playtime';
 import { canKeep } from './pwkeep';
 import { keepPageId, PAGE_ID_FILE, pageId, seen } from './page-id';
-import { NameClaims, onlineName } from './claim';
+import { digitsFor, NameClaims, onlineName, readsAsSlur } from './claim';
 import { claimQuietly, NameRow, quietCheck, renamePick, settleName, type PlayNameDeps } from './claim-ui';
 import { RenderCheck, RENDER_CHECK_TIMES, type RenderCheckTimes } from './rendercheck';
 import { moviesKept, Predownload } from './predownload';
 import { movieCodec } from '../host/movie';
 import type { Packs } from '../host/datacache';
 import { texSplit } from '../gpu/index';
+import { copyText, copyToast } from './copy';
 
 type Phase = 'boot' | 'ready' | 'error' | 'waiting' | 'starting' | 'playing' | 'exited';
 
@@ -95,6 +98,7 @@ function takeParams(dev: boolean): string[] {
   const given = TEST_PARAMS.filter(k => addr.has(k));
   if (!given.length || !dev) return given;
   q = addr;
+  DEVICE.roam = 'off';
   // never the game data's own OPFS folder, nor the page id's file (savefs keeps names to one segment)
   const save = (q.get('save') || 'save').replace(/[^A-Za-z0-9._-]/g, '_');
   SAVE = save === 'cache' || save === PAGE_ID_FILE || /^\.+$/.test(save) ? 'save-test' : save;
@@ -162,6 +166,7 @@ const msgStore = new MessageStore();      // messages between friends (messages.
 let friendMessages: FriendMessages;       // ...in the game: the log's lines, I and its card
 let chatDialog: ChatDialog;               // ...on the start page: one conversation
 let settings: SettingsPanel;
+let bigTabs: PanelTabs;
 let players: { now(): void; last(): PlayerCounts | null; fresh(ms: number): Promise<PlayerCounts | null> } | null = null;
 let playersPanel: PlayersPanel;
 /** the name the linked passphrase claims, as the line under Your name last heard (undefined: not asked yet) */
@@ -313,14 +318,16 @@ async function editSettings(edit: (text: string) => string): Promise<string> {
   void settings.refresh();
   return text;
 }
-/** this device's own defaults (a phone's: device.ts), below settings.ini and the page address */
-const DEVICE = deviceDefaults();
+/** the page's own defaults, below settings.ini and the page address: free roam with others on (2026-11-05; until then
+ *  off, and the first Play asked; the game's own default stays off), and this device's (a phone's: device.ts).  A test
+ *  page keeps free roam off (takeParams): its tools set NFSU2_ROAM where they want it */
+const DEVICE: Record<string, string> = { roam: 'on', ...deviceDefaults() };
 function resolved(host: Record<string, string> = {}): Resolved { return resolveEnv(settingsText, ENVIRONMENT, host, DEVICE); }
 /** the game's language (runtime/language.c): which language pack the page fetches ahead and counts */
 const language = (r: Resolved = resolved()) => (r.env.NFSU2_LANGUAGE ?? 'english').toLowerCase();
 /** the texture packs picked (runtime/web/texrep_web.c), comma-separated, '' for none: the ones the page fetches ahead
- *  and counts.  Each setting's value names its pack */
-const texpack = (r: Resolved = resolved()) => [r.env.NFSU2_UI_TEXTURES, r.env.NFSU2_MAP_TEXTURES]
+ *  and counts.  Each setting's value names its pack (ui_textures = map: none of the menus' and HUD's, uiPack) */
+const texpack = (r: Resolved = resolved()) => [uiPack(r.env.NFSU2_UI_TEXTURES), r.env.NFSU2_MAP_TEXTURES]
   .map(v => (v ?? '').toLowerCase()).filter(v => v && v !== 'original').join(',');
 /** the data the settings pick (datacache.ts Packs): the texture pack and the songs (EA's own: io-worker.ts dataFile) */
 const packs = (r: Resolved = resolved()): Packs => ({ texpack: texpack(r), songs: (r.env.NFSU2_SONGS ?? '').trim().toLowerCase() });
@@ -339,62 +346,9 @@ function stageCanvas(): HTMLCanvasElement {
 let untrack: (() => void) | null = null;
 
 /**
- * The first Play asks whether to play free roam with others (off by default: with it on, everyone on the server
- * sees the player's name and status).  The answer goes into settings.ini as roam = on or off, so it is asked
- * once; Not now and Esc are off.  Not asked when the file or the page address sets it already, on a test page
- * (the address's test settings), offline or with network = off.  The name shows only when there is one (Your
- * name, else the newest career profile's): a new player has none yet, the game asks for it before free roam.
- * While the server's free roam is busy (its newest /players says roamBusy: fewer links a player) it is not asked
- * and nothing is written, so a later Play asks once free roam has room again.  While the server is full it is asked,
- * and says that with it on the game waits in line for a place (and plays alone until then).  True: it was asked.
- * ASK_ROAM false: never asked, and free roam stays off until the player turns it on under Online.
- */
-const ASK_ROAM = true;
-async function askRoam(): Promise<boolean> {
-  const r = resolved();
-  if (!ASK_ROAM || r.source.NFSU2_ROAM || TEST_PARAMS.some(k => q.has(k)) || offline || /^(off|0|none)$/i.test(r.env.NFSU2_NET?.trim() ?? '')) return false;
-  if (players?.last()?.roamBusy === true) { log.add('[app] free roam with others: not asked, the server\'s free roam is busy (asked at a later Play)'); return false; }
-  const name = (r.source.NFSU2_ROAM_NAME === 'settings.ini' ? r.env.NFSU2_ROAM_NAME : '') || (await newestProfile())?.name || '';
-  const p = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
-  const body = document.createElement('div');
-  body.append(p(t('Drive in your career\'s free roam with other players and challenge each other to outruns. Races, traffic and money stay your own.')),
-    p(t('Everyone on this server sees your name and whether you\'re driving or in the menus; players near you also see your car.')));
-  const c = players?.last();
-  if (c?.full === true) {
-    const n = Number.isInteger(c.queue) && c.queue! > 0 ? c.queue! : 0;
-    const turn = t('You wait in line too, driving alone until it\'s your turn.');
-    body.append(p(`${n ? tn(n, 'The server is full: {n} player is in line.', 'The server is full: {n} players are in line.')
-      : t('The server is full.')} ${turn}`));
-  }
-  let field: HTMLInputElement | null = null;
-  if (name) {
-    const row = document.createElement('p'); row.className = 'dlg-field';
-    const label = Object.assign(document.createElement('label'), { className: 'set-label', htmlFor: 'roam-ask-name', textContent: t('Your name') });
-    const f = field = Object.assign(document.createElement('input'), { type: 'text', id: 'roam-ask-name', value: name, maxLength: 24, autocomplete: 'off', spellcheck: false });
-    // a name the setting refuses keeps the question open (Not now and Esc still close it)
-    f.oninput = () => { const v = f.value.trim(), c = v ? checkSetting('roam_name', v) : null; f.setCustomValidity(c && !c.ok ? t('{Error}.', { Error: tvars(c.why, c.v) }) : ''); };
-    // Enter in the field turns it on (the form's first button, which Enter would press, is Not now)
-    f.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $<HTMLButtonElement>('#confirm-ok').click(); } };
-    row.append(label, f);
-    body.append(row);
-  }
-  body.append(p(t('You can change this under Online on the start page.')));
-  const answer = confirmBox(t('Free roam with others?'), body, t('Turn on'), false, '', t('Not now'));
-  $<HTMLButtonElement>('#confirm-ok').focus();
-  const on = await answer;
-  const typed = field?.value.trim() ?? name;
-  const edit = (s: string) => { const r = putKey(s, 'roam', on ? 'on' : 'off').text; return on && typed !== name ? putKey(r, 'roam_name', typed || null).text : r; };
-  // (not written, the browser's storage full or not answering: this game plays as answered, and the next Play asks again)
-  try { await editSettings(edit); }
-  catch (e) { log.add(`[app] free roam with others: the answer was not written (${e})`); settingsText = edit(settingsText ?? TEMPLATE); }
-  log.add(`[app] free roam with others: ${on ? 'on' : 'off'} (asked at the first Play${c?.full === true ? ', the server full' : ''})${on && typed !== name ? `, name ${typed || '(the profile\'s)'}` : ''}`);
-  return true;
-}
-
-/**
  * Play asks a player with a profile here and no cloud saves to turn them on: the saves live only in this browser, and
  * browsers clear a site's data now and then.  First at the first Play with a profile here (a new player's second: the
- * first asks about free roam, and the next one asks), then a week after each Not now (or Esc), three times in all
+ * first makes the profile), then a week after each Not now (or Esc), three times in all
  * (vault-ui.ts offerable; before 2026-10-31 once, at the fifth Play), and once more past 12 games started and 3 hours
  * played here, whatever the count and the week (2026-11-03).  It shows what is at stake (the profiles, their
  * money, the hours played here; until 2026-11-03 also a Download backup button).  Not on a test page, offline, or where
@@ -450,8 +404,8 @@ async function showPassphrase(phrase: string, claimed: string | null, taken: str
   const box = Object.assign(document.createElement('p'), { className: 'keyphrase', textContent: phrase });
   const copy = Object.assign(document.createElement('button'), { type: 'button', className: 'text-btn', textContent: t('Copy') });
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(phrase); copy.textContent = t('Copied.'); }
-    catch { getSelection()?.selectAllChildren(box); }
+    if (await copyText(phrase, copy)) copyToast(copy);
+    else getSelection()?.selectAllChildren(box);
   };
   const file = Object.assign(document.createElement('button'), { type: 'button', className: 'text-btn', textContent: t('Download passphrase') });
   file.onclick = () => vault.download();
@@ -475,7 +429,7 @@ function playDeps(): PlayNameDeps {
   return {
     claims, seed: pageId, linked: () => vault.linked(), log: logLine,
     choose: (title, body, ok, cancel) => choiceBox(title, body, ok, cancel),
-    save: n => settings.putName(n),
+    save: n => settings.putName(n), claimed: () => claimedName ?? null,
   };
 }
 
@@ -496,7 +450,7 @@ async function playName(): Promise<string | null> {
   if (r.env.NFSU2_ROAM !== '1' && r.env.NFSU2_ONLINE === '0') return null;
   const typed = await typedName();
   const name = await settleName(playDeps(), typed, SAVE, quietCheck);
-  if (name && name !== onlineName(typed)) log.add('[app] your name: this game plays under another (digits, or one picked)');
+  if (name && name !== onlineName(typed)) log.add('[app] your name: this game plays under another (the claimed name, digits, or one picked)');
   return name;
 }
 
@@ -505,8 +459,7 @@ async function playName(): Promise<string | null> {
  * line for it.  The player picks: wait in line (the game starts, alone until it is their turn; the default, also for
  * Esc), or play offline (this game only, without free roam or Online; settings.ini stays as it is).  True: offline.
  * Not asked when the game would not take a place at once (free roam off: the LAN and Online screens wait in line
- * themselves, the line over the game says where), offline mode, network = off or a test page, nor right after the
- * free-roam question (askRoam), which says the server is full itself.
+ * themselves, the line over the game says where), offline mode, network = off or a test page.
  */
 async function askFull(c: PlayerCounts | null): Promise<boolean> {
   const r = resolved();
@@ -670,10 +623,8 @@ async function startGame() {
     if (cloud === 'stop') { void audio?.close().catch(() => {}); startAudio = null; endStage(); return; }
     if (cloud === 'taken' || pulled) await loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`));
   }
-  // (the free-roam question says when the server is full: answered, it is not asked again what to do about that)
-  const roamAsked = await askRoam();
-  if (!roamAsked && !noSave) await askCloud();
-  const alone = !roamAsked && await askFull(counts);
+  if (!noSave) await askCloud();
+  const alone = await askFull(counts);
   // the name this game plays under, by the claims
   const playAs = alone ? null : await playName();
   setPhase('starting', T('Starting'), full && canFullscreen() ? T('Going full screen and starting the game.') : T('Starting the game.'));
@@ -697,9 +648,12 @@ async function startGame() {
   const firstName = profiles.length || r.source.NFSU2_ROAM_NAME !== 'settings.ini' ? '' : newProfileName(r.env.NFSU2_ROAM_NAME ?? '');
   if (firstName) r.env.NFSU2_NEW_PROFILE_NAME = firstName;
   if (playAs) r.env.NFSU2_ROAM_NAME = playAs;
-  // Players' cars shown by this device's default, not the player's pick: the game shows 32 after all once its frames
-  // are slow with more (roam_game.c cars_cut)
-  if (r.source.NFSU2_ROAM_MAX_CARS === 'device') r.env.NFSU2_ROAM_CARS_AUTO = '1';
+  // Players' cars shown: Auto is a computer's (roam_game.c cars_auto: more cars while the frames have room); a phone or
+  // tablet whose file says auto gets its own number, as more cars loading at once stopped iPhones for memory
+  if (r.env.NFSU2_ROAM_MAX_CARS?.toLowerCase() === 'auto' && DEVICE.roam_max_cars !== 'auto') r.env.NFSU2_ROAM_MAX_CARS = DEVICE.roam_max_cars ?? '32';
+  // a computer's game gets the guest heap's window (device.ts heapWindow; process.ts asks for the memory, the game's
+  // log says whether it got it); a settings.ini line NFSU2_HEAP_WINDOW = 0 or 1 decides instead
+  if (!('NFSU2_HEAP_WINDOW' in r.env) && heapWindow()) r.env.NFSU2_HEAP_WINDOW = '1';
   // the room and crews in Unicode's composed form, as the page hashes them (players.ts roomText): one "é" whichever way
   for (const k of ['NFSU2_ROAM_ROOM', 'NFSU2_ROAM_CREW'] as const) if (r.env[k]) r.env[k] = roomText(r.env[k]);
   // the names this game goes by, for the log as it leaves the browser (privacy.ts)
@@ -782,6 +736,7 @@ async function startGame() {
   // (and a full server's player who chose to play offline: askFull)
   const net = !/^(off|0|none)$/i.test(r.env.NFSU2_NET?.trim() ?? '') && !alone;
   const netName = net ? (r.env.NFSU2_ROAM_NAME?.trim() || 'Player') : null;
+  netNameNow = netName ?? ''; coopName = null; coopChecked = '';
   hudWide = !/^(43|4:3)$/i.test(r.env.NFSU2_HUD?.trim() ?? '');
   roamCollide = net && r.env.NFSU2_ROAM === '1' ? collideOf(r.env.NFSU2_ROAM_COLLIDE) : null;
   roamCrews = net && r.env.NFSU2_ROAM === '1' ? crewsOf(r.env.NFSU2_ROAM_CREW ?? '', r.env.NFSU2_ROAM_CREW_RGB ?? '') : null;
@@ -797,8 +752,11 @@ async function startGame() {
     // longer than the game), and a closure from this function would keep its
     // scope, and with it this game, reachable
     const ids = net ? await keepPageId() : null;
+    // Menus, HUD and maps on Map only: the maps' pack alone (resolveEnv turned it on), the menus' and HUD's the
+    // game's (the game reads the variable's value as a pack's name; r.env keeps the setting, for the day's count)
+    const env = r.env.NFSU2_UI_TEXTURES !== undefined && !uiPack(r.env.NFSU2_UI_TEXTURES) ? { ...r.env, NFSU2_UI_TEXTURES: 'original' } : r.env;
     session = await GameSession.start({
-      module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle,
+      module: loaded!.module, info: loaded!.info, saveDir: SAVE, env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle, coop: coopMsg,
       friend: friendMsg,
       netBack, netQueue, onSaved, onSaveGone: saveGone, onRemoved, onLost, onSaveTrouble,
       netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved, netRaces, netRename,
@@ -1091,7 +1049,7 @@ function onExit(s: GameSession, code: number) {
     // error code 1 in the first minute: the game's own program file did not load (runtime/mem.c), damaged in the
     // browser's copy or blocked by the network (HTTP 403): players asked what to do, the code said nothing
     const base = () => code === 0 ? t('The game closed normally after {time}.', { time: mins() }) : code === -1 ? t('The game was stopped after {time}.', { time: mins() })
-      : code === 1 && seconds < 60 ? t('The game\'s files didn\'t load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.')
+      : code === 1 && seconds < 60 ? t('The game\'s files didn\'t load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.')
       : t('The game stopped with error code {code} after {time}.', { code, time: mins() });
     // what is kept: the game's last profile save, never a claim it did not make
     const sv = saved;
@@ -1366,18 +1324,41 @@ let removedTimer: ReturnType<typeof setInterval> | null = null;
 const until = (ms: number) => new Date(ms).toLocaleString(dateLocale(), { dateStyle: 'medium', timeStyle: 'short' });
 /** the operator's message (in its own words), as a sentence after the page's */
 const said = (msg: string) => msg ? ` ${msg}${/[.!?]$/.test(msg) ? '' : '.'}` : '';
+/** which ban, for the player to quote: "Ban #12 · Ann · 1 Nov 2026"; null from a server that names none */
+function banLine(c: NetBanCase): string | null {
+  if (c.id === undefined) return null;
+  const made = c.at === undefined ? null : new Date(c.at).toLocaleDateString(dateLocale(), { dateStyle: 'medium' });
+  return [t('Ban #{n}', { n: c.id }), c.name, made].filter(Boolean).join(' · ');
+}
+/** an Apple device, whose Safari may play through iCloud Private Relay (a VPN of its own) */
+const apple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
 function netRemoved(r: NetRemoved) {
   const head = !r.ban ? t('You were removed from playing with others.')
     : r.until ? t('You can\'t play with others until {when}.', { when: until(r.until) })
     : t('You can\'t play with others any more.');
-  removedLine(`${head}${said(r.msg)} ${t('You can keep playing on your own.')}`);
+  // (the ban's name: this player's, under another name maybe; the log a player posts names nobody)
+  if (r.name) privacy.name(r.name, 'you');
+  const which = r.ban ? banLine(r) : null;
+  const solo = t('You can keep playing on your own.');
+  removedLine(which ? `${head}${said(r.msg)}\n${which}\n${solo} ${t('Think it\'s a mistake? Ask on Discord with the ban number.')}`
+    : `${head}${said(r.msg)} ${solo}`);
 }
-/** the operator's race ban (net/index.ts onRaces): why and until when, over the game (again when the LAN or Online
- *  screens open); null: lifted */
+/** the operator's race ban (net/index.ts onRaces), or someone else's ban by the player's address: why, until when,
+ *  which ban, over the game (again when the LAN or Online screens open); null: lifted */
 function netRaces(r: NetRaces | null) {
   if (!r) { toast(t('You can race other players again.'), 6000); return; }
+  // (by the address only: someone else's name, which the log a player posts keeps to itself)
+  if (r.name) privacy.name(r.name, r.addr ? 'player' : 'you');
+  const which = banLine(r), roam = t('Free roam stays open.');
+  if (r.addr) {
+    const fix = apple ? t('Turn off your VPN or iCloud Private Relay, or use another network.') : t('Turn off your VPN, or use another network.');
+    toast([`${t('Someone who played from your network or VPN was banned, so you can\'t race other players from it.')} ${roam}`, which, fix]
+      .filter(Boolean).join('\n'), 20_000);
+    return;
+  }
   const head = r.until ? t('You can\'t race other players until {when}.', { when: until(r.until) }) : t('You can\'t race other players any more.');
-  toast(`${head}${said(r.msg)} ${t('Free roam stays open.')}`, 12_000);
+  toast(which ? `${head}${said(r.msg)} ${roam}\n${which}\n${t('Think it\'s a mistake? Ask on Discord with the ban number.')}`
+    : `${head}${said(r.msg)} ${roam}`, which ? 16_000 : 12_000);
 }
 /** the operator took the player's name away (net/index.ts onRename): a question for another (claim-ui.ts renamePick);
  *  picked, the game plays under it at once (the input's name) and the page goes back to the others; Not now: playing
@@ -1388,20 +1369,61 @@ async function netRename(r: NetRename) {
   if (renaming) return;
   renaming = true;
   try {
-    const name = await renamePick(playDeps(), r.name, r.msg);
+    // co-op: player 2's name the one taken away (player 1's is the page's own, its hello's): the question says so, and
+    // the name picked is player 2's for this game
+    const seat2 = !!coopName && onlineName(r.name)?.toLowerCase() === onlineName(coopName)?.toLowerCase();
+    const name = await renamePick(playDeps(), r.name, r.msg, seat2);
     if (!name) {
-      log.add('[app] your name: none picked (playing with others waits for another name)');
+      log.add(`[app] ${seat2 ? 'player 2\'s' : 'your'} name: none picked (playing with others waits for another name)`);
       removedLine(t('Playing with others waits for another name: change it under Online on the start page.'));
       return;
     }
     privacy.name(name, 'you');
-    log.add(`[app] your name: another picked (${session?.input?.name?.(name) ? 'the game plays under it now' : 'the game did not take it'})`);
-    session?.net?.rename?.(name);
+    if (seat2) {
+      coopChecked = name.toLowerCase();
+      log.add(`[app] player 2's name: another picked (${session?.input?.name?.(name, true) ? 'the game plays under it now' : 'the game did not take it'})`);
+      session?.net?.rename?.(netNameNow);
+    } else {
+      log.add(`[app] your name: another picked (${session?.input?.name?.(name) ? 'the game plays under it now' : 'the game did not take it'})`);
+      netNameNow = name;
+      session?.net?.rename?.(name);
+      void settings.refresh();
+    }
     hideRemoved();
-    void settings.refresh();
   } finally {
     renaming = false;
   }
+}
+/** the name this game plays under on the switch (player 1's: the page's hello) */
+let netNameNow = '';
+/**
+ * Co-op free roam: player 2 online, its name the game's (player 1's + " 2", as the server keeps it for the owner of
+ * player 1's claimed name).  The same checks as player 1's name at Play (claim-ui.ts settleName), without a question:
+ * a name that reads as a slur or that another player claimed, or one the server does not allow, plays under this
+ * browser's digits instead (the game takes it at once).  "{}": player 2's endpoint ended.  Nothing of it for a player
+ * who never plays co-op.
+ */
+let coopName: string | null = null;
+let coopChecked = '';
+function coopMsg(json: string) {
+  let m: { name?: unknown } = {};
+  try { m = JSON.parse(json) as { name?: unknown }; } catch { return; }
+  coopName = typeof m.name === 'string' && m.name ? m.name : null;
+  if (coopName) void coopCheck(coopName);
+}
+async function coopCheck(name: string) {
+  privacy.name(name, 'you');
+  const online = onlineName(name);
+  if (!online || coopChecked === online.toLowerCase()) return;
+  coopChecked = online.toLowerCase();
+  const slur = readsAsSlur(name);
+  const info = slur || testPage() || offline ? null : await claims.check(online);
+  log.add(`[app] player 2's name: ${slur ? 'reads as a slur' : !info ? 'not checked' : info.state === 'yours' || info.state === 'old' ? 'claimed with this browser\'s keyphrase' : info.state}`);
+  if (!slur && info?.state !== 'taken' && info?.state !== 'blocked') return;
+  const alt = await digitsFor(online, pageId());
+  coopChecked = alt.toLowerCase();
+  privacy.name(alt, 'you');
+  log.add(`[app] player 2's name: this browser's digits instead (${session?.input?.name?.(alt, true) ? 'the game plays under them now' : 'the game did not take them'})`);
 }
 /** the line over the game for a player off the others, until the player plays on (an input REMOVED_MS after it came
  *  up) */
@@ -1564,7 +1586,7 @@ function drawPopCrews(focus?: (root: HTMLElement) => Element | null | undefined)
   box.replaceChildren();
   crewControl({ list: roamCrews ?? [], id: 'crews-pop-input', labelId: 'crews-pop-title', placeholder: N('Crew name'), counts: popCounts, draft: crewDraft,
     onDraft: v => { crewDraft = v; }, change: (list, f) => void menuCrews(list, f),
-    // with the room the game is in (crew-mates meet within one room); what the copy did goes in the popup's note
+    // with the room the game is in, if any (crew-mates meet within one room); what the copy did goes in the popup's note
     link: name => inviteLink(location.origin, { crew: name, room: roamRoom ?? '' }) }, box).setAttribute('aria-labelledby', 'crews-pop-title');
   if (had && focus) ((focus(box) ?? box.querySelector('input:enabled')) as HTMLElement | null)?.focus({ focusVisible: true } as FocusOptions);
 }
@@ -1604,8 +1626,15 @@ function drawPopFriends() {
 /** a Join in the menu's Friends: that friend's room, at once, and back to the game */
 async function joinFriend(room: string) {
   for (const id of ['#friends-pop', '#menu']) { const d = $<HTMLDialogElement>(id); if (d.open) d.close(); }
+  // (the friend's page named the room: checked as a link's room is)
+  const inv = tidyInvite({ room }), ok = checkInvite(inv);
+  if (!ok.ok) {
+    log.add(`[app] the menu's Friends: not joining a friend's room: ${ok.why}`);
+    tell(t('This invite link cannot be used: {why}.', { why: tvars(ok.why, ok.v).replace(/[.。]$/, '') }));
+    return;
+  }
   log.add('[app] the menu\'s Friends: joining a friend\'s room');
-  tell(joinedText(await applyInvite({ room })));
+  tell(joinedText(await applyInvite(inv)));
 }
 
 // --------------------------------------------------------- invite links --
@@ -1646,8 +1675,10 @@ function inviteLive(): boolean {
 }
 
 /** Join inv here (this tab owns the saves): settings.ini, then the running game where it can.  Throws where settings.ini
- *  did not read or write (nothing joined, nothing written: joinHere says so). */
-async function applyInvite(inv: Invite): Promise<Joined> {
+ *  did not read or write (nothing joined, nothing written: joinHere says so).  The names as checkInvite read them
+ *  (tidyInvite), whichever way they came. */
+async function applyInvite(given: Invite): Promise<Joined> {
+  const inv = tidyInvite(given);
   const was = await readText(SAVE, 'settings.ini') ?? settingsText ?? TEMPLATE;
   const now = inviteNow(was), d = inviteDiff(inv, now);
   if (d.full) return 'full';
@@ -1716,8 +1747,10 @@ function hearInvites() {
   };
 }
 
-/** An invite link opened (the page's address, or a new one pasted while it is open): the question, then the join. */
-async function offerInvite(inv: Invite) {
+/** An invite link opened (the page's address, or a new one pasted while it is open), or a friend's room on the start
+ *  page: the question, then the join. */
+async function offerInvite(given: Invite) {
+  const inv = tidyInvite(given);
   // once this tab knows whether it owns the saves, has read them, and shows no other question
   await Promise.race([instance.whenOwner, new Promise(r => setTimeout(r, 500))]);
   if (instance.owner && settingsText === null) await loadSettings().catch(() => null);
@@ -2131,6 +2164,10 @@ export async function boot() {
       end === 'error' && why !== 'exit' ? why : undefined);
     $('#log-btn').hidden = $('#lastgame').hidden = false;
     $('#report').hidden = end === 'left';
+  } else {
+    // else the last game's play (playtime.ts): a game that ends on this page says its time in the status line instead
+    const ms = lastGameMs();
+    if (playedText(ms)) { live($('#lastgame'), () => t('Last game: {time}', { time: playedText(ms) })); $('#lastgame').hidden = false; }
   }
   fps = new FpsOverlay($('#fps'));
   lobbyPanel = new LobbyPanel($('#lobby'), $('#lobby-cover'), logLine);
@@ -2138,9 +2175,15 @@ export async function boot() {
   fps.extra = () => session?.stats() ?? {};
   // the language this browser showed last, at once (settings.ini says which it is: applyLanguage, once it is read)
   void setLanguage(lastLanguage(), logLine);
-  // the big panel's tabs (the one open last, or the one the address names: #friends) and About's
-  panelTabs($('#settings'), { store: 'nfsu2.page.tab', hash: true });
+  // the big panel's tabs (the one open last, or the one the address names: #friends) and About's; the Other tab's
+  // contents are at the Game tab's end since the Mods tab came (kept or named, #other opens Game there)
+  bigTabs = panelTabs($('#settings'), { store: 'nfsu2.page.tab', hash: true, moved: { other: { tab: 'game', at: '#game-data' } } });
   panelTabs($('#about'));
+  // Last.fm: its row under the songs' settings, and the scrobbles of the songs the game plays (lastfm.ts)
+  const lastfmApi = new LastfmApi(), lastfmRow = new LastfmRow({ api: lastfmApi, log: logLine, say: pageToast });
+  const scrobbler = new Scrobbler({ api: lastfmApi, folder: () => radio?.lastTrack ?? null, dropped: () => lastfmRow.dropped(), log: logLine });
+  scrobbleWhilePlaying(radioPort, scrobbler, readSession);
+  onLanguage(() => lastfmRow.render());
   settings = new SettingsPanel($('#settings'), {
     // another language, texture pack or songs count other files as the game data (its pack); a keyphrase sends the file
     saveDir: SAVE, environment: ENVIRONMENT, defaults: DEVICE, onSaved: text => {
@@ -2154,6 +2197,8 @@ export async function boot() {
     // the tab that owns the saves is the one whose Play reads the file: another tab only looks
     readOnly: () => !instance.owner, say: pageToast, confirm: confirmBox,
     nameRow: (row, input, ctl) => nameRow.attach(row, input, ctl),
+    quietSave: (key, value) => key === 'roam_name' && nameRow.notPlayed(value),
+    rowAfter: key => key === 'race_music' ? lastfmRow.el : null,
   }, $('#online'));
   // the language picker at the top: the same setting as the Game tab's Language
   const pick = $<HTMLSelectElement>('#lang-pick');
@@ -2323,8 +2368,9 @@ export async function boot() {
   showOverrides(given, dev);
   if (given.length) log.add(dev ? `[app] test settings from the page address: ${given.join(', ')}` : `[app] the page address's test settings (${given.join(', ')}) are ignored: not a development server`);
   if (q.has('fresh') && SAVE !== 'save') { await removeSaveDir(SAVE); forgetLink(SAVE); log.add(`[app] fresh save folder ${SAVE}`); }
-  // the settings and saves show at once (read only until this tab owns the saves), and again once it does
-  void settings.refresh();
+  // the settings and saves show at once (read only until this tab owns the saves), and again once it does; then the
+  // place the address named (#other) can be scrolled to
+  void settings.refresh().then(() => bigTabs.settled());
   void saves.refresh();
   void vault.start().then(() => friendsPanel.refresh(true));
   void instance.whenOwner.then(async () => {

@@ -45,8 +45,9 @@ export class Radio {
   private last: Pair = [-1, -1];          // per place: the track chosen last, which Shuffle does not repeat at once
   private shuffled = readShuffle();
   private offered: Pair = [-1, -1];       // per place: the track whose tags the game was shown
-  private tags = new Map<number, Promise<Lines>>();
+  private tags = new Map<number, { own: Promise<Lines>; plaque: Promise<Lines> }>();   // per track: its tags as read, and as the plaque shows them
   private playing: { index: number; place: Place } | null = null;
+  private track: { tags: Promise<Lines>; plaque: Promise<Lines>; seconds: number } | null = null;
   private restored: Promise<void>;        // settles when the remembered folder is read, or is known to need a click
 
   constructor(private port: () => RadioLink | null, private log: (line: string) => void = () => {}) { this.restored = this.restore(); }
@@ -56,6 +57,9 @@ export class Radio {
   /** The tracks as paths in the folder ("a.mp3", "Album/a.mp3") in playlist order; the same array until another folder is chosen. */
   get trackPaths() { return this.paths; }
   get shuffle() { return this.shuffled; }
+  /** The track served last (Last.fm's scrobbles, lastfm.ts): its own tags, the lines the game's plaque shows of them (the runtime's
+   *  song_text), its length in seconds. */
+  get lastTrack() { return this.track; }
   mode(name: string): Mode { return this.modes.get(name) ?? 'all'; }
   private suits(name: string, place: Place) { const m = this.mode(name); return m === 'all' || m === (place ? 'racing' : 'menu'); }
   private saveModes() { try { localStorage.setItem(MODES_KEY, JSON.stringify(Object.fromEntries(this.modes))); } catch { /* a private window keeps nothing */ } }
@@ -164,17 +168,18 @@ export class Radio {
   private async offer(epoch = this.epoch) {
     const link = this.port(), files = this.files, picks: Pair = [this.choose(0), this.choose(1)];
     if (!link) return;
-    const lines = await Promise.all(picks.map(i => i < 0 ? null : this.tagsFor(files, i)));
+    const lines = await Promise.all(picks.map(i => i < 0 ? null : this.tagsFor(files, i).plaque));
     if (epoch !== this.epoch || files !== this.files) return;
     this.offered = picks;
     link.setPlaces([lines[0], lines[1]]);
   }
 
-  private tagsFor(files: FileSystemFileHandle[], i: number): Promise<Lines> {
+  private tagsFor(files: FileSystemFileHandle[], i: number) {
     let t = this.tags.get(i);
     if (!t) {
       if (this.tags.size >= TAGS_KEPT) this.tags.clear();
-      t = tagsOf(files[i]).then(l => plaqueTags(l, subfolderOf(this.paths[i]) || this.name));
+      const own = tagsOf(files[i]);
+      t = { own, plaque: own.then(l => plaqueTags(l, subfolderOf(this.paths[i]) || this.name)) };
       this.tags.set(i, t);
     }
     return t;
@@ -245,6 +250,8 @@ export class Radio {
       if (left.length > MAX_FRAMES) throw new Error('longer than 15 minutes');
     } catch (e) { this.log(skipLine(i, e)); return 'skipped'; }
     this.song = { left, right, at: 0 };
+    const t = this.tagsFor(this.files, i);
+    this.track = { tags: t.own, plaque: t.plaque, seconds: left.length / RATE };
     if (!link.serve(seq, left.length)) throw new Error('the game has no rings for the sound');
     try { this.feed(link); } catch (e) { this.song = null; this.log(skipLine(i, e)); this.bad++; return 'ring'; }
     return 'played';

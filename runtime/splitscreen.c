@@ -10,14 +10,32 @@
 #include "splitscreen_layout.h"
 #include "gamepad.h"
 #include "kbd.h"
+#include "coop.h"
 
 /* the labels shown (split_label_text: in the game's language) */
 enum { SL_SPLIT, SL_PLAYERS, SL_PLAYER, SL_PLAYER_UP, SL_JOIN, SL_JOIN_KB, SL_JOIN_SP, SL_N };
 static void split_label_text(int which, unsigned n, char *out, size_t size);
 
+/* more than one view drawn: a split race, or co-op free roam (coop.c: the career's game mode, player 2 on view 2,
+ * which makes the view mode 3 by itself) */
+int coop_in(void);
 static int split_racing(void){
 #ifdef __wasm__
-    return MR32(0x850078u) == 4 && MR32(0x89e7c0u) == 2 && MR32(0x8707e0u) == 3;
+    if (MR32(0x8707e0u) != 3) return 0;
+    if (MR32(0x850078u) == 4) return MR32(0x89e7c0u) == 2;
+    /* co-op: player 2 in free roam (coop.c's), or a career race the two race together (the game's two humans) */
+    return MR32(0x850078u) == 1 && MR32(SPLIT_PLAYERS_COUNT) == 2 && (coop_in() || coop_racing_together());
+#else
+    return 0;
+#endif
+}
+/* co-op: the HUDs' size in their halves (picked from 0.5, 0.6 and 0.7, 2026-11-04) */
+static float split_coop_scale(void){ return 0.7f; }
+/* co-op free roam's two views (coop.c): each player's free-roam HUD mapped into its half */
+static int split_coop_hud(void){
+#ifdef __wasm__
+    /* (a career race together has the game's own 2P HUDs, made for halves) */
+    return split_racing() && MR32(0x850078u) == 1 && !coop_racing_together();
 #else
     return 0;
 #endif
@@ -85,7 +103,10 @@ static unsigned split_pad_of(unsigned seat){
     return pad;
 }
 void split_keyboard_device(PadState *pad){
-    if (!pad->connected && (split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0) && MR32(0x850078u) == 4){
+    /* the game's pad device converts every seat's input: it must exist (split screen: a keyboard seat; co-op: player
+     * 2's device, whose controller the page keeps from driving this pad) */
+    int need = MR32(0x850078u) == 4 ? split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0 : coop_device() >= 0;
+    if (!pad->connected && need){
         memset(pad, 0, sizeof *pad);
         pad->connected = 1; pad->family = PADF_XBOX;
         strcpy(pad->name, "Split Screen keyboard");
@@ -102,16 +123,20 @@ static const uint8_t SPLIT_KB_KEYS[3][6][2] = {
     { {0x36, 0}, {0x9d, 0x35}, {0x34, 0}, {0x33, 0}, {0x26, 0}, {0x27, 0} },  /* Right Shift, Right Ctrl or /, . , L ; */
     { {0x2a, 0}, {0x39, 0}, {0x12, 0}, {0x10, 0}, {0x2e, 0}, {0x30, 0} },     /* Left Shift, Space, E, Q, C, B */
 };
-static void split_kb_read(int side, PadState *pad){
+static void split_kb_read(int side, int both, PadState *pad){
     uint8_t keys[256]; kbd_state(keys, sizeof keys);
     memset(pad, 0, sizeof *pad);
     pad->connected = 1; pad->family = PADF_XBOX;
     strcpy(pad->name, "Keyboard");
-    int both = split_kb_seat[0] >= 0 && split_kb_seat[1] >= 0, racing = MR32(0x8654a4u) == 6;
+    /* driving: in the world (a split race: as the two-keyboard layout has it, its pause menu too); co-op: with no menu
+     * or dialog up, where the arrows as a stick would be a second press of each (the pad's menu keystrokes,
+     * dinput_pad.c) */
+    int split = MR32(0x850078u) == 4;
+    int racing = MR32(0x8654a4u) == 6 && (split || coop_driving());
     /* START: Enter (only Enter's player's while two share the keyboard), and Space's player's Space outside a
-     * race (in one it is the handbrake) */
+     * split race (in one it is the handbrake; co-op's player 2 pauses with the keyboard's Esc) */
     if ((!both || side == SPLIT_KB_ENTER) && (keys[0x1c] || keys[0x9c])) pad->buttons |= 1u << PAD_START;
-    if (side == SPLIT_KB_SPACE && !racing && keys[0x39]) pad->buttons |= 1u << PAD_START;
+    if (side == SPLIT_KB_SPACE && split && !racing && keys[0x39]) pad->buttons |= 1u << PAD_START;
     /* Native keyboard messages handle car/menu navigation once, rather
      * than duplicating Enter and arrows through the virtual pad. */
     if (!racing) return;
@@ -124,11 +149,33 @@ static void split_kb_read(int side, PadState *pad){
     for (unsigned b = 0; b < 6; ++b)
         if ((map[b][0] && keys[map[b][0]]) || (map[b][1] && keys[map[b][1]])) pad->buttons |= 1u << SPLIT_KB_BUTTON[b];
 }
+/* co-op free roam (coop.c, the career's game mode): seat 1 is player 2's device, a local pad's seat or the keyboard's
+ * WASD half; seat 0 the arrows' half when player 2 has the WASD's (player 1's game input is the game's own, port 0) */
+static int split_coop_seat(unsigned seat, PadState *pad){
+    int dev = coop_device();
+    memset(pad, 0, sizeof *pad);
+    if (seat == 1 && dev == COOP_DEV_KB){ split_kb_read(SPLIT_KB_SPACE, 1, pad); return 1; }
+    if (seat == 1 && dev >= 0) return gamepad_read_local((unsigned)dev, pad);
+    if (seat == 0 && dev == COOP_DEV_KB){
+        split_kb_read(SPLIT_KB_ENTER, 1, pad);
+        pad->buttons &= ~(1u << PAD_START);     /* player 1's Enter stays the game's own (Engage, the menus) */
+        return 1;
+    }
+    return 0;
+}
+/* the game's own keyboard while two share it in co-op: player 2's half is player 2's alone (dinput_kbd.c) */
+int split_kb_hidden(unsigned dik){
+    if (dik >= 256u || coop_device() != COOP_DEV_KB || !coop_driving()) return 0;   /* a menu has the whole keyboard */
+    if (dik == 0x11 || dik == 0x1e || dik == 0x1f || dik == 0x20) return 1;          /* W A S D */
+    for (unsigned b = 0; b < 6; ++b) if (SPLIT_KB_KEYS[2][b][0] == dik || SPLIT_KB_KEYS[2][b][1] == dik) return 1;
+    return 0;
+}
 #endif
 int split_read_local(unsigned seat, PadState *pad){
 #ifdef __wasm__
+    if (MR32(0x850078u) != 4 && coop_wanted()) return split_coop_seat(seat, pad);
     int side = split_kb_of(seat);
-    if (side >= 0){ split_kb_read(side, pad); return 1; }
+    if (side >= 0){ split_kb_read(side, split_kb_seat[0] >= 0 && split_kb_seat[1] >= 0, pad); return 1; }
     return gamepad_read_local(split_pad_of(seat), pad);
 #else
     (void)seat; memset(pad, 0, sizeof *pad); return 0;
@@ -164,7 +211,7 @@ static int split_pause_port = -1, split_pause_seen, split_pause_released;
  * lend it their own pad while they own the pause menu. */
 void sub_0050d2d0_orig(CPU *c);
 void sub_0050d2d0(CPU *c){
-    if (split_requested() && MR32(c->esp) == 0x4eb46eu){
+    if ((split_requested() || ((coop_in() || coop_racing_together()) && MR32(0x850078u) != 4)) && MR32(c->esp) == 0x4eb46eu){
         unsigned port = MR32(c->esp + 4);
         if (port < 6){
             split_pause_port = (int)port;
@@ -186,7 +233,7 @@ static void split_pause_refresh(CPU *c){
         active |= !!(split_call(c, 0x52cf60u, 0, 1, &name) & 255);
     }
     if (active) split_pause_seen = 1;
-    else if (split_pause_seen || !split_racing()){
+    else if (split_pause_seen || !(split_racing() || coop_in() || coop_racing_together())){
         fprintf(stderr, "[split] pause closed P%d\n", split_pause_port + 1);
         split_pause_port = -1;
     }
@@ -207,7 +254,9 @@ int split_menu_pad(PadState *pad){
         }
         return 1;
     }
-    if (split_pause_port < 0 || !split_requested()) return 0;
+    if (split_pause_port < 0 || !(split_requested() || ((coop_in() || coop_racing_together()) && MR32(0x850078u) != 4))) return 0;
+    /* co-op: player 1's pause is the game's own (its controller already drives this pad) */
+    if (!split_requested() && split_pause_port == 0) return 0;
     split_read_local((unsigned)split_pause_port, pad);
     if (!split_pause_released){
         if (!pad->buttons) split_pause_released = 1;
@@ -667,8 +716,9 @@ static void split_main_react(CPU *c){
 }
 /* ---- the labels in the game's language ---------------------------------------------------------------
  * The Latin-script languages: texts of ours, in each game's own words ("Splitscreen", "Ecran partagé" ...), into
- * the letters their fonts draw (language.c language_game_letters: Polish's, Turkish's, Hungarian's own).  The
- * others' fonts spell in orders of their own, so theirs are cut from the game's own texts in that language:
+ * the letters their fonts draw (language.c language_game_letters: Polish's, Turkish's, Hungarian's, Czech's,
+ * Slovak's own).  The others' fonts spell in orders of their own, so theirs are cut from the game's own texts in
+ * that language:
  * 0x6A2B93EB "2 Player Split-Screen" (the menu item's name, which ours replaces), 0xD9DC2F12 "PLAYER", 0xD87133BC
  * "Player 1", 0x1F181F57 "Press START" (0xEEEB248E "Press START button" where that is empty).  English where a cut
  * does not find what it expects (a language pack of another make). */
@@ -713,6 +763,12 @@ static const struct { const char *lang, *split, *players, *player, *player_up, *
     { "hungarian",  "Osztott képernyő", "%u játékos", "%u. Játékos", "%u. JÁTÉKOS",
                       "%u. Játékos: nyomj START gombot", "%u. Játékos: nyomj START vagy Enter gombot",
                       "%u. Játékos: nyomj START vagy Szóköz gombot" },
+    { "czech",      "Rozdělená obrazovka", "%u hráči", "Hráč %u", "HRÁČ %u",
+                      "Hráč %u: stiskni START", "Hráč %u: stiskni START nebo Enter",
+                      "Hráč %u: stiskni START nebo mezerník" },
+    { "slovak",     "Rozdelená obrazovka", "%u hráči", "Hráč %u", "HRÁČ %u",
+                      "Hráč %u: stlač START", "Hráč %u: stlač START alebo Enter",
+                      "Hráč %u: stlač START alebo medzerník" },
 };
 /* a text of the game's in its own letters (empty when it has none) */
 static int split_game_text(uint32_t hash, char *out, size_t n){
@@ -974,7 +1030,7 @@ static void split_map_hud_objects(uint32_t obj, unsigned seat, unsigned depth, i
 }
 static void split_map_huds(CPU *c){
     static unsigned frames;
-    if (!split_racing() || split_render_limit() <= 2){ split_hud_data_count = 0; return; }
+    if (!split_racing() || (split_render_limit() <= 2 && !split_coop_hud())){ split_hud_data_count = 0; return; }
     if (++frames % 30 && split_hud_data_count) return;
     split_minimap_names(c);
     split_hud_data_count = 0;
@@ -1199,9 +1255,19 @@ static int split_clone_hud(CPU *c, uint32_t src, uint32_t dst){
 }
 
 void sub_004f8bf0_orig(CPU *c);
+int coop_making_player(void);
 void sub_004f8bf0(CPU *c){
     int who = split_hud_owner >= 2 ? split_hud_owner : (int)MR32(c->esp + 8);
     uint32_t fng = MR32(c->esp + 4);
+    if (coop_making_player() && fng){
+        /* co-op: player 2's HUD is free roam's own, a copy of the package under a name of its own (the Player ctor
+         * named a 2P race HUD: it sees two local humans while it runs) */
+        uint32_t src = SPLIT_HUD_SCRATCH, dst = SPLIT_HUD_NAMES + 64;
+        snprintf((char *)g_mem + src, 64, "HUD_SingleRace.fng");
+        snprintf((char *)g_mem + dst, 64, "HUD_SingleRac2.fng");
+        if (split_clone_hud(c, src, dst)) MR32(c->esp + 4) = dst;
+        else fprintf(stderr, "[coop] player 2's HUD: no copy of HUD_SingleRace (the 2P one stays)\n");
+    }
     if (split_requested() > 2 && who >= 0 && who < 6 && fng && (who >= 2 || (who & 1))){
         uint32_t src = SPLIT_HUD_SCRATCH, dst = SPLIT_HUD_NAMES + who * 64;
         snprintf((char *)g_mem + src, 64, "%s", (char *)g_mem + fng);
@@ -1344,10 +1410,16 @@ void sub_005df580(CPU *c){
 }
 
 void sub_005e4e70_orig(CPU *c);
+void coop_note_pools(int big);
 void sub_005e4e70(CPU *c){
     uint32_t streamer = c->ecx;
     int n = split_requested();
-    if (n && MR32(0x89e7c0u) == 2){
+    /* co-op free roam (coop.c): two players' areas of the city, as two players' split race (the 1.5x); a career race
+     * the two race together too (two views; the game's own two-human pool is smaller than one human's) */
+    int coop = MR32(0x850078u) == 1 && ((MR32(0x89e7b0u) == 0 && coop_wanted()) || coop_racing_together());
+    if (coop) n = 2;
+    coop_note_pools(coop);
+    if (n && (MR32(0x89e7c0u) == 2 || coop)){
         uint64_t bytes = (uint64_t)MR32(0x79dc54u) * 512 * (n + 1);
         if (bytes > 256u * 1024 * 1024) bytes = 256u * 1024 * 1024;
         if (bytes > MR32(c->esp + 4)) MR32(c->esp + 4) = (uint32_t)bytes;
@@ -1368,6 +1440,10 @@ void sub_005e4e70(CPU *c){
 void sub_00610750_orig(CPU *c);
 void split_second_pool(CPU *c){
     int n = split_requested();
+    /* co-op free roam: room for player 2's car (another of player 1's) beside the game's 11000 KB; online free
+     * roam's own size (roam_game.c, 48000 KB and up) has it already */
+    if (MR32(0x850078u) == 1 && MR32(0x89e7b0u) == 0 && coop_wanted() && MR32(c->esp + 4) < 17000u * 1024u)
+        MR32(c->esp + 4) = 17000u * 1024u;
     if (n && MR32(0x89e7c0u) == 2){
         uint64_t bytes = (uint64_t)MR32(0x7fa9d4u) * 512 * n;
         if (bytes > 256u * 1024 * 1024) bytes = 256u * 1024 * 1024;
@@ -1432,10 +1508,46 @@ static void split_poll(CPU *c){
 }
 #endif
 
+/* one input record into another (16 bytes: two words of actions, a bit 0 while pressed; four bytes of axes, the
+ * first two from 0, the others centred on 0x80; the time): pressed in either, each axis the further one */
+static void split_merge_input(uint32_t into, uint32_t from){
+    MR32(into) &= MR32(from); MR32(into + 4) &= MR32(from + 4);
+    for (unsigned k = 0; k < 4; ++k){
+        int a = MR8(into + 8 + k), b = MR8(from + 8 + k), mid = k < 2 ? 0 : 0x80;
+        if (abs(b - mid) > abs(a - mid)) MR8(into + 8 + k) = (uint8_t)b;
+    }
+}
 void sub_005cfd60_orig(CPU *c);
 void sub_005cfd60(CPU *c){
 #ifdef __wasm__
     uint32_t port = MR32(c->esp + 4u), type = MR32(c->esp + 8u), previous = MR32(c->esp + 12u);
+    if (MR32(0x850078u) != 4 && (coop_in() || coop_racing_together()) && MR32(0x8654a4u) == 6 && port < 2){
+        /* co-op free roam: port 0 stays the game's own (player 1's keys and controller); port 1 is player 2's seat.
+         * With the keyboard shared, player 1's arrows' half joins port 0's own (player 2's keys are hidden from it) */
+        static uint32_t port_type;
+        if (!port){
+            split_pause_refresh(c);
+            sub_005cfd60_orig(c);
+            uint32_t native = c->eax;
+            port_type = type ? MR32(type) : 0;
+            split_poll(c);
+            /* driving only: a menu reads port 0 as well (an arrow would count twice) */
+            if (coop_device() == COOP_DEV_KB && native && coop_driving()) split_merge_input(native, SPLIT_INPUT_CURRENT);
+            /* a menu or dialog up: player 2's port at rest (the menus read the ports too: a gas held when the pause
+             * menu came up moved it) */
+            if (!coop_driving()){
+                uint32_t p2 = SPLIT_INPUT_CURRENT + 16u;
+                MR32(p2) = MR32(p2 + 4) = 0xffffffffu;
+                MR8(p2 + 8) = MR8(p2 + 9) = 0; MR8(p2 + 10) = MR8(p2 + 11) = 0x80;
+            }
+            return;
+        }
+        POP32(c->eip);
+        if (type) MR32(type) = port_type;
+        if (previous) MR32(previous) = SPLIT_INPUT_PREVIOUS + port * 16u;
+        c->eax = SPLIT_INPUT_CURRENT + port * 16u;
+        return;
+    }
     if (MR32(0x850078u) == 4 && MR32(0x8654a4u) == 6 && port < 6){
         static uint32_t port_type;
         if (!port){
@@ -1682,6 +1794,36 @@ int splitscreen_hook(CPU *c, uint32_t ip){
             if (pos > worst){ worst = pos; trailer = p; }
         }
         if (ai_racer) MR32(c->ebx + 0x748) = (int8_t)MR8(ai_racer + 0xa) > threshold ? trailer : leader;
+        return 1;
+    }
+    if (ip == 0x51b0b0u && split_coop_hud() && MR32(c->esp + 16) == 0){
+        /* co-op: a full-screen HUD (640x480, centred units) into its half: s times as big, an element left or right
+         * of the middle kept on that screen edge, one above the middle at the half's top, one below at its bottom
+         * (the names over online players' cars are placed in their half already: roam_game.c) */
+        uint32_t data = MR32(c->esp + 4);
+        int roam_game_placed(uint32_t data);
+        if (roam_game_placed(data)) return 1;
+        for (unsigned i = 0; data && i < split_hud_data_count; ++i) if (split_hud_data[i].data == data){
+            uint32_t copy = 0x00d08000u + (split_hud_copy++ & 15) * 0x50;
+            memcpy(g_mem + copy, g_mem + data, 0x50);
+            unsigned width, height; void com_backbuffer_size(unsigned *, unsigned *);
+            com_backbuffer_size(&width, &height);
+            float x = MRF32(copy + 28), y = MRF32(copy + 32);
+            /* player 2's HUD without the top band: the bank, the SMS and Engage icons, the song, the outrun meter are
+             * player 1's career's */
+            if (split_hud_data[i].hide || (split_hud_data[i].seat && y < -60.f && fabsf(x) < 400.f)) x = y = 10000.f;
+            else if (fabsf(x) < 400.f && fabsf(y) < 300.f){             /* not one the game parks off screen */
+                float sc = split_coop_scale(), e = height ? 240.f * width / height : 320.f;
+                float top = split_hud_data[i].seat ? 0.f : -240.f, bot = top + 240.f;
+                x = x < -40.f ? -e + (x + 320.f) * sc : x > 40.f ? e - (320.f - x) * sc : x * sc;
+                y = y < 0.f ? top + (y + 240.f) * sc : bot - (240.f - y) * sc;
+                for (unsigned k = 4; k <= 6; ++k) MRF32(copy + k * 4) *= sc;
+                MRF32(copy + 56) *= sc; MRF32(copy + 60) *= sc;
+            }
+            MRF32(copy + 28) = x; MRF32(copy + 32) = y;
+            MR32(c->esp + 4) = copy;
+            break;
+        }
         return 1;
     }
     if (ip == 0x51b0b0u && split_racing() && split_render_limit() > 2 && MR32(c->esp + 16) == 0){

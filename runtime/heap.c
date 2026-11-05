@@ -7,7 +7,10 @@
  * eventually exhaust the 496 MB arena.  This module gives the guest a real
  * memory manager:
  *
- *   VA manager   [GH_BASE, GH_LIMIT) in 64 KiB granules: VirtualAlloc with
+ *   VA manager   [GH_BASE, GH_LIMIT) in 64 KiB granules (on wasm also the
+ *                window above the runtime, where there is one: guest_span.h;
+ *                the runtime's memory between them is never handed out),
+ *                VirtualAlloc with
  *                reserve/commit/decommit/release semantics, VirtualQuery,
  *                VirtualProtect.  Heap segments and large blocks are VA
  *                regions too, so freed address space is shared by everyone;
@@ -46,6 +49,7 @@
  * All guest code runs under the GIL, but host threads (Metal, audio, timers)
  * may reach the COM allocators, so every entry point takes g_hl. */
 #include "cpu.h"
+#include "guest_span.h"
 #include <os/lock.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,14 +65,21 @@ void win32_set_last_error(CPU *, uint32_t);
 #ifdef __wasm__
 #define GH_BASE   0x08000000u          /* wasm: 512 MB below GUEST_END (cpu.h) */
 #define GH_LIMIT  0x28000000u
+#define GH_TOP    0x80000000u          /* the index goes on to 2 GB (whole words of g_va_bits): [GH_LIMIT, the window) is
+                                          the runtime's, the window too where there is none, and the window's top to
+                                          2 GB nobody's (va_holes) */
+void mem_window_init(void);
 #else
 #define GH_BASE   0x10000000u
 #define GH_LIMIT  0x60000000u          /* win32_ext.c: guest thread stacks from here up */
+#define GH_TOP    GH_LIMIT
+static const uint32_t g_gwin_lo = 0, g_gwin_hi = 0;
+static inline void mem_window_init(void){ }
 #endif
 #define VA_GRAN   0x10000u
-#define VA_NG     ((GH_LIMIT - GH_BASE) / VA_GRAN)
+#define VA_NG     ((GH_TOP - GH_BASE) / VA_GRAN)
 #define GPAGE     0x1000u
-#define VA_NP     ((GH_LIMIT - GH_BASE) / GPAGE)
+#define VA_NP     ((GH_TOP - GH_BASE) / GPAGE)
 #define SEG_MIN   (4u << 20)           /* heap segment size */
 #define LARGE_MIN (1u << 20)           /* blocks at least this big get a VA region */
 
@@ -150,6 +161,17 @@ static inline int pcbit(uint32_t a){ uint32_t p = (a - GH_BASE) / GPAGE; return 
 static inline void pcset(uint32_t a, int v){ uint32_t p = (a - GH_BASE) / GPAGE;
     if (v) g_va_pc[p >> 3] |= (uint8_t)(1u << (p & 7)); else g_va_pc[p >> 3] &= (uint8_t)~(1u << (p & 7)); }
 static inline int dbit(uint32_t a){ uint32_t p = (a - GH_BASE) / GPAGE; return (g_va_dirty[p >> 3] >> (p & 7)) & 1; }
+/* a in the address space the VA manager hands out: [GH_BASE, GH_LIMIT), and the window where there is one */
+static inline int va_managed(uint32_t a){ return (a >= GH_BASE && a < GH_LIMIT) || (g_gwin_hi && a >= g_gwin_lo && a < g_gwin_hi); }
+static uint64_t va_managed_bytes(void){ return (uint64_t)(GH_LIMIT - GH_BASE) + (g_gwin_hi - g_gwin_lo); }
+/* The index's granules no one gets (heap_init): the runtime's memory between the two ranges, and the window where
+ * there is none.  Reserved, but no region's (g_va_start 0, never a region's first granule past 0) and not counted in
+ * g_va_reserved, so every search and run count sees them as taken and every map leaves them out.  Without a window
+ * the free granules are today's, so every search finds what it found before. */
+static void va_holes(void){
+    for (uint32_t a = GH_LIMIT; a < GH_TOP; a += VA_GRAN)
+        if (!va_managed(a)) vset(g_va_bits, (a - GH_BASE) / VA_GRAN, 1);
+}
 static inline void dset(uint32_t a, int v){ uint32_t p = (a - GH_BASE) / GPAGE;
     if (v) g_va_dirty[p >> 3] |= (uint8_t)(1u << (p & 7)); else g_va_dirty[p >> 3] &= (uint8_t)~(1u << (p & 7)); }
 
@@ -233,10 +255,16 @@ static int64_t va_find(uint32_t ng, int top, int allow_dead){
     if (ng >= VA_BIG){
         int64_t fit = -1; uint32_t fitlen = 0, run = 0;
         for (uint32_t g = 0; g <= VA_NG; g++){
-            if (g < VA_NG && !(g & 63) && !(g_va_bits[g >> 6] | (dead ? g_va_dead[g >> 6] : 0ull))){ run += 64; g += 63; continue; }
-            if (g < VA_NG && !vbit(g_va_bits, g) && !(dead && vbit(g_va_dead, g))){ run++; continue; }
+            int full = 0;                                   /* a word all taken: the runtime's memory between the ranges */
+            if (g < VA_NG && !(g & 63)){
+                uint64_t w = g_va_bits[g >> 6] | (dead ? g_va_dead[g >> 6] : 0ull);
+                if (!w){ run += 64; g += 63; continue; }
+                full = w == ~0ull;
+            }
+            if (!full && g < VA_NG && !vbit(g_va_bits, g) && !(dead && vbit(g_va_dead, g))){ run++; continue; }
             if (run >= ng && (fit < 0 || run < fitlen || (run == fitlen && top))){ fit = (int64_t)g - run; fitlen = run; }
             run = 0;
+            if (full) g += 63;
         }
         if (fit < 0) return -1;
         return top ? fit + (int64_t)(fitlen - ng) : fit;
@@ -269,6 +297,22 @@ static void va_free_runs(uint32_t *free_g, uint32_t *longest_g, uint32_t *runs);
 static int g_heapmap = 0;                 /* NFSU2_HEAPMAP=1 (test aid): the map with every [status] line */
 static uint64_t g_win_va;                 /* NFSU2_HEAPMAP: since the last [status] line, VA's most */
 static uint32_t g_win_run = ~0u;          /* ... and the longest free run's least (granules) */
+static uint32_t g_win_run_lo = ~0u, g_win_run_hi = ~0u;   /* ... with the window: below the runtime, in the window */
+/* The longest free run in granules [lo, hi) of the index. */
+static uint32_t va_longest(uint32_t lo, uint32_t hi){
+    uint32_t big = 0, run = 0;
+    for (uint32_t g = lo; g < hi; g++){
+        if (!(g & 63) && g + 64u <= hi){
+            uint64_t w = g_va_bits[g >> 6];
+            if (!w){ run += 64; g += 63; continue; }
+            if (w == ~0ull){ if (run > big) big = run; run = 0; g += 63; continue; }
+        }
+        if (vbit(g_va_bits, g)){ if (run > big) big = run; run = 0; } else run++;
+    }
+    return run > big ? run : big;
+}
+#define VA_G_LIMIT ((GH_LIMIT - GH_BASE) / VA_GRAN)
+static uint32_t va_g_of(uint32_t a){ return (a - GH_BASE) / VA_GRAN; }
 static uint32_t va_take(uint32_t g0, uint32_t ng, int kind, int heap, uint32_t prot){
     for (uint32_t g = g0; g < g0 + ng; g++){ vset(g_va_bits, g, 1); vset(g_va_dead, g, 0); g_va_start[g] = g0; }
     g_va[g0] = (VaReg){ ng, (uint8_t)kind, (uint8_t)heap, 0, prot, prot, 0 };
@@ -278,6 +322,11 @@ static uint32_t va_take(uint32_t g0, uint32_t ng, int kind, int heap, uint32_t p
         uint32_t run; va_free_runs(0, &run, 0);
         if (g_va_reserved > g_win_va) g_win_va = g_va_reserved;
         if (run < g_win_run) g_win_run = run;
+        if (g_gwin_hi){
+            uint32_t lo = va_longest(0, VA_G_LIMIT), hi = va_longest(va_g_of(g_gwin_lo), va_g_of(g_gwin_hi));
+            if (lo < g_win_run_lo) g_win_run_lo = lo;
+            if (hi < g_win_run_hi) g_win_run_hi = hi;
+        }
     }
     return GH_BASE + g0 * VA_GRAN;
 }
@@ -303,7 +352,11 @@ static uint32_t va_take(uint32_t g0, uint32_t ng, int kind, int heap, uint32_t p
 static uint32_t va_seg_room(uint32_t x0, uint32_t xn){   /* segments the free runs outside the holes hold, [x0, x0+xn) taken */
     uint32_t room = 0, run = 0;
     for (uint32_t g = 0; g <= VA_NG; g++){
-        if (g < VA_NG && !(g & 63) && !(g_va_bits[g >> 6] | g_hintmask[g >> 6]) && (g + 64u <= x0 || g >= x0 + xn)){ run += 64; g += 63; continue; }
+        if (g < VA_NG && !(g & 63)){
+            uint64_t w = g_va_bits[g >> 6] | g_hintmask[g >> 6];
+            if (!w && (g + 64u <= x0 || g >= x0 + xn)){ run += 64; g += 63; continue; }
+            if (w == ~0ull){ room += run / SEG_G; run = 0; g += 63; continue; }
+        }
         if (g < VA_NG && !vbit(g_va_bits, g) && !vbit(g_hintmask, g) && (g < x0 || g >= x0 + xn)){ run++; continue; }
         room += run / SEG_G; run = 0;
     }
@@ -323,8 +376,9 @@ static int64_t va_find_keep(uint32_t ng, uint32_t keep, int holes_ok){
         for (uint32_t g = 0; g <= VA_NG; g++){
             uint64_t w = g < VA_NG ? (g_va_bits[g >> 6] | (dead && pass == 0 ? g_va_dead[g >> 6] : 0ull)
                                       | (pass < 2 ? g_hintmask[g >> 6] : 0ull)) : ~0ull;
+            int full = g < VA_NG && !(g & 63) && w == ~0ull;
             if (g < VA_NG && !(g & 63) && !w){ run += 64; g += 63; continue; }
-            if (g < VA_NG && !((w >> (g & 63)) & 1u)){ run++; continue; }
+            if (!full && g < VA_NG && !((w >> (g & 63)) & 1u)){ run++; continue; }
             if (run >= ng){
                 int64_t at = (int64_t)g - ng;
                 /* outside the holes the run is its own room; with holes the count is made again */
@@ -333,6 +387,7 @@ static int64_t va_find_keep(uint32_t ng, uint32_t keep, int holes_ok){
                 if ((cost == 0 || left >= keep) && (cost < bcost || (cost == bcost && run <= blen))){ best = at; bcost = cost; blen = run; }
             }
             run = 0;
+            if (full) g += 63;
         }
         if (best >= 0) return best;
     }
@@ -373,7 +428,7 @@ static void va_free_runs(uint32_t *free_g, uint32_t *longest_g, uint32_t *runs){
 }
 /* Region containing a, or -1. */
 static int64_t va_region(uint32_t a){
-    if (a < GH_BASE || a >= GH_LIMIT) return -1;
+    if (!va_managed(a)) return -1;
     uint32_t g = (a - GH_BASE) / VA_GRAN;
     return vbit(g_va_bits, g) ? (int64_t)g_va_start[g] : -1;
 }
@@ -588,8 +643,12 @@ static void va_map(const char *why){
     }
     char buf[1024];
     int k = snprintf(buf, sizeof buf, "[heap] %s: VA %.1f of %.0f MB reserved, %.1f MB free in %u runs (longest %.1f MB);",
-                     why, g_va_reserved / 1048576.0, (GH_LIMIT - GH_BASE) / 1048576.0, fr * (VA_GRAN / 1048576.0), nr,
+                     why, g_va_reserved / 1048576.0, va_managed_bytes() / 1048576.0, fr * (VA_GRAN / 1048576.0), nr,
                      big * (VA_GRAN / 1048576.0));
+    if (g_gwin_hi)
+        k += snprintf(buf + k, sizeof buf - (size_t)k, " below the runtime longest %.1f MB, in the window %.1f MB;",
+                      va_longest(0, VA_G_LIMIT) * (VA_GRAN / 1048576.0),
+                      va_longest(va_g_of(g_gwin_lo), va_g_of(g_gwin_hi)) * (VA_GRAN / 1048576.0));
     for (int i = 1; i < MAXHEAP && k < (int)sizeof buf; i++){
         if (!nseg[i] && !nlrg[i]) continue;
         GHeap *H = &g_heap[i];
@@ -759,7 +818,7 @@ static void q_push(int hi, uint32_t b){
 
 /* Validate a user pointer: returns its header and owning heap, or 0. */
 static uint32_t block_check(uint32_t p, int *hi){
-    if ((p & 15u) || p < GH_BASE + HDR || p >= GH_LIMIT) return 0;
+    if ((p & 15u) || p < GH_BASE + HDR || p >= GH_TOP) return 0;
     uint32_t b = p - HDR;
     int64_t g0 = va_region(b);
     if (g0 < 0) return 0;
@@ -931,14 +990,17 @@ void heap_init(void){
     g_heapmap = !g_bump && hm && *hm && *hm != '0' && scr && *scr;
     const char *qc = getenv("NFSU2_HEAPCHECK_QUAR");
     if (qc && *qc) g_qcap = (uint64_t)strtoull(qc, 0, 0) << 20;
+    if (!g_bump){ mem_window_init(); va_holes(); }
     heap_new("process", 0);                     /* handle 1 = GetProcessHeap */
     if (!g_bump){ g_gh_com = heap_new("com objects", 1); g_gh_gbuf = heap_new("com buffers", 1); }
     else mem_commit(BUMP_BASE, 0x10000);
-    fprintf(stderr, "heap: %s%s%s, region 0x%08x..0x%08x\n",
+    fprintf(stderr, "heap: %s%s%s, region 0x%08x..0x%08x",
             g_bump ? "bump allocator (NFSU2_HEAP=bump)" : "TLSF heaps + VA manager",
             g_check ? (g_check >= 2 ? ", HEAPCHECK=2 (fill)" : ", HEAPCHECK") : "",
             g_sitestat ? ", per-site stats" : "",
             g_bump ? BUMP_BASE : GH_BASE, g_bump ? BUMP_MAX : GH_LIMIT);
+    if (!g_bump && g_gwin_hi) fprintf(stderr, " and 0x%08x..0x%08x", g_gwin_lo, g_gwin_hi);
+    fprintf(stderr, "\n");
 }
 
 /* ---- runtime API ---------------------------------------------------------- */
@@ -1050,7 +1112,7 @@ static uint32_t virtual_alloc(CPU *c, uint32_t addr, uint32_t size, uint32_t typ
             uint32_t a0 = addr & ~(VA_GRAN - 1);
             uint64_t end = (uint64_t)addr + size;
             uint32_t ng = (uint32_t)((end - a0 + VA_GRAN - 1) / VA_GRAN);
-            if (a0 < GH_BASE || end > GH_LIMIT){ win32_set_last_error(c, 487); return 0; }
+            if (a0 < GH_BASE || end > GH_TOP){ win32_set_last_error(c, 487); return 0; }   /* (the holes: reserved) */
             uint32_t g0 = (a0 - GH_BASE) / VA_GRAN;
             for (uint32_t g = g0; g < g0 + ng; g++) if (vbit(g_va_bits, g)){ win32_set_last_error(c, 487); return 0; }
             hint_drop(g0, ng);
@@ -1113,11 +1175,11 @@ static uint32_t virtual_query(uint32_t addr, uint32_t mbi, uint32_t len){
         uint32_t e = pg;
         while (e < rend && (R->kind != VK_VIRTUAL || pcbit(e) == com)) e += GPAGE;
         rsize = e - pg; state = com ? MEM_COMMIT : MEM_RESERVE; prot = com ? R->prot : 0;
-    } else if (!g_bump && pg >= GH_BASE && pg < GH_LIMIT){
+    } else if (!g_bump && va_managed(pg)){
         /* unreserved granules of the VA manager are free (released pages
          * stay host-committed, zero-filled) */
         uint32_t e = (pg + VA_GRAN) & ~(VA_GRAN - 1);
-        while (e < GH_LIMIT && va_region(e) < 0) e += VA_GRAN;
+        while (va_managed(e) && va_region(e) < 0) e += VA_GRAN;
         rsize = e - pg; state = MEM_FREE; prot = 1u;
     } else if (mem_is_committed(pg)){
         uint32_t e = (pg + 0x4000u) & ~0x3FFFu;
@@ -1284,10 +1346,16 @@ int  memstat_line(char *buf, size_t n){
     if (!g_bump) va_free_runs(0, &run, 0);
     if (g_heapmap){
         va_map("status");
-        if (g_win_va)                               /* between two [status] lines (a burst the lines miss) */
-            fprintf(stderr, "[heap] since the last status: VA at most %.1f MB, the longest free run at least %.1f MB\n",
+        if (g_win_va){                              /* between two [status] lines (a burst the lines miss) */
+            fprintf(stderr, "[heap] since the last status: VA at most %.1f MB, the longest free run at least %.1f MB",
                     g_win_va / 1048576.0, g_win_run * (VA_GRAN / 1048576.0));
+            if (g_gwin_hi && g_win_run_hi != ~0u)
+                fprintf(stderr, " (below the runtime %.1f MB, in the window %.1f MB)",
+                        g_win_run_lo * (VA_GRAN / 1048576.0), g_win_run_hi * (VA_GRAN / 1048576.0));
+            fprintf(stderr, "\n");
+        }
         g_win_va = g_va_reserved; g_win_run = run;
+        if (g_gwin_hi){ g_win_run_lo = va_longest(0, VA_G_LIMIT); g_win_run_hi = va_longest(va_g_of(g_gwin_lo), va_g_of(g_gwin_hi)); }
     }
     UNLOCK();
     com_mem_stats(&cb, &bb, &objs);
@@ -1325,7 +1393,7 @@ void heap_report(void){
             else if (g_va[g].kind == VK_SEG) ns++; else nl++; }
         fprintf(stderr, "  VA: %.1f MB reserved now (peak %.1f MB of %.1f MB): %u heap segments, %u large blocks,"
                         " %u VirtualAlloc regions (%.1f MB, %.1f MB committed); %llu commit / %llu release calls\n",
-                g_va_reserved / 1048576.0, g_va_peak / 1048576.0, (GH_LIMIT - GH_BASE) / 1048576.0, ns, nl, nv,
+                g_va_reserved / 1048576.0, g_va_peak / 1048576.0, va_managed_bytes() / 1048576.0, ns, nl, nv,
                 bv / 1048576.0, bvc / 1048576.0, (unsigned long long)g_va_commit_calls, (unsigned long long)g_va_release_calls);
     }
     fprintf(stderr, "  API calls:");

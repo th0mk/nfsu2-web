@@ -58,6 +58,7 @@ void sub_005d6d20_orig(CPU *c);
 #ifdef __wasm__
 #include "web/gpu_proto.h"
 int photo_hides(uint32_t ri);                    /* photo.c: a car photo mode does not draw */
+int photo_dark(uint32_t car);                    /* photo.c: a car whose headlights photo mode turned off */
 
 #define VIEW9       0x008331d0u   /* eView 9 (0x48B1E0(9): 0x832DE0 + 9 * 0x70): the player's headlight */
 #define CUR_VIEW     0x00870848u   /* the viewport (eView +0x58) being rendered (0x5CAAD0); view 9 shares view 1's */
@@ -129,7 +130,7 @@ enum { LS_OFF = 1, LS_HIGH = 2 };
 static int wanted(uint32_t car, uint32_t me){
     if (g_mode == HL_SELF) return car == me;
     if (car == me) return lightkey_state(me) == LS_HIGH && lightkey_self_ok();   /* our high beam: a light of this kind */
-    if (lightkey_state(car) == LS_OFF) return 0;
+    if (lightkey_state(car) == LS_OFF || photo_dark(car)) return 0;
     if (g_mode == HL_ALL) return 1;
     if (MR32(G_GAMEMODE) & GM_NETWORK) return MR32(car + CAR_DRIVER) != DRIVER_TRAFFIC;
     return roam_game_friend_car(car);

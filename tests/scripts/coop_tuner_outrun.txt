@@ -1,0 +1,30 @@
+# Co-op free roam, a tuner's outrun with player 2 in (seed s4_outrun, NFSU2_CAREER_RACEWIN=3): player 2 joins on the
+# keyboard's left half, the game's AI drives player 1 until the tuners come out, `outrun` takes on the nearest one;
+# the outrun has player 1 and the tuner as its racers and one local human (player 2's car is a human's in the World:
+# the outrun's start must not count it); RACEWIN posts player 1 first: the career's reward; after it one racer again,
+# player 2 still in and driving.
+0     roam fe2roam 14000
++0    roam smsauto on
++120  roam coop join kb
++0    waitmem 0xd00030 2 1500
++150  mark bank i:0x85ad40+0x7134
++0    autopilot on
++600  outrun 0 6000
++0    autopilot off
++0    waitmem 0x89e7b0 7 600
++60   expect i:0x89e7b0 == 7
++0    expect i:0x89e7c0 == 1
++0    expect i:[0x890118]+0x24 >= 2
++0    expect i:0xd00030 == 2
++0    status coop_tuner_outrun_on
++0    waitmem 0x89e7b0 0 1800
++300  expect i:0x89e7b0 == 0
++0    expect i:0x89e7c0 == 1
++0    expect i:[0x890118]+0x24 == 1
++0    expect i:0x85ad40+0x7134 > @bank
++0    expect i:0xd00030 == 2
++0    down W
++100  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    up W
++0    status coop_tuner_outrun_complete
++10   quit

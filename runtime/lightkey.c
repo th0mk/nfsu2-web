@@ -1,8 +1,8 @@
 /* lightkey.c -- the headlights on a key: G tapped turns them off, or back on (the game's own lights, as they were);
  * held (HOLD_S) it is high beam, brighter than the game's own and reaching farther, for as long as it is held, and as
  * they were again when it is let go (off again, if they were off: a flash).  On a controller the right stick straight
- * up does the same (the look's stick: the left one when the game steers with the right one, look.c): flicked up and
- * back, on or off; held up, high beam (straight up turns the look by nothing).  Only
+ * up does the same (the look's stick: the left one when the game steers with the right one, look.c; none with the
+ * look turned off): flicked up and back, on or off; held up, high beam (straight up turns the look by nothing).  Only
  * while the player drives (the drive camera, the HUD on top, the race running: free roam, races, Online and LAN);
  * not paused, in menus, photo mode, a replay or a cutscene.  Friends in free roam see it (roam_game.c: the state's
  * RC_BIT_DARK, its extension's RC_OPEN_HIBEAM), on their screens as on ours.  The key is the player's (the start
@@ -189,9 +189,9 @@ static void key_input(int can, double t){
 }
 
 /* the look's stick straight up (the right stick; the left one when the game's controls read the right one and none of
- * the left, none when they read both: dinput_pad.c pad_look_stick): flicked up and back to rest within HOLD_S, on or
- * off; held up, high beam.  A stick the game steers or brakes with never is (the quick chat's picker keeps the stick
- * from the game, and from here, while it is open) */
+ * the left, none when they read both or the player turned the look off: dinput_pad.c pad_look_stick): flicked up and
+ * back to rest within HOLD_S, on or off; held up, high beam.  A stick the game steers or brakes with never is (the
+ * quick chat's picker keeps the stick from the game, and from here, while it is open) */
 int pad_look_stick(void);
 static int stick_input(int can, double t){
     PadState s;

@@ -1,0 +1,15 @@
+# Co-op free roam online, collisions per pair, instance B (alone): once A's player 2 (named "<A> 2", COOP_PEER A's
+# name) is shown, B jumps 14 m behind its car and drives into it.  What A expects: coop_online_hit_a.txt.
+0     roam fe2roam 14000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitname 6000 ${COOP_PEER} 2
++90   roam mp status
++0    roam mp followname 14 0 0 ${COOP_PEER} 2
++120  roam mp status
++0    log ram
++0    down UP
++150  up UP
++300  roam mp status
++0    status coop_hit_rammed
++600  quit

@@ -1,0 +1,77 @@
+# The Japanese release's vinyls (runtime/vinylpacks.c, VINYLPACKS) in a career Graphics shop, as the player sees
+# them: a career save with everything unlocked (the game's unlock-all flag [0x838464]: Art Factory is locked
+# until late in the career), CC_GRAPHICS, Vinyls, the bottom layer, the
+# categories to the last and back to Art Factory, the fourth from the end (Special, Sponsor, Contest, Art Factory:
+# vp_cat), into it, down its list to ART FACTORY 27 (vp_27), then each of ART FACTORY 28 to 34 (vp_28 .. vp_34), with
+# the shop's Visual Rating and price, the add-to-setup question (vp_apply): Yes, out of the shop, and the car in the
+# world, in photo mode (vp_world, vp_world2).  The log's "[vinyls]" line says the
+# car part database has the seven, its "[file]" lines which cars' VINYLS.BIN read their pack.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --data <game folder with VINYLPACKS>
+#        --seed <career save> --a Ex:vinylpacks_shop.txt:NFSU2_ROAM=1,NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank: room for parts
++0    poke 0x838464 1                 # unlock all
++60   shopgo CC_GRAPHICS
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the shop
++1500 fnglist
++30   tap RIGHT                       # Vinyls
++120  tap RETURN
++600  fnglist
++30   tap RETURN                      # the bottom layer
++600  fnglist
++0    loop 40
++40   tap RIGHT
++0    endloop
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++120  dump vp_cat
++30   tap RETURN                      # into Art Factory
++600  fnglist
++0    dump vp_list
++0    loop 26
++30   tap DOWN
++0    endloop
++400  dump vp_27
++30   tap DOWN
++400  dump vp_28
++30   tap DOWN
++400  dump vp_29
++30   tap DOWN
++400  dump vp_30
++30   tap DOWN
++400  dump vp_31
++30   tap DOWN
++400  dump vp_32
++30   tap DOWN
++400  dump vp_33
++30   tap DOWN
++400  dump vp_34
++30   tap RETURN                      # apply it
++300  fnglist
++0    dump vp_apply
++30   tap LEFT                        # Yes
++30   tap RETURN
++300  fnglist
++0    dump vp_on
++0    loop 4
++60   tap ESCAPE
++200  fnglist
++0    endloop
++0    dump vp_exit                    # "exit back to Explore Mode?"
++0    tap LEFT
++30   tap RETURN                      # Yes
++0    waitroam 4000
++600  photo on
++60   photo orbit
++60   photo turn 80 0
++120  dump vp_world
++0    photo turn 100 0
++120  dump vp_world2
++0    photo off
++0    log VINYLS DONE
++10   quit

@@ -1,16 +1,21 @@
 // The one place that knows the layout of the radio's words after the status table (HostStatusRadio in
 // runtime/web/radio_proto.h, same order): the page writes the switch, the tags and the sound, the runtime (runtime/radio.c)
 // reads them.  RadioLink.open() gives a link only to a game whose block has the radio's magic and version.
-const WORDS = ['radio_magic', 'radio_version', 'on', 'tag_seq', 'places', 'req_seq', 'req_index', 'ready_seq', 'failed_seq', 'total', 'written', 'ring', 'ring_frames', 'read', 'skip'] as const;
+const WORDS = ['radio_magic', 'radio_version', 'on', 'tag_seq', 'places', 'req_seq', 'req_index', 'ready_seq', 'failed_seq', 'total', 'written', 'ring', 'ring_frames', 'read', 'skip',
+  'listen', 'song_seq', 'song_kind', 'song_ms', 'song_end'] as const;
 type Word = typeof WORDS[number];
 export const RADIO_WORDS: readonly string[] = WORDS;
 /** What the runtime writes into the first two words at its start (RADIO_MAGIC, RADIO_VERSION in radio_proto.h). */
-export const RADIO_MAGIC = 0x31444152, RADIO_VERSION = 2;
+export const RADIO_MAGIC = 0x31444152, RADIO_VERSION = 3;
 const W = Object.fromEntries(WORDS.map((n, i) => [n, i])) as Record<Word, number>;
 const CTL = 16 + 48 * 24,   // the status table before them (status.ts: HEAD + MAX * ITEM)
   PLACES = 2, TAG = 44, TEXT = WORDS.length * 4;
 
 export interface Lines { artist: string; title: string; album: string }
+/** The song playing as the runtime tells it (radio_proto.h song_*): seq counts the songs the game started; kind: 'game' an EA Trax
+ *  song, 'folder' the Radio's track, 'none' no song; ms: how long it has been heard; ended: it played to its end. */
+export interface Song { seq: number; kind: 'none' | 'game' | 'folder'; ms: number; ended: boolean; lines: Lines }
+const KINDS = ['none', 'game', 'folder'] as const;
 /** 0 menus, 1 driving */
 export type Place = 0 | 1;
 
@@ -24,7 +29,7 @@ export class RadioLink {
 
   /** The link to the radio's words at the status block, or null: the block is too short, or it is another build's (an older game in the cache). */
   static open(memory: WebAssembly.Memory, ptr: number): RadioLink | null {
-    const end = ptr + CTL + TEXT + PLACES * 3 * TAG;
+    const end = ptr + CTL + TEXT + (PLACES + 1) * 3 * TAG;
     if (!Number.isInteger(ptr) || ptr < 0 || end > memory.buffer.byteLength || (ptr + CTL) % 4) return null;
     const w = new Int32Array(memory.buffer, ptr + CTL, 2);
     return Atomics.load(w, W.radio_magic) === RADIO_MAGIC && Atomics.load(w, W.radio_version) === RADIO_VERSION ? new RadioLink(memory, ptr) : null;
@@ -71,6 +76,20 @@ export class RadioLink {
    *  radio on the folder's next track).  Each press counts once; with no song playing (a drift or drag race, the pause
    *  menu) the runtime lets it go. */
   skip() { Atomics.add(this.words(), W.skip, 1); }
+
+  /** The page wants the song playing told (song()), radio on or off: Last.fm's scrobbles (lastfm.ts). */
+  listen(on: boolean) { Atomics.store(this.words(), W.listen, on ? 1 : 0); }
+
+  /** The song playing, null while the runtime writes it (asked again a moment later) or before it told one. */
+  song(): Song | null {
+    const w = this.words(), seq = Atomics.load(w, W.song_seq) >>> 0;
+    if (!seq || seq & 1) return null;
+    const bytes = new Uint8Array(this.memory.buffer, this.ptr + CTL + TEXT + PLACES * 3 * TAG, 3 * TAG);
+    const line = (k: number) => { const b = bytes.slice(k * TAG, (k + 1) * TAG), nul = b.indexOf(0); return new TextDecoder('latin1').decode(nul < 0 ? b : b.subarray(0, nul)).trim(); };
+    const kind = KINDS[Atomics.load(w, W.song_kind)] ?? 'none', lines = { artist: line(0), title: line(1), album: line(2) };
+    const ms = Atomics.load(w, W.song_ms) >>> 0, ended = (Atomics.load(w, W.song_end) >>> 0) === seq;
+    return (Atomics.load(w, W.song_seq) >>> 0) === seq ? { seq, kind, ms, ended, lines } : null;
+  }
 
   /** Frames the rings take now (the counters wrap at 32 bits, their difference does not). */
   room(): number {

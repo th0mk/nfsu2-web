@@ -20,8 +20,13 @@ export const K_TONE = 1552, TONE_BYTES = 16, TONE_MAGIC = 0x454E4F54;
 export const K_LAT = 1568, LAT_BYTES = 24, LAT_MAGIC = 0x4E54414C;
 // GwPhoto: photo mode's picture (runtime/photo.c) at this byte offset of every frame's VS constant arena (not bound):
 // magic, state (0 off, 1 the frame as it is, 2 frame n of target frames of still picture gen, 3 it has them, 4 the frame as it is is the picture), n, target,
-// gen; at PHOTO_ACK the page's answer in both buffers' blocks: gen << 16 | the frames of it the page has
-export const K_PHOTO = 1600, PHOTO_BYTES = 32, PHOTO_MAGIC = 0x544F4850, PHOTO_ACK = 20;
+// gen; at PHOTO_ACK the page's answer in both buffers' blocks: gen << 16 | the frames of it the page has; at PHOTO_TILE
+// the tile drawn (low byte), tiles a side (<< 8), what is being taken (<< 12: CAP_*), the last picture asked for the game
+// saw (<< 16); at PHOTO_WANT the page's: a picture asked for (1 .. 0xFFFF) | the most tiles a side it takes << 16; at
+// PHOTO_FOV the field of view drawn (float, degrees across), at PHOTO_LENS what the page makes of it (LENS_*)
+export const K_PHOTO = 1600, PHOTO_BYTES = 48, PHOTO_MAGIC = 0x544F4850, PHOTO_ACK = 20, PHOTO_TILE = 24, PHOTO_WANT = 28,
+  PHOTO_FOV = 32, PHOTO_LENS = 36;
+export const CAP_NONE = 0, CAP_TILES = 1, CAP_SHUTTER = 2, LENS_PLAIN = 0, LENS_FISHEYE = 1;
 // the VS constant arena is bound in windows of this many 16-byte rows (GW_KWIN_ROWS)
 export const KWIN_ROWS = 4096;
 

@@ -1,0 +1,42 @@
+# Options > Gameplay: Show Player Names (runtime/shownames.c), the game's own row of the LAN lobby's options, the
+# eighth, after Race Map Mode, before Save.  On at first (the game's default, no registry value); Left: Off, the log
+# says "[names] Show Player Names Off" and the game's byte is 0, the registry's ShowPlayerNames 0 (roam-pair --fetch
+# registry.txt shows it; options_names_again.txt and roam_names_profile.txt start with it); Save, the ninth row, still
+# has its parts.  roam-pair --page app saves the page at each "log SHOT <name>":
+#   roam-pair --page app --solo --a Opt:options_names.txt --fetch registry.txt --out <dir>
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    waitfng GarageMain.fng 3000
++0    expect b:0x8500c9 == 1                       # On: the game's default
++400  tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
++90   tap RETURN                                   # Options
++0    waitfng UI_OptionsMain.fng 600
++300  tap RIGHT
++60   tap RIGHT
++90   tap RETURN                                   # Gameplay
++300  tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN                                     # Show Player Names
++90   dump names_on
++0    log SHOT names_on
++60   tap LEFT                                     # Off
++30   expect b:0x8500c9 == 0
++0    log SHOT names_off_30
++60   log SHOT names_off_90
++120  dump names_off
++0    log SHOT names_off
++60   tap DOWN                                     # Save, the last
++90   dump last
++0    tap ESCAPE
++300  dump left
++0    expect b:0x8500c9 == 0
++60   quit

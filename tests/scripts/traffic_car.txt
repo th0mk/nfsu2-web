@@ -1,0 +1,21 @@
+# A traffic vehicle as the player's car (runtime/trafficcars.c), in career free roam: the test knob makes the
+# player's car a fire truck at the world's load; a frame from each of the drive views.  With
+# NFSU2_TEST_TRAFFIC_GAME=1 (the game's way) only its lights and shadow show.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --seed <a career save tree>
+#        --a Tom:traffic_car.txt:NFSU2_ROAM=0,NFSU2_TEST_TRAFFIC_CAR=FIRETRUCK
+0     bot on
++0    waitroam 6000
++0    bot off
++600  poke 0x83aa74 4                 # player 1's view: the next C is view 0
++30   tap C
++240  dump traffic_view0
++30   tap C
++240  dump traffic_view1
++30   tap C
++240  dump traffic_view2
++30   tap C
++240  dump traffic_view3
++30   tap C
++240  dump traffic_view4
++0    log TRAFFIC DONE
++120  quit

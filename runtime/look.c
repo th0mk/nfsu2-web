@@ -20,7 +20,9 @@
  * the right stick (the game's Joypad Configuration) the left stick looks
  * round, if the game reads none of it either, else nothing does
  * (dinput_pad.c pad_look_stick; players steered with the right stick, and
- * it turned the view as it steered, 2026-11-03).
+ * it turned the view as it steered, 2026-11-03).  The player may turn the
+ * look off (the start page's Controls, Site, Free look: settings.ini
+ * button_look off): no stick looks round then, the game's camera as it was.
  *
  * How: the drive camera puts the camera where it wants it each frame, in the
  * main loop's update (0x5811C0, before the sound's 0x483B40); the frame is
@@ -59,6 +61,7 @@
  * NFSU2_PAD_LOG=1 logs each look's start and end
  * (tests/scripts/pad_look.txt; roam_look_a.txt in free roam). */
 #include "cpu.h"
+#include "coop.h"
 #include "gamepad.h"
 #include <math.h>
 #include <stdio.h>
@@ -136,7 +139,7 @@ static uint32_t driving_car(void){
     if (MR32(G_FLOW) != 6u || !ok(pl, PL_MOVER + 4u) || !ok(r, 3) || MR32(r) != 4u) return 0;
     uint32_t car = rd32(pl + PL_CAR), mv = rd32(pl + PL_MOVER);
     if (!ok(car, CAR_POS + 12u) || !ok(mv, MV_TYPE + 4u) || MR32(mv + MV_TYPE) != MOVER_DRIVE) return 0;
-    uint32_t hud = rd32(pl + PL_HUD), fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? rd32(mg + 0xe4u) : 0;
+    uint32_t hud = rd32(pl + PL_HUD), fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? coop_fe_top(mg) : 0;
     char a[40], b[40];
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b) ? car : 0;

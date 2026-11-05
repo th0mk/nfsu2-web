@@ -1,12 +1,17 @@
 // Claimed names on the start page (claim.ts): the line under Your name (the Online tab) with its Claim button, and
 // what Play asks about the name (shell.ts settleName):
+// - One name: a passphrase with a claimed name plays as that name, whatever Your name says (2026-11-05: a player who
+//   typed another name after claiming played under one nobody held, which nobody could add as a friend, while the
+//   friends lists went by the claim; the line only said the typed name was free).  Typing another name changes
+//   nothing until Change name (once a week): Play never moves a claim, so nobody loses theirs by typing.
 // - Your name: as typed, the line says what the name is to this player: free (Claim; without a keyphrase, Claim
 //   turns cloud saves on first), claimed by this keyphrase (as long as it lasts), another player's (the digits it plays
-//   under), NAME (the game's default, which nobody claims), or a change of name (Change name, once a week).  A claim
-//   runs Cloudflare's check in the row when the server asks for it.
+//   under), NAME (the game's default, which nobody claims), or, with a claim, that the claimed name is the one played
+//   (and Change name, once a week).  A claim runs Cloudflare's check in the row when the server asks for it.
 // - Play: NAME asks once for a name of the player's own; a name another player claimed asks once (per name) for
-//   another; either way the game plays under the name with this browser's four digits until then.  A free name with
-//   a keyphrase is claimed as the game starts: Cloudflare's check shows only when it wants a click.
+//   another; either way the game plays under the name with this browser's four digits until then (with no claim of
+//   its own).  A free name with a keyphrase but no claim yet is claimed as the game starts: Cloudflare's check shows
+//   only when it wants a click.
 // The texts and their look follow the page's own rows and dialogs (one line, coloured by its state).
 
 import { dateLocale, t } from './i18n';
@@ -75,6 +80,8 @@ export class NameRow {
   private seq = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private els: { input: HTMLInputElement; btn: HTMLButtonElement; line: HTMLParagraphElement; use: HTMLButtonElement } | null = null;
+  /** the box's own placeholder (settings-ui's: the profile's name), shown again when there is no claimed name */
+  private placeholder = '';
   /** Cloudflare's widget's box: one for every drawing of the row (the panel draws its rows again as settings change,
    *  turning cloud saves on among them, and a widget drawn into a box gone from the page never answers) */
   private readonly check = Object.assign(document.createElement('div'), { className: 'claim-check', hidden: true });
@@ -92,6 +99,7 @@ export class NameRow {
     use.onclick = () => { input.value = this.alt; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('change')); };
     row.append(this.check, line);
     this.els = { input, btn, line, use };
+    this.placeholder = input.placeholder;
     input.maxLength = 15;
     input.addEventListener('input', () => { this.note = null; clearTimeout(this.timer); this.timer = setTimeout(() => void this.ask(), 300); this.draw(); });
     this.draw();
@@ -104,16 +112,25 @@ export class NameRow {
     return v || (await this.d.profileName()) || '';
   }
 
-  /** the server asked about the name typed (or the profile's) */
+  /** `typed` is not what Play plays: the passphrase here holds another name (the last one heard of; the line under
+   *  the box says so) */
+  notPlayed(typed: string | null): boolean {
+    const mine = this.info?.mine, name = typed ? onlineName(typed) : null;
+    return !!mine && this.d.linked() && !!name && name.toLowerCase() !== mine.name.toLowerCase();
+  }
+
+  /** the server asked about the name typed (or the profile's); with a passphrase here, also with none to ask about
+   *  (an empty box and no profile, a name the page refuses): its claimed name is the one played all the same */
   async ask() {
     const typed = await this.typed();
     const name = onlineName(typed);
     const n = ++this.seq;
-    if (!name || local(typed)) { this.of = name ?? ''; this.info = null; this.draw(); return; }
-    const alt = await digitsFor(name, this.d.seed());
-    const info = await this.d.claims.check(name, alt);
+    const ok = !!name && !local(typed);
+    if (!ok && !this.d.linked()) { this.of = name ?? ''; this.info = null; this.draw(); return; }
+    const alt = ok ? await digitsFor(name!, this.d.seed()) : '';
+    const info = await this.d.claims.check(ok ? name! : '', alt || undefined);
     if (n !== this.seq) return;
-    this.of = name; this.alt = alt; this.info = info;
+    this.of = ok ? name! : ''; this.alt = alt; this.info = info;
     this.d.kept(info?.mine?.name ?? null);
     this.draw();
   }
@@ -139,16 +156,34 @@ export class NameRow {
     const bad = typed ? local(typed) : null;
     if (bad) return show(bad[0], bad[1]);
     if (this.note) return show(this.note, 'bad');
-    const i = this.info;
-    if (!i || this.d.claims.here === false || onlineName(typed || this.of) !== this.of) return show(null);
-    const name = i.name ?? this.of, mine = i.mine;
+    const i = this.info, mine = i?.mine;
+    // an empty box plays as the claimed name: it shows there
+    e.input.placeholder = mine?.name ?? this.placeholder;
+    if (!i || this.d.claims.here === false) return show(null);
+    if (mine && !typed) return show(t('Claimed with your passphrase. It stays yours as long as the passphrase does.'), 'ok');
+    if (onlineName(typed || this.of) !== this.of) return show(null);
+    const name = i.name ?? this.of;
+    // one name (the module's doc): another name typed is not played until Change name
+    if (mine && i.state !== 'yours') {
+      const claimed = mine.name, soon = mine.next > Date.now();
+      switch (i.state) {
+        case 'free':
+          if (soon) return show(t('You play as {claimed}, your claimed name. You can change it to {name} on {date}.', { claimed, name, date: day(mine.next) }), 'env');
+          return show(t('You play as {claimed}, your claimed name. To play as {name}, press Change name: your friends move with you, and {claimed} stays yours for {n} days. One change a week.', { claimed, name, n: GRACE_DAYS }), 'env', t('Change name'));
+        case 'old':
+          return show(t('You play as {claimed}, your claimed name. {name} was yours before: yours until {date}.', { claimed, name, date: day(i.until ?? 0) }), 'env', soon ? null : t('Change name'));
+        case 'taken':
+          return show(t('Another player claimed {name}. You play as {claimed}, your claimed name.', { claimed, name }), 'env');
+        default:
+          return show(t('You play as {claimed}, your claimed name.', { claimed }), 'env');
+      }
+    }
     switch (i.state) {
       case 'default':
         return show(t('{name} is the game\'s default and can\'t be claimed. Pick your own.', { name }), 'env', null, this.alt);
       case 'yours':
         return show(t('Claimed with your passphrase. It stays yours as long as the passphrase does.'), 'ok');
       case 'old':
-        if (mine && mine.next <= Date.now()) return show(t('{name} was your name before your change: yours until {date}.', { name, date: day(i.until ?? 0) }), 'ok', t('Change name'));
         return show(t('{name} was your name before your change: yours until {date}.', { name, date: day(i.until ?? 0) }), 'ok');
       case 'taken':
         // with a passphrase here, entering one is no way back to it: that one is another (2026-11-02, a player's
@@ -156,8 +191,6 @@ export class NameRow {
         if (this.d.linked()) return show(t('Another passphrase claimed {name}, not the one this browser syncs with, so you play as {alt}. Pick another name.', { name, alt: this.alt }), 'bad', null, this.alt);
         return show(t('Another player claimed {name}, so you play as {alt}. Pick another name, or if it\'s yours, enter your passphrase under Cloud saves.', { name, alt: this.alt }), 'bad', null, this.alt);
       case 'free':
-        if (mine && mine.next > Date.now()) return show(t('{name} is free. You can change your name again on {date}.', { name, date: day(mine.next) }));
-        if (mine) return show(t('{name} is free. {old} stays yours for {n} days and your EA Messenger friends move with you. One change a week.', { name, old: mine.name, n: GRACE_DAYS }), 'free', t('Change name'));
         if (!this.d.linked()) return show(t('Not claimed: anyone can play as {name}. Claiming makes you an 8-word passphrase that holds the name and your cloud saves.', { name }), 'free', t('Claim'));
         return show(t('Not claimed yet. Your passphrase claims it the next time you play with others.'), 'free', t('Claim'));
       default:
@@ -225,6 +258,9 @@ export interface PlayNameDeps {
   choose(title: string, body: Node, ok: string, cancel: string): Promise<string>;
   save(name: string): Promise<void>;
   log(s: string): void;
+  /** the passphrase's claimed name as the page last heard it (the line under Your name), for a Play the server does
+   *  not answer: null, none known */
+  claimed?(): string | null;
 }
 
 const asked = (k: string) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
@@ -233,17 +269,30 @@ const para = (text: string) => Object.assign(document.createElement('p'), { text
 
 /**
  * The name this game plays under, by the claims: `typed` is Your name, or the profile's.  null: as it is (no claims
- * on this server, no answer, or nothing to change).  NAME and a name another player claimed play under this
- * browser's digits, after a question the first time (per save folder for NAME, per name for a claimed one); a free
- * name with a keyphrase here is claimed (`quiet`: Cloudflare's check where it wants a click).
+ * on this server, no answer, or nothing to change).  A passphrase with a claimed name plays as that name, whatever is
+ * typed (one name: the module's doc; the claim never moves here).  Else NAME and a name another player claimed play
+ * under this browser's digits, after a question the first time (per save folder for NAME, per name for a claimed
+ * one); a free name with a keyphrase here is claimed (`quiet`: Cloudflare's check where it wants a click).
  */
 export async function settleName(d: PlayNameDeps, typed: string, saveDir: string, quiet: (name: string, site: string) => Promise<string | null>): Promise<string | null> {
   const name = onlineName(typed);
-  if (!name || readsAsSlur(typed)) return null;
-  const alt = await digitsFor(name, d.seed());
-  const info = await d.claims.check(name, alt);
-  if (!info) return null;
   const linked = d.linked();
+  const ok = !!name && !readsAsSlur(typed);
+  if (!ok && !linked) return null;
+  const alt = ok ? await digitsFor(name!, d.seed()) : '';
+  const info = await d.claims.check(ok ? name! : '', alt || undefined);
+  const known = linked ? d.claimed?.() ?? null : null;
+  if (!info) {
+    if (known) d.log('[app] your name: no answer about it: your claimed name as heard before');
+    return known && !(name && name.toLowerCase() === known.toLowerCase()) ? known : null;
+  }
+  if (linked && info.mine) {
+    // (the claimed name in the case typed, if that is all that differs)
+    const same = ok && name!.toLowerCase() === info.mine.name.toLowerCase();
+    d.log(`[app] your name: your claimed name${same ? '' : ' (Your name says another: it is played only after Change name)'}`);
+    return same ? name! : info.mine.name;
+  }
+  if (!ok) return null;
   d.log(`[app] your name: ${info.state === 'yours' || info.state === 'old' ? 'claimed with this browser\'s keyphrase'
     : info.state === 'taken' ? `claimed by another player (${linked ? 'with another passphrase than this browser\'s' : 'no passphrase here'})` : info.state}`);
   switch (info.state) {
@@ -340,14 +389,14 @@ async function pick(d: PlayNameDeps, title: string, before: Node[], alt: string,
  * The server's operator took the player's name away (net/index.ts onRename: `was`, with the operator's `msg`): a
  * question for another, the box empty and checked as it is typed (a name another player claimed, or one the server
  * does not allow, will not do; a server without claims asks nothing).  The name picked, saved as Your name; null: Not
- * now.
+ * now.  seat2: co-op player 2's name was taken (the box says so; the name is player 2's, for this game only, not saved).
  */
-export async function renamePick(d: PlayNameDeps, was: string, msg: string): Promise<string | null> {
+export async function renamePick(d: PlayNameDeps, was: string, msg: string, seat2 = false): Promise<string | null> {
   const body = document.createElement('div');
   body.append(para(t('{name} isn\'t allowed here.', { name: was })));
   if (msg) body.append(para(msg));
   const row = document.createElement('p'); row.className = 'dlg-field';
-  const label = Object.assign(document.createElement('label'), { className: 'set-label', htmlFor: 'rename-ask-name', textContent: t('Your name') });
+  const label = Object.assign(document.createElement('label'), { className: 'set-label', htmlFor: 'rename-ask-name', textContent: seat2 ? t('Player 2\'s name') : t('Your name') });
   const f = Object.assign(document.createElement('input'), { type: 'text', id: 'rename-ask-name', maxLength: 15, autocomplete: 'off', spellcheck: false });
   row.append(label, f);
   const line = Object.assign(document.createElement('p'), { className: 'hint claim-line' });
@@ -381,7 +430,7 @@ export async function renamePick(d: PlayNameDeps, was: string, msg: string): Pro
   await check();
   const name = onlineName(f.value.trim());
   if (!name || !good) return null;
-  await d.save(name);
+  if (!seat2) await d.save(name);
   return name;
 }
 

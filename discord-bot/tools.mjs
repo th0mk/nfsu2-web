@@ -60,7 +60,24 @@ export const TOOL_DEFS = [
     pattern: str('the regular expression (JavaScript syntax)'),
     days: int('how many days back, 1 to 7'),
   }),
+  tool('labels', "The page's tabs, buttons and settings that replies name most, as the page shows them in one language " +
+    '(English, then that language\'s text), from web/src/app/lang/<language>.json. For a reply not in English: call it ' +
+    'in your first round, with the other calls.', {
+    language: str('the language, as a code (es, pt-BR, ru, hu, ...) or its English name (spanish, portuguese, ...)'),
+  }),
 ];
+
+// the page's labels replies name most (start page tabs, buttons, settings), for `labels`: a language's file has ~1,400
+// texts, too many to read for a few, and replies in Spanish, Hungarian and Portuguese named them in English
+const LABELS = ['Saves', 'Online', 'Friends & crews', 'Game', 'Display', 'Mods', 'Controls', 'Play', 'Quit game', 'Download log',
+  'Cloud saves', 'Turn on', 'Load', 'Stop syncing', "Keep this browser's", 'Put back', 'Download backup', 'Restore', 'Screenshots',
+  'Free roam with others', 'Your name', 'Claim', 'Room', 'Ghost mode', "Players' cars shown", 'Frame rate', 'Auto',
+  'Resolution scale', 'Full screen on Play', 'More display settings', 'More game settings',
+  'Controller', 'More controller settings', 'Hotplug', 'Off', 'Rumble', 'Trigger full press',
+  'Delete game data'];
+const LANG_FILES = { pt: 'portuguese', es: 'spanish', pl: 'polish', ru: 'russian', tr: 'turkish', hu: 'hungarian', uk: 'ukrainian',
+  cs: 'czech', sk: 'slovak', el: 'greek', fr: 'french', de: 'german', it: 'italian', nl: 'dutch', sv: 'swedish', da: 'danish',
+  zh: 'chinese', ja: 'japanese', ko: 'korean', th: 'thai' };
 
 function cut(s, n = MAX_OUT) {
   return s.length <= n ? s : s.slice(0, n) + `\n[... cut: ${s.length - n} more characters: read a smaller range, or search]`;
@@ -116,11 +133,31 @@ export class Tools {
         case 'git_show': return await this.gitShow(input);
         case 'search_threads': return this.searchThreads(input);
         case 'discord_search': return this.discordSearch(input);
+        case 'labels': return this.labels(input);
         default: return { error: `no tool ${name}` };
       }
     } catch (e) {
       return { error: e.message };
     }
+  }
+
+  /** LABELS in one language: "English → theirs", one a line */
+  labels({ language }) {
+    const l = String(language ?? '').trim().toLowerCase();
+    const file = LANG_FILES[l.split(/[-_]/)[0]] ?? (Object.values(LANG_FILES).includes(l) ? l : null);
+    if (!file) {
+      if (/^en\b|^english$/.test(l)) return 'English is the page\'s own language: name the labels as they are.';
+      throw new Error(`no page language "${language}": the page has ${Object.entries(LANG_FILES).map(([c, f]) => `${c} (${f})`).join(', ')} and English`);
+    }
+    const texts = JSON.parse(fs.readFileSync(path.join(this.repo.dir, 'web/src/app/lang', `${file}.json`), 'utf8'));
+    const keys = Object.keys(texts);
+    const of = label => {
+      // a button with markup in it ("Restore<input ...>"): its text before the markup
+      const key = label in texts ? label : keys.find(k => k.startsWith(`${label}<`));
+      return key ? texts[key].replace(/<[^>]*>/g, '').trim() : '';
+    };
+    return [`The page's labels in ${file} (English → ${file}); one missing: name it in English:`,
+      ...LABELS.map(x => `${x} → ${of(x) || '(missing)'}`)].join('\n');
   }
 
   async search({ pattern, path: p, ignore_case }) {

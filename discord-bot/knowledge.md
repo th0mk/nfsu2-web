@@ -15,7 +15,7 @@ known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
   the game is on the server", and Reload or Play loads it. A tab left open runs the old version until then. When a fix
   is live, the answer is when it was fixed, since when it is live, and "reload the page (Ctrl+F5 on a PC)".
 - The page's own settings are on the start page, in its tabs (Online; Game, with its Game and Display parts;
-  Controls; Other), not in the game's Options. Players who can't find one are looking in the game: say "on the start
+  Mods; Controls), not in the game's Options. Players who can't find one are looking in the game: say "on the start
   page", and that it applies at the next Play (F9, Quit game first).
 - The FAQ's answers come in the reader's Discord language (Discord's own Settings, Language), and in #help the bot
   replies with one line from the FAQ's answer when a question asks exactly that.
@@ -72,6 +72,42 @@ The log is the most useful thing in a bug report. Say exactly how:
 - Saves and cloud saves: what happened, which browsers, whether cloud saves are on. Never ask for the passphrase.
 - Sound: browser and system, the output latency setting (start page, Game, More game settings), what is wrong (none, late, crackling).
 
+## The start page and the log, exactly (checked 2026-11-05: web/index.html, web/src/app/settings-ui.ts)
+
+Replies named settings that don't exist ("Settings, Display", "Resolution scale 50% or lower"), left a step out, or
+misread the log's numbers:
+
+- Tabs: **Saves, Online, Friends & crews, Game, Mods, Controls**. There is no "Settings" tab, and the game's own
+  Options hold none of the page's settings. Game has two parts, Game and Display, and at its end Game data on this
+  device (Delete game data) and Edit settings.ini as text; Mods lists every built-in mod with its makers (the mods'
+  credits are there, not in the About), its switch or choice where it has a setting, and right after each row's name an (i)
+  that opens what it does, who sees it, where it is set and its pages, then Our changes, a row per group (Driving, Free
+  roam, Photos and screen, Career and garage, Controls, Saves) whose (i) lists every change in it; Controls has Keyboard
+  (Touch on a touch screen), Controller and Site. A page older than the Mods tab has an Other tab with what
+  is now Game's end, and the mods' settings in Game.
+- A setting behind its part's "More … settings" button needs that step said. Controller (On, Hotplug, Off), the dead
+  zones and Trigger full press: Controls, Controller, More controller settings. Sound output latency: Game, More game
+  settings. Race HUD, the frame-rate counter: Game, Display, More display settings. The Controller part shows the
+  buttons' layout, not the pad's name.
+- The mods' settings are on their rows in Mods, named by the mod (no "More" step): Upscaled HUD and Detailed Map
+  (Original, Map only, Upscaled), English Subtitles Fixed (off: no movie subtitles in any language), Uncensored &
+  Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover. Music in drag
+  and drift races is the site's own setting: Game.
+- Resolution scale: 50%, 75%, 100%, 150%, 200%. 50% is the lowest (a quarter of the pixels); phones start at 75%.
+- Frame rate: Auto, 30, 60, 120, 240. Auto picks one of those from the screen's refresh rate (240 from 239 Hz, 120
+  from 119 Hz, 30 at 31 Hz or less, else 60; runtime/framerate.c). A 75 Hz screen gets 60 and a 144-165 Hz one 120,
+  and neither spaces those evenly: some frames show twice. No page setting matches such a screen exactly; Auto does not
+  "follow the screen" there.
+- Cloud saves while the browser syncs: the passphrase box is read-only and Load is hidden. To load another passphrase:
+  Stop syncing first (the saves stay), then paste it and press Load.
+- The page's menu in the game: F9 on a keyboard, Home on a controller, the ☰ button on a touch screen.
+- Frame rate in a log: the frames of a status line divided by its seconds is the real rate; compare it with the limit.
+  "GPU done" runs from a frame's submit to its finish, frames in flight included: high while the frame rate is full is
+  no slow GPU.
+- `[gpu] device lost: … A valid external Instance reference no longer exists` is Chrome's (Dawn's) general text for a
+  lost device, on every vendor: no match by itself. What comes before it (a GPU slowing down, canvas resizes, a driver
+  hang) tells the cases apart.
+
 ## Answers that keep coming up
 
 Checked against the guide or the code, and confirmed by players in threads:
@@ -83,6 +119,13 @@ Checked against the guide or the code, and confirmed by players in threads:
 - `PAGE-NOT-ISOLATED` ("not cross-origin isolated") on nfsu2.xyz itself: something in the browser changes the page,
   most often an extension. A guest or incognito window works for the players who tried it (its saves are gone when it
   closes: it only shows the cause); then, in a normal window, turn the extensions off one by one.
+- Ban boxes (since 2026-11-05). "Someone who played from your network or VPN was banned, so you can't race other
+  players from it": someone else's ban names that address (a VPN's server, iCloud Private Relay, a phone network, a
+  household); turning the VPN or Private Relay off, or another network, fixes it, and free roam stays open meanwhile.
+  "You can't play with others any more" or "You can't race other players…" with "Ban #N": the player's own ban; only
+  staff can check or lift it, by that number: ask them to post the number and their in-game name, and never judge
+  whether the ban was right. Before 2026-11-05 a VPN user could get a cheater's full ban by address ("turn off the VPN"
+  fixed it then too).
 - Saves gone after closing the browser: the browser deletes site data when it closes (Chrome: `chrome://settings/content/siteData`,
   allow nfsu2.xyz to save data). Lost saves do not come back; Saves, Download backup, and cloud saves keep a copy.
 - `SAVES-UNREADABLE` ("Play without saving?" and "This browser can't read or write your saves right now (…)", on a page
@@ -147,16 +190,19 @@ Checked against the guide or the code, and confirmed by players in threads:
   and Robust add delay and are for crackling or dropouts. Never suggest Robust for late sound. Bluetooth headphones
   add their own delay.
 - The EA Trax songs differ from the original game's (other versions, longer intros, "covers", swear words): they are
-  the uncensored versions on purpose: unedited, some in longer album versions. Since 32540c78, start page, Game, Songs,
-  Original plays them as the game shipped them, and F7 (keyboard only) plays the next song.
+  the uncensored versions on purpose: unedited, some in longer album versions (xGMVx's Uncensored & Restored
+  Soundtrack). Since 32540c78, start page, Mods, Uncensored & Restored Soundtrack, Original plays them as the game
+  shipped them, and F7 (keyboard only) plays the next song.
 - A laptop with a graphics card that plays badly or shows a black picture, while its log names the Intel or AMD
   integrated chip: Chrome runs on the wrong one. Windows Settings, System, Display, Graphics: add Chrome, set High
   performance, then quit Chrome completely and start it again. Players confirmed it.
 - Touch Nitro or the thumb stick do nothing while Gas and steering work: they act as the controller's buttons, so
   start page, Controls, More controller settings, Controller must be On or Hotplug, not Off. A poster confirmed it.
 - Steam Deck or Steam Controller: buttons act as arrow keys, Enter and Esc and no pad shows in Controls, Controller:
-  Steam Input is in its keyboard mode; add Chrome to Steam as a non-Steam game with a gamepad layout and start it
-  through Steam (confirmed). The game crawls on a Steam Deck with sound playing: Chrome draws WebGPU on SwiftShader
+  the controller is in its mouse-and-keyboard mode. In Chrome or Edge on a computer, where Controls, Controller has
+  Connect a Steam Controller: press it and pick the controller in the browser's list, once (the 2026 controller
+  through its dongle confirmed). Otherwise (Firefox, Safari, no such button): add the browser to Steam as a
+  non-Steam game with a gamepad layout and start it through Steam (confirmed). The game crawls on a Steam Deck with sound playing: Chrome draws WebGPU on SwiftShader
   (`chrome://gpu`: Vulkan Disabled); a player fixed it by starting Chrome with
   `--enable-features=Vulkan --use-angle=vulkan` (2026-11-01).
 - A pad that Windows sees but Controls, Controller does not: close Steam, DS4Windows and other pad software, press a
@@ -187,9 +233,12 @@ Checked against the guide or the code, and confirmed by players in threads:
      stars come from visual parts: body kits, paint and vinyls, rims, and the specialties (neons, tint, hydraulics,
      audio). Players who did this got their next races ("upgraded my car to 3 stars and got invited for a special
      event, then a URL race showed"). A shop not found yet is not on the map: drive around the city, the newer areas
-     too. Parts and cars unlock as the stage's races are won.
+     too. Parts and cars unlock as the stage's races are won. A player who asks for a way round the stars: since
+     ad7e4171, start page, Mods, Visual Reputation Remover (off by default, thelink2012's mod) sets the rating by the
+     stage, so every DVD cover shoot of the stage is offered at the next free-roam load and pays by that rating; the
+     shops then show no Visual Rating box. Offer it as their choice, after the parts.
   3. Only then the original game's hidden races: they never show on the map or the radar, only a marker on the street
-     when you drive near. Start page, Game, More game settings, Show hidden races (off by default) puts them on the map
+     when you drive near. Start page, Mods, Show Hidden Races Mod (off by default) puts them on the map
      and the radar from the next Play.
   Saves (Saves, Download backup) and escalating only when all three are done and still nothing shows.
 - Wide body kits, the most asked question of all (how to get them, locked after finishing the game, more than one
@@ -206,7 +255,7 @@ Checked against the guide or the code, and confirmed by players in threads:
   message still arrives at the 6th and 11th stage-5 outrun win. Since 2970e8e, beating Caleb puts every unique visual
   part in the shops for every car (above), so that is the answer; the stage-5 unique performance part is only on an
   earlier save (cloud saves' earlier copy, or a backup). The wide body star never shows while driving an SUV (Hummer,
-  Navigator, Escalade): switch cars. Show hidden races does not change any of this (stars are not races).
+  Navigator, Escalade): switch cars. Show Hidden Races Mod does not change any of this (stars are not races).
 - The game's outrun challengers (the tuners, grey arrows on the minimap) gone from the whole city, online or not: the
   original game's limit, not a bug. Each stage offers only so many outruns: none once the stage's outrun wins reach 10
   in stage 2, 15 in stage 3 and 20 in stages 4 and 5 (checked in the game's code), and none while a unique part's
@@ -224,15 +273,23 @@ Checked against the guide or the code, and confirmed by players in threads:
   `phone graphics: the graphics options were changed in this browser, they stay`); then the game's Options, Display:
   car and road reflections, motion blur, depth of field, overbright and bleach bypass off, and the resolution on the
   row with a size such as 1916x884 (the screen's own at the page's resolution scale), not 1080p or 1440p, which draw
-  more pixels than a phone's default 75%. Players' cars shown (start page, Online) takes 16, 24, 32, 40 or 48,
-  nothing lower.
-- No sound at all on an iPhone, while the log's sound is fine: Silent mode is on, and Safari plays no page sound in
-  it. Turn it off (the switch on the side; on newer iPhones the Action button or Control Center). Posters confirmed it.
-  Since 4 November (pending release) the page plays its sound in Silent mode too (Safari's audio session "playback",
-  as a video plays; other apps' music pauses while the game plays): then a reload of the page is the answer.
+  more pixels than a phone's default 75%. Players' cars shown (start page, Online) takes 16, 24, 32, 40 or 48
+  (since 4 November, pending release: 16, 24, 32, 48 or 64), nothing lower.
+- "I picked 64 but see fewer / cars keep popping in and out in busy places": a link went both ways, so a car showed
+  only while that player had room for yours too, and most players keep 32, 24 or 16. Since 5 November players get
+  the cars of their nearest players one way where those show fewer, and friends' cars load in fewer frames.
+- "Cars vanish and come back at a car meet, even close ones": the server ranked the cars round a player by where they
+  head and what is in front of the player, which turned with every donut. Since 5 November (pending release) a player
+  standing or rolling slowly gets the cars within 60 m first, and a car that came that near stays at least 30 s. A
+  player's F9 log says why each car went ("car removed (...: the server: ...)", "car hidden (...)").
+- No sound at all on an iPhone: the page played no sound in Silent mode until the release of 4 November (17:02 UTC,
+  c75e4c62). Since then it plays as a video does (Safari's audio session "playback"), Silent mode or not: a page
+  loaded before that needs a reload (Ctrl+F5 is a PC's: on the iPhone, reload the page). A side effect players
+  noticed: other apps' music (Apple Music, Spotify) pauses while the game plays; no setting lets both play.
 - "Error code 1" seconds after Play: the game's program file did not load, and the log says why. `HTTP 403` for it:
   a network or filter blocks it (another network, or allow nfsu2.xyz). `no PE signature`: the browser's copy is
-  damaged: start page, Other, Delete game data, reload (Ctrl+F5), Play; saves stay (a poster confirmed it).
+  damaged: start page, Game, Delete game data (at the tab's end), reload (Ctrl+F5), Play; saves stay (a poster
+  confirmed it).
 - A profile's name is the game's: up to 7 letters and digits. Other players see Online, Your name (3 to 15 letters,
   digits, - or _), or the profile's name when that is empty. Saves, Rename renames a profile; the game's main menu,
   Profile Manager, Delete deletes one; to start over, a new profile, or Career, Start New Career.
@@ -242,6 +299,13 @@ Checked against the guide or the code, and confirmed by players in threads:
   syncs with, so another name. Before f2f3e79 (live 2 November) the page also said so right after the player's own
   claim: reload. Claimed with this browser's passphrase and still given digits on the live version: escalate with
   the log. Never judge whose name it is.
+- One name a passphrase, and since the "one name" update (the line "You play as X, your claimed name" under Your
+  name) the game always plays as the passphrase's claimed name, whatever Your name says. Before it, a player who
+  typed another name after claiming played under that other name, which nobody held: others adding it by name or
+  by bumpers got "X has no claimed name, so can't add friends yet", while the player's own requests worked (their
+  friends see the claimed name). Saves, Cloud saves shows "This passphrase also holds your claim on X": that is the
+  name others can add. To play as the typed name: Change name (once a week; "You can change it on <date>" says when).
+  Changing moves the friends along (the start page or the Online menu, whichever comes first).
 - Races only with friends, career races too: everyone sets the same uncommon Room (start page, Online) before Play;
   lobbies stay within the room. It is not private. Alone in free roam often means a Room left set: clear it.
 - A career without other players: start page, Online, Free roam with others off, then Play. The page menu's "Stop
@@ -251,8 +315,8 @@ Checked against the guide or the code, and confirmed by players in threads:
 - A player in a bus, fire truck, ambulance or another traffic car: a save editor changed their profile; the game sells
   none. Other cars drive through it. Don't say how.
 - The game's data can't go on another drive: the browser keeps it in its own folder for the site. Preloading it is
-  optional; start page, Other, Delete game data frees the space, and saves stay. "No more room" is the browser's
-  limit for the site.
+  optional; start page, Game, Delete game data (at the tab's end) frees the space, and saves stay. "No more room" is
+  the browser's limit for the site.
 - A profile left out of a restore because "the name inside … is not one the game makes": since a530a5a0 (2 November,
   live that evening) it comes in renamed. Reload, then restore again.
 
@@ -306,6 +370,12 @@ context lists every problem the developer has a report on, with its first thread
   buffer` and `scratch area` lines: the memory was that full). All only once the live version has those commits; no
   setting avoids it for sure before. With them the log says what holds the memory (`[heap] no room for ...` lines)
   and names anything freed twice (`DOUBLE FREE` lines): escalate such a log.
+  Since 4 November (pending release) a computer's browser gives the game 768 MB more of that memory, 1.25 GB in all
+  (Chrome, Edge or Firefox; not Safari, phones or tablets, nor a computer whose browser says it has less than 8 GB):
+  its log then says `[memory] 2048 MB` and `[heap] window above the runtime`. A computer's log with those lines and
+  still these failures: escalate it. `[heap] no window above the runtime` means the browser did not give the 2 GB
+  (the `[memory]` line says what it refused), and the game runs with 512 MB as before. A settings.ini line
+  `NFSU2_HEAP_WINDOW = 0` turns the extra memory off.
 - Free roam: the world's loading screen, or roads missing, while driving among many players (seconds on a PC, half a
   minute on a phone; once it never ended). Cause found on 29 October: the game loads no part of the city while it
   loads a player's car, and with players coming and going their cars load one after another, so the city waited for
@@ -343,6 +413,9 @@ context lists every problem the developer has a report on, with its first thread
   the game's Joypad Configuration steers or brakes with no longer looks round; the left stick does when the game uses
   none of it. On an older version: reload. On a newer one the report is new. Threads 1567127501359153282,
   1567191097149497415 (also 1567230313292112002, "Option to change view stick on gamepad", which this answers).
+  Since 1c0af43d the look can be turned off: the start page's Controls, Site, Free look (a click on its Auto makes it Off): no stick
+  looks round, straight back is no Look Back, and the stick straight up no longer switches the headlights (G still
+  does); the answer to "make the 360 camera optional" (threads 1567427206119166022, 1567191097149497415).
 - Free roam, error 134 with `tlsf_alloc < gheap_alloc_c < gbuf_alloc` at the top of the stack while other players'
   cars load, on PCs with AMD and with Intel graphics, also on the live version; `HeapAlloc(2, 0x0, 1398016) FAILED`
   lines come before it. No fix yet. A log with this stack adds to thread 1567239277035790336.
@@ -375,9 +448,10 @@ context lists every problem the developer has a report on, with its first thread
   held back a second). Since abba6770 such a key or button is left to the game, ours does nothing on it, and the log
   says so once (`[keys] X is bound to Shift Up in the game: drift mode stays off it`, `[pad] D-pad down is bound to
   ...`). A D-pad down, left stick or right stick still on its default (Career Status, hydraulics) works as before.
-  Since a10b03d6 the site's own are set on the start page, Controls, Site: a list of them (drift mode, trunk/hood/
-  doors, horn, quick chat, message, add friend, photo mode, menu, next song, frame-rate counter) with each one's key
-  and controller button as caps; click one, then press the new key or button, or Off. Keys the game itself uses can't
+  Since a10b03d6 the site's own are set on the start page, Controls, Site: a list of them (drift mode, hood/trunk/
+  doors, horn, headlights, free look, quick chat, message, add friend, photo mode, hide HUD, menu, next song,
+  frame-rate counter) with each one's key and controller button as caps; click one, then press the new key or button,
+  or Off (the free look's cap switches Auto / Off with a click). Keys the game itself uses can't
   be picked, quick chat's 1-4 stay, the menu always keeps a key (and Home or both sticks), and a key the player put a
   game control on says so there. It applies at the next Play; the touch controls' Drift and Horn work whatever is
   picked. Until that is live, only the game's own Controls can be changed.
@@ -403,10 +477,16 @@ The developer said these in public; repeat them briefly and kindly when a post a
 The game plays as the original did. Additions and improvements around it are welcome: multiplayer features, quality of
 life, controls, the page, languages, optional graphics settings (off by default: the original look stays the default),
 fixes of the original game's crashes and glitches. Changing its core gameplay mechanics is not done: handling and physics, car
-performance and tuning, AI and traffic, the career's progression, races and rewards, the economy.
+performance and tuning, AI and traffic, the career's progression, races and rewards, the economy. The Mods tab's mods
+that change the career (Show Hidden Races Mod, Visual Reputation Remover) are off by default: the player's choice.
 
 - A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
-  (Power Units in Options, Gameplay; drift mode with X, and since 19f84c9 with the drift races' handling and the car's
+  (Power Units in Options, Gameplay; Show Player Names there too since 31cc3384 (also in the pause menu's Options, Gameplay): Off
+  hides the names over other players' cars, in free roam and LAN races; the Bank box in career free roam shows only
+  for 20 s after the bank changes, 10 s when free roam starts and 8 s after the pause menu, the map or a shop, the
+  answer to "hide the Bank"; Jump Camera Off in Options, Gameplay (also the pause menu's; it may take the next race
+  or free roam to apply) turns off both the jump camera and the slow-motion camera after a crash, the answer to
+  "disable the jump and crash cutscenes" (thread 1567563824121249905); drift mode with X, and since 19f84c9 with the drift races' handling and the car's
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
   (right looks right; straight down is the game's Look Back since 77a2a706; the left stick when the game's controls
   steer or brake with the right one, since c04e9dc0) and turns it in the garage; quick chat,
@@ -414,19 +494,27 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   ghost mode in F9 or the start page's Online: Players lets other players' cars pass through, and Everything (since
   6f7bb374) also the game's traffic and its tuners, in free roam with others: the answer to "ghost mode for traffic"
   and to disabling or removing the traffic or the tuners (NPCs) in free roam, which stay in the world as in the game
-  but no longer get in the way; Upscaled HUD in the start page's Game, Display, more: Menus, HUD and maps (Upscaled),
+  but no longer get in the way; Upscaled HUD in the start page's Mods: Upscaled HUD and Detailed Map (Upscaled),
   which since 09e907f1
   also shows JeansBig's Detailed Map: the minimap's, world map's and race menus' maps sharp, with the missing
-  shortcuts; photo mode with F12 or the pause menu's
+  shortcuts, and since 5988eb2a Map only in the same row shows the Detailed Map alone, with the game's own menus and HUD; the time
+  played in this browser in Saves, and the last game's under Play (counted only in this browser, not synced; counting
+  began on 26 October and stopped at 2 hours until 31 October, so older browsers show "at least"); Delete all for
+  the F12 screenshots in Saves, Screenshots (also the way out of a Download backup too big for the browser: "RangeError", "Blob size"); Quebec in
+  Online, Your flag, since 5988eb2a; photo mode with F12 or the pause menu's
   Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and
   Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for the eyes, in
-  the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in the start page's Game, more:
-  Show hidden races, since dec0e11; wide body kits and the other unique visual parts for every car once Caleb is beaten,
-  since 2970e8e; opening the trunk, hood and doors parked in free roam, O (then again: the hood, the doors, all closed)
-  or a controller's D-pad down held a second, other players see them, they close when the car drives off, since
-  1ccb47ac (the open trunk showed no trunk audio: empty boxes on the player's own car, nothing on others'; since
-  68128859 it shows the layout, speakers and amps on every car); car meets on the world map, with the GPS to them,
-  since 109bdcc4; Songs in the start page's Game (Uncensored or the game's Original versions) and F7 for the next song,
+  the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in the start page's Mods:
+  Show Hidden Races Mod, since dec0e11; DVD cover shoots without the visual rating's stars, in the start page's Mods:
+  Visual Reputation Remover (the rating by the stage; the shops show no Visual Rating box), since ad7e4171; wide body
+  kits and the other unique visual parts for every car once Caleb is beaten,
+  since 2970e8e; opening the trunk, hood and doors parked in free roam, O or a controller's D-pad down held a second,
+  other players see them, they close when the car drives off, since 1ccb47ac (the open trunk showed no trunk audio:
+  empty boxes on the player's own car, nothing on others'; since 68128859 it shows the layout, speakers and amps on
+  every car); since 1c0af43d one part at a time: O the hood, again the trunk alone, the doors alone, all of them, all closed (the
+  answer to "open only the hood" or "only the doors", threads 1567568582660071586, 1567034148458205255); car meets on
+  the world map, with the GPS to them, since 109bdcc4; the songs in the start page's Mods: Uncensored & Restored
+  Soundtrack (Uncensored or the game's Original versions) and F7 for the next song,
   since 32540c78; drift battles between players (drift mode on, then the challenge offered as for an outrun: 90 s,
   most drift points win $100 out of the loser's bank, no nitrous, the cars drive through each other), since 19dc8394;
   a picture that looks stretched, cars too wide, wheels oval: the original game draws everything about 10 % too wide
@@ -440,20 +528,24 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   changeable (it starts at 5 and 5), and a race of one lap shows Completed % in place of LAP 1/1, since 81fad175;
   headlights on G: a tap turns them off or back on, held is high beam (brighter, reaching farther) until let go, and
   friends in free roam see it; on a controller the look's stick straight up; another key, or none, in Controls,
-  Site; since a64138c4; the guide
+  Site; since a64138c4; since 1c0af43d the whole HUD hidden while driving, F10 (again: back), free roam and races, the names and
+  quick chat lines over other players' cars with it, the pause menu, map and messages still shown, off again at each
+  Play, no touch button; another key, or none, in Controls, Site, Hide HUD (thread 1567596160397344910); the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
-- A "bug" that is how the original game behaves (drift races have no music; a part's info screen; hidden races): say so
-  when you are sure, or when the guide or the code shows it; otherwise none.
+- A "bug" that is how the original game behaves (drag and drift races have no music, unless the start page's Game, Music in
+  drag and drift races is on, since 0dc17b5d; a part's info screen; hidden races): say so when you are sure, or when the guide or the
+  code shows it; otherwise none.
 
 ## Limits players hit (true as of these notes; check the guide and the code)
 
 - No WebGPU, no game: Firefox for Android (play in Chrome), Samsung TV browsers, Windows PCs without Direct3D 12
   (Intel HD 4000, 4400, 4600 and older; NVIDIA cards whose last driver is 391.35, such as older GT 730s: Chrome offers them only
   its D3D11 backend). Chrome on Linux needs the Vulkan driver. Players report that the Xbox's browser does not run it
-  either.
-- CPUs without SSE4.1 (AMD Phenom II and older): browsers turn WebAssembly SIMD off ("WebAssembly SIMD unsupported";
+  either. Windows 7 and 8 (and older): their last Chrome (109) and Firefox (115 ESR) came before WebGPU.
+- CPUs without SSE4.1 (AMD Phenom II, Athlon II, the A4/A6/A8-3000 series "Llano", E- and C-series "Bobcat"; Intel
+  Core 2 before Penryn; other AMD A4 models have it): browsers turn WebAssembly SIMD off ("WebAssembly SIMD unsupported";
   Firefox: "v128 not enabled"), and the game is built with it. No build without it.
 - Samsung Xclipse graphics (some Galaxy phones; `GPU-ADAPTER-ANDROID`, chrome://gpu says "Limited support / testing
   currently available on Android"): Chrome blocklists them, and chrome://flags/#enable-unsafe-webgpu, then restarting
@@ -467,7 +559,8 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   function"; the page now says `STORAGE-OLD` there. It still can't run there. Say it once; don't change that answer
   later in the thread.
 - iPhone: a web page cannot go full screen. Adding the page to the Home Screen (Share menu) opens it without the
-  browser's bars. That copy has its own saves: cloud saves bring them over. Only controllers iOS knows (Xbox,
+  browser's bars. That copy has its own saves: cloud saves bring them over. Only on an iPhone or iPad: an app added
+  from Chrome on Android or a PC shares the browser's saves. Only controllers iOS knows (Xbox,
   PlayStation, Switch, MFi) reach the page.
 - Wheels: no force feedback in any browser; the clutch does nothing (the game has none).
 - Stuttering cars in races with other players: the game's updates go through the player who created the race (the

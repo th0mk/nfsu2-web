@@ -53,12 +53,10 @@
 //             Chrome with --js-flags=--expose-gc), so is every AudioContext and GPU device, and
 //             measureUserAgentSpecificMemory comes back to where it was before the first Play
 //   cache     page -> Ready and Play -> title screen, first time and again (persistent profile)
-//   roamask   a player's first Play (no test settings in the address) asks about free roam: not while the
-//             server says free roam is busy (/players roamBusy: nothing written, asked at the next Play); without
-//             a name no name line, Esc is Not now (roam = off), not asked again; with one, the name to change (a
-//             refused one keeps the question open), Enter in it turns free roam on with the new name
-//   cloudask  a Play with a profile in the browser and no cloud saves asks to turn them on: not at a Play that asked
-//             about free roam, not without a profile; it shows the profile, its money and the hours played (no
+//   roamdefault  free roam with others is on by default on a player's page (no test settings in the address):
+//             the switch shows it, the first Play asks nothing and writes nothing for it; switched off, the file
+//             says roam = off and the game plays alone; a test page keeps it off
+//   cloudask  a Play with a profile in the browser and no cloud saves asks to turn them on: not without a profile; it shows the profile, its money and the hours played (no
 //             Download backup since 2026-11-03); Esc is Not now, asked again a week later, three times at
 //             most, then once more past 12 games and 3 hours here (not under 3 hours, not twice) (a browser asked
 //             before as 'asked' once); Turn on makes a passphrase and shows it (Copy, Download
@@ -69,7 +67,7 @@
 //             kept, only asked without a question after.  The cloud copy deleted after.  The passwords are played by
 //             the page as Chrome answers (a test browser's own password manager is off: --enable-automation)
 //   full      a full server (needs one started with --max-peers 1: the step holds that place itself): the first
-//             Play's free-roam question says the server is full, and nothing more is asked after it; in line, the
+//             Play asks to wait in line or play offline, and nothing more after Wait in line; in line, the
 //             place over the game and the page menu's Stop waiting; in once the place frees up (told in the toast); a
 //             later Play asks to wait in line or play offline (Esc waits): offline, no network at all; Stop waiting
 //             leaves the line
@@ -219,7 +217,7 @@ try {
       env.NFSU2_ROAM_NAME === 'Tester' && env.NFSU2_ROAM === '0' && env.NFSU2_HORN === 'train' && env.SNDSYNC === '0' && !('WINDOW' in env);
     // the raw editor: a refused value is kept in the file but shown as ignored; a setting the panel has no row for
     // (roam_rate) and one the browser ignores (roam_port, the Mac app's) are listed under the groups
-    await tab(page, 'other');
+    await tab(page, 'game');
     await page.click('#settings-raw summary');
     const ta = page.locator('#settings-text');
     await ta.fill((await ta.inputValue()).replace('#hud = wide', 'hud = ultrawide').replace('#roam_rate = 20', 'roam_rate = 30')
@@ -243,12 +241,12 @@ try {
     await tab(page, 'game');
     await page.click('#settings summary:has-text("More display")');
     n0 = await saved(page);
-    await page.click('.set[data-key="hud"] .text-btn'); await settle(page, n0);
+    await page.click('.set[data-key="hud"] .reset-btn'); await settle(page, n0);
     const file2 = (await readOpfs(page, SAVE, 'settings.ini')).text;
     // Reset on a line without a row (roam_rate): its template line back
     n0 = await saved(page);
-    await tab(page, 'other');
-    await page.click('#settings-other li:has-text("roam_rate") .text-btn'); await settle(page, n0);
+    await tab(page, 'game');
+    await page.click('#settings-other li:has-text("roam_rate") .reset-btn'); await settle(page, n0);
     const file3 = (await readOpfs(page, SAVE, 'settings.ini')).text;
     // Reset all settings: asks, then the template with the name (roam_port, the Mac app's line, goes too)
     await page.click('#settings-reset-all');
@@ -1029,75 +1027,43 @@ try {
       { firstVisit: first, repeatVisit: again, playToTitleMs: { emptyDataCache: cold, warmDataCache: warm, afterReload: warm2 }, cachedMiB: cache });
   }
 
-  // ---------------------------------------------------------- roamask --
+  // ------------------------------------------------------ roamdefault --
   // a player's page: no test settings in the address, so its own save folder in a context of its own
-  if (want('roamask')) {
+  if (want('roamdefault')) {
     const c5 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const r = watch(await c5.newPage(), 'R');
-    const ini = () => readOpfs(r, 'save', 'settings.ini').then(f => f?.text ?? '');
-    const roamLines = t => t.split('\n').filter(l => /^roam(_name)? = /.test(l));
-    const asked = () => r.evaluate(() => ({ title: document.querySelector('#confirm-title').textContent,
-      field: document.querySelector('#roam-ask-name')?.value ?? null, ok: document.querySelector('#confirm-ok').textContent,
-      okClass: document.querySelector('#confirm-ok').className, cancel: document.querySelector('#confirm-cancel').textContent,
-      focus: document.activeElement?.id ?? null }));
-    const stop = async () => {
-      await r.waitForFunction(() => !!window.__nfsu2.session, null, { timeout: 60000 });
-      await r.evaluate(() => window.__nfsu2.session.terminate());
-      await waitPhase(r, ['exited'], 30000);
-    };
-    // free roam busy on the server (the hub gives fewer than 24 links a player): not asked, nothing written
-    const playersUrl = u => u.pathname === '/players';
-    await r.route(playersUrl, route => route.fulfill({ contentType: 'application/json', body: '{"players":700,"online":40,"full":false,"roamBusy":true}' }));
+    const roamLines = () => r.evaluate(() => (window.__nfsu2.settingsText() ?? '').split('\n').filter(l => /^roam = /.test(l)));
+    const shown = () => r.evaluate(() => document.querySelector('#set-roam')?.checked ?? null);
+    const roamEnv = () => r.evaluate(() => window.__nfsu2.env().NFSU2_ROAM ?? null);
     await r.goto(`${BASE}/`);
     await waitPhase(r, ['ready', 'error'], 60000);
-    await r.waitForFunction(() => document.querySelector('#players-all')?.textContent === '700', null, { timeout: 10000 });
+    await settingsReady(r);
+    const before = { shown: await shown(), env: await roamEnv() };
+    // the first Play: no question (no profile yet, so no cloud saves one either), the game in free roam's multiplayer
+    const p0 = await phase(r);
     await r.click('#play');
-    const busyAsked = await r.waitForSelector('#confirm[open]', { timeout: 4000 }).then(() => true, () => false);
-    await waitPhase(r, ['playing', 'exited'], 60000);
-    const busy = { asked: busyAsked, ini: roamLines(await ini()), log: (await r.evaluate(() => window.__nfsu2.log.tail(400))).filter(l => /free roam with others/.test(l)) };
-    await stop();
-    await r.unroute(playersUrl);
-    await r.goto(`${BASE}/`);
+    const asked = await r.waitForFunction(p0 => document.querySelector('#confirm[open]') ? document.querySelector('#confirm-title').textContent
+      : window.__nfsu2.phase !== p0 && ['playing', 'exited'].includes(window.__nfsu2.phase) ? 1 : null, p0, { timeout: 60000, polling: 100 }).then(h => h.jsonValue());
+    await r.waitForFunction(() => !!window.__nfsu2.session, null, { timeout: 60000 });
+    const first = { asked: asked === 1 ? null : asked, lines: await roamLines(),
+      log: (await r.evaluate(() => window.__nfsu2.log.tail(400))).filter(l => /free roam with others/.test(l)) };
+    await r.evaluate(() => window.__nfsu2.session.terminate());
+    await waitPhase(r, ['exited'], 30000);
+    // switched off under Online: written, and the game plays alone
+    await settingsReady(r);
+    await tab(r, 'online');
+    await r.click('.set[data-key="roam"] .switch');
+    await r.waitForFunction(() => /^roam = off$/m.test(window.__nfsu2.settingsText() ?? ''), null, { timeout: 10000 }).catch(() => {});
+    const off = { shown: await shown(), env: await roamEnv(), lines: await roamLines() };
+    // a test page (the address's test settings): off, as the tools expect
+    await r.goto(`${BASE}/?save=${RUN}-roam`);
     await waitPhase(r, ['ready', 'error'], 60000);
-    // a new player: no name line; Esc is Not now
-    await r.click('#play');
-    await r.waitForSelector('#confirm[open]', { timeout: 10000 });
-    const first = await asked();
-    await r.locator('#confirm').screenshot({ path: path.join(OUT, 'roam-ask.png') });
-    await r.keyboard.press('Escape');
-    await waitPhase(r, ['playing', 'exited'], 60000);
-    const afterEsc = roamLines(await ini());
-    await stop();
-    // once only
-    await r.click('#play');
-    const again = await r.waitForSelector('#confirm[open]', { timeout: 4000 }).then(() => true, () => false);
-    await waitPhase(r, ['playing', 'exited'], 60000);
-    await stop();
-    // a player with a name (Your name): the name to change
-    const t = (await ini()).replace(/^roam = off$/m, '#roam = off').replace(/^#roam_name =$/m, 'roam_name = Racer');
-    await r.evaluate(async t => { const w = await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('save')).getFileHandle('settings.ini')).createWritable(); await w.write(t); await w.close(); }, t);
-    await r.click('#play');
-    await r.waitForSelector('#confirm[open]', { timeout: 10000 });
-    const named = await asked();
-    await r.locator('#confirm').screenshot({ path: path.join(OUT, 'roam-ask-named.png') });
-    await r.fill('#roam-ask-name', 'Zoë');
-    await r.click('#confirm-ok');
-    await r.waitForTimeout(300);
-    const refused = await r.evaluate(() => ({ open: document.querySelector('#confirm').open, why: document.querySelector('#roam-ask-name').validationMessage }));
-    await r.fill('#roam-ask-name', 'New Racer');
-    await r.press('#roam-ask-name', 'Enter');
-    // the phase is still the last game's 'exited' until the answer is written and this game starts
-    await r.waitForFunction(() => window.__nfsu2.phase !== 'exited', null, { timeout: 10000 });
-    await waitPhase(r, ['playing', 'exited'], 60000);
-    const afterOn = roamLines(await ini());
-    const env = await r.evaluate(() => window.__nfsu2.env());
-    await stop();
+    await settingsReady(r);
+    const test = { shown: await shown(), env: await roamEnv() };
     await c5.close();
-    report('roamask', !busy.asked && busy.ini.length === 0 && busy.log.length === 1 && /not asked, the server's free roam is busy/.test(busy.log[0]) &&
-      first.title === 'Free roam with others?' && first.field === null && first.ok === 'Turn on' && first.okClass === 'btn selected' &&
-      first.cancel === 'Not now' && first.focus === 'confirm-ok' && afterEsc.join() === 'roam = off' && !again && named.field === 'Racer' &&
-      refused.open && /not a name/.test(refused.why) && [...afterOn].sort().join() === 'roam = on,roam_name = New Racer' && env.NFSU2_ROAM === '1' && env.NFSU2_ROAM_NAME === 'New Racer',
-      { busy, first, afterEsc, askedAgain: again, named, refused, afterOn, env: { NFSU2_ROAM: env.NFSU2_ROAM, NFSU2_ROAM_NAME: env.NFSU2_ROAM_NAME } });
+    report('roamdefault', before.shown === true && before.env === '1' && first.asked === null && first.lines.length === 0 && !first.log.length &&
+      off.shown === false && off.env === '0' && off.lines.join() === 'roam = off' && test.shown === false && test.env === '0',
+      { before, first, off, test });
   }
 
   // --------------------------------------------------------- cloudask --
@@ -1185,7 +1151,6 @@ try {
     await ready(r);
     await r.evaluate(() => localStorage.setItem('nfsu2.play.ms', String(6.5 * 3600_000)));
     await profile(true);
-    const withRoam = await playAll();                      // the first Play asks about free roam: that one only
     await profile(false);
     const noProfile = await playAll();                     // no profile: nothing
     await profile(true);
@@ -1267,7 +1232,7 @@ try {
     const box = await r.evaluate(() => ({ type: document.querySelector('#vault-input').type, mask: document.querySelector('#vault-mask').textContent,
       user: document.querySelector('#vault-form input[autocomplete="username"]')?.value ?? null, auto: document.querySelector('#vault-input').autocomplete }));
     const ASK = 'Turn on cloud saves?', phrase = shown.phrase;
-    report('cloudask', withRoam.asked.join() === 'Free roam with others?' && withRoam.count === null && noProfile.asked.length === 0 && noProfile.count === null &&
+    report('cloudask', noProfile.asked.length === 0 && noProfile.count === null &&
       first.title === ASK && first.ok === 'Turn on' && first.cancel === 'Not now' && first.cancelShown && first.focus === 'confirm-ok' &&
       /^This browser\s+CLOUDT \$123,450 · 6 hours played$/.test(first.stake ?? '') && backupButton === 0 &&
       /sync them between your devices/.test(first.text) && !/change this/.test(first.text) &&
@@ -1285,7 +1250,7 @@ try {
       cloudLog.some(l => /cloud saves: not now \(asked at Play, 1 of 3\)/.test(l)) && cloudLog.some(l => /cloud saves: turned on/.test(l)) &&
       cloudLog.some(l => /cloud saves: not now \(asked at Play, once more, 1\d games and 7 h played here\)/.test(l)) &&
       cloudLog.some(l => /asked to keep it in its passwords/.test(l)),
-      { pwKind, withRoam, noProfile, first, askGrid, askNarrow, backupButton, afterEsc, inWeek, weekOn, weekOnOffer, thrice, lateShort, late, lateOffer, lateAgain,
+      { pwKind, noProfile, first, askGrid, askNarrow, backupButton, afterEsc, inWeek, weekOn, weekOnOffer, thrice, lateShort, late, lateOffer, lateAgain,
         shown, wide, narrow, copied, file: file.trim(), stillOpen, played,
         after: { phrase: after.link?.phrase, offer: after.offer, kept: after.kept, stored: after.stored.length, type: after.type, when: after.when }, cloudLog,
         oldLink: oldLink.length, oldLinkAgain: oldLinkAgain.length, box });
@@ -1380,11 +1345,11 @@ try {
     await f.goto(`${BASE}/`);
     await waitPhase(f, ['ready', 'error'], 60000);
     await f.waitForFunction(() => /server is full/.test(document.querySelector('#players-note')?.textContent ?? ''), null, { timeout: 20000 });
-    // the first Play: the free-roam question, saying the server is full; turned on, nothing more is asked
+    // the first Play (free roam on by default): wait in line or play offline; Wait in line, nothing more is asked
     await f.click('#play');
     await f.waitForSelector('#confirm[open]', { timeout: 10000 });
-    const roamAsk = await dialog();
-    await f.locator('#confirm').screenshot({ path: path.join(OUT, 'full-roam-ask.png') });
+    const firstAsk = await dialog();
+    await f.locator('#confirm').screenshot({ path: path.join(OUT, 'full-first-ask.png') });
     await f.click('#confirm-ok');
     const second = await f.waitForFunction(() => document.querySelector('#confirm').open, null, { timeout: 1500 }).then(() => true, () => false);
     await waitPhase(f, ['playing', 'exited'], 60000);
@@ -1433,12 +1398,12 @@ try {
     await stop();
     holder.close(1000, 'closed');
     await c6.close();
-    report('full', /The server is full\. You wait in line too/.test(roamAsk.text) && roamAsk.ok === 'Turn on' && !second &&
+    report('full', firstAsk.title === 'The server is full' && firstAsk.ok === 'Wait in line' && !second &&
       /^The server is full\. In line for a place: next/.test(inLine ?? '') && stopShown && inLog.some(l => /in from the line/.test(l)) &&
       /^A place on the server freed up/.test(inToast ?? '') &&
       fullAsk.title === 'The server is full' && fullAsk.ok === 'Wait in line' && fullAsk.cancel === 'Play offline' &&
       !offline.net && !offline.line && !left.line && /Playing offline/.test(left.toast) && left.log === 1,
-      { roamAsk, second, inLine, stopShown, inLog, inToast, fullAsk, offline, left });
+      { firstAsk, second, inLine, stopShown, inLog, inToast, fullAsk, offline, left });
   }
 
   // ------------------------------------------------------------- page --
@@ -1456,13 +1421,17 @@ try {
       .map(async u => [u, (await fetch(u, { cache: 'no-store' })).status]))));
     const a11y = await s.evaluate(() => {
       const unnamed = [], undescribed = [];
-      for (const el of document.querySelectorAll(':is(#settings-body, #online-body) .set :is(input, [role="radiogroup"])')) {
+      for (const el of document.querySelectorAll(':is(#settings-body, #online-body, #mods-body) .set :is(input, [role="radiogroup"])')) {
         if (el.type === 'radio') continue;                           // named by its own label, the group by the row's
-        const named = el.labels?.length || el.getAttribute('aria-labelledby') && document.getElementById(el.getAttribute('aria-labelledby'))?.textContent;
+        const named = el.labels?.length || el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') && document.getElementById(el.getAttribute('aria-labelledby'))?.textContent;
         if (!named) unnamed.push(el.id || el.outerHTML.slice(0, 60));
         const desc = (el.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
         if (!desc.length || desc.some(id => !document.getElementById(id))) undescribed.push(el.id || el.outerHTML.slice(0, 60));
       }
+      // each mod's (i) named by its mod
+      const mods = [...document.querySelectorAll('#mods-body .mod-about')];
+      for (const b of mods) if (!b.getAttribute('aria-label')?.includes(b.closest('.set')?.querySelector('.set-label')?.textContent || '\u0000')) unnamed.push(`(i) ${b.dataset.mod}`);
+      if (mods.length < 10) unnamed.push(`${mods.length} (i) buttons in the Mods tab`);
       return { unnamed, undescribed, keys: document.querySelectorAll('#keys .keys > div').length, dialogsOpen: document.querySelectorAll('dialog[open]').length,
         headings: [...document.querySelectorAll('h1, h2')].map(h => `${h.tagName}:${h.textContent}`) };
     });

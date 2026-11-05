@@ -1,0 +1,31 @@
+# Players' cars shown, Auto (runtime/roam_game.c cars_auto): one player at the new career's start among more
+# players than 32 (web/tools/roam-crowd.mjs --meet), with NFSU2_ROAM_MAX_CARS=auto.  The game shows 32, then 48
+# (64 with the guest heap's window) once its frames have room, each step a "cars shown (Auto)" line, and stands
+# AUTO_WAIT frames.  NFSU2_ROAM_TEST_AUTO_S: shorter windows; NFSU2_ROAM_TEST_AUTO_LATE=1: every frame counts as
+# late above 32, so after its step up the game goes back to 32 and stays there.
+#   node web/tools/roam-pair.mjs --solo --page play --page-arg bc=0 --crowd 70
+#        --crowd-args "--meet 1695,-884,24.1 --links 64 --cars all" --a Viewer:roam_crowd_auto.txt
+#        --env NFSU2_ROAM_MAX_CARS=auto --env NFSU2_ROAM_TEST_AUTO_S=5 --env AUTO_WAIT=3600
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 32 6000
++0    roam mp waitcars 32 6000
++0    roam mp status
++${AUTO_WAIT} roam mp status
++10   quit

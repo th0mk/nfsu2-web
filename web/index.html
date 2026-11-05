@@ -104,8 +104,7 @@
       </div>
       <div class="pane prose" role="tabpanel" data-tab="credits" hidden>
         <p data-i18n-html>Source code on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. Based on Talha Müderrisoğlu's <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a>, the original x86 → C static recompiler for NFSU2, after <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>. This project was forked from NFSU2Recomp's <a href="https://github.com/TalhaMudo/NFSU2Recomp/tree/3d187ce7e5f1b99c0580866da4dbaa6d59dd23c7" target="_blank" rel="noopener noreferrer">MIT-licensed version of 16 October 2026</a> and uses only code from that version.</p>
-        <p data-i18n-html>Texture packs: LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>, JeansBig's <a href="https://nfsmods.xyz/mod/4485" target="_blank" rel="noopener noreferrer">Detailed Map</a>.</p>
-        <p data-i18n-html>Split screen: BirdSentinel (Zack)'s port of mihaits' <a href="https://github.com/mihaits/NFSU2-SplitScreen" target="_blank" rel="noopener noreferrer">NFSU2-SplitScreen</a>.</p>
+        <p data-i18n-html>Mods and their makers: the <a href="#mods">Mods</a> tab.</p>
       </div>
       <div class="pane prose" role="tabpanel" data-tab="translations" hidden>
         <p data-i18n-html>Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <a href="https://nfsmods.xyz/mod/5749" target="_blank" rel="noopener noreferrer">Multi 13 languages mod</a>, with Lee-Ryo's Thai support.</p>
@@ -114,7 +113,10 @@
         <p data-i18n-html>Turkish: <a href="https://samye.li" target="_blank" rel="noopener noreferrer">Samet Samyeli</a>; fonts: <a href="https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch" target="_blank" rel="noopener noreferrer">muntazam</a>.</p>
         <p data-i18n-html>Hungarian: <a href="http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html" target="_blank" rel="noopener noreferrer">GameHunter</a> (L_zooltan).</p>
         <p data-i18n-html>Ukrainian: <a href="https://kuli.com.ua/need-for-speed-underground-2" target="_blank" rel="noopener noreferrer">Clark X.</a></p>
-        <p data-i18n-html>Bulgarian: <a href="https://ivanoff.free.bg" target="_blank" rel="noopener noreferrer">StoyanKolev (IVANOFF)</a></p>
+        <p data-i18n-html>Czech: <a href="https://www.abcgames.cz/?p=preklady_zobraz&amp;id=7774" target="_blank" rel="noopener noreferrer">ROXOR, PINĎA &amp; syn</a>, with our own edits.</p>
+        <p data-i18n-html>Slovak: <a href="https://www.abcgames.cz/?p=preklady_zobraz&amp;id=7774" target="_blank" rel="noopener noreferrer">MixerX</a>.</p>
+        <p data-i18n-html>Greek: <a href="https://github.com/Corneleto" target="_blank" rel="noopener noreferrer">Corneleto</a>.</p>
+        <p data-i18n-html>Bulgarian: <a href="https://ivanoff.free.bg" target="_blank" rel="noopener noreferrer">StoyanKolev (IVANOFF)</a>.</p>
         <p data-i18n-html>English subtitles: VileStuff's <a href="https://nfsmods.xyz/mod/5286" target="_blank" rel="noopener noreferrer">English Subtitles Fixed</a>.</p>
       </div>
     </section>
@@ -128,13 +130,25 @@
         <button type="button" class="tab" role="tab" data-tab="online" data-i18n>Online</button>
         <button type="button" class="tab" role="tab" data-tab="friends" data-i18n>Friends &amp; crews</button>
         <button type="button" class="tab" role="tab" data-tab="game" data-i18n>Game</button>
+        <button type="button" class="tab" role="tab" data-tab="mods" data-i18n>Mods</button>
         <button type="button" class="tab" role="tab" data-tab="controls" data-i18n>Controls</button>
-        <button type="button" class="tab" role="tab" data-tab="other" data-i18n>Other</button>
       </div>
 
       <div class="pane" role="tabpanel" data-tab="saves" id="saves">
         <div class="panel-head">
-          <h3 data-i18n>Profiles</h3>
+          <h3 data-i18n>Screenshots</h3>
+          <div class="row" id="shots-head">
+            <p class="hint key-only" data-i18n-html>Screenshot with <kbd>F12</kbd></p>
+            <button type="button" class="text-btn" id="shots-clear" hidden data-i18n>Delete all</button>
+          </div>
+        </div>
+        <p class="hint" id="shots-info" hidden data-i18n>None yet.</p>
+        <ul class="shots" id="shots" data-i18n-attr="aria-label" aria-label="Screenshots in this browser"></ul>
+        <div class="panel-head sub" id="profiles-head">
+          <div class="head-title">
+            <h3 data-i18n>Profiles</h3>
+            <p class="hint" id="played" hidden></p>
+          </div>
           <div class="row">
             <button type="button" class="btn" id="export" data-i18n>Download backup</button>
             <label class="btn file-btn" data-i18n-html>Restore<input type="file" id="import"></label>
@@ -142,13 +156,7 @@
         </div>
         <p class="msg" id="saves-msg" role="status"></p>
         <ul class="profiles" id="profiles" data-i18n-attr="aria-label" aria-label="Profiles in this browser"></ul>
-        <p class="hint" data-i18n-html>To save while playing: <span class="key-only"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>
-        <div class="panel-head sub">
-          <h3 data-i18n>Screenshots</h3>
-          <p class="hint key-only" data-i18n-html>Screenshot with <kbd>F12</kbd></p>
-        </div>
-        <p class="hint" id="shots-info" hidden data-i18n>None yet.</p>
-        <ul class="shots" id="shots" data-i18n-attr="aria-label" aria-label="Screenshots in this browser"></ul>
+        <p class="hint" id="save-how" data-i18n-html>To save while playing: <span class="key-only"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>
         <div class="vault" id="vault" hidden>
           <div class="panel-head sub">
             <h3 data-i18n>Cloud saves</h3>
@@ -199,9 +207,41 @@
         <div id="friends"></div>
       </div>
 
+      <!-- the settings (settings-ui.ts), then the game data on this device (saves-ui.ts), the lines without a row and the
+           file as text (settings-ui.ts) -->
       <div class="pane" role="tabpanel" data-tab="game" hidden>
         <p class="hint" id="settings-note">Changes apply the next time you press Play.</p>
         <div id="settings-body"></div>
+        <div id="game-data">
+          <h3 data-i18n>Game data on this device</h3>
+          <p class="hint" id="cache-info">Counting…</p>
+          <div class="bar" id="data-bar" role="progressbar" data-i18n-attr="aria-label" aria-label="Game data preload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+            <div class="bar-fill"></div>
+          </div>
+          <div class="row">
+            <button type="button" class="btn" id="fetch-all" hidden>Preload the game data</button>
+            <button type="button" class="btn" id="clear-cache" data-i18n>Delete game data</button>
+          </div>
+          <p class="msg" id="data-msg" role="status"></p>
+        </div>
+        <div id="settings-lines"></div>
+        <div class="raw">
+          <button type="button" class="text-btn" id="settings-reset-all" data-i18n>Reset all settings</button>
+          <details id="settings-raw">
+            <summary data-i18n>Edit settings.ini as text</summary>
+            <textarea id="settings-text" spellcheck="false" rows="20" wrap="off" aria-label="settings.ini"></textarea>
+            <div class="row">
+              <button type="button" class="btn" id="settings-text-save" data-i18n>Save file</button>
+              <span class="hint" id="settings-text-msg" role="status"></span>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- the mods (mods.ts): their rows (mods-ui.ts; a setting's row is settings-ui.ts's) -->
+      <div class="pane" role="tabpanel" data-tab="mods" id="mods" hidden>
+        <p class="hint" id="mods-note">The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.</p>
+        <div id="mods-body"></div>
       </div>
 
       <div class="pane" role="tabpanel" data-tab="controls" id="controls" hidden>
@@ -257,7 +297,7 @@
               <div data-key-of="horn"><dt><kbd>N</kbd></dt><dd data-i18n>Horn (with other players)</dd></div>
               <div data-key-of="lights"><dt><kbd>G</kbd></dt><dd data-i18n>Headlights off or on; hold for high beam</dd></div>
               <div data-key-of="drift"><dt><kbd>X</kbd></dt><dd data-i18n>Drift mode (in free roam)</dd></div>
-              <div data-key-of="showoff"><dt><kbd>O</kbd></dt><dd data-i18n>Open trunk, then hood, then doors (parked, in free roam)</dd></div>
+              <div data-key-of="showoff"><dt><kbd>O</kbd></dt><dd data-i18n>Open hood, then trunk, then doors, then all (parked, in free roam)</dd></div>
               <div><dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd data-i18n>Quick chat (with other players): group, then phrase</dd></div>
               <div data-key-of="message"><dt><kbd>I</kbd></dt><dd data-i18n>Message a friend (in free roam)</dd></div>
               <div><dt><kbd>Enter</kbd></dt><dd data-i18n>Start an event, take an outrun</dd></div>
@@ -280,33 +320,6 @@
               <div class="key-only"><dt data-i18n-html>Hold <kbd>Esc</kbd></dt><dd data-i18n>Leave full screen</dd></div>
             </dl>
           </div>
-        </div>
-      </div>
-
-      <div class="pane" role="tabpanel" data-tab="other" hidden>
-        <div id="game-data">
-          <h3 data-i18n>Game data on this device</h3>
-          <p class="hint" id="cache-info">Counting…</p>
-          <div class="bar" id="data-bar" role="progressbar" data-i18n-attr="aria-label" aria-label="Game data preload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
-            <div class="bar-fill"></div>
-          </div>
-          <div class="row">
-            <button type="button" class="btn" id="fetch-all" hidden>Preload the game data</button>
-            <button type="button" class="btn" id="clear-cache" data-i18n>Delete game data</button>
-          </div>
-          <p class="msg" id="data-msg" role="status"></p>
-        </div>
-        <div id="settings-lines"></div>
-        <div class="raw">
-          <button type="button" class="text-btn" id="settings-reset-all" data-i18n>Reset all settings</button>
-          <details id="settings-raw">
-            <summary data-i18n>Edit settings.ini as text</summary>
-            <textarea id="settings-text" spellcheck="false" rows="20" wrap="off" aria-label="settings.ini"></textarea>
-            <div class="row">
-              <button type="button" class="btn" id="settings-text-save" data-i18n>Save file</button>
-              <span class="hint" id="settings-text-msg" role="status"></span>
-            </div>
-          </details>
         </div>
       </div>
     </section>
@@ -413,6 +426,18 @@
     <button class="btn" value="close" data-i18n>Close</button>
   </form>
   <div id="changelog-body"></div>
+</dialog>
+
+<!-- a Mods tab row's (i): its mod, both of a shared row, or a group of our changes (mods-ui.ts) -->
+<dialog class="dlg mod-info" id="mod-info" aria-labelledby="mod-info-title">
+  <form method="dialog" class="dlg-head">
+    <div>
+      <h2 id="mod-info-title"></h2>
+      <p class="hint" id="mod-info-by" hidden></p>
+    </div>
+    <button class="btn" value="close" autofocus data-i18n>Close</button>
+  </form>
+  <div id="mod-info-body"></div>
 </dialog>
 
 <dialog class="dlg" id="donate" aria-labelledby="donate-title">

@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include "cpu.h"
+#include "guest_span.h"
 #include <stdio.h>
 #include <stdlib.h>
 #ifndef __wasm__
@@ -38,19 +39,61 @@ uint8_t g_cbits[1u<<15] = {0};
 void mprot_arm(uint32_t);
 #ifdef __wasm__
 /* wasm: the guest span [0, GUEST_END) is ordinary linear memory, readable,
- * writable and zero from the start.  Committing only keeps the bitmap
- * (mem_is_committed, genexec, autotest probes) and the statistics; release
- * zeroes the whole 16 KB pages so a released range still reads as zero
- * (heap.c relies on it).  No page is ever given back to the browser. */
+ * writable and zero from the start, and so is the guest heap's window above
+ * the runtime where there is one (guest_span.h).  Committing only keeps the
+ * bitmap (mem_is_committed, genexec, autotest probes) and the statistics;
+ * release zeroes the whole 16 KB pages so a released range still reads as
+ * zero (heap.c relies on it).  No page is ever given back to the browser. */
 void mem_init(void){ }
+uint32_t g_gwin_lo = 0, g_gwin_hi = 0;
+/* the runtime heap's break (runtime/web/sbrk.c; none in a test program that has libc's own) */
+__attribute__((weak)) uint64_t heap_break(void);
+extern __attribute__((weak)) int g_sbrk_high;           /* sbrk.c's test aid (none in a test program) */
+/* The guest heap's window: on, once, where the page asked for it
+ * (NFSU2_HEAP_WINDOW=1, a computer's browser: host/process.ts) and the memory
+ * it gave reaches the window's top, with the runtime's heap still below the
+ * window.  Phones, tablets and Safari get no window and today's layout.
+ * NFSU2_HEAP_WINDOW=0 turns it off where the page would ask.  The line says
+ * which. */
+void mem_window_init(void){
+    static int done = 0;
+    if (done) return;
+    done = 1;
+    const char *e = getenv("NFSU2_HEAP_WINDOW");
+    if (!e || strcmp(e, "1")) return;
+    uint64_t have = (uint64_t)__builtin_wasm_memory_size(0) * 65536u, brk = heap_break ? heap_break() : 0;
+    if (have < GWIN_HI || brk > GWIN_LO){
+        fprintf(stderr, "[heap] no window above the runtime: the memory is %llu MB (%u MB wanted), the runtime's heap at %llu MB\n",
+                (unsigned long long)(have >> 20), (GWIN_HI + 0xFFFFFu) >> 20, (unsigned long long)(brk >> 20));
+        return;
+    }
+    __atomic_store_n(&g_gwin_lo, GWIN_LO, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_gwin_hi, GWIN_HI, __ATOMIC_RELEASE);
+    fprintf(stderr, "[heap] window above the runtime: 0x%08x..0x%08x (%u MB more guest heap; memory %llu MB, the runtime's heap at %llu MB)\n",
+            GWIN_LO, GWIN_HI, (GWIN_HI - GWIN_LO + 0xFFFFFu) >> 20, (unsigned long long)(have >> 20), (unsigned long long)(brk >> 20));
+    /* NFSU2_TEST_HIGH_RUNTIME=1 (test runs: with NFSU2_INPUT_SCRIPT): the runtime's heap past the window from its next
+     * growth on, at 2 GB or more, as after a long session (sbrk.c) */
+    const char *hr = getenv("NFSU2_TEST_HIGH_RUNTIME"), *scr = getenv("NFSU2_INPUT_SCRIPT");
+    if (&g_sbrk_high && hr && !strcmp(hr, "1") && scr && *scr){
+        g_sbrk_high = 1;
+        fprintf(stderr, "[heap] NFSU2_TEST_HIGH_RUNTIME: the runtime's heap goes on past the window, at 2 GB or more\n");
+    }
+}
+/* [lo, hi) cut to one of the guest's spans ([0, GUEST_END) or the window): 0 when it is in neither */
+static int guest_cut(uint64_t *lo, uint64_t *hi){
+    if (*lo < GUEST_END){ if (*hi > GUEST_END) *hi = GUEST_END; return 1; }
+    if (g_gwin_hi && *lo >= g_gwin_lo && *lo < g_gwin_hi){ if (*hi > g_gwin_hi) *hi = g_gwin_hi; return 1; }
+    return 0;
+}
 void mem_commit(uint32_t addr, uint32_t size){
     uint64_t lo = addr & ~0x3FFFull;
-    uint64_t hi = ((uint64_t)addr + size + 0x3FFF) & ~0x3FFFull;
-    if (hi > GUEST_END){
+    uint64_t hi = ((uint64_t)addr + size + 0x3FFF) & ~0x3FFFull, want = hi;
+    int in = guest_cut(&lo, &hi);
+    if (!in || hi < want){
         static int shown = 0;
-        if (shown++ < 8) fprintf(stderr, "mem_commit 0x%08x+%u beyond the guest span (0x%08x): ignored\n", addr, size, GUEST_END);
-        if (lo >= GUEST_END) return;
-        hi = GUEST_END;
+        if (shown++ < 8) fprintf(stderr, "mem_commit 0x%08x+%u beyond the guest span (0x%08x%s): ignored\n", addr, size, GUEST_END,
+                                 g_gwin_hi ? " and the window" : "");
+        if (!in) return;
     }
     for (uint64_t a2 = lo; a2 < hi; a2 += 0x4000ull){
         uint32_t pg = (uint32_t)(a2 >> 14);
@@ -60,8 +103,8 @@ void mem_commit(uint32_t addr, uint32_t size){
 uint64_t mem_committed(void){ return g_committed; }
 void mem_release(uint32_t addr, uint32_t size, int rw){
     uint64_t lo = ((uint64_t)addr + 0x3FFF) & ~0x3FFFull;
-    uint64_t hi = ((uint64_t)addr + size) & ~0x3FFFull;
-    if (hi <= lo || hi > GUEST_END) return;
+    uint64_t hi = ((uint64_t)addr + size) & ~0x3FFFull, want = hi;
+    if (hi <= lo || !guest_cut(&lo, &hi) || hi < want) return;
     memset(g_mem + lo, rw ? 0 : 0xDD, (size_t)(hi - lo));     /* rw=0 (HEAPCHECK): poison, no fault */
     for (uint64_t a2 = lo; a2 < hi; a2 += 0x4000ull){
         uint32_t pg = (uint32_t)(a2 >> 14);

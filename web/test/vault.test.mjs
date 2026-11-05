@@ -383,6 +383,26 @@ test('no profile here is never sent by itself; a torn profile waits; the copy of
   assert.equal(a.sync.link.profiles, 0);
 });
 
+test('the last profile deleted on the Saves tab (VaultPanel.changedSaves): sent, not asked; gone without a word: asked', async () => {
+  const srv = server(), a = browser(srv);
+  seed(a, 1000);
+  await a.sync.create();
+  const rev = a.sync.link.rev;
+  a.files.delete(at('TOBI'));
+  a.sync.intended();
+  await a.sync.push();
+  assert.equal(a.sync.state.s, 'synced');
+  assert.notEqual(a.sync.link.rev, rev, 'the deletion went out');
+  assert.equal(a.sync.link.dropped, undefined, 'the allowance ends with the send');
+  // a profile again, synced; then none, with no Delete: asked, as before
+  a.files.set(at('MEH'), profile('MEH', { money: 5 }));
+  await a.sync.push();
+  const rev2 = a.sync.link.rev;
+  a.files.delete(at('MEH'));
+  await a.sync.push();
+  assert.deepEqual([a.sync.link.rev, a.sync.state.s, a.sync.state.why], [rev2, 'conflict', 'empty']);
+});
+
 test('a profile whose name inside the game\'s field does not make is no torn one: sent during a game', async () => {
   // the Chinese new-profile box's own text (D6 8B 89) kept in front of a name: a whole save all the same
   const srv = server(), a = browser(srv), zh = Buffer.from([0xd6, 0x8b, 0x89]).toString('latin1') + 'ads';

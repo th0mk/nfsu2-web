@@ -117,6 +117,10 @@ export class QuickChat {
   private rstick = 0;
   private driveAt = 0;
   private armed = true;
+  /** the stick is out from a flick the picker took: it stays the picker's until back at rest, also once that flick said
+   *  the phrase and closed it (given back still up, the game took the stick up from rest and back as a tap of the
+   *  headlights, runtime/lightkey.c, and the view looked round: a Discord report, 2026-11-05) */
+  private tail = false;
   /** the player's sixteen: the phrase in each slot (group * 4 + place), and each group's name */
   private layout: readonly number[] = DEFAULT_PHRASES;
   private groups: readonly CatId[] = DEFAULT_GROUPS;
@@ -222,11 +226,12 @@ export class QuickChat {
    *  by the stick's click), else the game looks round with it */
   stick(x: number, y: number): boolean {
     const r = Math.hypot(x, y), mine = this.open >= 0 && this.mode === 'pad';
-    if (r < REST) { this.armed = true; return mine; }
-    if (!mine) return false;
+    if (r < REST) { this.armed = true; this.tail = false; return mine; }
+    if (!mine) return this.tail;
+    this.tail = true;
     if (r < FLICK || !this.armed) return true;
     this.armed = false;
-    if (!this.can()) { this.close(); return false; }
+    if (!this.can()) { this.close(); this.tail = false; return false; }
     const dir = Math.abs(x) > Math.abs(y) ? (x > 0 ? 1 : 3) : (y < 0 ? 0 : 2);
     if (this.open === GROUPS) this.group(dir, 'pad');
     else this.pick(this.open * 4 + dir);

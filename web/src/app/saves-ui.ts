@@ -3,21 +3,23 @@
 // overlay as a zip (profiles, registry.txt, settings.ini, screenshots) and
 // restoring one, or adding the PC game's profiles beside the ones here
 // (readBackup tells them apart), and the F12 screenshots (shots.ts); a keyphrase's saves come in as a
-// backup does (readVault, restoreVault: vault-ui.ts).  And the Other tab's game data on
+// backup does (readVault, restoreVault: vault-ui.ts).  And the Game tab's game data on
 // this device: how much of it, all of it downloaded ahead (predownload.ts), or
 // deleted.  The game data is never part of a backup and never written back:
 // it stays on the server.
 
 import { cacheBytes, clearCache, filesOf, pruneSaveDir, UndoPending, writeTogether, type BesideFile, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, UNREADABLE, writeFile, type Entry, type Profile } from './savefs';
-import { AUTOSAVE_SEEN, coverOf, fixedName, GIVE_MAX, isGivenName, isProfileFile, isProfileName, mendedBefore, modCars, profileInside, renameProfile, sameCareer, sealed, withName, type RenameFiles } from './profile';
+import { AUTOSAVE_SEEN, coverOf, fixedName, GIVE_MAX, isGivenName, isProfileFile, isProfileName, mendedBefore, modCars, profileInside, renameProfile, deleteProfile, sameCareer, sealed, withName, type RenameFiles } from './profile';
 import { listZip, unzip, zip, ZipError, type ZipEntry } from './zip';
 import { downloadBlob, stamp } from './logs';
 import { fmtBytes } from './checks';
 import { resolveEnv, withDevice } from './settings';
 import { gameDataKept, type DownloadState, type DownloadStatus, type Predownload } from './predownload';
-import { ScreenshotsPart } from './shots';
+import { ScreenshotsPart, when } from './shots';
+import { iconButton, PENCIL, TRASH } from './settings-ui';
+import { playedAtLeast, playedMs, playedText } from './playtime';
 import { GAMEFILE, isCover, keeps, kept } from './vault';
-import { dateLocale, listOf, live, N, t, tn, tvars, type Msg } from './i18n';
+import { listOf, live, N, t, tn, tvars, type Msg } from './i18n';
 
 export interface SavesDeps {
   saveDir: string;
@@ -511,6 +513,7 @@ function eta(s: number): string {
   return t('about {n} h left', { n: (s / 3600).toFixed(1) });
 }
 const QUIT_TO_CHANGE = N('Quit the game (or close the other tab that runs it) to change the game data.');
+const QUIT_TO_DELETE = N('Quit the game (or close the other tab that runs it) to delete a profile.');
 const QUIT_TO_RENAME = N('Quit the game (or close the other tab that runs it) to rename a profile or restore a backup.');
 
 export class SavesPanel {
@@ -521,7 +524,7 @@ export class SavesPanel {
     inp.onchange = () => { const f = inp.files?.[0]; inp.value = ''; if (f) void this.doImport(f); };
     dataPanel.querySelector<HTMLButtonElement>('#clear-cache')!.onclick = () => void this.doClearCache();
     dataPanel.querySelector<HTMLButtonElement>('#fetch-all')!.onclick = () => void this.doDownload();
-    this.shots = new ScreenshotsPart(root, { saveDir: deps.saveDir, confirm: deps.confirm, changed: () => void this.refresh() });
+    this.shots = new ScreenshotsPart(root, { saveDir: deps.saveDir, confirm: deps.confirm, changed: () => void this.refresh(), say: text => this.msg(text) });
   }
 
   private shots: ScreenshotsPart;
@@ -560,10 +563,11 @@ export class SavesPanel {
     if (this.said.saves === UNREADABLE) this.msg('');
     this.profiles = await listProfiles(this.deps.saveDir, files);
     this.shots.show(files.filter(f => isScreenshot(f.path)));
+    this.showPlayed();
     const busy = this.deps.busy();
     // a name being typed stays as it is (the list is shown again when the edit ends)
     if (!this.profiles.some(p => p.name === this.renaming)) { this.renaming = null; this.showProfiles(); }
-    for (const b of this.root.querySelectorAll<HTMLButtonElement>('.profiles .rename-btn, .profiles .renaming [type="submit"]')) b.disabled = busy;
+    for (const b of this.root.querySelectorAll<HTMLButtonElement>('.profiles .rename-btn, .profiles .delete-btn, .profiles .renaming [type="submit"]')) b.disabled = busy;
     this.root.querySelector<HTMLLabelElement>('.file-btn')!.toggleAttribute('aria-disabled', busy);
     this.root.querySelector<HTMLInputElement>('#import')!.disabled = busy;
     this.dataPanel.querySelector<HTMLButtonElement>('#clear-cache')!.disabled = busy;
@@ -579,6 +583,14 @@ export class SavesPanel {
     if (n !== this.counted) return;
     this.kept = kept; this.data = data;
     this.showData();
+  }
+
+  /** the play counted in this browser (playtime.ts), beside the Profiles heading; nothing under a minute.  "At least" where the
+   *  count began before it counted all play */
+  private showPlayed() {
+    const el = this.root.querySelector<HTMLElement>('#played')!, ms = playedMs(), least = playedAtLeast();
+    el.hidden = !playedText(ms);
+    live(el, () => least ? t('at least {time} played', { time: playedText(ms) }) : t('{time} played', { time: playedText(ms) }));
   }
 
   /** The download's progress (Predownload's onChange), or what is kept when none runs. */
@@ -624,11 +636,13 @@ export class SavesPanel {
       info.textContent = t('Nothing here yet: the game downloads data as it needs it. Preload it now so loading never waits on the network.');
   }
 
-  /** The profiles, each with its Rename button, or the name being edited. */
+  /** The profiles, each with its Rename and Delete icons, or the name being edited; how to save in the game while
+   *  there is none. */
   private showProfiles() {
     const ul = this.root.querySelector('#profiles')!, busy = this.deps.busy();
     let focus: HTMLElement | null = null;
     ul.replaceChildren();
+    this.root.querySelector<HTMLElement>('#save-how')!.hidden = this.profiles.length > 0;
     if (!this.profiles.length) {
       const li = document.createElement('li'); li.className = 'empty';
       li.textContent = t('No profiles yet. Create one in the game.');
@@ -647,12 +661,14 @@ export class SavesPanel {
       }
       const n = document.createElement('span'); n.className = 'name'; n.textContent = p.name;
       const m = document.createElement('span'); m.className = 'meta';
-      m.textContent = t('saved {when}, {size}', { when: new Date(p.mtime).toLocaleString(dateLocale()), size: fmtBytes(p.size) });
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'text-btn rename-btn'; b.textContent = t('Rename');
-      b.setAttribute('aria-label', t('Rename {name}', { name: p.name })); b.disabled = busy;
+      m.textContent = when(p.mtime);
+      const b = iconButton('rename-btn', t('Rename {name}', { name: p.name }), PENCIL); b.disabled = busy;
       b.onclick = () => { this.renaming = p.name; this.showProfiles(); };
+      const d = iconButton('delete-btn', t('Delete {name}', { name: p.name }), TRASH); d.disabled = busy;
+      d.onclick = () => void this.doDelete(p.name);
       if (p.name === this.focusName) focus = b;
-      li.append(n, m, b); ul.append(li);
+      const acts = document.createElement('span'); acts.className = 'acts'; acts.append(b, d);
+      li.append(n, m, acts); ul.append(li);
     }
     this.focusName = null;
     if (focus) { focus.focus(); if (focus instanceof HTMLInputElement) focus.select(); }
@@ -694,6 +710,21 @@ export class SavesPanel {
     if ('refused' in r) { ok.disabled = this.deps.busy(); say(r.refused); return; }
     this.renaming = null; this.focusName = to;
     this.msg(() => t('Renamed {from} to {to}.', { from, to }));
+    this.deps.onChanged?.();
+    await this.refresh();
+  }
+
+  /** A profile and its cover shoots out of this browser, after a question (a Delete that is not the default). */
+  private async doDelete(name: string) {
+    if (this.deps.busy()) { this.msg(() => t(QUIT_TO_DELETE)); return; }
+    if (!await this.deps.confirm(t('Delete {name}?', { name }),
+      t('Its career and cars are deleted, here and in cloud saves. Download backup first to keep a copy.'), t('Delete'), true)) return;
+    if (this.deps.busy()) { this.msg(() => t(QUIT_TO_DELETE)); return; }
+    let r: { folders: number };
+    // (stopped halfway: its covers may have gone, the profile never before them; the cloud is told either way)
+    try { r = await this.write(oneWriter(() => deleteProfile(filesOf(this.deps.saveDir), PROFILES_DIR, name))); }
+    catch (err) { this.msg(() => t('Deleting {name} stopped: {error}', { name, error: String(err) })); this.deps.onChanged?.(); await this.refresh(); return; }
+    this.msg(() => r.folders ? t('Deleted {name}.', { name }) : t('There is no profile {name} in this browser.', { name }));
     this.deps.onChanged?.();
     await this.refresh();
   }

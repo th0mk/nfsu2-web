@@ -1,0 +1,36 @@
+# Hiding the HUD (runtime/photo.c, "the HUD hidden"): new career -> prologue free roam, the car standing.  F10 on the
+# page (the player's way: the page sends it to the game, keeping it from the browser) hides the HUD ("[hud] ... F10:
+# the HUD hidden"); the pause menu over it still draws, and F10 there does nothing ("a screen over the HUD"); back in
+# the game it is hidden still; F10 again shows it ("the HUD shown").  With roam-pair --page app each step's page is
+# saved (a_hud_on, a_hud_hidden, a_pause, a_back_hidden, a_hud_shown).
+#   node web/tools/roam-pair.mjs --page app --solo --a Ann:hud_hide.txt
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log SHOT a_hud_on
++60   log KEY F10
++60   log SHOT a_hud_hidden
++60   tapuntil ESCAPE UI_Pause.fng 60 600
++60   log SHOT a_pause
++60   log KEY F10                     # nothing: a screen over the HUD
++60   tap ESCAPE                      # back to the game
++120  log SHOT a_back_hidden
++60   log KEY F10
++60   log SHOT a_hud_shown
++0    log hud_done
++10   quit

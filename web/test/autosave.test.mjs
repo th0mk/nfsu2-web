@@ -12,6 +12,8 @@
 // - renaming a profile (profile.ts renameProfile) moves its folder, file and
 //   cover shoots, changes the name inside and the two checksums it moves, and
 //   nothing else; a refused rename, or one that fails halfway, leaves the saves as they were
+// - deleting a profile (profile.ts deleteProfile, the Saves tab's bin) takes its folder and its cover shoots in any
+//   case, and nothing of another profile: not one whose name starts with it, nor its covers
 // - a first profile's name field starts with Your name's letters and digits (profile.ts newProfileName), never NAME,
 //   Player or a slur; a profile of a name of up to 15 with spaces is renamed like any other
 // The profiles here are synthetic (the layout of profile.ts's header comment).
@@ -190,6 +192,26 @@ test('a rename moves the profile, its cover shoots and its autosave line, and ch
   assert.ok(![...fs.m.keys()].some(k => k.startsWith(`${DIR}/TOBI`)), [...fs.m.keys()].join('\n'));
   for (const k of [at('AUTO'), `${DIR}/AUTO DVD 1/AUTO DVD 1`, 'registry.txt']) assert.equal(fs.m.get(k), before.get(k), `${k} untouched`);
   assert.equal(fs.writes.findIndex(w => w.startsWith('-')), fs.writes.length - 3, 'the old folders go last');
+});
+
+test('a delete takes the profile and its cover shoots, any case, and nothing else', async () => {
+  const fs = folder({
+    [at('TOBI')]: profile('TOBI'), [`${DIR}/TOBI/notes.txt`]: 'x', [`${DIR}/TOBI DVD 1/TOBI DVD 1`]: cover(),
+    [`${DIR}/tobi Magazine 12/tobi Magazine 12`]: cover(),
+    [at('TOBIAS')]: profile('TOBIAS'), [`${DIR}/TOBIAS DVD 1/TOBIAS DVD 1`]: cover(), [at('TOB')]: profile('TOB'),
+    [at('Big Bad Wolf')]: profile('Big Bad Wolf'), [`${DIR}/Big Bad Wolf DVD 2/Big Bad Wolf DVD 2`]: cover(),
+    [P.AUTOSAVE_SEEN]: '# head\nTOBI\n', 'registry.txt': 'r', 'nfsu2-2026-11-05_12-00-00.png': 'png',
+  });
+  const before = new Map(fs.m);
+  assert.deepEqual(await P.deleteProfile(fs, DIR, 'TOBI'), { folders: 3 });
+  assert.deepEqual(fs.writes.sort(), [`-${DIR}/TOBI`, `-${DIR}/TOBI DVD 1`, `-${DIR}/tobi Magazine 12`].sort(), 'only removes, no writes');
+  assert.deepEqual([...fs.m.keys()].sort(), [...before.keys()].filter(k => !/\/(TOBI|TOBI DVD 1|tobi Magazine 12)\//.test(k)).sort());
+  for (const [k, v] of fs.m) assert.equal(v, before.get(k), `${k} untouched`);
+  assert.deepEqual(await P.deleteProfile(fs, DIR, 'Big Bad Wolf'), { folders: 2 }, 'a name with spaces, and its cover');
+  assert.ok(fs.m.has(at('TOBIAS')) && fs.m.has(`${DIR}/TOBIAS DVD 1/TOBIAS DVD 1`) && fs.m.has(at('TOB')));
+  assert.deepEqual(await P.deleteProfile(fs, DIR, 'NOBODY'), { folders: 0 }, 'no such profile: nothing goes');
+  assert.deepEqual(await P.deleteProfile(fs, 'Other', 'TOBIAS'), { folders: 0 }, 'only in the profiles folder');
+  assert.ok(fs.m.has(at('TOBIAS')));
 });
 
 test('a change of case only is a rename; a longer name inside is cleared', async () => {

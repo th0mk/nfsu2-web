@@ -1,0 +1,48 @@
+# Names and flags over friends' cars after a shop (runtime/roam_game.c world_changed, tags_live): one player in the new
+# career's prologue free roam among web/tools/roam-crowd.mjs's players parked in front of it, with flags (the flags'
+# images: copies of the HUD's first image), then the car lot (the 206 bought: the world and the HUD go) and back to the
+# crowd.  The old HUD's objects are all forgotten with its world; a next HUD at its address once kept the flags'
+# images and wrote to them freed (error 134 in tags_update, 2026-11-04/05).  mp status lists the names shown on the
+# new HUD; no "names: a new HUD at the old one's address" in normal play, no fault.
+#   roam-pair --solo --a Ann:roam_names_visit.txt --env ROAM_CROWD_CARS=12 --crowd 12
+#     --crowd-args "--track <a fan of 12 spots 14-22 m ahead of the start> --cars all --speed 0 --flags br,nl,tr,de,fr,-"
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers ${ROAM_CROWD_CARS} 6000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++600  roam mp status
++0    log VISIT car lot 1
++60   roam shopgo CC_CAR_LOT_1
++300  tapuntil RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the car lot
++0    waitfng GarageMain.fng 3000
++300  tap RETURN                      # buy the 206
++180  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 1200
++60   tap LEFT
++30   tap RETURN                      # save: Yes
++300  tap RETURN                      # Save complete: Continue
++120  tapuntil ESCAPE HUD_SingleRace.fng 120 3000
++0    roam waitroam 4000
++600  roam mp status
++0    roam teleport 1695.25 -883.64 24.11 0xf833   # back to the crowd
++600  roam mp status
++10   quit

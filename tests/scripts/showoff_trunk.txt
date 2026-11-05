@@ -1,6 +1,7 @@
 # Show-off's open trunk with its audio (runtime/showoff.c, trunk_rec): a saved career with trunk audio fitted
 # (roam-pair --solo --page app --seed <save tree>) in free roam; "mp trunk" says what the car's drawing has (the
-# layout, its places, each piece's own model and the world's stand-in boxes), then O opens the trunk and photo mode's
+# layout, its places, each piece's own model and the world's stand-in boxes), then O twice opens the trunk (the hood
+# first, then the trunk alone) and photo mode's
 # orbit saves the page from above the trunk and from its two corners (up, left, right).  With
 # NFSU2_TEST_TRUNK_GAMEWAY=1 the trunk is drawn the game's way (the stand-in boxes), for the before picture.
 0     bot on
@@ -8,7 +9,8 @@
 +0    bot off
 +0    roam smsauto on
 +300  roam mp trunk
-+0    tap O
++0    tap O                           # the hood
++30   tap O                           # the trunk
 +300  roam mp trunk
 +0    photo on
 +0    photo names 0

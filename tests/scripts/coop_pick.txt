@@ -1,0 +1,29 @@
+# Co-op free roam, player 2 picks one of player 1's garage cars: a garage of two (test: the career's slot 2 a copy of
+# slot 1), Add Player 2, START on a second controller, the car dialog: Next car, then Drive; player 2 in that car.
+0     roam fe2roam 14000
++0    roam smsauto on
++120  localpad 1 connect 1
++0    roam coop garage2
++30   tap ESCAPE
++90   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap LEFT
++60   tap RETURN
++60   waitfe IG_GenericDialog_MED.fng 120
++0    localpad 1 START 1
++10   localpad 1 START 0
++90   waitfe IG_GenericDialog_MED.fng 120
++0    tap LEFT
++30   tap RETURN
++90   waitfe IG_GenericDialog_MED.fng 120
++0    tap RIGHT
++30   tap RETURN
++0    waitmem 0xd00030 2 1500
++60   expect i:0xd00030 == 2
++10   status coop_pick_complete
++10   quit

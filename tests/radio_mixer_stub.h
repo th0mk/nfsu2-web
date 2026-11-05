@@ -28,6 +28,7 @@ static struct {
     int song_slot[2], reuse_addresses, song_on_both_sides, voices;
     int noyield, stop_noyield;                     /* guest_noyield's depth now, and in the last stop */
     int page_writes_between, ends_of_stream;       /* the page writes only after the song's first reader of a step (from the first one fed); readers that said end of stream */
+    int song_ends;                                 /* the game's song readers say end of stream */
 } g;
 static struct { int next_id, served_seq, silent; uint32_t track_steps, frames_per_step; } pg;
 static CPU cpu;
@@ -125,7 +126,7 @@ void sub_004ac9f0_orig(CPU *c){
 }
 void sub_0072d18d_orig(CPU *c){
     MRF32(MR32(c->esp + 16u)) = MRF32(MR32(c->esp + 4u) + 4u);
-    c->eax = MR32(c->esp + 8u);
+    c->eax = g.song_ends && MRF32(MR32(c->esp + 4u) + 4u) == 1.0f ? READER_ENDS : MR32(c->esp + 8u);
 }
 void guest_noyield(int d){ g.noyield += d; }
 void sub_00739320_orig(CPU *c){

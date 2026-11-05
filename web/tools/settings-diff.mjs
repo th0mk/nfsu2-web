@@ -133,14 +133,15 @@ const checks = [];
 const allDefaultsOk = [...S.DEFAULTS].every(([k, v]) => v === '' || S.checkSetting(k, v)?.ok);
 checks.push(['every template default is accepted', allDefaultsOk]);
 // the defaults both templates list ("#key = value"): the same (the settings panel shows the page's), but
-// fullscreen (the Mac's empty one remembers the last choice; the page's is off)
+// fullscreen (the Mac's empty one remembers the last choice; the page's is off) and roam (the page's on since 2026-11-05,
+// shell.ts DEVICE; the Mac's off, its free roam has no hub)
 const tpl = src.slice(src.findIndex(l => l.startsWith('static const char *const k_template =')) + 1);
 const cDefaults = new Map();
 for (const l of tpl.slice(0, tpl.findIndex(l => l.trimEnd().endsWith(';')) + 1)) {
   const m = /^"#([a-z_0-9]+) =\s*(.*?)\\n";?$/.exec(l.trim());
   if (m) cDefaults.set(m[1], m[2].trim());
 }
-const defaultDiffs = [...S.DEFAULTS].filter(([k, v]) => k !== 'fullscreen' && cDefaults.has(k) && cDefaults.get(k) !== v);
+const defaultDiffs = [...S.DEFAULTS].filter(([k, v]) => k !== 'fullscreen' && k !== 'roam' && cDefaults.has(k) && cDefaults.get(k) !== v);
 for (const [k, v] of defaultDiffs) console.log(`DEFAULT DIFF ${k}: bundle.m "${cDefaults.get(k)}", settings.ts "${v}"`);
 checks.push([`the templates' defaults agree (${cDefaults.size} in bundle.m)`, cDefaults.size > 20 && !defaultDiffs.length]);
 const uncommented = S.TEMPLATE.split('\n').map(l => /^#[a-z_]+ =/.test(l) ? l.slice(1) : l).join('\n');

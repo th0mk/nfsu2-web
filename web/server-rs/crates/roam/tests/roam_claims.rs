@@ -99,3 +99,57 @@ fn a_name_taken_away_plays_alone() {
     k.hub.tick();
     assert!(linked(&k, 0, 1) && linked(&k, 0, 2));
 }
+
+/// co-op's second player of browser i (port 47211, its HELLO flagged: roam_core.h RC_HF_SEAT2) under `name` at x
+fn place_second(k: &mut Kit, i: u32, name: &[u8], x: f64, key: Option<char>) {
+    let o = key.map(owner);
+    let h = hello_with(200 + i, &HelloOpts { core: 4, name, room: room_hash("claims"), flags: 0x2000, ..Default::default() });
+    k.hub.frame_from(V(i), &frame_ports(V(i), &h, 47211, 47210), o.as_ref());
+    k.hub.frame_from(V(i), &frame_ports(V(i), &snap(200 + i, [x, 0.0, 0.0]), 47211, 47210), o.as_ref());
+}
+
+fn linked_second(k: &Kit, i: u32, j: u32) -> bool {
+    k.lists().get(&format!("{}:47211", V(i))).is_some_and(|l| l.iter().any(|e| e.vip == V(j)))
+}
+
+// a claimed name's second form ("Alex 2", co-op's second player) is its owner's: its page's second player plays with
+// everyone, another keyphrase's under it alone; a claim of the second form itself, older, comes first
+#[test]
+fn a_claimed_names_second_form_is_its_owners() {
+    let claims = Arc::new(Claims::in_memory());
+    claims.claim("Bob_2", &owner('C'), T0).unwrap();
+    claims.claim("Alex", &owner('A'), T0).unwrap();
+    claims.claim("Bob", &owner('D'), T0).unwrap();
+    let mut k = Kit::new(RoamOptions::default());
+    k.hub.set_claims(Some(claims.clone()));
+    place(&mut k, 0, b"Racer", 0.0, None);
+    place(&mut k, 1, b"Alex", 10.0, Some('A'));
+    place_second(&mut k, 1, b"Alex 2", 13.0, Some('A'));
+    place_second(&mut k, 2, b"Alex 2", 20.0, Some('B'));
+    place(&mut k, 3, b"Bob", 30.0, Some('D'));
+    place_second(&mut k, 3, b"Bob 2", 33.0, Some('D'));
+    place(&mut k, 4, b"Bob 2", 40.0, Some('C'));
+    k.hub.tick();
+    assert!(linked_second(&k, 1, 0) && linked(&k, 0, 1), "the owner's two players play with the others");
+    assert!(!linked_second(&k, 2, 0) && !linked_second(&k, 2, 1), "another keyphrase's Alex 2: no links");
+    assert!(!linked_second(&k, 3, 0) && linked(&k, 3, 0), "Bob 2 is C's claim: D's second player plays alone");
+    assert!(linked(&k, 4, 0), "C under its own claim");
+    assert_eq!(k.lines.lock().iter().filter(|l| l.contains("a name another keyphrase claimed")).count(), 2, "{:?}", k.lines.lock());
+}
+
+// the second form of a name taken away (co-op's second player's "BadName 2") plays alone as that name does: names are
+// compared by their letters (nfsu2-names `letters`), and a 2 is none
+#[test]
+fn a_taken_names_second_form_plays_alone() {
+    let deny = Arc::new(nfsu2_names::Deny::default());
+    deny.set(["B4d_N4me".to_string()]);
+    let mut k = Kit::new(RoamOptions { deny: Some(deny), ..RoamOptions::default() });
+    place(&mut k, 0, b"Racer", 0.0, None);
+    place(&mut k, 1, b"Driver", 10.0, None);
+    place_second(&mut k, 1, b"BadName 2", 13.0, None);
+    place(&mut k, 2, b"BadName_2", 20.0, None);
+    k.hub.tick();
+    assert!(linked(&k, 0, 1));
+    assert!(!linked_second(&k, 1, 0) && !linked(&k, 0, 2) && !linked(&k, 2, 0));
+    assert_eq!(k.lines.lock().iter().filter(|l| l.contains("a name the operator took away")).count(), 2, "{:?}", k.lines.lock());
+}

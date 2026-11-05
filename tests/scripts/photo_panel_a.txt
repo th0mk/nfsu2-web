@@ -1,0 +1,45 @@
+# Photo mode's panel in free roam with a friend ahead (with photo_names_b.txt): each of its tabs as the player sees it,
+# and the picture without the panel.
+#   roam-pair --page app --a Ann:photo_panel_a.txt --b Bob:photo_names_b.txt --env NFSU2_ROAM_ROOM=<r>
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++1300 log KEY F12
++60   photo drag 0.18 0.03
++0    photo dolly -4
++60   log PRESS .photo-panel [data-tab="camera"]
++60   log SHOT camera
++60   log PRESS .photo-panel [data-tab="picture"]
++60   log SHOT picture
++60   log PRESS .photo-panel [data-tab="scene"]
++60   log SHOT scene
++60   log PRESS .photo-panel [data-tab="controls"]
++60   log SHOT controls
++60   log PRESS .photo-panel [data-tab="camera"]
++30   log KEY KeyK
++30   photo drag 0.3 0
++30   log KEY KeyK
++30   log KEY KeyF
++90   log SHOT camera_on
++60   log KEY KeyH
++60   log SHOT clean
++60   log KEY KeyH
++0    log KEY Escape
++30   quit

@@ -1,7 +1,9 @@
 //! Free roam's friends (docs/web/PLAYING.md, "Friends"): two players whose cars touched front bumpers for 3 seconds
 //! may befriend each other, and see each other on their start pages from then on.  The friends lists are EA
 //! Messenger's (nfsu2-online buddy.rs: one file a player, kept for claimed names only, so a friend made in free roam is
-//! one in the Messenger too); the free-roam hub links friends first and says where they play (nfsu2-roam).
+//! one in the Messenger too); the free-roam hub links friends first and says where they play (nfsu2-roam).  Only a
+//! friendship both ways (each one on the other's list, as an accepted request makes it: nfsu2-online
+//! `FriendRow::mutual`) is linked or told where the other plays; a name on one list alone is a name, no more.
 //!
 //! In the game, the page's control messages on its /lan connection (nfsu2-lan `LanSwitch::on_text`), each answered on
 //! it:
@@ -31,17 +33,21 @@
 //!
 //! On the start page, with the keyphrase's token as /names takes it (this server's own pages only):
 //! - GET /friends -> {"me":<name>|null,"friends":[{"name","where":"roam"|"online"|"","room":<its room's name, "" for
-//!   the room of everyone; none when not in free roam or its page did not tell it>,"contact":<when it has one>}],
-//!   "asks":[names],"sent":[names],"mail":[the messages that waited, as above]}
-//! - POST /friends {"op":"accept"|"decline"|"remove"|"block","name":...}, {"op":"msg","name":...,"body":...}, or
+//!   the room of everyone; none when not in free roam or its page did not tell it>,"contact":<its Discord username,
+//!   when it gave one>}],"asks":[names],"sent":[names],"mail":[the messages that waited, as above],"contact":<the
+//!   player's own Discord username>|null}
+//! - POST /friends {"op":"accept"|"decline"|"remove"|"block","name":...}, {"op":"msg","name":...,"body":...},
 //!   {"op":"ask","name":<a player's name, as typed>} (a request by name: any claimed name, wherever its player is; its
-//!   open pages hear of it) -> {"done":...} and the same lists after it
+//!   open pages hear of it), or {"op":"discord","name":<the player's Discord username, as typed; "" none>} (its
+//!   friends both ways see it: nfsu2-online buddy.rs `discord_name`; "name" when it is not one) -> {"done":...} and
+//!   the same lists after it
 //!
 //! Limits: per client (and twice that per site) READ_BURST reads of /friends, then READ_RATE a second; per page
 //! SAY_BURST friend messages, then SAY_RATE a second (on top of the switch's own budget for control messages); per
 //! keyphrase MSG_BURST messages to friends, then MSG_RATE a second, from the game and the start page together (quick
-//! chat's three in six seconds), and ASK_BURST requests by name, then one every 30 s.  The console has the requests, friendships and messages (nfsu2-online's lines: who to
-//! whom, never what), never a keyphrase.
+//! chat's three in six seconds), ASK_BURST requests by name, then one every 30 s, and DISCORD_BURST changes of the
+//! Discord username, then one every 10 s.  The console has the requests, friendships and messages (nfsu2-online's
+//! lines: who to whom, never what) and that a Discord username changed (never which), never a keyphrase.
 
 use std::sync::{Arc, Weak};
 
@@ -64,6 +70,8 @@ pub const MSG_BURST: f64 = 3.0;
 pub const MSG_RATE: f64 = 0.5;
 pub const ASK_BURST: f64 = 5.0;
 pub const ASK_RATE: f64 = 1.0 / 30.0;
+pub const DISCORD_BURST: f64 = 5.0;
+pub const DISCORD_RATE: f64 = 1.0 / 10.0;
 /// the most of a POST's body (an op and a name)
 const MAX_BODY: usize = 1024;
 
@@ -77,6 +85,7 @@ pub struct Friends {
     says: Rate,
     msgs: Rate,
     asks: Rate,
+    discords: Rate,
 }
 
 /// what `can` found: the other player's browser and keyphrase, its claimed name, and the state ("new", ...)
@@ -90,7 +99,8 @@ struct Can {
 impl Friends {
     pub fn new(online: Arc<OnlineHost>, roam: Arc<RoamHub>, lan: Arc<LanSwitch>, claims: Arc<Claims>) -> Arc<Friends> {
         let (reads, says, msgs) = (Rate::new(READ_BURST, READ_RATE), Rate::new(SAY_BURST, SAY_RATE), Rate::new(MSG_BURST, MSG_RATE));
-        Arc::new(Friends { online, roam, lan, claims, reads, says, msgs, asks: Rate::new(ASK_BURST, ASK_RATE) })
+        let (asks, discords) = (Rate::new(ASK_BURST, ASK_RATE), Rate::new(DISCORD_BURST, DISCORD_RATE));
+        Arc::new(Friends { online, roam, lan, claims, reads, says, msgs, asks, discords })
     }
 
     /// the pages' friend messages come here (the switch holds this weakly: it outlives nothing), and a friend's
@@ -117,6 +127,7 @@ impl Friends {
         self.says.prune();
         self.msgs.prune();
         self.asks.prune();
+        self.discords.prune();
     }
 
     fn now() -> i64 {
@@ -146,7 +157,9 @@ impl Friends {
             return;
         }
         match op {
-            (Some("room"), _) => self.roam.room_name(vip, name),
+            // (as a page tidies a typed room, so no line break ever reaches a friend's settings.ini by its Join: the
+            // 2026-11-05 security audit)
+            (Some("room"), _) => self.roam.room_name(vip, nfsu2_lan::clean_name(&name)),
             (Some("flying"), _) => self.roam.flew(vip, m.get("s").and_then(Value::as_f64).unwrap_or(0.0)),
             (Some("friend"), Some("list")) => self.send_list(vip, owner, group).await,
             (Some("friend"), Some("can")) => {
@@ -174,7 +187,8 @@ impl Friends {
         self.lists(o, group, FriendAsk::Send(name.to_string(), body)).await.done
     }
 
-    /// the page's lists to it, with the messages that waited for it, and its friends to the hub
+    /// the page's lists to it, with the messages that waited for it, and its friends to the hub: the friendships both
+    /// ways only (`FriendRow::mutual`), since the hub links each one's friends with it, and puts it on theirs
     async fn send_list(&self, vip: u32, owner: Option<Arc<str>>, group: Arc<str>) {
         let Some(o) = owner else {
             return self.say(vip, json!({ "t": "friend", "op": "list", "me": null, "friends": [], "asks": [] }));
@@ -182,7 +196,7 @@ impl Friends {
         let r = self.lists(o.clone(), group, FriendAsk::ListMail).await;
         if r.me.is_some() {
             let now = Self::now();
-            let owners = r.friends.iter().filter_map(|f| self.claims.holder(&f.name, now)).collect();
+            let owners = r.friends.iter().filter(|f| f.mutual).filter_map(|f| self.claims.holder(&f.name, now)).collect();
             self.roam.friends(vip, o, owners);
         }
         let names: Vec<&str> = r.friends.iter().map(|f| f.name.as_str()).collect();
@@ -212,7 +226,7 @@ impl Friends {
         let is = |n: &String| n.eq_ignore_ascii_case(&peer);
         c.st = if r.me.is_none() {
             "claim"
-        } else if r.friends.iter().any(|f| is(&f.name)) {
+        } else if r.friends.iter().any(|f| f.mutual && is(&f.name)) {
             "friends"
         } else if r.asks.iter().any(is) {
             "asks"
@@ -260,13 +274,18 @@ impl Friends {
     /// the start page's view of the lists: each friend where it plays
     async fn page_json(&self, r: FriendReply) -> Value {
         let friends = self.placed(&r).await;
-        json!({ "me": r.me, "done": r.done, "friends": friends, "asks": r.asks, "sent": r.sent, "mail": mail_json(&r.mail) })
+        json!({
+            "me": r.me, "done": r.done, "friends": friends, "asks": r.asks, "sent": r.sent, "mail": mail_json(&r.mail), "contact": r.contact,
+        })
     }
 
-    /// the friends of the lists, each where it plays (the module's doc, GET /friends)
+    /// the friends of the lists, each where it plays (the module's doc, GET /friends): a one-way entry
+    /// (`FriendRow::mutual`) nowhere, its room none (the 2026-11-05 security audit: one the Messenger's RADD put on a
+    /// list unasked told the adder where its player was, and the name of its private room)
     async fn placed(&self, r: &FriendReply) -> Vec<Value> {
         let now = Self::now();
-        let owners: Vec<Option<Arc<str>>> = r.friends.iter().map(|f| self.claims.holder(&f.name, now)).collect();
+        let owners: Vec<Option<Arc<str>>> =
+            r.friends.iter().map(|f| if f.mutual { self.claims.holder(&f.name, now) } else { None }).collect();
         let found: Vec<Arc<str>> = owners.iter().flatten().cloned().collect();
         let mut at = self.roam.whereabouts(found).await.unwrap_or_default().into_iter();
         r.friends
@@ -349,6 +368,12 @@ impl App {
                         let now = nfsu2_util::now_ms() as i64;
                         let claimed = f.claims.holder(&name, now).and_then(|o| f.claims.mine(&o, now)).map(|m| m.name);
                         FriendAsk::AskByName(claimed.unwrap_or(name))
+                    }
+                    Some("discord") => {
+                        if !f.discords.take(&owner, "") {
+                            return self.json(q, s, 200, &json!({ "done": "rate" })).await;
+                        }
+                        FriendAsk::Discord(name)
                     }
                     Some("accept") => FriendAsk::Answer(name, true),
                     Some("decline") => FriendAsk::Answer(name, false),

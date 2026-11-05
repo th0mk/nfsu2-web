@@ -81,7 +81,8 @@
  *                              which takes every career command)
  *     status [label]           print a [status] line now (memory trend points)
  *     stall SECONDS            test-only: block the guest thread (GIL held) to
- *                              exercise the stall watchdog (watchdog.c)
+ *                              exercise the stall watchdog (watchdog.c); a
+ *                              fraction (0.08) is a long frame
  *     loop N                   repeat the lines up to the matching "endloop"
  *     endloop                  N times (loops may nest; N=0 means forever)
  *     trace EVERY NAME=EXPR... log the expressions every EVERY frames (one
@@ -148,6 +149,7 @@
  *        NUMPAD0..9 ...), or a number (0x1c = DIK code), or VK_xx / vk:0xNN.
  */
 #include "cpu.h"
+#include "coop.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -403,7 +405,7 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "endloop")) e.cmd = C_ENDLOOP;
         else if (!strcasecmp(cmd, "status")){ e.cmd = C_STATUS; snprintf(e.text, sizeof e.text, "%s", a1); }
-        else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = atol(a1); }
+        else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = (long)(atof(a1) * 1000.0 + 0.5); }
         else if (!strcasecmp(cmd, "waitmem")){ e.cmd = C_WAITMEM;
             e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0)); e.val = (uint32_t)strtoul(a2, 0, 0);
             e.n = a3[0] ? atol(a3) : 0; }
@@ -520,7 +522,7 @@ const char *autotest_top_fng(void){
     if (!fe || !mem_is_committed(fe + 11)) return 0;
     uint32_t mg = MR32(fe + 8);                       /* GetTopPackage (0x50C8E0) */
     if (!mg || !mem_is_committed(mg + 0xe7)) return 0;
-    uint32_t pk = MR32(mg + 0xe4);                    /* FNGInfo*; name ptr at +0x0C */
+    uint32_t pk = coop_fe_top(mg);                    /* FNGInfo*; name ptr at +0x0C (co-op: player 2's HUD skipped) */
     if (!pk || !mem_is_committed(pk + 255)) return 0;
     if (g_fng_off >= 0){ const char *s = fng_str(MR32(pk + (uint32_t)g_fng_off)); if (s) return s; }
     for (int o = 0; o < 256; o += 4){
@@ -913,8 +915,8 @@ static int fire(CPU *c, Ev *e, double tms){
         status_line(now_ms(), tms, lb);
         break; }
     case C_STALL:
-        fprintf(stderr, "[autotest] f=%ld stall %ld s (test-only)\n", g_frame, e->n);
-        sleep((unsigned)(e->n > 0 ? e->n : 1));
+        if (e->n >= 1000) fprintf(stderr, "[autotest] f=%ld stall %.3f s (test-only)\n", g_frame, e->n / 1000.0);
+        usleep((useconds_t)(e->n > 0 ? e->n : 1000) * 1000u);   /* (ms: a fraction of a second is a long frame) */
         break;
     case C_CAREER:
         if (!career_cmd(c, e->text, &g_wait_start)) return 0;
@@ -1004,10 +1006,11 @@ static void status_line(double t, double tms, const char *label){
     if (k > 0 && k < (int)sizeof ms){ int pacer_spin_status(char *, size_t); pacer_spin_status(ms + k, sizeof ms - (size_t)k); }
 #endif
 #ifdef __wasm__
-    /* no ru_maxrss: rss = the wasm memory's size (it only grows), brk = the top of all the runtime heap ever took
-     * (runtime/web/sbrk.c): what of that memory the game has used, the guest's 640 MB included */
-    uint64_t memory_bytes(void), heap_break(void);
-    char rss[48]; snprintf(rss, sizeof rss, "%ldMB brk=%ldMB", (long)(memory_bytes() >> 20), (long)(heap_break() >> 20));
+    /* no ru_maxrss: rss = the wasm memory's size (it only grows), brk = all the runtime heap ever took
+     * (runtime/web/sbrk.c): what of that memory the game has used, the guest's 640 MB included (not the guest heap's
+     * window above the runtime: what the runtime's heap stepped over it is left out) */
+    uint64_t memory_bytes(void), heap_taken(void);
+    char rss[48]; snprintf(rss, sizeof rss, "%ldMB brk=%ldMB", (long)(memory_bytes() >> 20), (long)(heap_taken() >> 20));
 #else
     char rss[24]; snprintf(rss, sizeof rss, "%ldMB", (long)(ru.ru_maxrss / (1024 * 1024)));
 #endif

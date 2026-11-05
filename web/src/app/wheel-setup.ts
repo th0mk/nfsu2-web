@@ -9,7 +9,7 @@
 // wheel and the pedals, and its set-up goes on with a switch for nitrous, the handbrake and a respawn (Skip passes
 // one).
 
-import { deadTwin, drivingPad, familyOf, mayDrive, PAD_DRIVER_EVENT } from '../input/gamepad';
+import { allPads, deadTwin, drivingPad, familyOf, mayDrive, PAD_DRIVER_EVENT } from '../input/gamepad';
 import {
   guessMap, loadMap, loadShifter, saveMap, saveShifter, SHIFTER_MODES, shifterOf, WheelLearn, wheelOf, type LearnStep,
   type ShifterMode, type SwitchStep,
@@ -50,7 +50,7 @@ function connectedWheel(): Gamepad | null {
   try {
     const d = drivingPad();
     if (d) return wheel(d) ? d : null;
-    const pads = navigator.getGamepads?.() ?? [];
+    const pads = allPads();
     return pads.find(g => wheel(g) && !deadTwin(g!, pads)) ?? pads.find(wheel) ?? null;
   } catch { return null; }
 }
@@ -58,7 +58,7 @@ function connectedWheel(): Gamepad | null {
 /** whether a controller besides the wheel at index is connected that could drive instead (gamepad.ts) */
 function otherPad(index: number): boolean {
   try {
-    const pads = navigator.getGamepads?.() ?? [];
+    const pads = allPads();
     return pads.some(g => !!g?.connected && g.index !== index && mayDrive(g, pads));
   } catch { return false; }
 }
@@ -182,10 +182,10 @@ export function wheelSection(pad: HTMLElement, cap: (xb: string, ps: string) => 
   function tick() {
     // the tab or the dialog closed: no set-up behind the player's back
     if (!learn || !(box.checkVisibility?.() ?? box.offsetParent !== null)) { stop(); return; }
-    const g = navigator.getGamepads?.().find(p => !!p?.connected && p.id === id && p.index === index);
+    const g = allPads().find(p => !!p?.connected && p.id === id && p.index === index);
     if (!g) { stop(radio ? N('The radio went away before its set-up was done.') : N('The wheel went away before its set-up was done.')); return; }
     const pressed = radio ? g.buttons.map(b => !!b && (b.pressed || b.value > 0.5)) : undefined;
-    const pads = navigator.getGamepads?.() ?? [];
+    const pads = allPads();
     const more = beside.map(b => {
       const p = pads.find(q => !!q?.connected && q.index === b.index && q.id === b.id);
       return p && p.axes.length === b.n ? Array.from(p.axes) : Array<number>(b.n).fill(0);
@@ -208,7 +208,7 @@ export function wheelSection(pad: HTMLElement, cap: (xb: string, ps: string) => 
     radio = isRadio(g);
     const info = wheelOf(g.id)!;
     // pedals may be on their own USB: the controllers besides the wheels and those with the standard mapping
-    const pads = navigator.getGamepads?.() ?? [];
+    const pads = allPads();
     beside = radio ? [] : pads.filter(p => !!p?.connected && p.index !== g.index && p.mapping !== 'standard' && !wheelOf(p.id))
       .map(p => ({ index: p!.index, id: p!.id, n: p!.axes.length }));
     learn = new WheelLearn(loadMap(g.id) ?? guessMap(info, Array.from(g.axes), g.buttons.length), radio, beside.map(b => b.id));

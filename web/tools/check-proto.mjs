@@ -32,7 +32,7 @@ function tsNames(file) {
 }
 const pairs = [
   ['runtime/web/audio_proto.h', 'web/src/audio/proto.ts', ['AR_', 'AUDIO_']],
-  ['runtime/web/input_proto.h', 'web/src/input/proto.ts', ['IM_', 'IEV_', 'IKF_', 'IREASON_', 'ISYN_', 'INPUT_']],
+  ['runtime/web/input_proto.h', 'web/src/input/proto.ts', ['IM_', 'IEV_', 'IKF_', 'INAME_', 'IREASON_', 'ISYN_', 'INPUT_']],
   ['runtime/kbd.h', 'web/src/input/proto.ts', ['KSYN_']],
   ['runtime/gamepad.h', 'web/src/input/proto.ts', ['PAD_', 'PADF_']],
   ['runtime/web/host_abi.h', 'web/src/host/abi.ts', []],

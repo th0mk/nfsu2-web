@@ -17,8 +17,10 @@
 //   language  with French chosen in Settings: the French language pack's files but its movies, the folder's
 //             but the file the pack has in its place, and no other language's
 //             (no step before fetches a texture pack: Menus, HUD and maps is on Original by default)
-//   texpack   with Menus, HUD and maps on Upscaled: the game data counted gains TEXPACKS/uhud.pak and the maps'
-//             detailed.pak and detailed.tracks, the rest to preload is the packs, and they are all that is fetched
+//   map       with Menus, HUD and maps on Map only: the game data counted gains the maps' detailed.pak and
+//             detailed.tracks, the rest to preload is those two, and they are all that is fetched (not uhud.pak)
+//   texpack   then on Upscaled: the game data counted gains TEXPACKS/uhud.pak too, the rest to preload is that
+//             pack, and it is all that is fetched
 // The game module is out/web/nfsu2.wasm, as for the server (--wasm to use another).
 import { chromium } from 'playwright';
 import { pickBrowser } from './browser.mjs';
@@ -137,7 +139,7 @@ async function open() {
   await page.goto(`${BASE}/`);
   await page.waitForFunction(() => ['ready', 'error'].includes(window.__nfsu2?.phase), null, { timeout: 60000 });
   await page.waitForFunction(() => !/Counting/.test(document.querySelector('#cache-info').textContent), null, { timeout: 30000 });
-  await page.click('#settings .tab[data-tab="other"]');               // where the game data's buttons are
+  await page.click('#settings .tab[data-tab="game"]');                // where the game data's buttons are (its end)
 }
 async function until(f, ms = 60000) {
   const t0 = Date.now();
@@ -271,7 +273,7 @@ try {
     await until(s => s.have > 2 * M);
     const workers = () => page.workers().map(w => new URL(w.url()).pathname.replace(/^\/host\/|\.js$/g, '')).filter(n => n !== 'game-worker');
     const before = workers();
-    // free roam answered, so the first Play does not ask (shell.ts askRoam)
+    // free roam off (a player's page has it on by default): the game plays alone
     await page.evaluate(async () => {
       const fh = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('save', { create: true })).getFileHandle('settings.ini', { create: true });
       const text = await (await fh.getFile()).text();
@@ -340,23 +342,43 @@ try {
       { btn, want, state: s.state, have: s.have, total, mismatched: c.bad, extra: c.extra });
   }
 
-  // ---------------------------------------------------------- texpack --
+  // -------------------------------------------------------------- map --
   {
-    // everything French is here (the language step): with the packs the count gains them, the rest is the packs, and
-    // they are all that comes
-    const PACKS = ['TEXPACKS/detailed.pak', 'TEXPACKS/detailed.tracks', 'TEXPACKS/uhud.pak'];
-    const up = aheadOf('french', 'uhud,detailed'), total = sizeOf(up), want = `Preload the rest (${(sizeOf(PACKS) / 1e6).toFixed(1)} MB)`;
+    // everything French is here (the language step): with the maps' pack alone the count gains it and its .tracks, the
+    // rest is those, and they are all that comes
+    const MAP = ['TEXPACKS/detailed.pak', 'TEXPACKS/detailed.tracks'];
+    const up = aheadOf('french', 'detailed'), total = sizeOf(up), want = `(${(sizeOf(MAP) / 1e6).toFixed(1)} MB)`;
     wire.length = 0;
-    await page.$eval('input[name="set-ui_textures"][value="uhud"]', el => { el.checked = true; el.dispatchEvent(new Event('change')); });
-    const btn = await page.waitForFunction(w => document.querySelector('#fetch-all').textContent === w && w, want, { timeout: 15000 })
+    await page.$eval('input[name="set-ui_textures"][value="map"]', el => { el.checked = true; el.dispatchEvent(new Event('change')); });
+    // (the button's size: its words are French since the language step)
+    const btn = await page.waitForFunction(w => { const b = document.querySelector('#fetch-all').textContent; return b.endsWith(w) && b; }, want, { timeout: 15000 })
       .then(h => h.jsonValue()).catch(() => text('#fetch-all'));
     await page.click('#fetch-all');
     const s = await until(s => s.state === 'done' || s.state === 'error');
     await page.waitForTimeout(300);
     const c = await cacheMatches(up), fetched = [...new Set(wire.map(w => w.path))];
-    report('texpack', btn === want && s.state === 'done' && s.have === total && s.total === total && c.ok &&
+    report('map', btn.endsWith(want) && s.state === 'done' && s.have === total && s.total === total && c.ok &&
+      MAP.every(f => up.includes(f)) && !up.includes('TEXPACKS/uhud.pak') && fetched.sort().join() === MAP.join(),
+      { btn, want, state: s.state, have: s.have, total, fetched, mismatched: c.bad, extra: c.extra });
+  }
+
+  // ---------------------------------------------------------- texpack --
+  {
+    // the maps' pack is here (the map step): with Upscaled the count gains the HUD's, the rest is that pack, and it
+    // is all that comes
+    const PACKS = ['TEXPACKS/detailed.pak', 'TEXPACKS/detailed.tracks', 'TEXPACKS/uhud.pak'], REST = ['TEXPACKS/uhud.pak'];
+    const up = aheadOf('french', 'uhud,detailed'), total = sizeOf(up), want = `(${(sizeOf(REST) / 1e6).toFixed(1)} MB)`;
+    wire.length = 0;
+    await page.$eval('input[name="set-ui_textures"][value="uhud"]', el => { el.checked = true; el.dispatchEvent(new Event('change')); });
+    const btn = await page.waitForFunction(w => { const b = document.querySelector('#fetch-all').textContent; return b.endsWith(w) && b; }, want, { timeout: 15000 })
+      .then(h => h.jsonValue()).catch(() => text('#fetch-all'));
+    await page.click('#fetch-all');
+    const s = await until(s => s.state === 'done' || s.state === 'error');
+    await page.waitForTimeout(300);
+    const c = await cacheMatches(up), fetched = [...new Set(wire.map(w => w.path))];
+    report('texpack', btn.endsWith(want) && s.state === 'done' && s.have === total && s.total === total && c.ok &&
       PACKS.every(f => up.includes(f)) && !up.includes('TEXPACKS/other.pak') && !aheadOf('french').some(f => f.startsWith('TEXPACKS/')) &&
-      fetched.sort().join() === PACKS.join(),
+      fetched.sort().join() === REST.join(),
       { btn, want, state: s.state, have: s.have, total, fetched, mismatched: c.bad, extra: c.extra });
   }
 } catch (e) {

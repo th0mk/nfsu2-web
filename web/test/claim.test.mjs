@@ -60,6 +60,11 @@ test('/names: asked with the token, read as the page reads it', async () => {
   token = 'A'.repeat(43);
   await c.check('Alex');
   assert.equal(calls[1].init.headers.authorization, `Bearer ${'A'.repeat(43)}`);
+  // a claim on a name the operator took away: as none
+  answer = { status: 200, body: { name: 'Other', state: 'free', mine: { name: 'Alex', until: 1, next: 0, blocked: true } } };
+  assert.deepEqual(await c.check('Other'), { name: 'Other', state: 'free' });
+  answer = { status: 200, body: { name: 'Other', state: 'free', mine: { name: 'Alex', until: 1, next: 0 } } };
+  assert.equal((await c.check('Other')).mine.name, 'Alex');
   answer = { status: 404, body: {} };
   assert.equal(await c.check('Alex'), null);
   assert.equal(c.here, false, 'a server without claims');

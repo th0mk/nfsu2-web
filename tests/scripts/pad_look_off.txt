@@ -1,0 +1,37 @@
+# The controller's free look turned off (the start page's Controls, Site, Free look: settings.ini button_look off;
+# run with NFSU2_BUTTON_LOOK=off NFSU2_PAD_LOG=1 NFSU2_LIGHTS_LOG=1): in a Quick Race no stick looks round
+# ("[pad] looking round: none (turned off: button_look)", no "looks round the car" line, the drive camera's turn
+# none: look.c), straight back is no Look Back, and the stick straight up is no headlights (lightkey.c: no
+# "[lights]" press, the car's +0x93D stays 1).  The game's own controls on the pad drive as before.
+#   node web/tools/run-suite.mjs --base <server> --script pad_look_off.txt --marker "LOG look_off_done"
+#        --env NFSU2_BUTTON_LOOK=off --env NFSU2_PAD_LOG=1 --env NFSU2_LIGHTS_LOG=1
+0     pad connect
++0    tappaduntil START MC_Background.fng 120 4000
++200  tappad A                                       # no profile
++0    waitfng GarageMain.fng 3000
++300  tappaduntil A UI_QRModeSelect.fng 150 3000
++200  tappaduntil A UI_QRTrackSelect.fng 150 1500
++200  tappaduntil A UI_QRModeOptions.fng 150 1500
++200  tappaduntil A UI_QRCarSelect.fng 150 1500
++200  tappaduntil A PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++600  lights report                                  # on
++0    log --- the right stick right, then back: no look, no Look Back ---
++0    axis RX 1
++700ms axis RX 0
++0    axis RY 1
++700ms axis RY 0
++0    log --- the right stick flicked up, then held up: the headlights stay on ---
++0    axis RY -1
++150ms axis RY 0
++400ms axis RY -1
++800ms axis RY 0
++400ms lights report                                 # still on, no taps, no holds
++0    expect b:[[0x8900ac]+4]+0x93d == 1       # the car's headlights on
++0    log --- the left stick up: no headlights either ---
++0    axis LY -1
++150ms axis LY 0
++400ms lights report
++0    expect b:[[0x8900ac]+4]+0x93d == 1       # the car's headlights on
++0    log look_off_done
++60   quit

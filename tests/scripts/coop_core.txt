@@ -1,0 +1,48 @@
+# Co-op free roam, the core: player 2 joins on the keyboard's WASD half beside player 1 in career free roam (seed
+# s2_r7), each throttle comes only from its own keys, player 2 on a career race's marker engages nothing, player 2
+# leaves and joins again (back in the parked car).
+0     roam fe2roam 14000
++0    roam smsauto on
++120  status coop_inroam
++0    roam coop join kb
++0    waitmem 0xd00030 2 1200
++150  roam coop state
++0    expect i:0xd00030 == 2
++0    expect i:[0xd00004]+0x18 == 2
+# the first join loaded free roam again with the city's memory for two (the streamer's pool 1.5x: 92,160,000)
++0    expect i:0x88f1a0 >= 92160000
++0    status coop_joined
++0    down W
++100  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0    up W
++30   down UP
++100  expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0    up UP
++30   expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0    expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0    status coop_throttles
+# player 2's car alone on the next career race's marker (player 1's hot-position jump cancelled)
++0    careergo next
++0    poke 0x8900cd 0 byte
++0    roam call 0x5fbd60 ecx=*(*0xd00004+4) 0x890140 0 *0x8900d0 0
++120  roam coop state
++0    expect i:[0xd00004]+0x9ac == 0
++0    expect i:[0xd00000]+0x9ac == 0
++0    tap RETURN
++120  fnglist
++0    expect i:0x8654a4 == 6
++0    status coop_marker
++0    roam coop leave
++60   roam coop state
++0    expect i:0xd00030 == 1
++0    roam coop join kb
++0    waitmem 0xd00030 2 1200
++150  roam coop state
++0    expect i:0xd00030 == 2
++0    down W
++100  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    up W
++0    status coop_core_complete
++10   quit

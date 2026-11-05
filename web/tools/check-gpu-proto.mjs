@@ -34,7 +34,10 @@ c += 'printf("LAYOUT %u\\n", (unsigned)GW_LAYOUT);\nprintf("ATTACHED %u\\n", (un
 c += 'printf("K_HL %u\\n", (unsigned)GW_K_HL);\nprintf("HL_BYTES %u\\n", (unsigned)sizeof(GwHL));\nprintf("HL_MAX %u\\n", (unsigned)GW_HL_MAX);\nprintf("KWIN_ROWS %u\\n", (unsigned)GW_KWIN_ROWS);\n';
 c += 'printf("K_MARKS %u\\n", (unsigned)GW_K_MARKS);\nprintf("MARKS_BYTES %u\\n", (unsigned)sizeof(GwMarks));\nprintf("MARKS_MAX %u\\n", (unsigned)GW_MARKS_MAX);\nprintf("MARKS_MAGIC %u\\n", (unsigned)GW_MARKS_MAGIC);\n';
 c += 'printf("K_TONE %u\\n", (unsigned)GW_K_TONE);\nprintf("TONE_BYTES %u\\n", (unsigned)sizeof(GwTone));\nprintf("TONE_MAGIC %u\\n", (unsigned)GW_TONE_MAGIC);\n';
-c += 'printf("K_PHOTO %u\\n", (unsigned)GW_K_PHOTO);\nprintf("PHOTO_BYTES %u\\n", (unsigned)sizeof(GwPhoto));\nprintf("PHOTO_MAGIC %u\\n", (unsigned)GW_PHOTO_MAGIC);\nprintf("PHOTO_ACK %u\\n", (unsigned)offsetof(GwPhoto, ack));\nreturn 0; }\n';
+c += 'printf("K_PHOTO %u\\n", (unsigned)GW_K_PHOTO);\nprintf("PHOTO_BYTES %u\\n", (unsigned)sizeof(GwPhoto));\nprintf("PHOTO_MAGIC %u\\n", (unsigned)GW_PHOTO_MAGIC);\nprintf("PHOTO_ACK %u\\n", (unsigned)offsetof(GwPhoto, ack));\n';
+c += 'printf("PHOTO_TILE %u\\n", (unsigned)offsetof(GwPhoto, tile));\nprintf("PHOTO_WANT %u\\n", (unsigned)offsetof(GwPhoto, want));\n';
+c += 'printf("PHOTO_FOV %u\\n", (unsigned)offsetof(GwPhoto, fov));\nprintf("PHOTO_LENS %u\\n", (unsigned)offsetof(GwPhoto, lens));\n';
+c += 'printf("CAP_TILES %u\\n", (unsigned)GW_CAP_TILES);\nprintf("CAP_SHUTTER %u\\n", (unsigned)GW_CAP_SHUTTER);\nprintf("LENS_FISHEYE %u\\n", (unsigned)GW_LENS_FISHEYE);\nreturn 0; }\n';
 fs.writeFileSync(path.join(tmp, 'p.c'), c);
 execFileSync(path.join(ROOT, 'deps', wasi, 'bin/clang'), ['--target=wasm32-wasip1', '-O1', '-I', path.join(ROOT, 'runtime/web'), '-o', path.join(tmp, 'p.wasm'), path.join(tmp, 'p.c')]);
 let out = '';
@@ -69,6 +72,9 @@ eq('GW_K_MARKS', C['K_MARKS'], T.K_MARKS); eq('GwMarks size', C['MARKS_BYTES'], 
 eq('GW_MARKS_MAGIC', C['MARKS_MAGIC'], T.MARKS_MAGIC);
 eq('GW_K_TONE', C['K_TONE'], T.K_TONE); eq('GwTone size', C['TONE_BYTES'], T.TONE_BYTES); eq('GW_TONE_MAGIC', C['TONE_MAGIC'], T.TONE_MAGIC);
 eq('GW_K_PHOTO', C['K_PHOTO'], T.K_PHOTO); eq('GwPhoto size', C['PHOTO_BYTES'], T.PHOTO_BYTES); eq('GW_PHOTO_MAGIC', C['PHOTO_MAGIC'], T.PHOTO_MAGIC); eq('GwPhoto.ack', C['PHOTO_ACK'], T.PHOTO_ACK);
+eq('GwPhoto.tile', C['PHOTO_TILE'], T.PHOTO_TILE); eq('GwPhoto.want', C['PHOTO_WANT'], T.PHOTO_WANT); eq('GwPhoto.fov', C['PHOTO_FOV'], T.PHOTO_FOV);
+eq('GwPhoto.lens', C['PHOTO_LENS'], T.PHOTO_LENS); eq('GW_CAP_TILES', C['CAP_TILES'], T.CAP_TILES); eq('GW_CAP_SHUTTER', C['CAP_SHUTTER'], T.CAP_SHUTTER);
+eq('GW_LENS_FISHEYE', C['LENS_FISHEYE'], T.LENS_FISHEYE);
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(bad ? `${bad} mismatches` : `gpu proto OK: ${Object.keys(C).length} values match (layout ${C.LAYOUT.toString(16)})`);
 process.exit(bad ? 1 : 0);

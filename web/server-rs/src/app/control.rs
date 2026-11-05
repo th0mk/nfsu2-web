@@ -11,7 +11,8 @@
 //!   raceban <player> <for> [msg]  it plays on with the others, but races none of them until the ban ends (Online's
 //!                                 games, LAN races, free roam's lobby races and outruns): its page says why
 //!   rename <player> [message]     its name taken away from everyone (and names that read the same): its page asks for
-//!                                 another, and no one plays under it again
+//!                                 another, and no one plays under it again; of its other names (its page's, the ones
+//!                                 over its car) one another keyphrase holds only when named (`App::rename`)
 //!   unban <name | #ban>           the bans of that name, or with that number, lifted
 //!   change #ban <races|full|for>  a ban made a race ban or a full one, or to last <for> from now on (or both)
 //!   bans                          the bans in force: number, name, kind, until when, the message
@@ -40,7 +41,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use nfsu2_bans::{
-    Ban, Bans, How, Keys, Kind, Record, clean_msg, kick_message, parse_for, races_lifted_message, rename_message, span, when,
+    Ban, Bans, How, Keys, Kind, Match, Record, clean_msg, kick_message, parse_for, races_lifted_message, rename_message, span, when,
 };
 use nfsu2_lan::{CLOSE_BANNED, CLOSE_KICKED, CLOSE_RENAME, LanSwitch, Who, vip_num};
 use nfsu2_util::{log, now_ms, vip_str};
@@ -66,7 +67,8 @@ pub const USAGE: &str = "commands:
   ban <player> <for> [message]   off playing with others until the ban ends: <for> is 30m, 12h, 3d, 2w or perm
   raceban <player> <for> [msg]   off races with others until it ends (Online, LAN, free roam's lobby races and
                                  outruns); free roam and chat stay
-  rename <player> [message]      its name taken away from everyone: its page asks for another
+  rename <player> [message]      its name taken away from everyone: its page asks for another (another
+                                 keyphrase's claimed name only when named)
   unban <name | #ban>            lift the bans of that name, or that number
   change #ban <races|full|for>   make a ban a race ban or a full one, or last <for> from now on
   bans                           the bans in force
@@ -187,6 +189,28 @@ fn line(w: &Who, now: i64) -> String {
 /// "10.77.3.41 \"Bob\", 10.77.5.2 \"Eve\""
 fn listed(ws: &[&Who]) -> String {
     ws.iter().map(|w| format!("{} \"{}\"", vip_str(w.vip), w.name)).collect::<Vec<_>>().join(", ")
+}
+
+/// what a ban did to the players on the switch (`App::reach`), for the operator: "removed A", "out of races now: B"
+fn reached_lines(removed: &[&Who], out: &[&Who]) -> Vec<String> {
+    let mut t = Vec::new();
+    if !removed.is_empty() {
+        t.push(format!("removed {}", listed(removed)));
+    }
+    if !out.is_empty() {
+        t.push(format!("out of races now: {}", listed(out)));
+    }
+    t
+}
+
+/// the same for the log: "removed: A; out of races now: B", "nobody on the switch"
+fn reached_log(removed: &[&Who], out: &[&Who]) -> String {
+    let t: Vec<String> = [("removed", removed), ("out of races now", out)]
+        .into_iter()
+        .filter(|(_, l)| !l.is_empty())
+        .map(|(what, l)| format!("{what}: {}", listed(l)))
+        .collect();
+    if t.is_empty() { "nobody on the switch".into() } else { t.join("; ") }
 }
 
 /// the message's part of a log line
@@ -410,7 +434,7 @@ impl App {
                 if gone.is_empty() {
                     return Err(format!("no ban {} (bans lists them)", if sel.starts_with('#') { sel } else { format!("of \"{sel}\"") }));
                 }
-                // the players on the switch a race ban lifted kept out of races, and no other one does: they race again
+                // the players on the switch a lifted ban kept out of races, and no other one does: they race again
                 let freed = self.races_again(&gone, now).await;
                 let kind = |b: &Ban| if b.kind == Kind::Full { String::new() } else { format!(" ({})", b.kind.word()) };
                 let t = gone.iter().map(|b| format!("#{} \"{}\"{}", b.id, b.name, kind(b))).collect::<Vec<_>>().join(", ");
@@ -531,57 +555,85 @@ impl App {
         let before = self.bans.history(&p.keys, now);
         let msg = clean_msg(msg);
         let (ban, replaced) = self.bans.add(kind, &p.name, &p.keys, &msg, until, now).map_err(|e| format!("bans.json: {e}"))?;
-        // every connection it names: the player's, and whoever shares one of its addresses; removed (a full ban), or
-        // out of races from now on
-        let reached = self.reach(&all, &ban, now);
+        // every connection it names: the player's, removed (a full ban) or out of races from now on, and whoever shares
+        // one of its addresses, out of races
+        let (removed, out) = self.reach(&all, &ban, now);
         let who = match &p.handle {
             Some(h) => format!("\"{}\" ({h})", p.name),
             None => format!("\"{}\"", p.name),
         };
         let instead = if replaced.is_empty() { String::new() } else { format!("; in place of {}", numbers(&replaced)) };
-        let (log_what, reply_what) = match kind {
-            Kind::Races => ("race ban #", "out of races now"),
-            _ => ("#", "removed"),
-        };
+        let log_what = if kind == Kind::Races { "race ban #" } else { "#" };
         log::line(&format!(
-            "[ban] {log_what}{} {who} {}{}{instead}; {reply_what}: {}",
+            "[ban] {log_what}{} {who} {}{}{instead}; {}",
             ban.id,
             how_long(until, now),
             quoted(&msg),
-            listed(&reached)
+            reached_log(&removed, &out)
         ));
         let mut t = vec![format!("{} #{}: {who} {}, by {}", kind.word(), ban.id, how_long(until, now), named_by(&p.keys))];
         if !replaced.is_empty() {
             t.push(format!("it takes the place of {}", numbers(&replaced)));
         }
-        t.push(match (reached.is_empty(), p.left) {
-            (false, _) if kind == Kind::Races => format!("{reply_what}: {}", listed(&reached)),
-            (false, _) => format!("{reply_what} {}", listed(&reached)),
-            (true, Some(l)) => format!("not on the switch now (left {} ago)", span(now - l)),
-            (true, None) => "not on the switch now".into(),
-        });
+        let reached = reached_lines(&removed, &out);
+        if reached.is_empty() {
+            t.push(match p.left {
+                Some(l) => format!("not on the switch now (left {} ago)", span(now - l)),
+                None => "not on the switch now".into(),
+            });
+        }
+        t.extend(reached);
         t.extend(earlier(&before, now));
         Ok(t.join("\n"))
     }
 
-    /// `rename`: the names of the player `sel` names taken away from everyone, its page asked for another
+    /// `rename`: the names of the player `sel` names taken away from everyone, its page asked for another.  The name
+    /// the operator gave is taken; each other name it plays under (its page's, the ones its game shows over its cars)
+    /// only when no other keyphrase than its own holds it (nfsu2-claims `holders`), and no other player on the switch
+    /// now plays under a name that reads the same and is that player's own claim (`skip`).  A claim goes only with a
+    /// name taken whose claim is the player's own.  (Until the 2026-11-05 security audit it took every name and freed
+    /// each one's claim: an edited game that showed a victim's claimed name over its car, its page under an offensive
+    /// name for the bait, had the victim's claim freed, its pages asked for another name, and the name and the ones
+    /// that read the same nobody's until `unname`.)
     async fn rename(&self, sel: &str, msg: &str, now: i64) -> Result<String, String> {
         let all = self.lan.who().await;
         let p = self.player(&all, sel, now)?;
         // (NAME and Player, the game's names for nobody in particular, are never taken away)
         let nobody = [nfsu2_names::letters("NAME"), nfsu2_names::letters("Player")];
-        if p.names.iter().all(|n| nfsu2_names::letters(n).is_empty() || nobody.contains(&nfsu2_names::letters(n))) {
+        let nobodys = |n: &String| nfsu2_names::letters(n).is_empty() || nobody.contains(&nfsu2_names::letters(n));
+        if p.names.iter().all(nobodys) {
             return Err(format!("\"{}\": nothing to take away (the game's name for nobody in particular)", p.names.join("\", \"")));
+        }
+        // the name the operator gave (not an address, nor a [cheat] line's handle): the player's name as it named it
+        let named = (p.handle.is_none() && vip_num(sel) == 0).then_some(p.name.as_str());
+        let (take, skipped): (Vec<String>, Vec<(String, String)>) = {
+            let (mut take, mut skipped) = (Vec::new(), Vec::new());
+            for n in &p.names {
+                match self.skip(&all, &p, n, now) {
+                    Some(why) if !named.is_some_and(|x| x.eq_ignore_ascii_case(n)) => skipped.push((n.clone(), why)),
+                    _ => take.push(n.clone()),
+                }
+            }
+            (take, skipped)
+        };
+        let not_taken = skipped.iter().map(|(n, why)| format!("\"{n}\" ({why})")).collect::<Vec<_>>().join(", ");
+        if take.iter().all(nobodys) {
+            return Err(format!("nothing taken away: {not_taken}; to take one, name it"));
         }
         let before = self.bans.history(&p.keys, now);
         let msg = clean_msg(msg);
-        let (r, took) = self.bans.rename(&p.name, &p.names, &p.keys, &msg, now).map_err(|e| format!("bans.json: {e}"))?;
+        let (r, took) = self.bans.rename(&p.name, &take, &p.keys, &msg, now).map_err(|e| format!("bans.json: {e}"))?;
         let deny = self.bans.deny();
-        let taken: Vec<&String> = p.names.iter().filter(|n| deny.has(n)).collect();
-        // their claims go (a name taken away is nobody's)
-        let freed: Vec<String> = match &self.names {
-            Some(n) => taken.iter().filter_map(|x| n.claims.unclaim(x)).collect(),
-            None => vec![],
+        let taken: Vec<&String> = take.iter().filter(|n| deny.has(n)).collect();
+        // their claims go, the player's own (a name taken away is nobody's); another keyphrase's stays (the operator
+        // named it: `unclaim` frees it)
+        let (freed, stays): (Vec<String>, Vec<String>) = match &self.names {
+            Some(c) => {
+                let (mine, theirs): (Vec<&String>, Vec<&String>) =
+                    taken.iter().copied().filter(|x| c.claims.holder(x, now).is_some()).partition(|x| self.owns(&p, &c.claims, x, now));
+                (mine.iter().filter_map(|x| c.claims.unclaim(x)).collect(), theirs.iter().map(|x| x.to_string()).collect())
+            }
+            None => (vec![], vec![]),
         };
         // the player's connections, and anyone else's under a name that reads as one taken away: asked for another
         let asked: Vec<&Who> = all
@@ -596,8 +648,9 @@ impl App {
         let names = taken.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", ");
         let new = if took.is_empty() { " (taken away already)" } else { "" };
         let claims = if freed.is_empty() { String::new() } else { format!("; claim freed: {}", freed.join(", ")) };
+        let kept = if skipped.is_empty() { String::new() } else { format!("; not taken: {not_taken}") };
         log::line(&format!(
-            "[ban] rename #{} \"{}\": {names}{new}{}{claims}; asked for another name: {}",
+            "[ban] rename #{} \"{}\": {names}{new}{}{claims}{kept}; asked for another name: {}",
             r.id,
             p.name,
             quoted(&msg),
@@ -607,9 +660,42 @@ impl App {
         if !freed.is_empty() {
             t.push(format!("its claim went: {}", freed.join(", ")));
         }
+        if !stays.is_empty() {
+            t.push(format!("another keyphrase's claim stays: {} (unclaim frees it)", stays.join(", ")));
+        }
+        if !skipped.is_empty() {
+            t.push(format!("not taken: {not_taken}; to take one, name it"));
+        }
         t.push(if asked.is_empty() { "not on the switch now".into() } else { format!("asked for another name: {}", listed(&asked)) });
         t.extend(earlier(&before, now));
         Ok(t.join("\n"))
+    }
+
+    /// whether keyphrase `o` (nfsu2-claims' owner) is one of player p's (by its hash among p's keys: a `[cheat]` line's
+    /// handle has only those)
+    fn is_its(&self, p: &Player, o: &str) -> bool {
+        self.bans.keys(None, None, Some(o)).owners.iter().all(|h| p.keys.owners.contains(h))
+    }
+
+    /// whether `name`'s claim (nfsu2-claims `holders`: a second form's too) is none or player p's own keyphrase's
+    fn owns(&self, p: &Player, claims: &nfsu2_claims::Claims, name: &str, now: i64) -> bool {
+        claims.holders(name, now).iter().all(|o| self.is_its(p, o))
+    }
+
+    /// Why `rename` leaves a name of player p's alone unless the operator named it: another keyphrase holds it, or
+    /// another player on the switch now plays under a name that reads the same (nfsu2-names `letters`, as the names
+    /// taken away are compared) and holds that name's claim, which a rename would take from it too.  None: taken.
+    fn skip(&self, all: &[Who], p: &Player, name: &str, now: i64) -> Option<String> {
+        let c = &self.names.as_ref()?.claims;
+        if !self.owns(p, c, name, now) {
+            return Some("another keyphrase's claimed name".into());
+        }
+        let l = nfsu2_names::letters(name);
+        let theirs = |x: &&Who| x.left.is_none() && x.owner.as_deref().is_some_and(|o| !self.is_its(p, o));
+        let other = all.iter().filter(theirs).find_map(|x| {
+            std::iter::once(&x.name).chain(&x.game).find(|m| nfsu2_names::letters(m) == l && c.holder(m, now) == x.owner).map(|m| (x, m))
+        });
+        (!l.is_empty()).then_some(other).flatten().map(|(x, m)| format!("reads as {} \"{m}\", that player's claimed name", vip_str(x.vip)))
     }
 
     /// `change #ban <races|full|for>`: a ban in force made another kind, or to last another time from now on
@@ -631,13 +717,18 @@ impl App {
         // the players on the switch it names: removed now (a full ban), or out of races with what it says now; one made
         // a full ban from a race ban was let race no more before it, so whoever it names now goes
         let all = self.lan.who().await;
-        let reached = self.reach(&all, &ban, now);
+        let (removed, out) = self.reach(&all, &ban, now);
         let what = |b: &Ban| format!("{} {}", b.kind.word(), how_long(b.until, now));
-        log::line(&format!("[ban] changed #{} \"{}\": {} (was {}); reached: {}", id, ban.name, what(&ban), what(&was), listed(&reached)));
+        log::line(&format!(
+            "[ban] changed #{} \"{}\": {} (was {}); {}",
+            id,
+            ban.name,
+            what(&ban),
+            what(&was),
+            reached_log(&removed, &out)
+        ));
         let mut t = vec![format!("#{id} \"{}\": {} (was {})", ban.name, what(&ban), what(&was))];
-        if !reached.is_empty() {
-            t.push(format!("{}: {}", if ban.kind == Kind::Races { "out of races now" } else { "removed" }, listed(&reached)));
-        }
+        t.extend(reached_lines(&removed, &out));
         Ok(t.join("\n"))
     }
 
@@ -664,34 +755,48 @@ impl App {
         Ok(t.join("\n"))
     }
 
-    /// the connections on the switch `ban` names now (`Bans::covers`): a full ban removes them, a race ban keeps them
-    /// out of races (its message: what it says now); the ones it reached
-    fn reach<'a>(&self, all: &'a [Who], ban: &Ban, now: i64) -> Vec<&'a Who> {
-        let m = Bytes::from(ban.message());
-        all.iter()
-            .filter(|x| x.left.is_none() && self.bans.covers(ban, &keys_of(&self.bans, x), now))
-            .filter(|x| match ban.kind {
-                Kind::Races => self.lan.set_races(x.vip, true, m.clone()),
-                _ => self.lan.expel(x.vip, m.clone(), CLOSE_BANNED),
-            })
-            .collect()
+    /// the connections on the switch `ban` names now (`Bans::covers`): a full ban removes the player's own, a race ban
+    /// and the address alone keep them out of races (its message: what it says now); the ones it removed, and the ones
+    /// it keeps out of races
+    fn reach<'a>(&self, all: &'a [Who], ban: &Ban, now: i64) -> (Vec<&'a Who>, Vec<&'a Who>) {
+        let (mut removed, mut out) = (Vec::new(), Vec::new());
+        for x in all.iter().filter(|x| x.left.is_none()) {
+            match self.bans.covers(ban, &keys_of(&self.bans, x), now) {
+                None => {}
+                Some(Match::Own) if ban.kind == Kind::Full => {
+                    if self.lan.expel(x.vip, Bytes::from(ban.message(Match::Own)), CLOSE_BANNED) {
+                        removed.push(x);
+                    }
+                }
+                Some(m) => {
+                    if self.lan.set_races(x.vip, true, Bytes::from(ban.message(m))) {
+                        out.push(x);
+                    }
+                }
+            }
+        }
+        (removed, out)
     }
 
-    /// The players on the switch the race bans in `lifted` named, that no race ban in force names: they race again
-    /// (their pages hear so).  Their names and addresses.
+    /// The players on the switch the bans in `lifted` kept out of races (a race ban, any ban by the address only),
+    /// that no ban in force names: they race again (their pages hear so).  Their names and addresses.
     async fn races_again(&self, lifted: &[Ban], now: i64) -> Vec<String> {
-        if !lifted.iter().any(|b| b.kind == Kind::Races) {
+        if lifted.is_empty() {
             return vec![];
         }
-        let left: Vec<Ban> = self.bans.list(now).into_iter().filter(|b| b.kind == Kind::Races).collect();
+        let left = self.bans.list(now);
         let m = Bytes::from(races_lifted_message());
         let all = self.lan.who().await;
         all.iter()
             .filter(|x| x.left.is_none())
             .filter(|x| {
                 let k = keys_of(&self.bans, x);
-                lifted.iter().any(|b| b.kind == Kind::Races && self.bans.covers(b, &k, now))
-                    && !left.iter().any(|b| self.bans.covers(b, &k, now))
+                let out = |b: &Ban| match self.bans.covers(b, &k, now) {
+                    Some(Match::Own) => b.kind == Kind::Races,
+                    Some(Match::Addr) => true,
+                    None => false,
+                };
+                lifted.iter().any(out) && !left.iter().any(|b| self.bans.covers(b, &k, now).is_some())
             })
             .filter(|x| self.lan.set_races(x.vip, false, m.clone()))
             .map(|x| format!("{} \"{}\"", vip_str(x.vip), x.name))

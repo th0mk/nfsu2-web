@@ -88,7 +88,11 @@ export class NameClaims {
       if (r.status === 404) { this.here = false; return null; }
       if (!r.ok) return null;
       this.here = true;
-      return await r.json() as NameInfo;
+      const info = await r.json() as NameInfo & { mine?: Mine & { blocked?: boolean } };
+      // (a claim on a name the operator took away from someone that reads the same: not played, and the next claim is
+      // a change of it)
+      if (info.mine?.blocked) delete info.mine;
+      return info;
     } catch { return null; }
   }
 

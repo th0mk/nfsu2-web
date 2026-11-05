@@ -625,6 +625,7 @@ static int bot_jump(uint32_t m, const char *what){
  * (msg hash, and the focused object's hash for button presses 0x0C407210) */
 void sub_00498f00(CPU *c);   /* EngageEventDialogFNGObject::MessageHandler */
 void sub_00499c00(CPU *c);   /* EngageRaceDialogFNGObject::MessageHandler */
+__attribute__((weak)) int roam_game_card_question(void);   /* roam_game.c (free roam's race lobbies) */
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
 static void trace_msg(CPU *c, const char *who){
     uint32_t m = MR32(c->esp + 4u), o = MR32(c->esp + 8u);
@@ -917,6 +918,9 @@ static void bot_tick(void){
     }
     /* overlays first: dialogs, and MC_Main.fng = the memory-card prompts
      * ("save the profile?", "Save complete.", "Load complete.") */
+    /* (free roam with others: the race card's Solo or Multiplayer question opens with Solo focused, on the right, so
+     * Left would race it with others: Enter alone takes Solo, the career's race; roam_game.c, none without it) */
+    if (roam_game_card_question && roam_game_card_question()){ bot_keys("R"); B.next = f + 30; return; }
     if (fe_each(fe_dialog, 0)){ bot_keys("LR"); B.next = f + 30; return; }
     if (career_fe_active("MC_Main.fng")){ bot_keys(B.save ? "LR" : "R"); B.next = f + 60; return; }
     if (!strcasecmp(top, "UI_EngageRaceDialog.fng") || !strcasecmp(top, "UI_EngageEventDialog.fng")){

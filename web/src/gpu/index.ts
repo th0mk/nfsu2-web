@@ -17,13 +17,17 @@ import { HostKind } from '../host/abi';
 import * as P from './proto';
 import { C, F } from './proto';
 import { Encoder } from './encoder';
-import type { FromPng, ToPng } from './png-worker';
-import { PH_ADD, PH_DONE, PH_NOW, PH_OFF, PLAIN_LOOK, PhotoPicture, type PhotoLook } from './photo-picture';
+import type { FromPng, ToPng, ToPngEnd, ToPngTile } from './png-worker';
+import { PH_ADD, PH_DONE, PH_NOW, PH_OFF, PLAIN_LOOK, PhotoPicture, type PhotoLook, type PhotoTile } from './photo-picture';
 export type { PhotoLook } from './photo-picture';
 
 /** how long photo() waits for a whole still picture before it keeps the picture as it is: the camera still moving
  *  (a key held: the frame as it is), or still adding up frames (a slow GPU and the most blur) */
 const PHOTO_MOVING_MS = 600, PHOTO_WAIT_MS = 8000;
+/** how long photo() waits for the game to say it saw the picture asked for (a module without GwPhoto's want: never) */
+const PHOTO_ECHO_MS = 1500;
+/** the most bytes a picture put together from tiles may take (RGBA): phones less */
+const TILES_BYTES = 160e6, TILES_BYTES_PHONE = 48e6;
 
 export interface RendererOptions {
   /** where frame dumps go: a URL prefix that accepts PUT <prefix><name>.png (the dev server's /artifacts/) */
@@ -232,7 +236,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   const [reg, vreg] = await Promise.all([untilExit(proc.registered(HostKind.Gpu)), untilExit(proc.registered(HostKind.Vsync))]).catch(giveUp);
   const mem = proc.memory;
   const i32 = () => new Int32Array(mem.buffer), u32 = () => new Uint32Array(mem.buffer);
-  const cw = reg.ptr >> 2;
+  const cw = reg.ptr >>> 2;   // (unsigned: the runtime's memory may be at 2 GB or more, runtime/guest_span.h)
   {
     const u = u32();
     if (u[cw + C.magic] !== P.GW_MAGIC || u[cw + C.layout] !== P.LAYOUT) {
@@ -256,7 +260,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   // pipelines of earlier sessions, created asynchronously as their shaders arrive
   const WARM_KEY = 'nfsu2.gpu.pipelines.v1';
   try { const j = localStorage.getItem(WARM_KEY); if (j) enc.loadWarm(JSON.parse(j)); } catch { /* storage off: no warm-up */ }
-  const vw = vreg.ptr >> 2, vf = vreg.ptr >> 3;
+  const vw = vreg.ptr >>> 2, vf = vreg.ptr >>> 3;
 
   // page -> game: view size, pixel ratio, features.  The view is the canvas element's box in device pixels (what
   // canvas.width/height are when the page sizes the canvas), kept apart from canvas.width/height, which follow the
@@ -291,7 +295,22 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   const dumpWaiters: { name: string; mark?: boolean; resolve: (b: Blob) => void }[] = [];
   // photo mode (photo-picture.ts): its picture, made at the first frame of photo mode; the look; photo() waiting
   let pic: PhotoPicture | null = null, look: PhotoLook = PLAIN_LOOK, picState = PH_OFF;
-  const photoWaiters: { name: string; mark?: boolean; since: number; resolve: (b: Blob) => void }[] = [];
+  // photo() asks the game for its picture (GwPhoto want: id, the most tiles a side this page puts together): the game
+  // says it saw it (tile's echo) and whether it takes it in tiles or over a shutter's time; last: when it last went on
+  const photoWaiters: { name: string; mark?: boolean; since: number; last: number; id: number; resolve: (b: Blob) => void }[] = [];
+  let wantSeq = 0, bbW = 0, bbH = 0, progSeen = -1;
+  // a picture being taken in tiles: each read out as it is whole and put in its place by the PNG worker (pic), then the
+  // whole made into the PNG; for a photo() waiting, or (tests: photo take) the artifacts as take_<id>
+  type Taking = { id: number; pic: number; n: number; w: number; h: number; got: Set<number>; posted: Promise<void>[];
+    crop: [number, number, number, number]; mark?: boolean; name: string; resolve?: (b: Blob) => void; ended: boolean };
+  let taking: Taking | null = null, bigNext = 1;
+  const phone = /iPhone|iPad|Android|Mobile/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  /** the most tiles a side this page puts together, for the back buffer's size */
+  const maxTiles = () => {
+    let n = phone ? 2 : 4;
+    while (n > 1 && n * n * bbW * bbH * 4 > (phone ? TILES_BYTES_PHONE : TILES_BYTES)) n--;
+    return bbW ? n : 1;
+  };
   const pending = new Set<Promise<unknown>>();
   const waitAsync = (Atomics as unknown as { waitAsync(a: Int32Array, i: number, v: number, t?: number):
     { async: boolean; value: Promise<string> | string } }).waitAsync;
@@ -495,12 +514,27 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     if (U[at] !== P.PHOTO_MAGIC || U[at + 1] === PH_OFF || U[at + 1] > PH_NOW) return null;
     return [U[at + 1], U[at + 2], U[at + 3], U[at + 4]];
   };
+  // ...its tile word (the tile drawn, tiles a side, what is being taken, the last picture asked for the game saw), the
+  // field of view it is drawn with and the lens
+  const photoMore = (b: number) => {
+    const U = u32(), at = U[cw + C.frame + b * (P.FRAME_BYTES >> 2) + F.k] + P.K_PHOTO, tw = U[(at + P.PHOTO_TILE) >>> 2];
+    return { tile: tw & 0xff, n: Math.max(1, tw >>> 8 & 0xf), mode: tw >>> 12 & 0xf, echo: tw >>> 16,
+      fov: new Float32Array(mem.buffer, at + P.PHOTO_FOV, 1)[0], lens: U[(at + P.PHOTO_LENS) >>> 2] };
+  };
   // ...and the frames of still picture gen the average has, back to the game in both buffers' blocks (GwPhoto ack)
   const photoAck = (gen: number, n: number) => {
     const U = u32();
     for (let s = 0; s < P.GW_NBUF; s++) {
       const k = U[cw + C.frame + s * (P.FRAME_BYTES >> 2) + F.k];
       if (k) Atomics.store(U, (k + P.K_PHOTO + P.PHOTO_ACK) >>> 2, ((gen & 0xffff) << 16 | (n & 0xffff)) >>> 0);
+    }
+  };
+  // ...a picture asked for, in both buffers' blocks (GwPhoto want)
+  const photoWant = (v: number) => {
+    const U = u32();
+    for (let s = 0; s < P.GW_NBUF; s++) {
+      const k = U[cw + C.frame + s * (P.FRAME_BYTES >> 2) + F.k];
+      if (k) Atomics.store(U, (k + P.K_PHOTO + P.PHOTO_WANT) >>> 2, v >>> 0);
     }
   };
   // the label of frame b's autotest dump, or null without one
@@ -518,9 +552,10 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     const cur = ctx.getCurrentTexture();
     sinceRaf++; winUnshownFrames++;
     if (t0 - winUnshownT > SUMMARY_MS) summary(t0);
-    const tone = toneOf(b), ph = photoOf(b);
+    const tone = toneOf(b), ph = photoOf(b), more = ph ? photoMore(b) : null;
     if (!ph && picState !== PH_OFF) { pic?.destroy(); pic = null; }           // photo mode ended: its textures go
     picState = ph ? ph[0] : PH_OFF;
+    const tileReads: { rb: Readback; t: Taking; x: number; y: number }[] = [];
     const st = enc.encodeFrame(b, ce, direct && !tone && !ph ? cur : undefined);
     burn?.(ce);
     const scr = enc.screen!;   // the canvas texture itself, or the back buffer
@@ -544,10 +579,26 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       const rect: [number, number, number, number] = [Math.floor((cvw - w) / 2), Math.floor((cvh - h) / 2), w, h];
       imgRect = { x: rect[0], y: rect[1], w, h };
       if (ph) {
-        // photo mode: the frame into the picture's average, which shows with the picture's look
+        // photo mode: the frame into the picture's average, which shows with the picture's look (a fisheye bent round);
+        // while a picture is taken in tiles the canvas keeps the whole view as it was, and each tile once whole is read
+        // out for the PNG worker
         pic ??= new PhotoPicture(device);
+        bbW = scr.width; bbH = scr.height;
+        pic.fisheye = more!.lens === P.LENS_FISHEYE && more!.fov > 0 ? { fov: more!.fov, aspect: scr.width / scr.height } : null;
+        const tiles = more!.mode === P.CAP_TILES;
+        if (tiles && !pic.holding) pic.hold(ce);
+        else if (!tiles && pic.holding) pic.release();
         pic.add(ce, enc.screenView!, scr.width, scr.height, linear, ph[0], ph[1], ph[2], ph[3]);
         if (pic.gen) photoAck(pic.gen, pic.count);
+        if (tiles) {
+          if (!taking || taking.id !== more!.echo) taking = takeTiles(more!.echo, more!.n, scr.width, scr.height);
+          const t = taking, tl: PhotoTile = { x: more!.tile % t.n, y: Math.floor(more!.tile / t.n), n: t.n };
+          if (pic.done && ph[3] === pic.gen && !t.got.has(more!.tile)) {
+            t.got.add(more!.tile);
+            const sh = pic.shot(ce, linear, look, tl);
+            if (sh) tileReads.push({ rb: copyOut(ce, sh.tex), t, x: tl.x * t.w, y: tl.y * t.h });
+          }
+        }
         pic.show(ce, cur.createView(), canvasFormat, one ? nearest : linear, rect, look, tone, tsEnd);
       }
       // the back buffer's own view: its bind group is made once (Encoder.copyBg), not every frame
@@ -564,10 +615,26 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     const dumpName = lab === null ? null : `nfsu2_g${String(U[fw + F.dumpFrame]).padStart(6, '0')}_${lab}`;
     // photo mode's picture: the first frame with the whole still picture (or one past PHOTO_WAIT_MS) keeps it, and the
     // autotest's dumps get it as kept (photo() with photo mode off: dump()'s, the next frame)
+    // a picture asked for: once the game saw it (its echo; a module that never says: after PHOTO_ECHO_MS), taken in tiles
+    // (taking has it), over a shutter's time (waits while it goes on), or the still picture as it is
     if (!ph) dumpWaiters.push(...photoWaiters.splice(0));
-    const waited = photoWaiters.length ? t0 - photoWaiters[0].since : 0;
-    const pw = ph && photoWaiters.length && (pic!.done || (ph[0] !== PH_ADD && ph[0] !== PH_DONE && waited > PHOTO_MOVING_MS) ||
-      waited > PHOTO_WAIT_MS) ? photoWaiters.shift() : undefined;
+    const w0 = photoWaiters[0], seen = !!w0 && !!more && more.echo === w0.id;
+    if (w0 && seen && more!.mode !== P.CAP_NONE) {
+      const prog = pic ? pic.gen * 0x10000 + pic.count : 0;
+      if (prog !== progSeen) { progSeen = prog; w0.last = t0; }
+      if (more!.mode === P.CAP_TILES && taking?.id === w0.id && !taking.resolve) {
+        photoWaiters.shift(); taking.name = w0.name; taking.mark = w0.mark; taking.resolve = w0.resolve;
+      }
+    }
+    // (over a shutter's time: kept the moment its last frame is in, before the world as the shutter left it replaces it)
+    const waiting = !!w0 && !!more && seen && (more.mode === P.CAP_TILES || (more.mode === P.CAP_SHUTTER && !pic?.done));
+    const waited = w0 ? t0 - w0.last : 0;
+    const pw = ph && w0 && !waiting && (seen || t0 - w0.since > PHOTO_ECHO_MS) &&
+      (pic!.done || (ph[0] !== PH_ADD && ph[0] !== PH_DONE && waited > PHOTO_MOVING_MS) || waited > PHOTO_WAIT_MS) ? photoWaiters.shift() : undefined;
+    if (w0 && waiting && waited > PHOTO_WAIT_MS * 4) {
+      log(`[gpu] photo mode's picture: the game took more than ${PHOTO_WAIT_MS * 4 / 1000} s without going on: kept as it is`);
+      photoWaiters.shift(); dumpWaiters.push(w0);
+    }
     const shot = ph && (pw || dumpName) ? pic!.shot(ce, linear, look) : null;
     if (pw && !pic!.done) log(`[gpu] photo mode's picture kept as it is (${pic!.count} of ${pic!.target} frames)`);
     const waiter = pw ?? dumpWaiters.shift();
@@ -583,6 +650,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     const rbRead = rbTex ? copyOut(ce, rbTex) : null;
     device.queue.submit([ce.finish()]);
     enc.afterSubmit();
+    for (const r of tileReads) tileOut(r.rb, r.t, r.x, r.y);
     // tests (play.html pixelated=dump): an autotest dump labelled <name>_px is the frame as the game set it, and the
     // same frame drawn again into the back buffer with pixelated textures is <name>_px1: the same moment in both looks
     // (the next frame would not be, and the game replaces a frame the page is slow to take).  Drawn after the submit
@@ -652,6 +720,44 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     }
   };
 
+  // a picture in tiles: begun when the game starts drawing them (the crop's rectangle of the whole picture, from the
+  // look), each tile to the worker as it is read back, the PNG once all n x n are there
+  const takeTiles = (id: number, n: number, w: number, h: number): Taking => {
+    const W = w * n, H = h * n, c = look.crop;
+    const x = Math.max(0, Math.min(W - 1, Math.round(c[0] * W))), y = Math.max(0, Math.min(H - 1, Math.round(c[1] * H)));
+    const cw2 = Math.max(1, Math.min(W - x, Math.round((c[2] - c[0]) * W))), ch2 = Math.max(1, Math.min(H - y, Math.round((c[3] - c[1]) * H)));
+    log(`[gpu] photo mode's picture in ${n} x ${n} tiles: ${W}x${H}${cw2 !== W || ch2 !== H ? `, cropped to ${cw2}x${ch2}` : ''}`);
+    return { id, pic: bigNext++, n, w, h, got: new Set(), posted: [], crop: [x, y, cw2, ch2], name: `take_${id}`, ended: false };
+  };
+  const tileOut = (rb: Readback, t: Taking, x: number, y: number) => {
+    const job = (async () => {
+      await rb.buf.mapAsync(GPUMapMode.READ);
+      const px = rb.buf.getMappedRange().slice(0);
+      rb.buf.unmap(); rb.buf.destroy();
+      const msg: ToPngTile = { tile: true, pic: t.pic, px, w: rb.w, h: rb.h, bpr: rb.bpr, x, y, W: t.w * t.n, H: t.h * t.n };
+      pngWorkerOf().postMessage(msg, [px]);
+    })();
+    t.posted.push(job);
+    pending.add(job); job.finally(() => pending.delete(job));
+    if (t.got.size === t.n * t.n && !t.ended) {
+      t.ended = true;
+      const done = Promise.all(t.posted).then(() => new Promise<Blob>((resolve, reject) => {
+        const id = pngNext++, msg: ToPngEnd = { end: true, id, pic: t.pic, crop: t.crop, mark: t.mark };
+        pngWaiting.set(id, { resolve, reject });
+        pngWorkerOf().postMessage(msg);
+      })).then(async png => {
+        log(`[gpu] photo mode's picture from ${t.n} x ${t.n} tiles: ${t.crop[2]}x${t.crop[3]}, ${png.size} bytes`);
+        if (t.resolve) t.resolve(png);
+        else if (opts.artifacts) {
+          const res = await fetch(`${opts.artifacts}${t.name}.png`, { method: 'PUT', body: png });
+          log(`[gpu] dump ${t.name}.png ${t.crop[2]}x${t.crop[3]}${res.ok ? ` -> ${opts.artifacts}${t.name}.png` : ` (upload failed: ${res.status})`}`);
+        }
+      }).catch(x => { log(`[gpu] photo mode's picture in tiles failed: ${x}`); t.resolve?.(new Blob([], { type: 'image/png' })); })
+        .finally(() => { if (taking === t) taking = null; });
+      pending.add(done); done.finally(() => pending.delete(done));
+    }
+  };
+
   type Readback = { buf: GPUBuffer; w: number; h: number; bpr: number };
   const copyOut = (ce: GPUCommandEncoder, t: GPUTexture, r?: { x: number; y: number; w: number; h: number }): Readback => {
     const x = r?.x ?? 0, y = r?.y ?? 0, w = r?.w ?? t.width, h = r?.h ?? t.height;
@@ -687,10 +793,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   // the PNG is made in a worker (png-worker.ts), started at the first dump: here the frame is only copied out
   let pngWorker: Worker | null = null, pngNext = 0;
   const pngWaiting = new Map<number, { resolve: (b: Blob) => void; reject: (e: Error) => void }>();
-  async function readback(rb: Readback, mark?: boolean): Promise<Blob> {
-    await rb.buf.mapAsync(GPUMapMode.READ);
-    const px = rb.buf.getMappedRange().slice(0);
-    rb.buf.unmap(); rb.buf.destroy();
+  function pngWorkerOf(): Worker {
     if (!pngWorker) {
       const w = pngWorker = new Worker(new URL('/gpu/png-worker.js', import.meta.url), { type: 'module', name: 'png' });
       w.onmessage = (e: MessageEvent<FromPng>) => {
@@ -700,10 +803,16 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       };
       w.onerror = e => { for (const p of pngWaiting.values()) p.reject(new Error(e.message || 'the PNG worker failed')); pngWaiting.clear(); };
     }
-    const id = pngNext++, msg: ToPng = { id, px, w: rb.w, h: rb.h, bpr: rb.bpr, scale: opts.dumpScale ?? 1, mark };
+    return pngWorker;
+  }
+  async function readback(rb: Readback, mark?: boolean): Promise<Blob> {
+    await rb.buf.mapAsync(GPUMapMode.READ);
+    const px = rb.buf.getMappedRange().slice(0);
+    rb.buf.unmap(); rb.buf.destroy();
+    const w = pngWorkerOf(), id = pngNext++, msg: ToPng = { id, px, w: rb.w, h: rb.h, bpr: rb.bpr, scale: opts.dumpScale ?? 1, mark };
     return new Promise((resolve, reject) => {
       pngWaiting.set(id, { resolve, reject });
-      pngWorker!.postMessage(msg, [px]);
+      w.postMessage(msg, [px]);
     });
   }
 
@@ -806,11 +915,20 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     doneMs: () => { const d = done; done = []; return d; },
     dump: (name: string, mark?: boolean) => new Promise<Blob>(resolve => dumpWaiters.push({ name, mark, resolve })),
     photo: (name: string, mark?: boolean) => new Promise<Blob>(resolve => {
-      if (picState !== PH_OFF) photoWaiters.push({ name, mark, since: performance.now(), resolve });
-      else dumpWaiters.push({ name, mark, resolve });
+      if (picState === PH_OFF) { dumpWaiters.push({ name, mark, resolve }); return; }
+      wantSeq = wantSeq % 0x7fff + 1;                // (the game's own asks, for tests, are 0x8000 on)
+      photoWant(wantSeq | maxTiles() << 16);
+      const now = performance.now();
+      photoWaiters.push({ name, mark, since: now, last: now, id: wantSeq, resolve });
     }),
     photoLook: (l: PhotoLook) => { look = l; },
-    photoProgress: () => (picState === PH_OFF || !pic ? { n: 0, target: 0 } : { n: pic.count, target: picState === PH_ADD || picState === PH_DONE ? pic.target : 0 }),
+    photoProgress: () => {
+      if (picState === PH_OFF || !pic) return { n: 0, target: 0 };
+      const target = picState === PH_ADD || picState === PH_DONE ? pic.target : 0, t = taking;
+      // a picture in tiles: the tiles read out and this one's frames, of all of them
+      if (t && target) return { n: Math.min(t.got.size * target + (t.got.size < t.n * t.n ? pic.count : 0), t.n * t.n * target), target: t.n * t.n * target };
+      return { n: pic.count, target };
+    },
     imageRect:() => imgRect ?? { x: 0, y: 0, w: canvas.width, h: canvas.height },
     flush: async () => {
       while (pending.size) await Promise.allSettled([...pending]);
@@ -826,6 +944,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       Atomics.store(I, cw + C.attached, P.DETACHED);
       for (const w of [C.attached, C.state, C.rqTail, C.bell]) Atomics.notify(I, cw + w);
       for (const d of [...dumpWaiters.splice(0), ...photoWaiters.splice(0)]) d.resolve(new Blob([], { type: 'image/png' }));
+      taking?.resolve?.(new Blob([], { type: 'image/png' })); taking = null;
       pic?.destroy(); pic = null;
       // a PNG the worker is making still comes (a screenshot taken just before the game ended)
       void Promise.allSettled([...pending]).then(() => pngWorker?.terminate());

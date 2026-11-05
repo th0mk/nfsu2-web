@@ -11,8 +11,8 @@
 //!   its car is), a BYE when it stops.
 //! - hub -> player: twice a second (`tick_ms`) a PEERS message: the players linked to it, { virtual address, port, id }, at most
 //!   its degree: what its HELLO asks for (roam_core version 10: the friends' cars its game shows, its "Players' cars shown"),
-//!   `degree` (48: roam_core's group of 49 with itself) at most; 32 for a core before version 10, which reads no longer
-//!   list; an empty one says the hub is there.  To a player in a crew the list ends in
+//!   `degree` (64: roam_core's group of 65 with itself) at most; 48 at most for a core of versions 10 to 13 and 32 for one
+//!   before, which read no longer lists; an empty one says the hub is there.  To a player in a crew the list ends in
 //!   crew marks: its own crews, then which of them each listed player is in.
 //! - player -> hub -> player: when its world map opens, and a quarter second after each answer while it is open, a
 //!   MAPREQ naming the answer it holds; the hub answers with MAPD datagrams (at most 16, 48 to a page that takes
@@ -75,15 +75,17 @@
 //! tick (of its CPU quota: of the last `QUOTA_WINDOW`) the cap on the links goes down by a quarter, at most every
 //! `cap_down_ms`, to `min_degree` at the least; once it has room again (under `busy_low`) the cap goes back up by 2
 //! every `cap_up_ms`.  The nearest links stay.  While
-//! the cap is under `ask_cap` (24) free roam counts as busy (the server's /players roamBusy): the start page does not
-//! ask its question (Free roam with others?) at a Play then, so fewer new players join a crowd that already gets fewer
-//! cars; it asks at a later Play once the cap is back.  /players also says how many drive in free roam, or are paused
+//! the cap is under `ask_cap` (24) free roam counts as busy (the server's /players roamBusy): until 2026-11-05 the start
+//! page did not ask its question (Free roam with others?) at a Play then, so fewer new players joined a crowd that
+//! already got fewer cars (free roam is on by default since).  /players also says how many drive in free roam, or are paused
 //! there (`in_roam()`, counted at each tick).
 //!
 //! The hub also watches how each player's car moves (watch.rs): a teleport, a car faster than any of the game's, or a
 //! game whose clock runs fast (a speed hack) is a `[cheat]` line with the player's address and name, and who was
 //! next to where its car came to.  And it judges each race lobby's race by its racers' results (results.rs): a win
-//! no car makes is a `[cheat]` line too.  Lines only: the operator decides (`nfsu2-server ctl kick|ban`).
+//! no car makes is a `[cheat]` line too (the races' clean wins it goes by are by two clients' games at least: a
+//! frame's client is its site, an IPv6 /48, or else its address, `FrameCtx::site` and `group`).  Lines only: the
+//! operator decides (`nfsu2-server ctl kick|ban`).
 //!
 //! A claimed name (nfsu2-claims) is its keyphrase's only: a player whose HELLO names one that another keyphrase
 //! claimed (its page's hello to the switch named the keyphrase it plays with: `FrameCtx::owner`) gets no links, is on
@@ -101,7 +103,14 @@
 //! status, name and last position (and what its watch counted), and per browser the names it blocks; gone `gone_ms`
 //! after its last message, when it says BYE, or when it leaves the switch.  Reading positions is what choosing by
 //! distance costs: the switch itself never looks inside a frame.  At
-//! most `max_per_vip` endpoints per virtual address (a browser has one), and `max_players` in all.
+//! most `max_per_vip` endpoints per virtual address (a browser has one, two in co-op), and `max_players` in all.
+//!
+//! Co-op free roam: a browser's second local player (player 2 beside player 1 on one screen) is a second endpoint of
+//! its browser, on a port of its own (player 1's + 1), its HELLO flagged (wire::HF_SEAT2), its name the second form of
+//! player 1's ("Alex 2": nfsu2-claims `second`, its claim's owner's).  Every other player sees it as one more player;
+//! the hub never links two endpoints of one browser (nor shows one on the other's maps: the game shows its own cars),
+//! answers the maps of the browser's first player only, marks the second as nobody's friend, tells it apart on the
+//! console and lets its car come to the first one's side without a teleport (hub.rs `Player::seat2`).
 //!
 //! - [`Hub`]: the hub's logic, single-threaded, with the clock, the busy measure and the sending given to it (the
 //!   tests drive it by its `frame()`, `tick()` and `info()`)
@@ -148,14 +157,26 @@ pub const CREWS: usize = wire::CREWS;
 /// 0.5 s).  A value that is not a positive number keeps its default.
 #[derive(Clone, Debug)]
 pub struct RoamOptions {
-    /// the most links a player has (what its HELLO asks for under it; 32 at most for a core before version 10)
+    /// the most links a player has (what its HELLO asks for under it; 48 at most for a core of versions 10 to 13, 32 for
+    /// one before)
     pub degree: usize,
     pub tick_ms: u64,
     pub stale_ms: f64,
     pub gone_ms: f64,
     pub keep: f64,
     pub hold_ms: f64,
+    /// The endpoints of one browser (virtual address) at most, 3: co-op free roam's two local players (the second on a
+    /// port of its own, its HELLO flagged: hub.rs `Player::seat2`), and one more for a game started again while its
+    /// last start's endpoint lingers (until `gone_ms`).  A browser's endpoints are never linked with each other.
     pub max_per_vip: usize,
+    /// The players (endpoints) on the hub at most, 15360: of the switch's 16000 places (nfsu2-lan `ADDRS`, one browser
+    /// each) some two in five are in free roam at once (nfsu2.xyz, 2026-11-05: 4,968 of 13,163), a tenth of those in
+    /// co-op (desktop pages only), each with its second player an endpoint more (a restart's lingering endpoint is one
+    /// too, for a few seconds).  At most 16384 (hub.rs SLOTS_MAX: a world
+    /// map's key names a slot under it), and that far under it that a full hub's new player purges the slots of the
+    /// ones gone at most once in 1024 (else an eighth of the players, as before).  What grows with it: a player's
+    /// slot (some 1.5 KB with its links), the kept watches (one each at most), the tick (each link; a second player
+    /// asks for few, its first one fewer: their page's two together, as many as one player's).
     pub max_players: usize,
     pub exact_room: usize,
     pub min_degree: usize,
@@ -175,6 +196,21 @@ pub struct RoamOptions {
     /// a player's view point, this far ahead of where its car points (m): a car in front counts from there too, so it
     /// is linked from farther away than one beside or behind
     pub view_m: f64,
+    /// one-way links (a core of version 15 and up: `wire::CORE_ONEWAY`): a player sends its car to this many players
+    /// at most (its links if more), so that a player who shows more cars than the players round it gets theirs.  A
+    /// game sends a car state once whatever the receivers (the page's bundles name them, web/src/net TxBundle): a
+    /// phone's upload grows by 4 bytes a receiver, the server makes the copies.  Under the busy cap, its links.
+    pub sends: usize,
+    /// one-way links among players this near (m, where they are now): by that distance, before any farther (the
+    /// distances on and from the view point move with every turn and donut of a car at a meet, and changed which of
+    /// the cars round a player it got every few seconds), and one younger than near_hold_ms first, as one younger than
+    /// hold_ms is: a car that comes near stays that long while it is
+    pub near_m: f64,
+    pub near_hold_ms: f64,
+    /// ...for a player slower than this (m/s: parked, about to park, a donut, cruising round a meet): a driver at
+    /// speed gets its cars as before, the ones it heads for first (with near ones first, a crowd's drivers had fewer
+    /// of the cars ahead of them, tests/popin.rs "crowd")
+    pub near_fast: f64,
     /// a gap in height between two players that no road explains (a highway over a street, a tunnel under a hill):
     /// up to level_slack_m (m) plus level_grade of the way across (a hill, a ramp, a jump) it counts as it is, and
     /// each metre past that counts level_k metres more.  Two cars on one road weigh as before, one on a road above or
@@ -202,14 +238,14 @@ pub struct RoamOptions {
 impl Default for RoamOptions {
     fn default() -> Self {
         RoamOptions {
-            degree: 48,
+            degree: 64,
             tick_ms: 500,
             stale_ms: 60_000.0,
             gone_ms: 6_000.0,
             keep: 0.5,
             hold_ms: 5_000.0,
-            max_per_vip: 2,
-            max_players: 14336,
+            max_per_vip: 3,
+            max_players: 15360,
             exact_room: 256,
             min_degree: 8,
             busy_high: 0.85,
@@ -221,6 +257,10 @@ impl Default for RoamOptions {
             look_ms: 4_000.0,
             away_m: 100.0,
             view_m: 150.0,
+            sends: 64,
+            near_m: 60.0,
+            near_hold_ms: 30_000.0,
+            near_fast: 15.0,
             level_slack_m: 5.0,
             level_grade: 0.2,
             level_k: 25.0,
@@ -260,8 +300,8 @@ pub struct PeerEntry {
 
 /// What the switch posts to the hub's thread, in order.
 enum Cmd {
-    /// a frame from a browser, and the keyphrase its page plays with
-    Frame(u32, Bytes, Option<Arc<str>>),
+    /// a frame from a browser, the keyphrase its page plays with, and its client (`Hub::frame_of`)
+    Frame(u32, Bytes, Option<Arc<str>>, Arc<str>),
     Gone(u32),
     Attach(SwitchSend),
     Info(oneshot::Sender<serde_json::Value>),
@@ -300,6 +340,8 @@ pub struct RoamHub {
     in_roam: Arc<AtomicUsize>,
     in_rooms: Arc<Mutex<HashMap<u32, usize>>>,
     in_crews: Arc<Mutex<Vec<(u32, u32)>>>,
+    /// the hub's `coop_seats()` after its last tick, for the server's `[players]` lines
+    coop_seats: Arc<AtomicUsize>,
 }
 
 impl RoamHub {
@@ -335,12 +377,14 @@ impl RoamHub {
         let in_roam = Arc::new(AtomicUsize::new(0));
         let in_rooms = Arc::new(Mutex::new(HashMap::new()));
         let in_crews = Arc::new(Mutex::new(Vec::new()));
+        let coop_seats = Arc::new(AtomicUsize::new(0));
         let (busy_now, roam_now, rooms_now, crews_now) = (crowded.clone(), in_roam.clone(), in_rooms.clone(), in_crews.clone());
+        let coop_now = coop_seats.clone();
         std::thread::Builder::new()
             .name("roam-hub".into())
-            .spawn(move || run(hub, rx, &waiting, &busy_now, &roam_now, &rooms_now, &crews_now))
+            .spawn(move || run(hub, rx, &waiting, &busy_now, &roam_now, &rooms_now, &crews_now, &coop_now))
             .expect("a thread for the free-roam hub");
-        Arc::new(RoamHub { tx, pending, crowded, in_roam, in_rooms, in_crews })
+        Arc::new(RoamHub { tx, pending, crowded, in_roam, in_rooms, in_crews, coop_seats })
     }
 
     /// the hub's `crowded()`: free roam is busy, the cap is under `ask_cap` (as of the hub's last tick)
@@ -364,6 +408,12 @@ impl RoamHub {
     pub fn in_crews(&self, crews: &[u32]) -> Vec<usize> {
         let counts = self.in_crews.lock();
         crews.iter().map(|&c| counts.as_ref().map_or(0, |t| hub::crew_count(t, c))).collect()
+    }
+
+    /// the hub's `coop_seats()`: how many second players of co-op free roam drive there, or are paused there (as of the
+    /// hub's last tick)
+    pub fn coop_seats(&self) -> usize {
+        self.coop_seats.load(Ordering::Relaxed)
     }
 
     /// the switch's way to its browsers
@@ -411,6 +461,7 @@ fn guard(f: impl FnOnce()) {
 
 /// The hub's thread: what the switch posts, in order, and a tick every tick_ms (the next one a tick_ms after this
 /// one began).  It ends once the RoamHub is gone.
+#[allow(clippy::too_many_arguments)]
 fn run(
     mut hub: Hub,
     rx: mpsc::Receiver<Cmd>,
@@ -419,6 +470,7 @@ fn run(
     in_roam: &AtomicUsize,
     in_rooms: &Mutex<HashMap<u32, usize>>,
     in_crews: &Mutex<Vec<(u32, u32)>>,
+    coop_seats: &AtomicUsize,
 ) {
     let every = Duration::from_millis(hub.options().tick_ms);
     let mut next = Some(Instant::now() + every);
@@ -439,6 +491,7 @@ fn run(
                     work += now.elapsed();
                     crowded.store(hub.crowded(), Ordering::Relaxed);
                     in_roam.store(hub.in_roam(), Ordering::Relaxed);
+                    coop_seats.store(hub.coop_seats(), Ordering::Relaxed);
                     let rooms = hub.in_rooms();
                     if let Ok(mut m) = in_rooms.lock() {
                         *m = rooms;
@@ -462,10 +515,10 @@ fn run(
             },
         };
         match cmd {
-            Cmd::Frame(from, data, owner) => {
+            Cmd::Frame(from, data, owner, client) => {
                 pending.fetch_sub(1, Ordering::Relaxed);
                 let t0 = Instant::now();
-                guard(|| hub.frame_from(from, &data, owner.as_ref()));
+                guard(|| hub.frame_of(from, &data, owner.as_ref(), Some(&client)));
                 work += t0.elapsed();
             }
             Cmd::Gone(vip) => guard(|| hub.peer_gone(vip)),
@@ -514,13 +567,14 @@ impl Host for RoamHub {
         false
     }
     fn frame(&self, from: u32, data: Bytes, ctx: FrameCtx) {
-        // the hub's lists are charged to nobody; the owner is for the claimed names
-        let owner = ctx.owner;
+        // the hub's lists are charged to nobody; the owner is for the claimed names; the client, its site (an IPv6
+        // /48) or else its address, for the races' clean wins (results.rs: one address's endpoints are one client)
+        let (owner, client) = (ctx.owner, ctx.site.unwrap_or(ctx.group));
         if self.pending.fetch_add(1, Ordering::Relaxed) >= MAX_PENDING {
             self.pending.fetch_sub(1, Ordering::Relaxed);
             return;
         }
-        if self.tx.send(Cmd::Frame(from, data, owner)).is_err() {
+        if self.tx.send(Cmd::Frame(from, data, owner, client)).is_err() {
             self.pending.fetch_sub(1, Ordering::Relaxed);
         }
     }
@@ -574,6 +628,7 @@ mod tests {
             in_roam: Arc::new(AtomicUsize::new(0)),
             in_rooms: Arc::new(Mutex::new(HashMap::new())),
             in_crews: Arc::new(Mutex::new(Vec::new())),
+            coop_seats: Arc::new(AtomicUsize::new(0)),
         };
         let ctx = FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None, no_races: false };
         for _ in 0..100_000 {
@@ -609,7 +664,7 @@ mod tests {
         let (pending, crowded) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicBool::new(false)));
         let c = crowded.clone();
         let t = std::thread::spawn(move || {
-            run(hub, rx, &pending, &c, &AtomicUsize::new(0), &Mutex::new(HashMap::new()), &Mutex::new(Vec::new()))
+            run(hub, rx, &pending, &c, &AtomicUsize::new(0), &Mutex::new(HashMap::new()), &Mutex::new(Vec::new()), &AtomicUsize::new(0))
         });
         let until = |want: bool| {
             let t0 = Instant::now();

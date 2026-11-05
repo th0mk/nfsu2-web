@@ -1,0 +1,22 @@
+# Co-op free roam: player 2's controller pauses (START) and works the pause menu (Down moves the cursor there, B
+# resumes); player 1's keyboard pauses as before.
+0     roam fe2roam 14000
++0    roam smsauto on
++120  localpad 1 connect 1
++30   roam coop join pad 0
++0    waitmem 0xd00030 2 1200
++150  expect i:0xd00030 == 2
++0    localpad 1 START 1
++10   localpad 1 START 0
++60   fnglist
++0    waitfe UI_pause.fng 300
++30   localpad 1 B 1
++10   localpad 1 B 0
++90   fnglist
++0    status coop_pause_p2
++0    tap ESCAPE
++60   waitfe UI_pause.fng 300
++30   tap ESCAPE
++90   fnglist
++0    status coop_pause_complete
++10   quit

@@ -19,6 +19,7 @@
 //                    (the game and the page's own overlays) as <out>/<instance>-<name>.png; `log SHOT clean_<name>`
 //                    without the race lobby's panel (tests/scripts/mprace_shots_a/b.txt); `log MENU <item>` opens
 //                    the page menu (F9), clicks that item (its data-act, e.g. solid) and goes back to the game;
+//                    `log PRESS <selector>` clicks there with the mouse (photo mode's tabs: tests/scripts/photo_panel_a.txt);
 //                    `log KEY <code> ...` presses those keys on the page as the player does (KeyboardEvent.code: the
 //                    script's own keys reach only the game, never the page), `log STICK <x> <y>` moves the right
 //                    stick there for the page and `log CLICK` presses it in (quick chat's picker:
@@ -139,7 +140,7 @@ const FINGER = ['TAP', 'HOLD', 'SCROLL'];
 for (const [name, script] of SPECS) {
   let txt = '';
   try { txt = fs.readFileSync(path.join(REPO, 'tests/scripts', script), 'utf8'); } catch { continue; }
-  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CLICK|CREW|FRIENDS|INVITE(?:-NO)?|RENAME|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
+  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CLICK|CREW|FRIENDS|INVITE(?:-NO)?|RENAME|PRESS|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
     .filter(c => !APP || (FINGER.includes(c) && !TOUCH));
   if (app.length) console.log(`roam-pair: warning: ${name}'s ${script} has log ${app.join(', ')}, which only --page app${app.some(c => FINGER.includes(c)) ? ' --touch' : ''} does`);
 }
@@ -250,6 +251,9 @@ async function start(i, name, script, own) {
     // the right stick pressed in, as the page reads it (quick chat's picker), at a script's `log CLICK`
     if (APP && /LOG CLICK\b/.test(m.text())) void page.evaluate(() => window.__nfsu2.quickChatClick())
       .then(r => w(`[click] ${r ? 'the picker' : 'not used'}`), e => w(`[click] failed: ${e}`));
+    // a click on the page (the mouse), at a script's `log PRESS <selector>` (photo mode's tabs: tests/scripts/photo_panel_a.txt)
+    const pk = APP && /LOG PRESS (.+)$/.exec(m.text());
+    if (pk) void page.click(pk[1].trim(), { timeout: 5000 }).then(() => w(`[press] ${pk[1].trim()}`), e => w(`[press] ${pk[1]} failed: ${e}`));
     // a finger's tap on the page (--touch), at a script's `log TAP <selector>`
     const tk = APP && TOUCH && /LOG TAP (.+)$/.exec(m.text());
     if (tk) void page.tap(tk[1].trim(), { timeout: 5000 }).then(() => w(`[tap] ${tk[1].trim()}`), e => w(`[tap] ${tk[1]} failed: ${e}`));

@@ -18,7 +18,7 @@ const val = (e) => Function(...Object.keys(num), `return (${e.replace(/(\d+|0x[0
 for (const m of H.matchAll(/^#define\s+(NET_\w+)\s+(.+?)\s*(?:\/\*.*)?$/gm)) num[m[1]] = val(m[2]) >>> 0;
 
 test('constants', () => {
-  assert.equal(Object.keys(num).length, 42, 'header parsed');
+  assert.equal(Object.keys(num).length, 43, 'header parsed');
   for (const [k, v] of Object.entries(num)) {
     if (!(k in P)) continue;
     assert.equal(P[k] >>> 0, v, k);
@@ -26,7 +26,7 @@ test('constants', () => {
   for (const k of ['NET_MAGIC', 'NET_VERSION', 'NET_HDR_BYTES', 'NET_SLOT_BYTES', 'NET_SLOT_HDR', 'NET_MAX_PAYLOAD', 'NET_TX_SLOTS',
     'NET_RX_SLOTS', 'NET_MAILBOX_BYTES', 'NET_KIND_UDP', 'NET_KIND_UDP_LOOP', 'NET_BROADCAST', 'NET_MODE_CLOSED', 'NET_MODE_VLAN',
     'NET_MODE_LOOP', 'NET_PAGE_NONE', 'NET_PAGE_CONNECTING', 'NET_PAGE_ONLINE', 'NET_PAGE_OFFLINE', 'NET_KIND_LAN_UDP',
-    'NET_KIND_LAN_TCP', 'NET_KIND_LAN_ICMP', 'NET_KIND_NOTICE', 'NET_KIND_LOBBY', 'NET_KIND_SAY', 'NET_KIND_FRIEND', 'NET_KIND_FLYING', 'NET_KIND_BATTLE', 'NET_LAN_HDR', 'NET_LAN_TCP_SYN', 'NET_LAN_TCP_RST', 'NET_LAN_TCP_GONE', 'NET_MODE_LAN', 'NET_ROAM_HUB',
+    'NET_KIND_LAN_TCP', 'NET_KIND_LAN_ICMP', 'NET_KIND_NOTICE', 'NET_KIND_LOBBY', 'NET_KIND_SAY', 'NET_KIND_FRIEND', 'NET_KIND_FLYING', 'NET_KIND_BATTLE', 'NET_KIND_COOP', 'NET_LAN_HDR', 'NET_LAN_TCP_SYN', 'NET_LAN_TCP_RST', 'NET_LAN_TCP_GONE', 'NET_MODE_LAN', 'NET_ROAM_HUB',
     'NET_PAGE_IDLE', 'NET_PEER_BITS', 'NET_UDP_PORTS_SET'])
     assert.ok(k in P && k in num, `${k} on both sides`);
 });

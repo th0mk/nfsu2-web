@@ -53,6 +53,15 @@
  * A SNAP carries one state here, not three (rc_config.snap_states): the
  * WebSocket loses nothing, so the older two only doubled the traffic.
  *
+ * Co-op free roam (coop.c): player 2 is a second endpoint of this browser on
+ * the same switch connection, a session of its own on a port of its own
+ * (roam_plat_start2: player 1's port + 1), with the same virtual address.  The
+ * network thread feeds each datagram to the session of its destination port
+ * and ticks both; each sends from its own port.  The two never talk to each
+ * other: a datagram from our own address (another endpoint of this browser:
+ * an older hub links them, a restart's old endpoint lingers) is dropped, so
+ * neither ever takes the other as a peer, and the notices are player 1's.
+ *
  * The clock is CLOCK_MONOTONIC, which the host takes from
  * performance.timeOrigin + performance.now(): one clock in every worker of
  * the page (and comparable between pages of one browser).  Random numbers come
@@ -76,11 +85,16 @@ static atomic_int      g_stop;
 static pthread_mutex_t g_mu = PTHREAD_MUTEX_INITIALIZER;
 static rc_session     *g_s;
 static roam_plat_cfg   g_cfg;
+/* each session's own port, for its sends (rc_io.user); player 2's session (co-op), its port (0: none) */
+typedef struct { uint16_t port; } io_ep;
+static io_ep           g_ep1, g_ep2;
+static rc_session     *g_s2;
+static uint16_t        g_port2, g_port2_was;    /* (was: player 2's port in this game, 0: never; its datagrams stay ours) */
 static roam_plat_stats g_st;          /* written under g_mu */
 static net_mailbox    *MB;            /* allocated once, registered once */
 /* the browser's own numbers (under g_mu) */
 static struct {
-    uint64_t offline, unreachable, ring_full, filtered;
+    uint64_t offline, unreachable, ring_full, filtered, own;     /* own: from another endpoint of this browser, dropped */
     uint32_t offline_noted;                         /* generation + 1 of the outage last noted */
     double   rxw_sum, rxw_max; uint64_t rxw_n;     /* page queued -> network thread took it, ms */
 } W;
@@ -131,18 +145,21 @@ static void set_want(uint32_t on){
     __builtin_wasm_memory_atomic_notify((int *)&MB->tx_bell, 1);
 }
 
-/* queue one datagram for the page (with the lock held) */
-static int tx_push(uint32_t kind, uint32_t dst, uint16_t dport, const uint8_t *buf, int len){
+/* queue one datagram for the page (with the lock held), from our port sport */
+static int tx_push_from(uint16_t sport, uint32_t kind, uint32_t dst, uint16_t dport, const uint8_t *buf, int len){
     uint32_t h = MB->tx_head, t = ld(&MB->tx_tail);
     if (h - t >= NET_TX_SLOTS){ W.ring_full++; return 0; }
     net_slot *s = tx_slot(h);
     s->len = (uint32_t)len; s->kind = kind; s->src_ip = ld(&MB->vip); s->dst_ip = dst;
-    s->src_port = g_cfg.port; s->dst_port = dport; s->t_ms = now_ms();
+    s->src_port = sport; s->dst_port = dport; s->t_ms = now_ms();
     memcpy(s->data, buf, (size_t)len);
     st(&MB->tx_head, h + 1);
     __atomic_add_fetch(&MB->tx_bell, 1, __ATOMIC_SEQ_CST);
     __builtin_wasm_memory_atomic_notify((int *)&MB->tx_bell, 1);
     return 1;
+}
+static int tx_push(uint32_t kind, uint32_t dst, uint16_t dport, const uint8_t *buf, int len){
+    return tx_push_from(g_cfg.port, kind, dst, dport, buf, len);
 }
 
 /* ---- the guard (as roam_bsd.c) ------------------------------------------------ */
@@ -169,7 +186,7 @@ static void send_err(const char *why, uint32_t ip, uint16_t port){
                 (unsigned long long)g_st.send_err);
     }
 }
-static void do_send(uint32_t ip, uint16_t port, const uint8_t *buf, int len, int is_bcast){
+static void do_send(uint16_t sport, uint32_t ip, uint16_t port, const uint8_t *buf, int len, int is_bcast){
     if (!roam_plat_guard(g_cfg.test_mode, ip, is_bcast) || !MB || !ld(&MB->mode)) return;
     if (len <= 0 || len > (int)NET_MAX_PAYLOAD){ send_err("datagram too long", ip, port); return; }
     if (ld(&MB->page_state) != NET_PAGE_ONLINE){
@@ -200,10 +217,12 @@ static void do_send(uint32_t ip, uint16_t port, const uint8_t *buf, int len, int
         }
         if (ip == ((vip & mask) | ~mask)) dst = NET_BROADCAST;               /* the subnet's broadcast */
     }
-    if (!tx_push(kind, dst, port, buf, len)){ send_err("the page's send queue is full", ip, port); return; }
+    if (!tx_push_from(sport, kind, dst, port, buf, len)){ send_err("the page's send queue is full", ip, port); return; }
     g_st.sent++; g_st.sent_bytes += (uint64_t)len;
 }
-static void io_send(void *u, uint32_t ip, uint16_t port, const uint8_t *buf, int len){ (void)u; do_send(ip, port, buf, len, 0); }
+static void io_send(void *u, uint32_t ip, uint16_t port, const uint8_t *buf, int len){
+    do_send(u ? ((const io_ep *)u)->port : g_cfg.port, ip, port, buf, len, 0);
+}
 
 /* the unit tests' piece (no interfaces in a browser: discovery is the switch's
  * broadcast); kept with roam_bsd.c's rules for tests/roam_unit.c */
@@ -228,9 +247,12 @@ int roam_bcast_targets(const roam_if *ifs, int n, uint32_t *out, int max){
 static void io_broadcast(void *u, uint16_t port, const uint8_t *buf, int len){
     (void)u;
     if (g_cfg.test_mode || !g_cfg.discovery){ roam_plat_guard(1, 0xFFFFFFFFu, 1); return; }
-    do_send(NET_BROADCAST, port, buf, len, 1);                 /* every other browser on the switch */
+    do_send(g_cfg.port, NET_BROADCAST, port, buf, len, 1);     /* every other browser on the switch */
 }
+/* player 2's session broadcasts nothing (it takes the hub's links, or none) */
+static void io_broadcast2(void *u, uint16_t port, const uint8_t *buf, int len){ (void)u; (void)port; (void)buf; (void)len; }
 void roam_game_event(int ev, int peer, const char *text);    /* roam_game.c provides the log */
+void roam_game_event2(int ev, int peer, const char *text);   /* ...and player 2's */
 int roam_game_racing(void);                                  /* roam_game.c: the player races (no notices) */
 
 /* ---- notices: what the page shows over the game ----------------------------------
@@ -377,6 +399,36 @@ uint32_t roam_plat_name(char out[33]){
     pthread_mutex_unlock(&g_name_mx);
     return g;
 }
+/* Co-op: player 2's name from the page (IEV_NAME with INAME_SEAT2), the same way: the page checked the one the game
+ * made (NET_KIND_COOP) and another player holds it, or the operator took it away and the player picked another */
+static char g_name2_in[33], g_name2[33];
+static atomic_uint g_name2_gen;
+void roam_plat_name2_piece(int off, int total, const char *b, int n){
+    if (total < 1 || total > 32 || off < 0 || off >= total) return;
+    for (int i = 0; i < n && off + i < total; i++) g_name2_in[off + i] = b[i] ? b[i] : ' ';
+    if (off + n < total) return;
+    g_name2_in[total] = 0;
+    pthread_mutex_lock(&g_name_mx);
+    memcpy(g_name2, g_name2_in, sizeof g_name2);
+    atomic_fetch_add(&g_name2_gen, 1);
+    pthread_mutex_unlock(&g_name_mx);
+    fprintf(stderr, "[roam] a new name for player 2 from the page (%d characters)\n", total);
+}
+uint32_t roam_plat_name2(char out[33]){
+    if (!atomic_load(&g_name2_gen)) return 0;
+    pthread_mutex_lock(&g_name_mx);
+    uint32_t g = atomic_load(&g_name2_gen);
+    memcpy(out, g_name2, 33);
+    pthread_mutex_unlock(&g_name_mx);
+    return g;
+}
+/* player 2's endpoint for the page (NET_KIND_COOP): {"name"} or "{}"; -1: the ring is full, again later */
+int roam_plat_coop(const char *json){
+    int n = (int)strlen(json);
+    if (!MB) return -1;
+    if (n <= 0 || n > (int)NET_MAX_PAYLOAD) return 1;
+    return tx_push(NET_KIND_COOP, 0, 0, (const uint8_t *)json, n) ? 1 : -1;
+}
 static uint8_t place(const rc_peer *p){ return p->status == RC_ST_PAUSED ? RC_ST_ROAM : p->status; }
 /* we are in free roam and the friend's car was within NEAR_M of ours (on the
  * ground) when last seen: SNAPs come only from free roam, so its newest state
@@ -429,6 +481,8 @@ static void io_event(void *u, int ev, int peer, const char *text){
         g_where[peer].id = 0;
     }
 }
+/* player 2's session: its log only (the notices over the game are player 1's) */
+static void io_event2(void *u, int ev, int peer, const char *text){ (void)u; roam_game_event2(ev, peer, text); }
 
 /* ---- impairment (test aid, as roam_bsd.c) ------------------------------------------ */
 static struct { int on, loss, delay, jitter, dup; uint32_t rng; } IMP;
@@ -508,11 +562,11 @@ static void link_watch(link_seen *k, int64_t now){
 static void web_stats_log(const char *when){
     double tws = MB->tx_wait_ms_sum, twm = MB->tx_wait_ms_max; uint32_t twn = MB->tx_wait_n;
     fprintf(stderr, "[roam] virtual LAN %s: sent %llu, received %llu, dropped while offline %llu, send errors %llu (not on the LAN %llu, queue full %llu), "
-                    "filtered %llu; page: switch rtt %.2f ms, peers on the switch %u, RX ring full %u, oversize %u; "
+                    "filtered %llu (from this browser's own endpoints %llu); page: switch rtt %.2f ms, peers on the switch %u, RX ring full %u, oversize %u; "
                     "C->page wait mean %.3f ms max %.2f ms, page->C wait mean %.3f ms max %.2f ms\n",
             when, (unsigned long long)g_st.sent, (unsigned long long)g_st.recv, (unsigned long long)W.offline,
             (unsigned long long)g_st.send_err, (unsigned long long)W.unreachable, (unsigned long long)W.ring_full,
-            (unsigned long long)W.filtered, MB->switch_rtt_ms, ld(&MB->switch_peers), ld(&MB->rx_full_drop), ld(&MB->rx_oversize),
+            (unsigned long long)W.filtered, (unsigned long long)W.own, MB->switch_rtt_ms, ld(&MB->switch_peers), ld(&MB->rx_full_drop), ld(&MB->rx_oversize),
             twn ? tws / twn : 0.0, twm, W.rxw_n ? W.rxw_sum / (double)W.rxw_n : 0.0, W.rxw_max);
 }
 static void *net_main(void *u){
@@ -536,34 +590,42 @@ static void *net_main(void *u){
         for (int k = 0; k < 256 && tail != ld(&MB->rx_head); k++, tail++){
             const net_slot *s = rx_slot(tail);
             uint32_t ip = s->src_ip; uint16_t sport = s->src_port; int n = (int)s->len; int take = 0;
-            if (n >= 0 && n <= (int)NET_MAX_PAYLOAD && s->dst_port == port){
+            roam_plat_lock();
+            /* (player 2's session, co-op: the datagrams to its port) */
+            rc_session *to = s->dst_port == port ? g_s : g_s2 && s->dst_port == g_port2 ? g_s2 : 0;
+            if (n >= 0 && n <= (int)NET_MAX_PAYLOAD && to){
                 if (mode == NET_MODE_VLAN) take = s->kind == NET_KIND_UDP && (s->dst_ip == vip || s->dst_ip == NET_BROADCAST);
                 else if (mode == NET_MODE_LOOP){ take = s->kind == NET_KIND_UDP_LOOP; ip = 0x7F000001u; }
+                /* once this game had a player 2: another endpoint of this browser (player 1's or player 2's, or a
+                 * restart's old one) is never a peer (a solo game takes what it took before) */
+                if (take && g_port2_was && (mode == NET_MODE_VLAN ? ip == vip : sport == port || sport == g_port2_was)){ take = 0; W.own++; }
             }
-            roam_plat_lock();
             double w = tms - s->t_ms;
             if (w >= 0 && w < 60000){ W.rxw_sum += w; W.rxw_n++; if (w > W.rxw_max) W.rxw_max = w; }
             if (!take) W.filtered++;
             else {
                 g_st.recv++; g_st.recv_bytes += (uint64_t)n;
-                if (n > RC_MAX_DGRAM){ g_s->rx++; g_s->rx_bad++; }
-                else if (IMP.on){
+                if (n > RC_MAX_DGRAM){ to->rx++; to->rx_bad++; }
+                else if (IMP.on && to == g_s){
                     if ((int)(imp_rand() % 100u) < IMP.loss) g_st.impair_drop++;
                     else imp_queue(now, ip, sport, s->data, n);
-                } else rc_receive(g_s, ip, sport, s->data, n, now);
+                } else rc_receive(to, ip, sport, s->data, n, now);
             }
             roam_plat_unlock();
             st(&MB->rx_tail, tail + 1);
         }
         if (IMP.on){ roam_plat_lock(); imp_release(now); roam_plat_unlock(); }
-        if (now >= next_tick){ roam_plat_lock(); rc_tick(g_s, now); where_watch(now); roam_plat_unlock(); next_tick = now + 10000; }
+        if (now >= next_tick){
+            roam_plat_lock(); rc_tick(g_s, now); if (g_s2) rc_tick(g_s2, now); where_watch(now); roam_plat_unlock();
+            next_tick = now + 10000;
+        }
         if (now >= next_stats){ roam_plat_lock(); web_stats_log("stats"); roam_plat_unlock(); next_stats = now + 30000000; }
     }
     return 0;
 }
 
 int roam_plat_start(const roam_plat_cfg *cfg, rc_session *s){
-    g_cfg = *cfg; g_s = s;
+    g_cfg = *cfg; g_s = s; g_ep1.port = cfg->port;
     memset(&g_st, 0, sizeof g_st); memset(&W, 0, sizeof W);
     if (g_cfg.test_mode && g_cfg.discovery){
         fprintf(stderr, "[roam] LAN discovery DISABLED: automated run (test harness), no broadcast will be sent; "
@@ -577,7 +639,7 @@ int roam_plat_start(const roam_plat_cfg *cfg, rc_session *s){
     st(&MB->mode, g_cfg.test_mode ? NET_MODE_LOOP : NET_MODE_VLAN);
     imp_parse(g_cfg.impair);
     memset(g_q, 0, sizeof g_q); memset(g_where, 0, sizeof g_where); g_ntold = 0;
-    rc_io io = { 0, io_send, io_broadcast, io_event };
+    rc_io io = { &g_ep1, io_send, io_broadcast, io_event };
     const char *hub = getenv("NFSU2_ROAM_HUB");
     int use_hub = !g_cfg.test_mode && !(hub && !strcmp(hub, "0"));
     roam_plat_lock();
@@ -606,7 +668,10 @@ int roam_plat_start(const roam_plat_cfg *cfg, rc_session *s){
 }
 void roam_plat_stop(uint8_t reason){
     if (!g_thr_on) return;
-    roam_plat_lock(); rc_shutdown(g_s, reason); roam_plat_unlock();      /* BYE x3: the page sends what is queued */
+    roam_plat_lock();
+    if (g_s2){ rc_shutdown(g_s2, reason); g_s2 = 0; g_port2 = 0; }   /* player 2's too (co-op) */
+    rc_shutdown(g_s, reason);                                         /* BYE x3: the page sends what is queued */
+    roam_plat_unlock();
     atomic_store(&g_stop, 1);
     __atomic_add_fetch(&MB->rx_bell, 1, __ATOMIC_SEQ_CST);
     __builtin_wasm_memory_atomic_notify((int *)&MB->rx_bell, 1);
@@ -614,6 +679,43 @@ void roam_plat_stop(uint8_t reason){
     roam_plat_lock(); web_stats_log("closed"); roam_plat_unlock();
     st(&MB->mode, NET_MODE_CLOSED);
     set_want(0);
+}
+
+/* Co-op: player 2's session on the same connection, from port (player 1's + 1): its datagrams go out from that port,
+ * the ones to it come to it, it ticks with player 1's.  The hub (when player 1's has one) is its too.  With the lock
+ * free; 0: started */
+int roam_plat_start2(rc_session *s, uint16_t port){
+    if (!g_thr_on || !MB || !port || port == g_cfg.port) return -1;
+    rc_io io = { &g_ep2, io_send, io_broadcast2, io_event2 };
+    roam_plat_lock();
+    if (g_s2){ roam_plat_unlock(); return -1; }
+    s->io = io;
+    s->conf.hub_ip = g_s->conf.hub_ip; s->conf.hub_port = g_s->conf.hub_ip ? port : 0;
+    s->conf.snap_states = g_s->conf.snap_states;
+    s->conf.discovery = 0;
+    g_ep2.port = port; g_port2 = port; g_port2_was = port; g_s2 = s;
+    roam_plat_unlock();
+    fprintf(stderr, "[roam] player 2's virtual LAN UDP port %u open (a second endpoint of this browser)%s\n", port,
+            s->conf.hub_ip ? ", the players near player 2 from the server's hub" : "");
+    return 0;
+}
+/* player 2's session ends: BYE to its peers and the hub (queued for the page at once), then nothing more to it */
+void roam_plat_stop2(uint8_t reason){
+    roam_plat_lock();
+    if (g_s2){
+        rc_shutdown(g_s2, reason);
+        fprintf(stderr, "[roam] player 2's virtual LAN UDP port %u closed\n", g_port2);
+        g_s2 = 0; g_port2 = 0;
+    }
+    roam_plat_unlock();
+}
+/* ip:port is an endpoint of this browser (player 1's or player 2's port at our address; the loopback's in a test
+ * run).  With the lock held */
+int roam_plat_own(uint32_t ip, uint16_t port){
+    if (!MB) return 0;
+    if (ld(&MB->mode) == NET_MODE_LOOP) return ip == 0x7F000001u && (port == g_cfg.port || (g_port2 && port == g_port2));
+    uint32_t vip = ld(&MB->vip);
+    return vip && ip == vip;
 }
 
 int roam_plat_parse_peers(const char *list, int test_mode, uint16_t defport, uint32_t *ip, uint16_t *port, int max){

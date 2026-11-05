@@ -36,4 +36,8 @@ void sub_00601a60(CPU *c){
     }
     sub_00601a60_orig(c);
     if (nstep && ST(0) > 0.0){ ST(0) = (double)step[k]; k = (k + 1) % nstep; }
+    /* photo mode's shutter (photo.c): each of its picture's frames a step of the world of its own length */
+    int photo_world_step(double *st0);
+    double st = ST(0);
+    if (photo_world_step(&st)) ST(0) = st;
 }

@@ -1,7 +1,8 @@
 /* showoff.c -- free roam's show-off: with the car standing, O (or the
- * controller's D-pad down held for a second) opens its parts a step at a
- * time: the trunk, then the hood too, then both doors too, then closes them
- * all; they close by themselves as soon as the car drives off.  Other
+ * controller's D-pad down held for a second) opens its parts one at a
+ * time: the hood, then the trunk alone, then both doors alone, then all of
+ * them, then closes them all (players wanted the hood or the doors alone,
+ * 2026-11-03/04); they close by themselves as soon as the car drives off.  Other
  * players see them open: roam_game.c sends the open parts with the car's
  * state (RC_OPEN_*, roam_core.h) and hands each friend's car and its parts
  * here, where they open on that car.
@@ -52,6 +53,7 @@
  *
  * Tests: tests/scripts/showoff_*.txt; "[showoff]" log lines. */
 #include "cpu.h"
+#include "coop.h"
 #include "kbd.h"
 #include "gamepad.h"
 #include "roam_core.h"            /* RC_OPEN_* */
@@ -145,14 +147,16 @@ static struct {
     Car car[SO_CARS];
     Bank bank[SO_TYPES]; int nbank;
     int nlive;                        /* cars with a node not closed */
-    int step;                         /* the player's: 0 closed, 1 the trunk, 2 and the hood, 3 and the doors */
+    int step;                         /* the player's: 0 closed, 1 the hood, 2 the trunk, 3 the doors, 4 all (k_step) */
     int ostate; uint32_t kseq; int kinit;
     int gate, moving;                 /* the D-pad's hold is ours now (free roam, the HUD on top); the car drives */
     int held, fired, fires, drifts, hmove; double t0, tap_until;   /* hmove: the hold began driving (drift mode's) */
     int note;                         /* the last press that did nothing, logged once */
     int failed;                       /* the player's car type's animations can't be had */
 } S;
-static const uint8_t k_step[4] = { 0, RC_OPEN_TRUNK, RC_OPEN_TRUNK | RC_OPEN_HOOD, RC_OPEN_ALL };
+#define NSTEPS 5
+static const uint8_t k_step[NSTEPS] = { 0, RC_OPEN_HOOD, RC_OPEN_TRUNK, RC_OPEN_LDOOR | RC_OPEN_RDOOR, RC_OPEN_ALL };
+static const char *const k_stepname[NSTEPS] = { "all closed", "the hood", "the trunk", "the doors", "all open" };
 static const char *const k_part[4] = { "hood", "trunk", "left door", "right door" };
 
 /* the bank of a car type (0x433A30's walk; 0: its animations are not in) */
@@ -174,7 +178,7 @@ static int roam_world(void){
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(void){
     uint32_t pl = rd32(G_PLAYER1), hud = pl ? rd32(pl + 0x9a4u) : 0, fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0,
-             top = mg ? rd32(mg + 0xe4u) : 0;
+             top = mg ? coop_fe_top(mg) : 0;
     char a[40], b[40];
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b);
@@ -183,7 +187,7 @@ static int typing(void){ return rd32(G_FLOW) != 6u || (mem_is_committed(G_TXT_RE
 /* a cover shoot is on (its screens on top: UI_ShowCase_Preview.fng, UI_Showcase_DPAD.fng): it opens and closes the
  * player's car's parts itself, on the game's list */
 static int shoot_on(void){
-    uint32_t fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? rd32(mg + 0xe4u) : 0;
+    uint32_t fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? coop_fe_top(mg) : 0;
     char a[40];
     cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a);
     return !strncasecmp(a, "UI_Showcase", 11);
@@ -409,9 +413,8 @@ void showoff_frame(CPU *c){
             continue;
         }
         S.note = 0;
-        S.step = (S.step + 1) % 4;
-        fprintf(stderr, "[showoff] f=%ld %s: step %d (%s)\n", autotest_frame(), how, S.step,
-                S.step == 0 ? "all closed" : S.step == 1 ? "the trunk" : S.step == 2 ? "the trunk and the hood" : "the trunk, the hood and the doors");
+        S.step = (S.step + 1) % NSTEPS;
+        fprintf(stderr, "[showoff] f=%ld %s: step %d (%s)\n", autotest_frame(), how, S.step, k_stepname[S.step]);
     }
     int shoot = world && shoot_on();
     if (S.step && (!world || shoot || v > SHUT_MPS)){

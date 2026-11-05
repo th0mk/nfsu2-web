@@ -21,9 +21,10 @@
 //  - edge: a word that starts or ends a part (or the name's letters together), plural too ("nigabro", "biggniga"),
 //    but not where a part starts or ends with a word of EDGE_OK ("Nigar", "Minigame" ends no part with it,
 //    "Zuniga", "Hoonigan" is "hooniga" when cut to 7 letters)
-// The other offensive names go the same way (picked from the live server's names, 2026-10-26 and 2026-11-02): Nazi
+// The other offensive names go the same way (picked from the live server's names, 2026-10-26, 11-02 and 11-05): Nazi
 // ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it (the
-// neo-Nazi code).  A swear word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an
+// neo-Nazi code); and hate aimed at a group as a phrase (HATE: a verb, a word between or none, the group).  A swear
+// word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an
 // English word that ends in "pid" (rapid, cupid, stupid), or after a vowel when it runs into the next part
 // ("TopiDrift"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
 export const SLURS = Object.freeze({
@@ -34,15 +35,16 @@ export const SLURS = Object.freeze({
     'hitler', 'gitler', 'zitler', 'adolfh', 'himler', 'fuhrer', 'fuehrer', 'siegheil', 'zighael', 'goebbels',
     'mengele', 'mussolini', 'jewhunt', 'jewshunt', 'nigahunt', 'zenciav', 'natehig', 'binladen', 'benladen',
     'rapist', 'molester',
-    'niger', 'higger', 'chigga', 'negroid', 'zencigot', 'kacap', 'rusnya', 'pideras', 'frocio', 'pretomacaco',
+    'niger', 'higger', 'figger', 'chigga', 'negroid', 'zencigot', 'kacap', 'rusnya', 'pideras', 'frocio', 'pretomacaco',
     'kitler', 'fitler', 'ritler', 'sitler', 'xitler', 'heitler', 'nitler', 'neonazi', 'nazist', 'uncleadolf',
     'austrianartist', 'austrianpainter', 'pintoraustria', 'zyklonb', 'kristalnacht', 'ovendodger',
-    'hatejew', 'killjew', 'jewkill', 'gasjew', 'deadjew', 'jewslay', 'jewdestroy', 'fckjew', 'fuckjew', 'huntjew',
-    'jebaczyd', 'zydzidopieca', 'osamabin', 'alqaeda', 'pedophil', 'pedofil']),
+    'jewkill', 'jewslay', 'jewdestroy', 'jebaczyd', 'zydzidopieca', 'osamabin', 'alqaeda', 'pedophil', 'pedofil',
+    'wigger', 'niglet', 'nignog', 'nibber', 'iggernay', 'neegr', 'nigoger', 'nigrigg', 'nigler', 'nigcer', 'nigwer',
+    'poofter', 'binladin', 'htler', 'hitlr', 'hitlur', 'gasthejuice', 'goyim', 'goyslop', 'rapegod', 'rapedog', 'rapeloli', 'biraped']),
   whole: Object.freeze(['fag', 'dyke', 'coon', 'spic', 'paki', 'kike', 'gook', 'chink',
     'niga', 'nyga', 'ngga', 'neger', 'xach', 'xoxol', 'hohol', 'ukrop', 'pider', 'pedik', 'nazi', 'taliban', 'rape',
-    'nig']),
-  edge: Object.freeze(['niga', 'nyga']),
+    'nig', 'killnig', 'fucknig', 'hatenig', 'pedo', 'goy']),
+  edge: Object.freeze(['niga', 'nyga', 'hitla', 'hitle']),
 });
 /** the words a part may start (start) or end (end) with that would read as an edge word there and are none:
  *  a name (Nigar, Nygaard), "Nigam..." ("NIGAMI", a game), a Japanese name (Niigaki), a surname (Zuniga), a word
@@ -54,6 +56,14 @@ export const EDGE_OK = Object.freeze({
 /** the starts of the English words that end in "pid": rapid, cupid, stupid, tepid, vapid, insipid, lipid, limpid,
  *  sapid, intrepid, hispid */
 export const PID_STEMS = Object.freeze(['ra', 'cu', 'stu', 'te', 'va', 'insi', 'li', 'lim', 'sa', 'intre', 'his']);
+/** hate aimed at a group as a phrase, matched anywhere as the anywhere list's words are: a verb, one of the words
+ *  that may come between or none, a group ("GasJews", "Kill_All_Jews") */
+export const HATE = Object.freeze({
+  verbs: Object.freeze(['gas', 'kill', 'hate', 'hunt', 'slay', 'burn', 'shoot', 'nuke', 'bomb', 'dead', 'death', 'fck',
+    'fuck', 'fuk', 'destroy', 'exterminate']),
+  between: Object.freeze(['s', 'the', 'all', 'allthe', 'da', 'dem', 'them', 'those', 'every', 'dirty', 'to']),
+  groups: Object.freeze(['jew', 'kike', 'colored', 'coloured']),
+});
 
 const LOOKALIKE = {
   А: 'A', а: 'a', В: 'B', в: 'b', Е: 'E', е: 'e', К: 'K', к: 'k', М: 'M', м: 'm', Н: 'H', н: 'h', О: 'O', о: 'o',
@@ -73,7 +83,8 @@ function letter(ch) {
   return ch >= 'a' && ch <= 'z' ? ch : '';
 }
 const word = w => [...w].map(letter).join('');
-const ANYWHERE = SLURS.anywhere.map(word), WHOLE = SLURS.whole.map(word), EDGE = SLURS.edge.map(word);
+const PHRASES = HATE.verbs.flatMap(v => ['', ...HATE.between].flatMap(b => HATE.groups.map(g => v + b + g)));
+const ANYWHERE = [...SLURS.anywhere, ...PHRASES].map(word), WHOLE = SLURS.whole.map(word), EDGE = SLURS.edge.map(word);
 const OK_START = EDGE_OK.start.map(word), OK_END = EDGE_OK.end.map(word), STEMS = PID_STEMS.map(word);
 const DYKE = [word('dyke')], NIGER = word('niger'), NIGERIA = word('nigeri');
 const digit = ch => ch !== undefined && ch >= '0' && ch <= '9';

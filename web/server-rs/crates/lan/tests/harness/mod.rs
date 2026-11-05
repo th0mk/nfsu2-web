@@ -42,9 +42,9 @@ pub fn ip_str(v: u32) -> String {
     nfsu2_util::vip_str(v)
 }
 
-/// every address the switch hands out: host bytes 2-251 in each of 10.77.0-55.x (10.77.0.0/18)
+/// every address the switch hands out: host bytes 2-251 in each of 10.77.0-63.x (10.77.0.0/18)
 pub fn all_vips() -> Vec<u32> {
-    (0..56u32).flat_map(|b| (0..250u32).map(move |i| (10 << 24) | (77 << 16) | (b << 8) | (i + 2))).collect()
+    (0..64u32).flat_map(|b| (0..250u32).map(move |i| (10 << 24) | (77 << 16) | (b << 8) | (i + 2))).collect()
 }
 
 /// the tests' options: WebSocket messages of up to 1 MiB taken (max_payload), so that the switch's own limits decide

@@ -1,0 +1,40 @@
+# Music in a drag race (settings.ini race_music, runtime/drift.c race_music): Quick Race Drag, the first track
+# and car (race_music_drift.txt: the same in a drift race).  The original has none there: the music manager's
+# tick (0x482180) leaves the EA Trax songs for its other player and the in-game mix (0x471970) puts the music's
+# attenuation [0x7ED344] at 0x7FFF (0 = full).  With race_music on the race's songs play as in a circuit race:
+# MusicSFX.mus reads (READLOG=1) after "status racing", [0x7ED344] the music slider's (0 at full), "[drift] ...
+# a drag race: its songs play".  Once racing the other sliders go to 0 (the options' floats at 0x83AA28: +0
+# master, +0xC the in-game music), so the [audio] peaks (SNDSTAT=1 NFSU2_AUDIO_STATUS=2) are the music alone;
+# then the music slider to 0 (the music goes: 0x7FFF, as in a circuit race) and back.  Without race_music the
+# expects fail: [0x7ED344] stays 0x7FFF.  The trace's ev ([0x82AFD4]) takes a new value with each song started.
+#   node web/tools/run-suite.mjs --script race_music_drag.txt --marker music_end --env NFSU2_RACE_MUSIC=1 \
+#     --env READLOG=1 --env SNDSTAT=1 --env NFSU2_AUDIO_STATUS=2
+0     tapuntil RETURN MC_Background.fng 120 4000   # title -> profile prompt
++200  tap RETURN                                   # "No"
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++40   tap RIGHT
++40   tap RIGHT
++60   log mode_drag
++0    tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++0    tapuntil RETURN UI_QRModeOptions.fng 150 1500
++0    tapuntil RETURN UI_QRCarSelect.fng 150 1500
++0    tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 6000
++0    trace 60 att=i:0x7ed344 ev=i:0x82afd4 drag=b:0x89e7d8 drift=b:0x89e7d9 master=0x83aa28 music=0x83aa34 race=i:[0x890118]
++0    waitexpr i:[0x890118] == 4 6000            # racing (after the countdown)
++0    status racing
++0    expect b:0x89e7d8 != 0                       # a drag event
++0    poke 0x83aa2c 0
++0    poke 0x83aa30 0
++0    poke 0x83aa38 0
++0    poke 0x83aa3c 0
++0    poke 0x83aa40 0
++300  expect i:0x7ed344 < 32767                    # the music is not turned all the way down
++600  status music_full
++0    poke 0x83aa34 0                              # the in-game music slider to 0
++120  expect i:0x7ed344 == 32767                   # ... turns it down, as in a circuit race
++480  status music_slider_0
++0    poke 0x83aa34 0x3f800000                     # and to 1 again
++120  expect i:0x7ed344 < 32767
++480  status music_end
++60   quit

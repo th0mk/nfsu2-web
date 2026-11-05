@@ -1,6 +1,7 @@
 // The settings on the start page: a form over settings.ini, in the big panel's
-// tabs (Online; Game; the Controller part of Controls; Other: the file as text
-// and the lines without a row).  Every change
+// tabs (Online; Game, and at its end the file as text and the lines without a
+// row; Mods: the mods' settings, each on its mod's row; the Controller part of
+// Controls).  Every change
 // rewrites the one line of that key (settingsPut, bundle.m's settings_put), so
 // the file stays the source of truth and keeps the player's own comments;
 // "Reset" puts the template's commented-out line back, also on the lines the
@@ -17,9 +18,14 @@ import { roomHash } from './players';
 import { checkRoom, inviteLink } from './invite';
 import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
-import { flagCode, flagName, flagsByName, type FlagCode } from './flags';
+import { FLAG_CODES, FLAG_H, FLAG_SHEET_COLS, FLAG_W, flagAt, flagCode, flagName, flagsByName, type FlagCode } from './flags';
+/** Your flag's picture: /flags.png's 48x36 flags drawn at 32x24 (style.css .flag-pic) */
+const FLAG_SHOWN = 2 / 3;
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
 import { SITE_KEYS } from './sitekeys';
+import { copyText, copyToast } from './copy';
+import { MODS } from './mods';
+import { modName, modSections, rowHelp, rowName } from './mods-ui';
 
 type Control =
   | { t: 'switch' }
@@ -41,21 +47,39 @@ type Control =
 
 /** link: the words of help that link to a page (a mod's, say), opened in a new tab; several for help that names several */
 interface Link { text: string; href: string }
-interface Item { key: string; label: string; help: string; link?: Link | Link[]; c: Control; more?: boolean }
-/** own: the group has no heading of its own, its tab's name says it (Online; Friends & crews' Crews); at: the id of the
- *  element it goes in (Crews in Friends & crews, the Controls tab's Controller part), else the Online tab's (own) or the
- *  Game tab's; head: its heading, else its title; more: the title of its "more" part.  The texts are English (N),
- *  translated where they are drawn. */
-interface Group { title: string; more: string; items: Item[]; own?: boolean; at?: string; head?: string }
+/** deviceOpt: a choice offered first, and with its own help, only where it is this device's default (device.ts):
+ *  Players' cars shown's Auto, a computer's */
+/** mod: the Mods tab's row (mods.ts, the id of its entry): its label and help are the row's (mods-ui.ts rowName, rowHelp:
+ *  a mod's name as it is, the line translated), and an (i) right after its name opens the mod's popup */
+interface Item { key: string; label: string; help: string; link?: Link | Link[]; c: Control; more?: boolean; deviceOpt?: { value: string; label: string; help: string }; mod?: string }
+/** own: the group has no heading of its own, its tab's name says it (Online; Friends & crews' Crews; Mods); at: the id of
+ *  the element it goes in (Crews in Friends & crews, the Controls tab's Controller part, Mods), else the Online tab's
+ *  (own) or the Game tab's; head: its heading, else its title; more: the title of its "more" part; mods: the Mods tab's,
+ *  drawn in its sections (mods-ui.ts).  The texts are English (N), translated where they are drawn. */
+interface Group { title: string; more: string; items: Item[]; own?: boolean; at?: string; head?: string; mods?: true }
 
 /** each language's name in English (translated where it is shown), beside its own name */
 const LANGUAGE_NAMES: Record<Language, string> = {
   english: N('English'), french: N('French'), german: N('German'), italian: N('Italian'), spanish: N('Spanish'), dutch: N('Dutch'),
   swedish: N('Swedish'), danish: N('Danish'), korean: N('Korean'), chinese: N('Chinese'), japanese: N('Japanese'), russian: N('Russian'),
   thai: N('Thai'), portuguese: N('Portuguese (Brazil)'), polish: N('Polish'), turkish: N('Turkish'), hungarian: N('Hungarian'),
-  ukrainian: N('Ukrainian'), bulgarian: N('Bulgarian')
+  ukrainian: N('Ukrainian'), czech: N('Czech'), slovak: N('Slovak'), greek: N('Greek'),
+  bulgarian: N('Bulgarian'),
 };
 const LANGUAGE_OPTS = LANGUAGES.map(l => [l, LANGUAGE_NAMES[l]] as [string, string]);
+
+/** the controls of the mods' settings (mods.ts: a setting's entry), each on its mod's row in the Mods tab only (and
+ *  nowhere else: web/test/mods.test.mjs) */
+export const MOD_CONTROLS: Record<string, Control> = {
+  ui_textures: { t: 'seg', opts: [['original', N('Original')], ['map', N('Map only')], ['uhud', N('Upscaled')]] },
+  subtitles: { t: 'switch' },
+  songs: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] },
+  show_hidden_races: { t: 'switch' },
+  visual_rep_remover: { t: 'switch' },
+};
+/** the Mods tab's rows with a setting, in the catalogue's order (a shared row once: its first entry's) */
+const MOD_ITEMS: Item[] = MODS.flatMap(m => 'setting' in m.control && !m.row
+  ? [{ key: m.control.setting, label: m.name, help: m.line, c: MOD_CONTROLS[m.control.setting] ?? { t: 'switch' }, mod: m.id }] : []);
 
 const GROUPS: Group[] = [
   { title: N('Online'), more: N('More online settings'), own: true, items: [
@@ -64,12 +88,15 @@ const GROUPS: Group[] = [
     { key: 'roam_flag', label: N('Your flag'), help: N('Shown before your name over your car in free roam.'), c: { t: 'flag' } },
     { key: 'horn', label: N('Your horn'), help: N('With other players. Its key and button: Controls, Site.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
-      ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
+      ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')], ['dixie', N('Dixie horn')],
+      ['oldcar', N('Old car horn')], ['broken', N('Broken horn')], ['sputter', N('Sputtering horn')], ['thecar', N('The Car (1977)')],
+      ['thecar_long', N('The Car, long blast')]], preview: { play: playHorn, stop: stopHorn } } },
     { key: 'roam_room', label: N('Room'), help: N('With a name, free roam shows only players in the same room.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
     { key: 'roam_block', label: N('Blocked players'), help: N('Names, separated by commas: you never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not a tuner you race in an outrun.'),
       c: { t: 'seg', opts: [['on', N('Off')], ['off', N('Players')], ['none', N('Everything')]] } },
-    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['40', '40'], ['48', '48']] } },
+    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['48', '48'], ['64', '64']] },
+      deviceOpt: { value: 'auto', label: N('Auto'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate; Auto adds them only while it stays smooth.') } },
     { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Four groups of four. Others read them in their own language.'), c: { t: 'phrases' } },
     { key: 'online', label: N('Online mode'), help: N('The game\'s Online menu skips the EA login: lobby, chat and races with everyone on this server.'), c: { t: 'switch' }, more: true },
@@ -80,10 +107,8 @@ const GROUPS: Group[] = [
   { title: N('Game'), more: N('More game settings'), items: [
     { key: 'language', label: N('Language'), help: N('Menus, subtitles, dubbed voices and this page.'), c: { t: 'select', opts: LANGUAGE_OPTS } },
     { key: 'movies', label: N('Movies'), help: N('Intro and story movies.'), c: { t: 'switch' } },
-    { key: 'subtitles', label: N('Subtitles'), help: N('For the movies. English uses VileStuff\'s English Subtitles Fixed.'), link: { text: N('English Subtitles Fixed'), href: 'https://nfsmods.xyz/mod/5286' }, c: { t: 'switch' } },
-    { key: 'songs', label: N('Songs'), help: N('Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.'), c: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] } },
+    { key: 'race_music', label: N('Music in drag and drift races'), help: N('The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.'), c: { t: 'switch' } },
     { key: 'autosave', label: N('Autosave'), help: N('Sets each profile\'s Save option to Autosave once. A later change in the game\'s Options stays.'), c: { t: 'switch' } },
-    { key: 'show_hidden_races', label: N('Show hidden races'), help: N('MaxHwoy\'s Show Hidden Races Mod: the 33 hidden races show on the map and radar, with up to 8 of each kind at once (the original shows 1 to 4).'), link: { text: N('Show Hidden Races Mod'), href: 'https://nfsmods.xyz/mod/1583' }, c: { t: 'switch' }, more: true },
     { key: 'intro', label: N('Startup movies'), help: N('Logos, PSA and intro. Skippable: Enter, Esc, Space, a click, A, B or Start skips each. Original: only the intro can be skipped.'), c: { t: 'seg', opts: [['skippable', N('Skippable')], ['original', N('Original')], ['off', N('Off')]] }, more: true },
     { key: 'sound', label: N('Sound'), help: N('All sound output.'), c: { t: 'switch' }, more: true },
     { key: 'background', label: N('Background tab'), help: N('Pause freezes the game, like alt-tab on Windows. LAN and Online games keep running, muted.'), c: { t: 'seg', opts: [['pause', N('Pause')], ['run', N('Keep running')]] }, more: true },
@@ -94,7 +119,6 @@ const GROUPS: Group[] = [
     { key: 'fullscreen', label: N('Full screen on Play'), help: N('Off: play in the window; the menu has full screen. Hold Esc to leave it.'), c: { t: 'switch' } },
     { key: 'render', label: N('Resolution scale'), help: N('Lower is faster but softer: 50% renders a quarter of the pixels. Phones start at 75%.'), c: { t: 'seg', opts: [['scale:0.5', '50%'], ['scale:0.75', '75%'], ['backing', '100%'], ['scale:1.5', '150%'], ['scale:2', '200%']] } },
     { key: 'fps', label: N('Frame rate'), help: N('Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.'), c: { t: 'seg', opts: [['auto', N('Auto')], ['30', '30'], ['60', '60'], ['120', '120'], ['240', '240']] } },
-    { key: 'ui_textures', label: N('Menus, HUD and maps'), help: N('Upscaled: LunicAura106\'s Upscaled HUD and JeansBig\'s Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.'), link: [{ text: N('Upscaled HUD'), href: 'https://nfsmods.xyz/mod/4319' }, { text: N('Detailed Map'), href: 'https://nfsmods.xyz/mod/4485' }], c: { t: 'seg', opts: [['original', N('Original')], ['uhud', N('Upscaled')]] }, more: true },
     { key: 'pixelated_textures', label: N('Pixelated textures'), help: N('Textures without smoothing, blocky like early PC games. Overrides the game\'s Texture Filtering.'), c: { t: 'switch' }, more: true },
     { key: 'hud', label: N('Race HUD'), help: N('Wide anchors it to the screen edges; 4:3 is the original centred layout.'), c: { t: 'seg', opts: [['wide', N('Wide')], ['43', '4:3']] }, more: true },
     { key: 'movie_framing', label: N('Movie framing'), help: N('Fit keeps the 4:3 movies whole; fill crops them; stretch widens them.'), c: { t: 'seg', opts: [['fit', N('Fit')], ['fill', N('Fill')], ['stretch', N('Stretch')]] }, more: true },
@@ -113,6 +137,7 @@ const GROUPS: Group[] = [
     { key: 'gamepad_trigger_deadzone', label: N('Trigger dead zone'), help: N('Fraction of full travel, 0 to 0.9.'), c: { t: 'num', min: 0, max: 0.9, step: 0.01 }, more: true },
     { key: 'gamepad_trigger_click', label: N('Trigger full press'), help: N('How far a trigger travels before it counts as fully pressed.'), c: { t: 'num', min: 0, max: 1, step: 0.01 }, more: true },
   ] },
+  { title: N('Mods'), more: '', own: true, at: 'mods-body', mods: true, items: MOD_ITEMS },
 ];
 
 /** a row's second key, which its control writes with its own and its Reset resets too (not listed under "Other
@@ -130,6 +155,9 @@ const GROUP_OF = new Map(GROUPS.flatMap(g => g.items.map(i => [i.key, g] as cons
 const boolOn = (v: string) => v === 'on';
 const READ_ONLY = N('Read only: the game runs in another tab. Change settings there; this tab takes over when it closes.');
 const NOTE = N('Changes apply the next time you press Play.');
+const MODS_NOTE = N('The core gameplay is the original\'s, with a few improvements, fixes and multiplayer on top.');
+/** a row's label as shown (a mod's row: its name, mods-ui.ts rowName) */
+const labelOf = (it: Item) => it.mod ? rowName(it.mod) : t(it.label);
 
 /** a small button with a drawn sign (the Crews row's Join and Leave), its name for a screen reader and as its tooltip */
 export function iconButton(cls: string, name: string, path: string): HTMLButtonElement {
@@ -140,19 +168,19 @@ export function iconButton(cls: string, name: string, path: string): HTMLButtonE
   svg.append(p); b.append(svg);
   return b;
 }
+/** a bin (friends' Remove, a profile's Delete) and a pencil (a profile's Rename) */
+export const TRASH = 'M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13', PENCIL = 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4';
+/** a setting's Reset: the arrow going back round (the touch controls' reset, touch.ts) */
+const RESET = 'M6 13a6 6 0 1 0 2-5.2M5 4v4h4';
 const PLUS = 'M12 5v14M5 12h14', CROSS = 'M6 6l12 12M18 6L6 18', PERSON = 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7';
 const LINK = 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1';
 
-/** An invite link onto the clipboard; what to tell the player (in the page's language), the link in it either way:
- *  copied, or to copy by hand where the browser refused (an older WebView, a page without the focus). */
-export async function copyLink(link: string): Promise<string> {
-  try { await navigator.clipboard.writeText(link); return t('Invite link copied: {link}', { link }); } catch { /* the old way, then */ }
-  const ta = document.createElement('textarea'); ta.value = link; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0';
-  document.body.append(ta); ta.select();
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch { /* none */ }
-  ta.remove();
-  return ok ? t('Invite link copied: {link}', { link }) : t('Copy this invite link: {link}', { link });
+/** An invite link onto the clipboard from its button `at`, and a toast at the button says so (copy.ts); where the
+ *  browser refused (an older WebView, a page without the focus), what to tell the player instead (in the page's
+ *  language), the link in it to copy by hand.  null: copied. */
+export async function copyLink(link: string, at: HTMLElement): Promise<string | null> {
+  if (await copyText(link, at)) { copyToast(at); return null; }
+  return t('Copy this invite link: {link}', { link });
 }
 
 /** What a crews control shows and does: the Crews row's, and the page menu's while a game is in free roam */
@@ -200,7 +228,8 @@ export function crewControl(o: CrewControl, ctl: HTMLElement): HTMLInputElement 
     text.append(nm, n);
     const share = iconButton('crew-link', t('Copy an invite link to crew {name}', { name: c.name }), LINK);
     share.onclick = async () => {
-      const said = await copyLink(o.link(c.name));
+      const said = await copyLink(o.link(c.name), share);
+      if (said === null) return;
       if (o.said) { o.said(said); return; }
       note.textContent = said; note.classList.remove('warn');
     };
@@ -318,7 +347,11 @@ function optLabel(it: Item, value: string, label: string): string {
 function shown(it: Item, v: string): string {
   const c = it.c;
   if (c.t === 'switch') return v === 'on' ? t('on') : t('off');
-  if (c.t === 'seg' || c.t === 'select') { const o = c.opts.find(([x]) => x.toLowerCase() === v.toLowerCase()); return o ? optLabel(it, o[0], o[1]) : v; }
+  if (c.t === 'seg' || c.t === 'select') {
+    const opts: [string, string][] = it.deviceOpt ? [[it.deviceOpt.value, it.deviceOpt.label], ...c.opts] : c.opts;
+    const o = opts.find(([x]) => x.toLowerCase() === v.toLowerCase());
+    return o ? optLabel(it, o[0], o[1]) : v;
+  }
   if (c.t === 'phrases') return phrasesOf(v).map(p => t(PHRASES[p].text)).join(', ');
   if (c.t === 'flag') { const f = flagCode(v); return f ? flagName(f) : t('No flag'); }
   if (v === '') return t('empty');
@@ -392,6 +425,11 @@ export interface SettingsDeps {
   confirm?(title: string, body: string, ok: string, danger?: boolean): Promise<boolean>;
   /** Your name's row as made: its claim line and button go in (claim-ui.ts NameRow) */
   nameRow?(row: HTMLElement, input: HTMLInputElement, ctl: HTMLElement): void;
+  /** a value saved that its row's own line explains, with no "applies the next time you press Play" (Your name: another
+   *  name than the passphrase's claimed one, which Play does not use: claim-ui.ts) */
+  quietSave?(key: string, value: string | null): boolean;
+  /** a row of another part of the page that goes after this key's row (the Last.fm row after the songs': lastfm-ui.ts) */
+  rowAfter?(key: string): HTMLElement | null;
 }
 
 export class SettingsPanel {
@@ -478,8 +516,8 @@ export class SettingsPanel {
     if (key === 'roam' && !removed) for (const k of ROAM_ROWS) this.rerow(k);
     this.root.dataset.saved = String(++this.saves);
     const it = ITEMS.get(key), cur = this.current(key);
-    if (!site) this.deps.say?.(() => {
-      const v = { what: it ? t(it.label) : key, value: it ? shown(it, cur) : value ?? '' };
+    if (!site && !this.deps.quietSave?.(key, value)) this.deps.say?.(() => {
+      const v = { what: it ? labelOf(it) : key, value: it ? shown(it, cur) : value ?? '' };
       return value === null ? t('Saved: {what}, {value} (the default). Applies the next time you press Play.', v) : t('Saved: {what}, {value}. Applies the next time you press Play.', v);
     });
   }
@@ -489,12 +527,14 @@ export class SettingsPanel {
     const ro = this.ro();
     this.root.toggleAttribute('data-readonly', ro);
     this.root.querySelector('#settings-note')!.textContent = ro ? this.roText() : t(NOTE);
+    const modsNote = this.root.querySelector('#mods-note');
+    if (modsNote) modsNote.textContent = ro ? this.roText() : t(MODS_NOTE);
     this.online.toggleAttribute('data-readonly', ro);
     const note = this.online.querySelector<HTMLElement>('#online-note')!;
     note.textContent = ro ? this.roText() : ''; note.hidden = !ro;
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.set')?.dataset.key;
     this.root.querySelector('#settings-body')!.replaceChildren(...GROUPS.filter(g => !g.own && !g.at).map(g => this.group(g)));
-    for (const g of GROUPS.filter(g => g.at)) this.root.querySelector(`#${g.at}`)?.replaceChildren(this.group(g));
+    for (const g of GROUPS.filter(g => g.at)) this.root.querySelector(`#${g.at}`)?.replaceChildren(...g.mods ? modSections(key => this.row(ITEMS.get(key)!)) : [this.group(g)]);
     this.root.querySelector('#settings-lines')!.replaceChildren(...this.others());
     this.online.querySelector('#online-body')!.replaceChildren(...GROUPS.filter(g => g.own && !g.at).map(g => this.group(g)));
     this.syncRaw();
@@ -528,7 +568,7 @@ export class SettingsPanel {
       box.setAttribute('role', 'group'); box.setAttribute('aria-labelledby', h.id);
       box.append(h);
     }
-    box.append(...g.items.filter(i => !i.more).map(i => this.row(i)));
+    box.append(...g.items.filter(i => !i.more).flatMap(i => { const after = this.deps.rowAfter?.(i.key); return after ? [this.row(i), after] : [this.row(i)]; }));
     const more = g.items.filter(i => i.more);
     if (more.length) {
       const d = document.createElement('details'); d.className = 'more';
@@ -565,8 +605,7 @@ export class SettingsPanel {
       const line = t('line {line}: {key} = {value}', { line: o.phys, key: o.key, value: o.value.length > 80 ? o.value.slice(0, 80) + '…' : o.value });
       li.textContent = o.refused ? t('{line} (ignored: {why})', { line, why: o.why ? tvars(o.why.t, o.why.v) : o.refused })
         : o.env !== o.key ? t('{line} (sets {env})', { line, env: o.env }) : line;
-      const r = document.createElement('button'); r.type = 'button'; r.className = 'text-btn'; r.textContent = t('Reset');
-      r.setAttribute('aria-label', t('Reset {label}', { label: o.key }));
+      const r = iconButton('reset-btn', t('Reset {label}', { label: o.key }), RESET);
       const def = DEFAULTS.get(keyDef(o.key)?.key ?? '');
       if (def !== undefined) r.title = t('Back to the default ({value})', { value: def === '' ? t('empty') : def });
       r.disabled = this.ro();
@@ -626,13 +665,15 @@ export class SettingsPanel {
     const f = this.resolved.file[it.key], comp = COMPANION[it.key], f2 = comp ? this.resolved.file[comp] : undefined;
     const setInFile = (!!f && f.raw !== '') || (!!f2 && f2.raw !== '');   // set (or refused): Reset puts the template line back
     const c = it.c;
-    // a choice is a radio group named by this label; any other control is labelled by it directly
-    const label = document.createElement(c.t === 'seg' ? 'span' : 'label'); label.className = 'set-label'; label.id = `${id}-label`;
-    label.textContent = t(it.label);
+    // a choice is a radio group named by this label; any other control is labelled by it directly.  A mod's row: its
+    // label holds the mod's (i) too (mods-ui.ts modName), so its control takes the name as its aria-label
+    const label = document.createElement(c.t === 'seg' || it.mod ? 'span' : 'label'); label.className = 'set-label'; label.id = `${id}-label`;
+    label.textContent = labelOf(it);
     if (label instanceof HTMLLabelElement) label.htmlFor = id;
     const help = document.createElement('p'); help.className = 'set-help'; help.id = `${id}-help`;
     // each link on its words where they first stand in the help (in this language's text), in their order there
-    const helpText = t(it.help);
+    const devOpt = it.deviceOpt && this.deps.defaults?.[it.key] === it.deviceOpt.value ? it.deviceOpt : undefined;
+    const helpText = it.mod ? rowHelp(it.mod) : t(devOpt ? devOpt.help : it.help);
     const links = (it.link ? Array.isArray(it.link) ? it.link : [it.link] : [])
       .map(l => ({ href: l.href, text: t(l.text), at: helpText.indexOf(t(l.text)) })).filter(l => l.text && l.at >= 0)
       .sort((x, y) => x.at - y.at);
@@ -653,12 +694,18 @@ export class SettingsPanel {
       b.setAttribute('role', 'switch');
       b.checked = on;
       b.onchange = () => void this.put(it.key, b.checked ? 'on' : 'off');
+      if (it.mod) {
+        // the name turns it on or off, as a label's would (but the (i) in it)
+        b.setAttribute('aria-label', labelOf(it));
+        label.onclick = e => { if (!(e.target as Element).closest('.mod-about')) b.click(); };
+      }
       ctl.append(v, b);
       described = b;
     } else if (c.t === 'seg') {
       const seg = document.createElement('div'); seg.className = 'seg';
-      seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-labelledby', label.id);
-      const opts = [...c.opts];
+      seg.setAttribute('role', 'radiogroup');
+      if (it.mod) seg.setAttribute('aria-label', labelOf(it)); else seg.setAttribute('aria-labelledby', label.id);
+      const opts: [string, string][] = [...(devOpt ? [[devOpt.value, devOpt.label] as [string, string]] : []), ...c.opts];
       if (cur && !opts.some(([v]) => v.toLowerCase() === cur.toLowerCase())) opts.push([cur, cur]);   // a value set in the file
       opts.forEach(([v, l], i) => {
         const o = document.createElement('label'); o.className = 'opt';
@@ -707,15 +754,27 @@ export class SettingsPanel {
       add('', t('No flag'));
       if (this.country) add(this.country, flagName(this.country));
       for (const f of flagsByName()) add(f.code, f.name);
-      sel.onchange = () => void this.put(it.key, sel.value || null);
-      ctl.append(sel);
+      // the picked flag on the list's left, as the game draws it (/flags.png), in a box like Your horn's Listen; none
+      // with No flag
+      const pic = document.createElement('span'); pic.className = 'flag-pic'; pic.setAttribute('aria-hidden', 'true');
+      const flag = document.createElement('span'); pic.append(flag);
+      flag.style.background = `url(/flags.png) 0 0 / ${FLAG_SHEET_COLS * FLAG_W * FLAG_SHOWN}px `
+        + `${Math.ceil(FLAG_CODES.length / FLAG_SHEET_COLS) * FLAG_H * FLAG_SHOWN}px`;
+      const show = (v: string) => {
+        const at = flagAt(v);
+        pic.hidden = !at;
+        if (at) flag.style.backgroundPosition = `${-at[0] * FLAG_SHOWN}px ${-at[1] * FLAG_SHOWN}px`;
+      };
+      show(sel.value);
+      sel.onchange = () => { show(sel.value); void this.put(it.key, sel.value || null); };
+      ctl.append(pic, sel);
       described = sel;
       if (!this.countryAsked) { this.countryAsked = true; void this.askCountry(); }
     } else if (c.t === 'crews') {
       row.classList.add('set-list');
       described = crewControl({ list: crewsOf(cur, this.current('roam_crew_colours')), id, labelId: label.id, placeholder: c.placeholder, counts: this.crewCounts,
         draft: this.crewDraft, onDraft: v => { this.crewDraft = v; }, change: (list, focus) => void this.setCrews(list, focus),
-        // with the room this file sets: crew-mates meet within one room
+        // with the room this file sets, if any: crew-mates meet within one room
         link: name => inviteLink(location.origin, { crew: name, room: this.current('roam_room') }), said: msg => this.deps.say?.(msg) }, ctl);
     } else if (c.t === 'phrases') {
       row.classList.add('set-list');
@@ -761,7 +820,8 @@ export class SettingsPanel {
         share.onclick = async () => {
           const r = checkRoom(inp.value);
           if (!r.ok) { if (r.why) this.deps.say?.(t('Not saved: {key} = {why}.', { key: it.key, why: tvars(r.why, r.v ?? {}) })); return; }
-          this.deps.say?.(await copyLink(inviteLink(location.origin, { room: r.name })));
+          const said = await copyLink(inviteLink(location.origin, { room: r.name }), share);
+          if (said !== null) this.deps.say?.(said);
         };
         box.append(inp, share);
         ctl.append(box);
@@ -771,13 +831,13 @@ export class SettingsPanel {
     }
     if (setInFile && c.t !== 'crews' && c.t !== 'phrases') {   // (the Crews row has none: each crew's x leaves it; Your
                                                                // phrases has its own, beside Choose phrases)
-      const r = document.createElement('button'); r.type = 'button'; r.className = 'text-btn'; r.textContent = t('Reset');
-      r.setAttribute('aria-label', t('Reset {label}', { label: t(it.label) }));
+      const r = iconButton('reset-btn', t('Reset {label}', { label: labelOf(it) }), RESET);
       r.title = t('Back to the default ({value})', { value: shown(it, DEFAULTS.get(it.key) ?? '') });
       r.onclick = () => void this.put(it.key, null, comp ? [[comp, null]] : []);
       ctl.prepend(r);                                // first: the control keeps its place at the right edge
     }
-    row.append(label, help, ctl);
+    // a mod's row: its (i) right after its name (mods-ui.ts modName)
+    row.append(it.mod ? modName(label, it.mod) : label, help, ctl);
     if (it.key === 'roam_name' && c.t === 'text') this.deps.nameRow?.(row, ctl.querySelector('input')!, ctl);
     const bad = ([[it.key, f], [comp, f2]] as const).filter(([, x]) => x?.refused)
       .map(([k, x]) => t('settings.ini line {line}: {key} = {why}, so the default is used.', { line: x!.phys, key: k!, why: x!.why ? tvars(x!.why.t, x!.why.v) : x!.refused! }));
@@ -786,8 +846,7 @@ export class SettingsPanel {
     if (by && keyDef(by.key)?.key !== it.key) this.state(row, t('settings.ini line {line} sets {env} = {value} by its own name: that is what applies.', { line: by.phys, env: def.env, value: this.fileOnly.env[def.env] }), 'env');
     const envName = def.env;
     if (envName in this.deps.environment) this.state(row, t('The page address sets {env}={value}, which wins over this setting.', { env: envName, value: this.deps.environment[envName] }), 'env');
-    // a room or crews with free roam off do nothing: new players often never turned it on (the first Play does not ask
-    // while the server's free roam is busy), and saw nobody in the room their friends named
+    // a room or crews with free roam off do nothing: players who had it off saw nobody in the room their friends named
     if (ROAM_ROWS.includes(it.key) && cur && this.current('roam') !== 'on')
       this.state(row, it.key === 'roam_crew' ? t('Needs Free roam with others (Online).') : t('Needs Free roam with others (above).'), 'env');
     // who is in the room now (setRoomLine), while free roam is on in one
@@ -797,8 +856,8 @@ export class SettingsPanel {
       row.append(p);
     }
     this.describe(described, row);
-    // (a link copies what is there: read only or not)
-    if (this.ro()) for (const el of row.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button:not(.room-link):not(.crew-link), input, select')) el.disabled = true;
+    // (a link copies what is there, and a mod's (i) shows it: read only or not)
+    if (this.ro()) for (const el of row.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button:not(.room-link):not(.crew-link):not(.mod-about), input, select')) el.disabled = true;
     return row;
   }
 
@@ -847,8 +906,7 @@ export class SettingsPanel {
     }
     det.append(sum, grid);
     if (reset) {
-      const r = document.createElement('button'); r.type = 'button'; r.className = 'text-btn'; r.textContent = t('Reset');
-      r.setAttribute('aria-label', t('Reset {label}', { label }));
+      const r = iconButton('reset-btn', t('Reset {label}', { label }), RESET);
       r.title = t('Back to the default ({value})', { value: DEFAULT_PHRASES.slice(0, SLOTS).map(p => t(PHRASES[p].text)).join(', ') });
       r.onclick = reset;
       det.append(r);
@@ -902,10 +960,10 @@ export class SettingsPanel {
   /** a line of "Other settings in this file" back to its default; a keyboard's focus goes on to the next one */
   private async resetLine(phys: number, key: string, btn: HTMLButtonElement) {
     if (this.ro()) { this.deps.say?.(this.roText()); return; }
-    const at = [...this.root.querySelectorAll('#settings-other .text-btn')].indexOf(btn), focused = document.activeElement === btn;
+    const at = [...this.root.querySelectorAll('#settings-other .reset-btn')].indexOf(btn), focused = document.activeElement === btn;
     await this.write(resetLine(this.text ?? TEMPLATE, phys));
     if (focused) {
-      const rest = this.root.querySelectorAll<HTMLElement>('#settings-other .text-btn');
+      const rest = this.root.querySelectorAll<HTMLElement>('#settings-other .reset-btn');
       (rest[Math.min(at, rest.length - 1)] ?? this.root.querySelector<HTMLElement>('#settings-raw > summary'))?.focus();
     }
     this.deps.say?.(() => t('Saved: {key} is back to its default. Applies the next time you press Play.', { key }));

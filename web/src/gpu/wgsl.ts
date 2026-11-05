@@ -99,16 +99,33 @@ export const TONE = COPY + /* wgsl */`
 // t.w 1: on).  crop: the kept part (left, top, right, bottom, 0 .. 1).  The preview only (g.y 1): outside the kept
 // part dimmed, and with g.x 1 the lines of thirds over it, g.zw its size in pixels.
 export const PHOTO = COPY + /* wgsl */`
-struct Look { a: vec4f, b: vec4f, t: vec4f, crop: vec4f, g: vec4f }
+// tl: a tile's place in the whole picture (where its corner is, its part of the width and height: the vignette and the
+// crop are the whole picture's); fx: the fisheye (on, the tangent of the picture's half diagonal as drawn, width over
+// height)
+struct Look { a: vec4f, b: vec4f, t: vec4f, crop: vec4f, g: vec4f, tl: vec4f, fx: vec4f }
 @group(0) @binding(2) var<uniform> L: Look;
 @fragment fn fs_add(i: BOut) -> @location(0) vec4f { return vec4f(textureLoad(src, vec2i(i.pos.xy), 0).rgb, 1.0); }
+// the fisheye: the picture's corners stay where they are (a full-frame fisheye), each point as far out as a
+// stereographic lens puts it: the middle larger, straight lines bowed round it
+fn fisheye(uv: vec2f) -> vec2f {
+  let a = L.fx.z;
+  let v = (uv - vec2f(0.5)) * vec2f(a, 1.0);
+  let R = 0.5 * sqrt(a * a + 1.0);
+  let rho = length(v) / R;
+  let tc = L.fx.y;
+  let k = 2.0 * tan(0.5 * atan(tc)) / tc;            // where rho -> 0
+  let th = 2.0 * atan(rho * tan(0.5 * atan(tc)));
+  let s = select(k, tan(th) / tc / max(rho, 1e-6), rho > 1e-4);
+  return vec2f(0.5) + v * s / vec2f(a, 1.0);
+}
 @fragment fn fs_look(i: BOut) -> @location(0) vec4f {
-  var c = textureSample(src, smp, i.uv).rgb * L.a.x * L.b.rgb;
+  let uv = select(i.uv, fisheye(i.uv), L.fx.x > 0.5);
+  var c = textureSample(src, smp, uv).rgb * L.a.x * L.b.rgb;
   c = mix(vec3f(dot(c, vec3f(0.2126, 0.7152, 0.0722))), c, L.a.z);
   c = (c - vec3f(0.5)) * L.a.y + vec3f(0.5);
   c = vec3f(L.b.w) + c * (1.0 - L.b.w);
   let sz = max(L.crop.zw - L.crop.xy, vec2f(1e-6));
-  let p = (i.uv - L.crop.xy) / sz;
+  let p = (L.tl.xy + i.uv * L.tl.zw - L.crop.xy) / sz;
   c *= 1.0 - L.a.w * smoothstep(0.25, 1.0, length(p - vec2f(0.5)) * 1.41421356);
   c = clamp(c, vec3f(0.0), vec3f(1.0));
   if (L.t.w > 0.5) {

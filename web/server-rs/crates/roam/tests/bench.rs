@@ -74,7 +74,9 @@ fn bench_with(
             let (c, room) = (crews(i), if rooms > 1 { 1 + i % rooms } else { 0 });
             let crews = (!c.is_empty()).then_some(&c[..]);
             let name = format!("p{i}");
-            let core = if links > 0 { 10 } else { 2 };
+            // (BENCH_CORE=15: one-way links; links 1: the live mix, 60 % 32, 10 % 24, 20 % 16, 5 % 48, 5 % 64)
+            let core = std::env::var("BENCH_CORE").ok().and_then(|v| v.parse().ok()).unwrap_or(if links > 0 { 14 } else { 2 });
+            let links = if links == 1 { [32u8, 32, 32, 32, 32, 32, 24, 16, 16, 48, 64, 32][i as usize % 12] } else { links };
             frame(vip(i), &hello_with(1000 + i, &HelloOpts { core, room, crews, name: name.as_bytes(), links, ..Default::default() }))
         })
         .collect();
@@ -127,7 +129,7 @@ fn bench_with(
     };
     println!(
         "{what}: a tick {:.2} ms (median of {}; {:.2} to {:.2}; CPU {:.2} ms, the hub's thread {:.2} ms, least {:.2}), {} links{crewed}; \
-         {:.0} ns a frame (HELLO or SNAP)",
+         {:.0} ns a frame (HELLO or SNAP){}",
         times[times.len() / 2],
         times.len(),
         times[0],
@@ -136,8 +138,53 @@ fn bench_with(
         own[own.len() / 2],
         own[0],
         k.info("links"),
-        frames_ms * 1e6 / (23.0 * 2.0 * players as f64)
+        frames_ms * 1e6 / (23.0 * 2.0 * players as f64),
+        copies(&k, &pos, vip(0)),
     );
+}
+
+/// The car states the players send each other a second by the last tick's lists (each list's entries not marked RX:
+/// the ones a player sends its car to), as roam_core's rc_push_state sends them: by distance (every one within 300 m, every
+/// 4th past it, every 10th past 1 km), to a player who only gets ours (marked TX) by the hub's hints (core 16, `lists`)
+/// or every one (core 15: it knows nothing of where that player is)
+fn copies(k: &Kit, pos: &[[f64; 3]], vip0: u32) -> String {
+    let rate = |d: f64| if d > 1000.0 { 2.0 } else if d > 300.0 { 5.0 } else { 20.0 };
+    let (mut both, mut tx_before, mut tx_after, mut n_tx) = (0.0, 0.0, 0.0, 0u64);
+    let (mut list_bytes, mut lists) = (0usize, 0usize);
+    for (vip, f) in k.sent.lock().iter() {
+        list_bytes += f.len();
+        lists += 1;
+        let e = peers_of(f);
+        let marks = crew_marks(f).map(|m| m.1).unwrap_or_else(|| vec![0; e.len()]);
+        let a = pos[(vip - vip0) as usize];
+        for (q, m) in e.iter().zip(marks) {
+            if m & 0x20 != 0 {
+                continue;
+            }
+            let b = pos[(q.vip - vip0) as usize];
+            let r = rate((a[0] - b[0]).hypot(a[1] - b[1]));
+            if m & 0x40 != 0 {
+                tx_before += 20.0;
+                tx_after += r;
+                n_tx += 1;
+            } else {
+                both += r;
+            }
+        }
+    }
+    // (the lists: two a second, each to its player)
+    let lists = format!("; lists {:.0} B each, {:.1} Mbit/s", list_bytes as f64 / lists.max(1) as f64, list_bytes as f64 * 2.0 * 8.0 / 1e6);
+    if n_tx == 0 {
+        return format!("; car states {:.0}/s{lists}", both);
+    }
+    format!(
+        "; car states {:.0}/s, {:.0} of them to the {n_tx} who only get ours (hub: {}), with the hints {:.0}/s ({:+.1} %){lists}",
+        both + tx_before,
+        tx_before,
+        k.hub.info()["txOnly"],
+        both + tx_after,
+        100.0 * (tx_after - tx_before) / (both + tx_before)
+    )
 }
 
 /// crews of 2 to 6 players of one room, one after another (sizes 2, 3, 4, 5, 6 again and again: 500 crews of 2000
@@ -195,16 +242,26 @@ fn bench_crews() {
     with_and_without("4000 players in one room of 3 km, 1000 crews of 2-6", 4000, 1, 3000.0, 15.0, &small_crews(1));
 }
 
-/// the links a tick makes for players that ask for 32, 40 and 48 (core version 10): a crowd's links cost the tick
+/// the links a tick makes for players that ask for 32, 48 and 64 (core version 14): a crowd's links cost the tick
 /// about their number
 #[test]
 #[ignore]
-fn bench_links_32_40_48() {
-    for links in [32u8, 40, 48] {
+fn bench_links_32_48_64() {
+    for links in [32u8, 48, 64] {
         bench_links(&format!("3000 players in one room of 4 km, 15 m/s, {links} links"), 3000, 1, 4000.0, 15.0, links);
         bench_links(&format!("3000 players in one room of 1 km, 15 m/s, {links} links"), 3000, 1, 1000.0, 15.0, links);
         bench_links(&format!("2000 players on one spot of 10 m, {links} links"), 2000, 1, 10.0, 0.5, links);
     }
+}
+
+/// one-way links' cost (run with BENCH_CORE=15, and without for the links of before): the live mix of links
+#[test]
+#[ignore]
+fn bench_oneway() {
+    bench_links("3000 players in one room of 4 km, 15 m/s, the live mix", 3000, 1, 4000.0, 15.0, 1);
+    bench_links("3000 players in one room of 1 km, 15 m/s, the live mix", 3000, 1, 1000.0, 15.0, 1);
+    bench_links("2000 players on one spot of 10 m, the live mix", 2000, 1, 10.0, 0.5, 1);
+    bench_links("12000 players in one room of 4 km, 15 m/s, the live mix", 12000, 1, 4000.0, 15.0, 1);
 }
 
 #[test]

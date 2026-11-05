@@ -106,13 +106,15 @@ pub fn sha256_source(text: &str) -> String {
 /// The Permissions-Policy.  Only what the game uses: game controllers, full screen, the keyboard layout
 /// (key names in the settings; Keyboard Lock itself has no policy and needs full screen), sound without a
 /// click first, the screen kept on while a game runs (a controller's buttons do not keep every system's
-/// screen awake), and the motion sensor for the touch controls' tilt steering (the device orientation events
-/// need accelerometer and gyroscope).  The rest is switched off for this page and anything it could embed.
+/// screen awake), the motion sensor for the touch controls' tilt steering (the device orientation events
+/// need accelerometer and gyroscope), and WebHID for Valve's controllers, which are no gamepads to the
+/// browsers (web/src/input/steampad.ts; only those the player picked in the browser's list).  The rest is
+/// switched off for this page and anything it could embed.
 pub const PERMISSIONS_POLICY: &str = concat!(
     "gamepad=(self), fullscreen=(self), keyboard-map=(self), autoplay=(self), cross-origin-isolated=(self), ",
-    "screen-wake-lock=(self), accelerometer=(self), gyroscope=(self), ",
+    "screen-wake-lock=(self), accelerometer=(self), gyroscope=(self), hid=(self), ",
     "bluetooth=(), browsing-topics=(), camera=(), clipboard-read=(), display-capture=(), ",
-    "encrypted-media=(), geolocation=(), hid=(), idle-detection=(), local-fonts=(), ",
+    "encrypted-media=(), geolocation=(), idle-detection=(), local-fonts=(), ",
     "magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), ",
     "serial=(), usb=(), window-management=(), xr-spatial-tracking=()",
 );

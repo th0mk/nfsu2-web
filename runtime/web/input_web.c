@@ -479,6 +479,7 @@ int mprace_owns_input(void);
 void sms_request(int id);
 void photo_input(int cmd, int a, int b);                 /* photo.c */
 void roam_plat_name_piece(int off, int total, const char *b, int n);    /* roam_web.c */
+void roam_plat_name2_piece(int off, int total, const char *b, int n);   /* ...player 2's (co-op) */
 static int g_muted;
 static void handle(const InEv *e){
     int mute = mprace_owns_input();
@@ -522,7 +523,8 @@ static void handle(const InEv *e){
     case IEV_NAME: {
         char b[11];
         memcpy(b, e->ch, 3); memcpy(b + 3, &e->a, 4); memcpy(b + 7, &e->b, 4);   /* (wasm is little-endian) */
-        roam_plat_name_piece(e->dik, e->vk, b, (int)sizeof b);
+        if (e->flags & INAME_SEAT2) roam_plat_name2_piece(e->dik, e->vk, b, (int)sizeof b);
+        else roam_plat_name_piece(e->dik, e->vk, b, (int)sizeof b);
         break; }
     default: break;
     }
@@ -1042,6 +1044,12 @@ static void stick_dz(float *x, float *y, float dz){
 static float trig_dz(float v, float dz){
     if (v <= dz) return 0.f;
     return v >= 1.f ? 1.f : (v - dz) / (1.f - dz);
+}
+/* co-op free roam (coop.c): the local seat whose controller is player 2's (-1 none); the page then lets that
+ * controller drive nothing but its seat (not the pad the game's own input reads) */
+void gamepad_local_coop(int seat){
+    for (unsigned k = 0; k < INPUT_LOCAL_PADS; ++k)
+        atomic_store_explicit(g_mb.local_pad[k] + IM_LOCAL_COOP, (int)k == seat ? 1u : 0u, memory_order_release);
 }
 uint32_t gamepad_local_join_stamp(unsigned seat){
     return seat < INPUT_LOCAL_PADS ? atomic_load_explicit(g_mb.local_pad[seat] + IM_LOCAL_JOIN, memory_order_acquire) : 0;

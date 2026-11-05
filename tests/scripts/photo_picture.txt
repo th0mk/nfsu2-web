@@ -1,0 +1,40 @@
+# Photo mode's bigger pictures, lens shift, fisheye and shutter (runtime/photo.c capture, web/src/gpu photo-picture.ts,
+# png-worker.ts) in a Quick Race on the play page with artifacts= for the dumps: the picture as it is, the lens shifted
+# (the picture's middle right and up: what is above and right comes in, verticals stay upright), the fisheye, a picture
+# of 2 x 2 tiles (the page puts it together as take_<n>.png, twice the screen's size), and one over a quarter second
+# (the street streaked, the car sharp: the orbit rides with it).  Steps wait long: a slow page encodes late.
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    wzero
++0    photo hello
+7000wms autopilot on
+16000wms photo on
++30   expect i:0x890084 == 1
++0    photo dolly -8
++300  dump plain
++150  photo shift 0.3 0.25
++300  dump shift
++150  photo shift 0 0
++0    photo lens 1
++0    photo fov 110
++300  dump fisheye
++150  photo lens 0
++0    photo fov 70
++0    photo size 2
++300  dump before_tiles
++150  photo take
++700  dump after_tiles
++150  photo size 1
++0    photo shutter 250
++0    photo take
++900  dump shutter
++150  photo shutter 0
++0    photo off
++30   expect i:0x890084 == 0
++10   quit

@@ -2,11 +2,12 @@
  * Reports the first accesses outside the guest span with the lifted function
  * and the CPU registers, then traps like the unchecked build would. */
 #include "cpu.h"
+#include "../guest_span.h"
 #include <stdio.h>
 #include <stdlib.h>
 extern CPU *g_cur_cpu;
 uint8_t *guest_memchk(uint32_t a, unsigned n, const char *fn){
-    if ((uint64_t)a + n <= GUEST_END && a >= 0x10000u) return (uint8_t *)(uintptr_t)a;
+    if (guest_span(0x10000u, a, n)) return (uint8_t *)(uintptr_t)a;              /* (or the heap's window: guest_span.h) */
     static int shown = 0;
     if (shown++ < 16){
         CPU *c = g_cur_cpu;

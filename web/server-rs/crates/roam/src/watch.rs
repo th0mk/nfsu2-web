@@ -174,8 +174,11 @@ impl Watch {
     }
 
     /// A SNAP in free roam (status 2 or 5): what it shows of the car's way since the last one (a teleport or a fast
-    /// run), and of the player's clock; nothing of one older than the last
-    pub(crate) fn snap(&mut self, now: f64, p: [f64; 3], t_us: u32, clock: u8) -> [Option<Seen>; 2] {
+    /// run), and of the player's clock; nothing of one older than the last.  `beside`: its car is beside its browser's
+    /// first player's (co-op's second player, hub.rs `beside_own`), where the game puts it: however far it came, that
+    /// is no teleport and no run (the clock counts as ever; a run beside it is the first player's too, whose own watch
+    /// tells it)
+    pub(crate) fn snap(&mut self, now: f64, p: [f64; 3], t_us: u32, clock: u8, beside: bool) -> [Option<Seen>; 2] {
         let fix = Fix { p, at: now, t_us, clock };
         let Some(last) = self.last else {
             self.last = Some(fix);
@@ -199,6 +202,13 @@ impl Watch {
         let ms = recv.max(if same { own } else { 0.0 }).max(1.0);
         let d = distance(&last.p, &p);
         let past = d - DRIVE_MPS * ms / 1000.0;
+        if beside && past > 0.0 {
+            // (as a car that drove there: what went past before leaks away, nothing more counts)
+            self.over = (self.over - LEAK_MPS * ms / 1000.0).max(0.0);
+            self.over_ms += ms;
+            self.end_run();
+            return [None, if same { self.clock(now) } else { None }];
+        }
         let gain = past - LEAK_MPS * ms / 1000.0;
         if self.over == 0.0 && gain > 0.0 {
             self.over_from = last.p;
@@ -421,7 +431,7 @@ mod tests {
         fn at(&mut self, ms: f64, own: f64, p: [f64; 3]) -> [Option<Seen>; 2] {
             self.now += ms;
             self.t_us = self.t_us.wrapping_add((own * 1000.0) as u32);
-            self.w.snap(self.now, p, self.t_us, self.clock)
+            self.w.snap(self.now, p, self.t_us, self.clock, false)
         }
         fn snap(&mut self, p: [f64; 3]) -> [Option<Seen>; 2] {
             self.at(500.0, 500.0, p)
@@ -537,13 +547,13 @@ mod tests {
         assert_eq!(d.at(6500.0, 6000.0, x(600.0)), [None, None]);
         for i in 1..12 {
             let t = t_old.wrapping_add(i * 500_000);
-            assert_eq!(d.w.snap(d.now + i as f64, x(i as f64 * 50.0), t, 0), [None, None], "old SNAP {i}");
+            assert_eq!(d.w.snap(d.now + i as f64, x(i as f64 * 50.0), t, 0, false), [None, None], "old SNAP {i}");
         }
         assert_eq!(d.at(500.0, 500.0, x(650.0)), [None, None]);
         // an older clock epoch too
         d.clock = 5;
         d.snap(x(700.0));
-        assert_eq!(d.w.snap(d.now + 1.0, x(9000.0), d.t_us, 4), [None, None]);
+        assert_eq!(d.w.snap(d.now + 1.0, x(9000.0), d.t_us, 4, false), [None, None]);
         assert_eq!(d.w.jumps, 0);
     }
 
@@ -585,7 +595,7 @@ mod tests {
     fn a_connection_that_catches_up_is_no_fast_clock() {
         let mut d = Drive::new();
         d.now = 12_000.0;
-        d.w.snap(d.now, x(0.0), d.t_us, 0);
+        d.w.snap(d.now, x(0.0), d.t_us, 0, false);
         for i in 1..=20 {
             d.at(500.0, 500.0, x(i as f64 * 50.0));
         }
@@ -623,7 +633,7 @@ mod tests {
     fn a_late_start_is_no_fast_clock() {
         let mut d = Drive::new();
         d.now = 12_000.0;
-        d.w.snap(d.now, x(0.0), d.t_us, 0);
+        d.w.snap(d.now, x(0.0), d.t_us, 0, false);
         for i in 1..=24 {
             d.at(1.0, 500.0, x(i as f64 * 50.0));
         }
@@ -668,5 +678,29 @@ mod tests {
         assert_eq!(w.summary(1, "Bob", 500_000.0, false), None, "not 10 min yet");
         assert!(w.summary(1, "Bob", 600_000.0, false).unwrap().ends_with("(so far): 9 teleports"));
         assert_eq!(w.summary(1, "Bob", 1_300_000.0, false), None, "all told since");
+    }
+
+    // co-op's second player put beside its first one (`beside`), 2 km from where it was: no teleport, no run, nothing
+    // added up for the next jump; the same jump not beside it is one, and a car that drives on fast from there is
+    // watched as ever
+    #[test]
+    fn a_second_player_put_beside_its_first_is_no_teleport() {
+        let mut d = Drive::new();
+        d.snap(x(0.0));
+        d.now += 500.0;
+        d.t_us = d.t_us.wrapping_add(500_000);
+        assert_eq!(d.w.snap(d.now, x(2000.0), d.t_us, d.clock, true), [None, None]);
+        assert_eq!((d.w.jumps, d.w.runs, d.w.over), (0, 0, 0.0));
+        assert_eq!(d.drive(2000.0, 4000.0, 100.0), []);
+        let [jump, _] = d.snap(x(6000.0));
+        assert!(matches!(jump, Some(Seen::Jump { .. })), "not beside it: {jump:?}");
+        // put beside it, then on at 600 km/h: a run, told as ever
+        let mut told = Vec::new();
+        for i in 1..=10 {
+            d.now += 500.0;
+            d.t_us = d.t_us.wrapping_add(500_000);
+            told.extend(d.w.snap(d.now, x(6000.0 + i as f64 * 83.3), d.t_us, d.clock, i == 1).into_iter().flatten());
+        }
+        assert!(matches!(told[..], [Seen::Fast { .. }]), "{told:?}");
     }
 }

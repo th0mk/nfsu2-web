@@ -1,0 +1,87 @@
+# Co-op free roam from the pause menu: Add Player 2 asks; START on a second controller joins (the game resumes);
+# Remove Player 2 lets player 2 go; Add Player 2, Keyboard joins on the keyboard's left half; Add Player 2, Cancel.
+# The pause menu without the page's Photo Mode: Return to Explore Mode, Save, Jump to Garage?, Options, Replay
+# (greyed out, skipped), Add Player 2, Quit to Main Menu; where it opens differs (Return to Explore Mode is skipped
+# once the car moved): Right to Quit, then one Left.
+0     roam fe2roam 14000
++0    roam smsauto on
++120  localpad 1 connect 1
++30   tap ESCAPE
++90   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap LEFT
++60   tap RETURN
++60   waitfe IG_GenericDialog_MED.fng 120
++0    localpad 1 START 1
++10   localpad 1 START 0
++0    waitmem 0xd00030 2 1200
++0    expect i:0x8654a4 == 6
++0    status coop_menu_pad
+# Remove Player 2
++0    tap ESCAPE
++90   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap LEFT
++60   tap RETURN
++120  expect i:0xd00030 == 1
++0    status coop_menu_removed
+# Add Player 2, Keyboard
++0    tap ESCAPE
++90   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap LEFT
++60   tap RETURN
++60   waitfe IG_GenericDialog_MED.fng 120
++30   tap LEFT
++30   tap RETURN
++0    waitmem 0xd00030 2 1200
++60   roam coop state
++0    down W
++100  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0    up W
++0    status coop_menu_keyboard
+# Remove, then Add Player 2 and Cancel: nobody joins
++0    tap ESCAPE
++90   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap LEFT
++60   tap RETURN
++120  expect i:0xd00030 == 1
++0    tap ESCAPE
++90   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap LEFT
++60   tap RETURN
++60   waitfe IG_GenericDialog_MED.fng 120
++30   tap RETURN
++120  expect i:0xd00030 == 1
++0    tap ESCAPE
++120  expect i:0xd00030 == 1
++0    status coop_menu_complete
++10   quit

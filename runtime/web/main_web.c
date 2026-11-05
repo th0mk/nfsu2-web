@@ -100,6 +100,7 @@ int main(int argc, char **argv){
     { extern void tunegraph_install(void); tunegraph_install(); }     /* the tuning graphs' dots follow a press and a drag */
     { extern void regional_install(void); regional_install(); }       /* the European game's Corsa and 106 for sale, and AI racers' cars */
     { extern void garage_install(void); garage_install(); }           /* the career garage's slots 6-10 and Trade Car */
+    { extern void vinylpacks_install(void); vinylpacks_install(); }   /* the Japanese release's Art Factory 28-34 (VINYLPACKS) */
     { extern void carshadow_install(void); carshadow_install(); }     /* a car's shadow 1.5 cm above the road, not 4: off its wheels */
     { extern void hornmenu_install(void); hornmenu_install(); }   /* the horns' volume (registry HornVolume) */
     { extern void tonemenu_install(void); tonemenu_install(); }   /* Exposure and White Level (registry) to the renderer */

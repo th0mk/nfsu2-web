@@ -1,0 +1,18 @@
+# Co-op free roam online, planes, instance A: player 2's car counts as a plane ("roam mp fly fake2 on", roam_game.c
+# c2_fly) until A's game takes the page off the switch, as for player 1's car (fly_frame): with NFSU2_ROAM_FLY_S=10
+# after 10 s, "player 2's car has been in the air for 10 s: the page takes the player off the switch", and B
+# (coop_online_fly_b.txt) sees both of A's cars go.
+#   node web/tools/roam-pair.mjs --seed ~/projects/nsfu2/work/seed/career/s2_r7 \
+#        --a Alma:coop_online_fly_a.txt:NFSU2_ROAM_FLY_S=10 --b Boris:coop_online_fly_b.txt:COOP_PEER=Alma
+0     roam fe2roam 14000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam coop join kb
++0    waitmem 0xd00030 2 1200
++150  roam mp waitpeers2 1 3000
++120  roam mp fly fake2 on
++0    status coop_fly_plane
++1200 roam mp coop
++0    roam mp fly fake2 off
++0    status coop_fly_done
++600  quit

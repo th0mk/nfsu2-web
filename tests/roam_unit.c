@@ -477,6 +477,11 @@ static int g_hub_ncrews[NN]; static uint32_t g_hub_crews[NN][RC_CREW_MAX];   /* 
 static uint32_t g_hub_duel[NN];             /* ...and its outrun's other player (rc_set_duel) */
 static uint32_t g_hub_room[NN];             /* ...and its room */
 static uint16_t g_hub_flags[NN];            /* ...and its flags: with RC_HF_HUBCREW its lists end in crew marks */
+static uint8_t g_hub_way[NN][NN];           /* the way node i's link with node j goes, as the hub marks it in i's list (RC_MARK_RXONLY, _TXONLY) */
+static uint8_t g_hub_far[NN][NN];           /* ...and with g_hub_hints, how far j is from i in i's list (1, 4, 10; core 16) */
+static int g_hub_hints;
+static int g_hub_ngone[NN]; static uint32_t g_hub_gone_id[NN][4]; static uint8_t g_hub_gone_why[NN][4];   /* ...and why cars went */
+static int g_snap_tx[NN][NN];               /* SNAPs each node sent each other one */
 static rc_lobby g_hub_lobby_last[NN];
 static int64_t g_hub_next;
 static void hub_in(int from, const uint8_t *b, int len){
@@ -494,7 +499,7 @@ static void net_send(void *u, uint32_t ip, uint16_t port, const uint8_t *buf, in
     if (len > 5 && buf[5] == RC_MSG_CFG) g_cfg_tx[from]++;
     if (to >= 0 && len > 5 && buf[5] == RC_MSG_PING) g_ping_tx[from][to]++;
     if (to >= 0 && len > 5 && buf[5] == RC_MSG_HELLO) g_hello_tx[from][to]++;
-    if (to >= 0 && len > 15 && buf[5] == RC_MSG_SNAP){ if (buf[14] & RC_HF_STATEX) g_snapx_rx[to]++; else g_snap_rx[to]++; }
+    if (to >= 0 && len > 15 && buf[5] == RC_MSG_SNAP){ if (buf[14] & RC_HF_STATEX) g_snapx_rx[to]++; else g_snap_rx[to]++; g_snap_tx[from][to]++; }
     if (to < 0 || g_drop[from][to]) return;
     if (to == g_nocrew_from && len > 15 && buf[5] == RC_MSG_HELLO){ rc_msg d; if (rc_decode(buf, len, &d) == RC_OK && d.u.hello.n_crews) g_crew_to_old++; }
     if (len > 15 && buf[5] == RC_MSG_HELLO){ rc_msg d; if (rc_decode(buf, len, &d) == RC_OK && d.u.hello.n_crews) g_crew_p2p++; }
@@ -559,8 +564,16 @@ static void net_run(int64_t until, int nn){
                     m.h.flags = RC_HF_CREW; m.u.peers.n_mine = (uint8_t)g_hub_ncrews[i];
                     memcpy(m.u.peers.mine, g_hub_crews[i], sizeof m.u.peers.mine);
                 }
+                for (int j = 0; j < nn; j++) if (g_hub_link[i][j] && g_hub_way[i][j]) m.h.flags = RC_HF_CREW;   /* (one-way links: marks) */
+                if (g_hub_hints){                     /* the hints of a hub of core 16, after the marks */
+                    m.h.flags = RC_HF_CREW; m.u.peers.hints = 1; m.u.peers.n_gone = (uint8_t)g_hub_ngone[i];
+                    for (int k = 0; k < g_hub_ngone[i]; k++){ m.u.peers.gone[k].id = g_hub_gone_id[i][k]; m.u.peers.gone[k].why = g_hub_gone_why[i][k]; }
+                    g_hub_ngone[i] = 0;
+                }
                 for (int j = 0; j < nn; j++)
                     if (g_hub_link[i][j] && m.u.peers.n < RC_MAX_PEERS){
+                        m.u.peers.crew[m.u.peers.n] = g_hub_way[i][j];
+                        m.u.peers.far[m.u.peers.n] = g_hub_far[i][j] ? g_hub_far[i][j] : 1;
                         m.u.peers.e[m.u.peers.n].ip = node_ip(j); m.u.peers.e[m.u.peers.n].port = node_port(j);
                         m.u.peers.e[m.u.peers.n].id = g_n[j].conf.self_id;
                         for (int c = 0; m.h.flags && c < g_hub_ncrews[i]; c++)
@@ -735,6 +748,109 @@ static void t_hub(void){
     rc_shutdown(&g_n[3], 0);
     CHECK(g_hub_bye[3] == 1, "hub: a BYE when we stop");
     g_hub_on = 0;
+}
+
+/* ---- 4c'. one-way links (core 15): we get a car and send it nothing of ours, or the other way round -- */
+static void t_oneway(void){
+    mesh(3, 8);
+    g_hub_on = 1; g_hub_next = 0; memset(g_hub_link, 0, sizeof g_hub_link); memset(g_hub_way, 0, sizeof g_hub_way);
+    for (int i = 0; i < 3; i++){ g_n[i].conf.hub_ip = HUB_IP; g_n[i].conf.hub_port = HUB_PORT; }
+    uint32_t id[3]; for (int i = 0; i < 3; i++) id[i] = g_n[i].conf.self_id;
+    hub_links(0, 1); hub_links(0, 2);
+    g_hub_way[0][1] = RC_MARK_RXONLY; g_hub_way[1][0] = RC_MARK_TXONLY;    /* 0 gets 1's car, 1 gets nothing of 0's */
+    g_n[0].conf.max_players = 2;          /* a group of 2 by broadcast: the hub's list decides, both peers come */
+    drive(3, g_now + 3000000);
+    memset(g_snap_tx, 0, sizeof g_snap_tx);
+    drive(3, g_now + 3000000);
+    int k01 = peer_of(0, id[1]), k10 = peer_of(1, id[0]), k02 = peer_of(0, id[2]);
+    CHECK(k01 >= 0 && k10 >= 0 && k02 >= 0 && g_n[0].peer[k01].state == RC_PS_EST && g_n[1].peer[k10].state == RC_PS_EST &&
+          g_n[0].peer[k02].state == RC_PS_EST, "one way: both ends established, past max_players with the hub's list");
+    CHECK(rc_peer_way(&g_n[0], k01) == RC_MARK_RXONLY && rc_peer_way(&g_n[1], k10) == RC_MARK_TXONLY && rc_peer_way(&g_n[0], k02) == 0,
+          "one way: the hub's marks read (%d %d %d)", rc_peer_way(&g_n[0], k01), rc_peer_way(&g_n[1], k10), rc_peer_way(&g_n[0], k02));
+    CHECK(g_snap_tx[0][1] == 0 && g_snap_tx[1][0] > 40 && g_snap_tx[0][2] > 40 && g_snap_tx[2][0] > 40,
+          "one way: no SNAP to a player who gets nothing of ours, to the others as before (%d %d %d %d)",
+          g_snap_tx[0][1], g_snap_tx[1][0], g_snap_tx[0][2], g_snap_tx[2][0]);
+    CHECK(g_n[0].peer[k01].mo.n > 0 && g_n[1].peer[k10].mo.n == 0 && !g_n[1].peer[k10].lost,
+          "one way: its car at our end, none of ours at its end, and it does not count us lost");
+    /* a game that sends anyway (it ignores RC_MARK_RXONLY): its SNAPs are not taken at the other end */
+    uint32_t pol = g_n[1].rx_policy;
+    for (int r = 0; r < 10; r++){
+        g_n[0].peer[k01].hub_way = 0;
+        rc_state st; memset(&st, 0, sizeof st); st.q[3] = 1; st.t_us = (uint32_t)g_now;
+        g_n[0].next_snap_us = 0; rc_push_state(&g_n[0], &st, g_now);
+        net_run(g_now + 20000, 3);
+    }
+    CHECK(g_n[1].peer[k10].mo.n == 0 && g_n[1].rx_policy > pol, "one way: SNAPs of a player who should send none are dropped (%u)", g_n[1].rx_policy - pol);
+    /* both ways again: SNAPs both ways */
+    memset(g_hub_way, 0, sizeof g_hub_way);
+    drive(3, g_now + 2000000);
+    memset(g_snap_tx, 0, sizeof g_snap_tx);
+    drive(3, g_now + 2000000);
+    CHECK(rc_peer_way(&g_n[0], k01) == 0 && g_snap_tx[0][1] > 20, "one way, then both ways: our SNAPs to it again (%d)", g_snap_tx[0][1]);
+    g_hub_on = 0; for (int i = 0; i < 3; i++) g_n[i].conf.hub_ip = 0;
+}
+
+/* ---- 4c''. the hub's hints (core 16): a player who only gets our car gets every 4th or 10th far off, and why a car
+ * near us went -- */
+static void t_hints(void){
+    mesh(3, 8);
+    g_hub_on = 1; g_hub_next = 0; memset(g_hub_link, 0, sizeof g_hub_link); memset(g_hub_way, 0, sizeof g_hub_way);
+    memset(g_hub_far, 0, sizeof g_hub_far); g_hub_hints = 1;
+    for (int i = 0; i < 3; i++){ g_n[i].conf.hub_ip = HUB_IP; g_n[i].conf.hub_port = HUB_PORT; }
+    uint32_t id[3]; for (int i = 0; i < 3; i++) id[i] = g_n[i].conf.self_id;
+    hub_links(0, 1); hub_links(0, 2); hub_links(1, 2);
+    /* 0 gets 1's and 2's cars and sends them nothing; 1 and 2 get each other's */
+    g_hub_way[0][1] = g_hub_way[0][2] = RC_MARK_RXONLY; g_hub_way[1][0] = g_hub_way[2][0] = RC_MARK_TXONLY;
+    g_hub_far[1][0] = 4; g_hub_far[2][0] = 10;           /* far off and very far, as the hub has it */
+    g_n[0].conf.max_players = 3;
+    drive(3, g_now + 3000000);
+    memset(g_snap_tx, 0, sizeof g_snap_tx); memset(g_ping_tx, 0, sizeof g_ping_tx);
+    drive(3, g_now + 10000000);
+    int k10 = peer_of(1, id[0]), k20 = peer_of(2, id[0]), k12 = peer_of(1, id[2]);
+    CHECK(k10 >= 0 && k20 >= 0 && k12 >= 0 && g_n[1].peer[k10].hub_far == 4 && g_n[2].peer[k20].hub_far == 10 && g_n[1].peer[k12].hub_far == 1,
+          "hints: read from the list (%d %d %d)", k10 >= 0 ? g_n[1].peer[k10].hub_far : -1, k20 >= 0 ? g_n[2].peer[k20].hub_far : -1,
+          k12 >= 0 ? g_n[1].peer[k12].hub_far : -1);
+    /* (the nodes stand together: by their own states every one would be near) */
+    CHECK(g_snap_tx[1][0] >= 45 && g_snap_tx[1][0] <= 55 && g_snap_tx[2][0] >= 18 && g_snap_tx[2][0] <= 22 && g_snap_tx[1][2] >= 190,
+          "hints: to the one who only gets our car every 4th far off, every 10th very far; both ways by our own states (%d %d %d in 10 s)",
+          g_snap_tx[1][0], g_snap_tx[2][0], g_snap_tx[1][2]);
+    CHECK(g_ping_tx[1][0] <= 4 && g_ping_tx[1][2] >= 8, "hints: and its pings as rare (%d, %d near)", g_ping_tx[1][0], g_ping_tx[1][2]);
+    CHECK(g_n[0].peer[peer_of(0, id[1])].mo.n > 0 && g_n[0].peer[peer_of(0, id[2])].mo.n > 0 && !g_n[0].peer[peer_of(0, id[2])].lost,
+          "hints: the far ones' cars still come, none lost");
+    /* near again: every one */
+    g_hub_far[1][0] = 1;
+    drive(3, g_now + 2000000);
+    memset(g_snap_tx, 0, sizeof g_snap_tx);
+    drive(3, g_now + 5000000);
+    CHECK(g_snap_tx[1][0] >= 95, "hints: near again, every one (%d in 5 s)", g_snap_tx[1][0]);
+    /* why a car near us went: kept 10 s, the newest for its player */
+    g_hub_ngone[0] = 2; g_hub_gone_id[0][0] = 0x1234u; g_hub_gone_why[0][0] = RC_GONE_SENDS;
+    g_hub_gone_id[0][1] = id[1]; g_hub_gone_why[0][1] = RC_GONE_ROOM;
+    drive(3, g_now + 1500000);
+    CHECK(rc_hub_gone(&g_n[0], 0x1234u, g_now) == RC_GONE_SENDS && rc_hub_gone(&g_n[0], id[1], g_now) == RC_GONE_ROOM &&
+          rc_hub_gone(&g_n[0], id[2], g_now) == RC_GONE_NONE && rc_hub_gone(&g_n[1], 0x1234u, g_now) == RC_GONE_NONE,
+          "hints: why the hub let a car go, by its player (%d %d)", rc_hub_gone(&g_n[0], 0x1234u, g_now), rc_hub_gone(&g_n[0], id[1], g_now));
+    CHECK(rc_hub_gone(&g_n[0], 0x1234u, g_now + 11000000) == RC_GONE_NONE, "hints: and forgotten after 10 s");
+    for (int k = 0; k < 40; k++){ g_hub_ngone[0] = 1; g_hub_gone_id[0][0] = 0x5000u + (uint32_t)k; g_hub_gone_why[0][0] = RC_GONE_LIST;
+                                  drive(3, g_now + 1000000); }
+    CHECK(g_n[0].n_hub_gone == RC_GONE_MAX && rc_hub_gone(&g_n[0], 0x5000u + 39, g_now) == RC_GONE_LIST && rc_hub_gone(&g_n[0], 0x5000u, g_now) == RC_GONE_NONE,
+          "hints: the last RC_GONE_MAX kept (%d)", g_n[0].n_hub_gone);
+    /* a hub without hints (core 15's): every one again */
+    g_hub_hints = 0; g_hub_far[1][0] = 4;
+    drive(3, g_now + 2000000);
+    memset(g_snap_tx, 0, sizeof g_snap_tx);
+    drive(3, g_now + 5000000);
+    CHECK(g_n[1].peer[k10].hub_far == 0 && g_snap_tx[1][0] >= 95, "hints: none from the hub, every one as before (%d)", g_snap_tx[1][0]);
+    /* a teleport (rc_bump_epoch): the hub hears where we are with the next snapshot, not up to T_HUB_SNAP later */
+    drive(3, g_now + 1000000);
+    int hs = g_hub_snap[0];
+    rc_state ts; memset(&ts, 0, sizeof ts); ts.q[3] = 1; ts.t_us = (uint32_t)g_now; ts.p[0] = 2000.f;
+    g_n[0].next_snap_us = 0; rc_push_state(&g_n[0], &ts, g_now);
+    int before = g_hub_snap[0] - hs;
+    rc_bump_epoch(&g_n[0]); g_n[0].next_snap_us = 0; rc_push_state(&g_n[0], &ts, g_now + 1000);
+    CHECK(g_hub_snap[0] - hs == before + 1, "hints: a jump's first snapshot goes to the hub at once (%d, %d)", before, g_hub_snap[0] - hs);
+    g_hub_on = 0; for (int i = 0; i < 3; i++) g_n[i].conf.hub_ip = 0;
+    memset(g_hub_way, 0, sizeof g_hub_way); memset(g_hub_far, 0, sizeof g_hub_far);
 }
 
 /* ---- 4d. friends far away: their HELLOs and pings as much rarer as their snapshots -- */
@@ -1625,7 +1741,27 @@ static void t_crews(void){
           d.u.peers.crew[0] == 2 && d.u.peers.crew[1] == 0 && d.u.peers.crew[2] == 3 && d.u.peers.e[2].id == 0x22u, "PEERS' crew marks round trip");
     memcpy(lb, b, (size_t)n - 4); lb[n - 4] = 0xAA; lb[n - 3] = 0xBB; ln = n + 2; lb[6] = (uint8_t)ln; lb[7] = (uint8_t)(ln >> 8);
     c = rc_crc32(lb, (uint32_t)ln - 4); for (int k = 0; k < 4; k++) lb[ln - 4 + k] = (uint8_t)(c >> (8 * k));
-    CHECK(rc_decode(lb, ln, &d) == RC_OK && d.u.peers.crew[2] == 3, "bytes after the marks skipped (a newer hub's)");
+    CHECK(rc_decode(lb, ln, &d) == RC_OK && d.u.peers.crew[2] == 3 && !d.u.peers.hints, "bytes after the marks that are no hints: skipped, no hints");
+    {   /* the hints of a hub of core 16 after the marks: the far ones by index (+ very far), why cars went; what a newer
+         * hub adds after them skipped */
+        rc_msg h = m; uint8_t hb[RC_MAX_DGRAM], hl[RC_MAX_DGRAM];
+        h.u.peers.hints = 1; h.u.peers.far[0] = 1; h.u.peers.far[1] = 4; h.u.peers.far[2] = 10;
+        h.u.peers.n_gone = 2; h.u.peers.gone[0].id = 0x99u; h.u.peers.gone[0].why = RC_GONE_ROOM;
+        h.u.peers.gone[1].id = 0x77u; h.u.peers.gone[1].why = RC_GONE_SENDS;
+        int hn = rc_encode(&h, hb, sizeof hb);
+        CHECK(hn == n + 1 + 2 + 1 + 2 * 5 && hb[n - 4] == 2 && hb[n - 3] == 1 && hb[n - 2] == (2 | RC_HINT_VERYFAR) && hb[n - 1] == 2,
+              "PEERS' hints: 2 far ones (1, 2 very far), 2 gone (%d bytes)", hn);
+        CHECK(rc_decode(hb, hn, &d) == RC_OK && d.u.peers.hints && d.u.peers.far[0] == 1 && d.u.peers.far[1] == 4 && d.u.peers.far[2] == 10 &&
+              d.u.peers.n_gone == 2 && d.u.peers.gone[1].id == 0x77u && d.u.peers.gone[1].why == RC_GONE_SENDS && d.u.peers.crew[2] == 3,
+              "PEERS' hints round trip");
+        memcpy(hl, hb, (size_t)hn - 4); hl[hn - 4] = 0xAA; int hln = hn + 1; hl[6] = (uint8_t)hln; hl[7] = (uint8_t)(hln >> 8);
+        uint32_t hc = rc_crc32(hl, (uint32_t)hln - 4); for (int k = 0; k < 4; k++) hl[hln - 4 + k] = (uint8_t)(hc >> (8 * k));
+        CHECK(rc_decode(hl, hln, &d) == RC_OK && d.u.peers.hints && d.u.peers.far[2] == 10 && d.u.peers.n_gone == 2, "bytes after the hints skipped");
+        memcpy(hl, hb, (size_t)hn); hl[n - 2] = 3 | RC_HINT_VERYFAR; hc = rc_crc32(hl, (uint32_t)hn - 4);
+        for (int k = 0; k < 4; k++) hl[hn - 4 + k] = (uint8_t)(hc >> (8 * k));
+        CHECK(rc_decode(hl, hn, &d) == RC_OK && !d.u.peers.hints && d.u.peers.far[1] == 0 && !d.u.peers.n_gone && d.u.peers.crew[2] == 3,
+              "hints naming no entry: none taken, the list stands");
+    }
     lb[15] &= (uint8_t)~(RC_HF_CREW >> 8); c = rc_crc32(lb, (uint32_t)ln - 4); for (int k = 0; k < 4; k++) lb[ln - 4 + k] = (uint8_t)(c >> (8 * k));
     CHECK(rc_decode(lb, ln, &d) == RC_E_TRAIL, "without the flag the marks are trailing bytes: an older core gets none");
     memcpy(lb, b, (size_t)n); lb[pbase - 4] = RC_CREW_MAX + 1; c = rc_crc32(lb, (uint32_t)n - 4); for (int k = 0; k < 4; k++) lb[n - 4 + k] = (uint8_t)(c >> (8 * k));
@@ -1855,6 +1991,8 @@ int main(int argc, char **argv){
     t_session();
     t_review();
     t_hub();
+    t_oneway();
+    t_hints();
     t_far();
     t_duel();
     t_flag();

@@ -80,7 +80,10 @@ fn onl1_messenger_rates() {
     let a = w.buddy(ga, &ka);
     let b = w.buddy(gb, &kb);
     assert_eq!(w.c(a).l("AUTH").code, "");
-    w.send(b, "RADD", fields![("USER", "Flooder"), ("LIST", "B"), ("ID", 1)]);
+    // friends (a request, and the other's request back)
+    w.send(b, "RADM", fields![("USER", "Flooder"), ("ID", 1)]);
+    w.send(a, "RADM", fields![("USER", "Friend1"), ("ID", 1)]);
+    assert!(w.core.buddies.list("Friend1").unwrap().b.contains_key("flooder"));
     let pgets = |w: &World| w.c(b).msgs.iter().filter(|m| m.kind == "PGET" && m.get("USER") == Some("Flooder")).count();
     // ten presences that change nothing, then ten that do, in one moment: the friend hears of the first and, a
     // second later, of the last
@@ -334,14 +337,16 @@ fn onl6_blocked_list_follows_the_name() {
     let la = w.login_as(ga, "AliceAcct", "Alice", "secret");
     let ka = w.lkey(la);
     let ab = w.buddy(ga, &ka);
-    for (l, u) in [("B", "BobFriend"), ("B", "Mallory"), ("I", "Mallory")] {
-        w.send(ab, "RADD", fields![("LIST", l), ("USER", u), ("ID", 1)]);
-    }
-    // while Alice is online the block works
     let gm = client(&mut w, "10.77.0.51");
     let lm = login(&mut w, gm, "Mallory");
     let km = w.lkey(lm);
     let mb = w.buddy(gm, &km);
+    // Mallory a friend (a request, answered), then blocked
+    w.send(mb, "RADM", fields![("USER", "Alice"), ("ID", 1)]);
+    w.send(ab, "RRSP", fields![("USER", "Mallory"), ("ANSW", "Y"), ("ID", 1)]);
+    assert!(w.core.buddies.list("Alice").unwrap().b.contains_key("mallory"));
+    w.send(ab, "RADD", fields![("LIST", "I"), ("USER", "Mallory"), ("ID", 1)]);
+    // while Alice is online the block works
     w.send(mb, "SEND", fields![("USER", "Alice"), ("BODY", "hi")]);
     assert_eq!(w.c(ab).count("RECV"), 0, "a blocked sender's message does not arrive");
     // and while she is away, though Mallory is on her friends list too

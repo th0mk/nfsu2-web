@@ -118,7 +118,13 @@ impl App {
                     m.insert("alt".into(), status_json(&alt, &self.name_status(n, &alt, owner.as_deref(), now)));
                 }
                 if let Some(mine) = owner.as_deref().and_then(|o| n.claims.mine(o, now)) {
-                    m.insert("mine".into(), mine_json(&mine));
+                    let mut j = mine_json(&mine);
+                    // (a name the operator took away from someone that reads as this claim: the page does not play it,
+                    // claim-ui.ts, and its next claim is a change)
+                    if self.bans.deny().has(&mine.name) {
+                        j["blocked"] = true.into();
+                    }
+                    m.insert("mine".into(), j);
                 }
                 if let Some(t) = &n.turnstile {
                     m.insert("captcha".into(), t.site.clone().into());
@@ -293,6 +299,11 @@ mod tests {
         assert_eq!(j(&kit.get("/names?name=Alex", &[B]).await.body)["state"], "taken");
         assert_eq!(j(&kit.get("/names?name=Alex", &[]).await.body)["state"], "taken");
         assert_eq!(claim(&kit, B, "ALEX").await, (409, json!({ "error": "taken" })));
+        // its second form (co-op's second player, "Alex 2") is its own too, and another's claim of it is refused
+        let g = j(&kit.get("/names?name=Alex%202", &[A]).await.body);
+        assert_eq!((&g["name"], &g["state"]), (&json!("Alex_2"), &json!("yours")));
+        assert_eq!(j(&kit.get("/names?name=Alex%202", &[B]).await.body)["state"], "taken");
+        assert_eq!(claim(&kit, B, "Alex 2").await, (409, json!({ "error": "taken" })));
         // a change: the first is free, the next waits a week; the old name stays its own
         let (code, v) = claim(&kit, A, "Speedy").await;
         assert_eq!((code, &v["mine"]["name"]), (200, &json!("Speedy")));
@@ -305,6 +316,11 @@ mod tests {
         assert_eq!(j(&kit.get("/names?name=Speedy", &[B]).await.body)["state"], "free");
         assert_eq!(j(&kit.get("/names?name=Alex", &[B]).await.body)["state"], "free");
         assert_eq!(claim(&kit, B, "Alex").await.0, 200);
+        // a name the operator takes away from someone else that reads as the claim: the page hears so
+        assert_eq!(j(&kit.get("/names?name=Other", &[B]).await.body)["mine"].get("blocked"), None);
+        kit.app.bans.rename("Alex", &["Alex".to_string()], &Default::default(), "", nfsu2_util::now_ms() as i64).unwrap();
+        let g = j(&kit.get("/names?name=Other", &[B]).await.body);
+        assert_eq!((&g["mine"]["name"], &g["mine"]["blocked"]), (&json!("Alex"), &json!(true)));
         // another site's page claims nothing
         let x = kit.request("POST", "/names", &[B, ("Origin", "https://evil.example")], b"{\"name\":\"Evil\"}").await;
         assert_eq!(x.status, 403);

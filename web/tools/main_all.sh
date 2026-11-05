@@ -8,6 +8,9 @@
 # Chrome, /data from the local server) by the host self-test page.
 #
 #   web/tools/main_all.sh [http://localhost:<port>]   (default: a server on 8611)
+#   MAIN_ALL_ENV="K=V ..." web/tools/main_all.sh ...   more of the game's environment
+#     (NFSU2_HEAP_WINDOW=1: a 2 GB memory and the guest heap's window above
+#     the runtime, as a computer's browser gets it: runtime/guest_span.h)
 #
 # Needs a built tree (web/build.sh, cd web && node build.mjs) and a running
 # server (out/web/server-rs/nfsu2-server) started with --dev.  Exit 0 = all
@@ -38,7 +41,8 @@ RT="$(ls "$OUT"/rt/*.o | grep -v '/web_main_web\.o$')"
   -lsetjmp -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks
 echo "built web/dist-dev/test/nfsu2_all.wasm"
 LOG="$OUT/test/main_all.log"
-node web/tools/run-page.mjs "$BASE/test/hostcheck.html?wasm=/test/nfsu2_all.wasm&pages=16384&arg=/data/SPEED2.EXE&save=core-main-all&fresh" 300000 \
+ENVQ=""; for kv in ${MAIN_ALL_ENV:-}; do ENVQ="$ENVQ&env=$kv"; done
+node web/tools/run-page.mjs "$BASE/test/hostcheck.html?wasm=/test/nfsu2_all.wasm&pages=16384&arg=/data/SPEED2.EXE&save=core-main-all&fresh$ENVQ" 300000 \
   | sed -E 's/^\[[0-9]+!?\] //' > "$LOG"
 grep -aE 'FAIL|PASSED:|EXIT|TRAP|TIMEOUT|PAGEERROR' "$LOG" | grep -av '^  .\[32mPASS' || true
 grep -aqx 'EXIT 0' "$LOG"

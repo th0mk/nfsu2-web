@@ -4,18 +4,14 @@
 //! Cloudflare dashboard; the secret never on the command line).  With them the page's Content-Security-Policy lets in
 //! Cloudflare's script and frame (challenges.cloudflare.com: nfsu2-headers `CSP_TURNSTILE`).
 //!
-//! The question goes out over HTTPS with the web's root certificates built in (webpki-roots: the image has no
-//! certificate store), HTTP/1.1 with the connection closed after the answer, 10 s at most.  NFSU2_TURNSTILE_VERIFY
+//! The question goes out over HTTPS (outbound.rs), 10 s at most.  NFSU2_TURNSTILE_VERIFY
 //! points it elsewhere (the tests' own server, over http://).
 
-use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use super::outbound::{Https, form};
 
 pub const VERIFY: &str = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-/// the most of Cloudflare's answer read
-const MAX_ANSWER: usize = 64 << 10;
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Turnstile {
@@ -23,7 +19,7 @@ pub struct Turnstile {
     pub site: String,
     secret: String,
     verify: String,
-    tls: tokio_rustls::TlsConnector,
+    https: Https,
 }
 
 impl Turnstile {
@@ -35,14 +31,7 @@ impl Turnstile {
     }
 
     pub fn new(site: String, secret: String, verify: String) -> Turnstile {
-        let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-        let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let config = rustls::ClientConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .expect("the ring provider's TLS versions")
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-        Turnstile { site, secret, verify, tls: tokio_rustls::TlsConnector::from(Arc::new(config)) }
+        Turnstile { site, secret, verify, https: Https::new() }
     }
 
     /// the widget's answer passed Cloudflare's check (Err: Cloudflare could not be asked)
@@ -51,106 +40,20 @@ impl Turnstile {
             return Ok(false);
         }
         let body = format!("secret={}&response={}", form(&self.secret), form(response));
-        let answer = tokio::time::timeout(TIMEOUT, self.post(&body)).await.map_err(|_| "no answer in 10 s".to_string())??;
+        let post = self.https.post_form(&self.verify, &body);
+        let (status, answer) = tokio::time::timeout(TIMEOUT, post).await.map_err(|_| "no answer in 10 s".to_string())??;
+        if status != 200 {
+            return Err(format!("answered {status}"));
+        }
         let v: serde_json::Value = serde_json::from_slice(&answer).map_err(|e| format!("its answer: {e}"))?;
         Ok(v.get("success").and_then(serde_json::Value::as_bool) == Some(true))
     }
-
-    async fn post(&self, body: &str) -> Result<Vec<u8>, String> {
-        let (tls, rest) = match self.verify.split_once("://") {
-            Some(("https", r)) => (true, r),
-            Some(("http", r)) => (false, r),
-            _ => return Err(format!("not an http(s) address: {}", self.verify)),
-        };
-        let (hostport, path) = rest.split_once('/').map_or((rest, "/".to_string()), |(h, p)| (h, format!("/{p}")));
-        let (host, port) = match hostport.rsplit_once(':') {
-            Some((h, p)) if p.bytes().all(|c| c.is_ascii_digit()) => (h, p.parse::<u16>().map_err(|e| e.to_string())?),
-            _ => (hostport, if tls { 443 } else { 80 }),
-        };
-        let req = format!(
-            "POST {path} HTTP/1.1\r\nHost: {hostport}\r\nUser-Agent: nfsu2-server\r\nContent-Type: application/x-www-form-urlencoded\r\n\
-             Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        let tcp = tokio::net::TcpStream::connect((host, port)).await.map_err(|e| format!("{host}:{port}: {e}"))?;
-        if tls {
-            let name = rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|e| format!("{host}: {e}"))?;
-            let s = self.tls.connect(name, tcp).await.map_err(|e| format!("{host}: {e}"))?;
-            exchange(s, req.as_bytes()).await
-        } else {
-            exchange(tcp, req.as_bytes()).await
-        }
-    }
-}
-
-/// the request written, the answer read to its end; its body (Err: not a 200)
-async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(mut s: S, req: &[u8]) -> Result<Vec<u8>, String> {
-    s.write_all(req).await.map_err(|e| e.to_string())?;
-    s.flush().await.map_err(|e| e.to_string())?;
-    let mut buf = Vec::new();
-    let mut chunk = [0u8; 8192];
-    loop {
-        match s.read(&mut chunk).await {
-            Ok(0) => break,
-            Ok(n) => {
-                buf.extend_from_slice(&chunk[..n]);
-                if buf.len() > MAX_ANSWER {
-                    return Err("its answer is too long".into());
-                }
-            }
-            // (a TLS server that closes without close_notify: what came is the answer)
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(e) => return Err(e.to_string()),
-        }
-    }
-    let end = buf.windows(4).position(|w| w == b"\r\n\r\n").ok_or("no answer")?;
-    let head = String::from_utf8_lossy(&buf[..end]).to_ascii_lowercase();
-    let status = head.split(' ').nth(1).unwrap_or("");
-    if status != "200" {
-        return Err(format!("answered {status}"));
-    }
-    let body = &buf[end + 4..];
-    if head.lines().any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked")) {
-        return dechunk(body);
-    }
-    Ok(body.to_vec())
-}
-
-/// a chunked body's bytes
-fn dechunk(mut b: &[u8]) -> Result<Vec<u8>, String> {
-    let mut out = Vec::new();
-    loop {
-        let eol = b.windows(2).position(|w| w == b"\r\n").ok_or("a broken chunk")?;
-        let size = String::from_utf8_lossy(&b[..eol]);
-        let n = usize::from_str_radix(size.split(';').next().unwrap_or("").trim(), 16).map_err(|_| "a broken chunk")?;
-        b = &b[eol + 2..];
-        if n == 0 {
-            return Ok(out);
-        }
-        if b.len() < n {
-            return Err("a broken chunk".into());
-        }
-        out.extend_from_slice(&b[..n]);
-        b = b.get(n + 2..).unwrap_or(&[]);
-    }
-}
-
-/// application/x-www-form-urlencoded
-fn form(s: &str) -> String {
-    let mut o = String::with_capacity(s.len());
-    for b in s.bytes() {
-        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
-            o.push(b as char);
-        } else {
-            o.push_str(&format!("%{b:02X}"));
-        }
-    }
-    o
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     /// a server that answers one request with `answer`, and what it was asked
     async fn fake(answer: &'static str) -> (String, tokio::task::JoinHandle<String>) {

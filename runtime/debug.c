@@ -94,18 +94,22 @@ static uint32_t g_rec_n = 0, g_rec_esp0 = 0;
 void guest_hook(CPU *c, uint32_t ip){
     g_hook_hits++;
     { int splitscreen_hook(CPU *, uint32_t); if (splitscreen_hook(c, ip)) return; }
+    { int coop_hook(CPU *, uint32_t); if (coop_hook(c, ip)) return; }
     { int ws_hook(CPU *, uint32_t); if (ws_hook(c, ip)) return; }
     { int roam_hook(CPU *, uint32_t); if (roam_hook(c, ip)) return; }
     { int language_hook(CPU *, uint32_t); if (language_hook(c, ip)) return; }
     { int hornmenu_hook(CPU *, uint32_t); if (hornmenu_hook(c, ip)) return; }
     { int tonemenu_hook(CPU *, uint32_t); if (tonemenu_hook(c, ip)) return; }
     { int powerunits_hook(CPU *, uint32_t); if (powerunits_hook(c, ip)) return; }
+    { int shownames_hook(CPU *, uint32_t); if (shownames_hook(c, ip)) return; }
+    { int hudbank_hook(CPU *, uint32_t); if (hudbank_hook(c, ip)) return; }
     { int regional_hook(CPU *, uint32_t); if (regional_hook(c, ip)) return; }
     { int garage_hook(CPU *, uint32_t); if (garage_hook(c, ip)) return; }
     { int vinylcat_hook(CPU *, uint32_t); if (vinylcat_hook(c, ip)) return; }
     { int sndlead_hook(CPU *, uint32_t); if (sndlead_hook(c, ip)) return; }
     { int drift_hook(CPU *, uint32_t); if (drift_hook(c, ip)) return; }
     { int quickrace_hook(CPU *, uint32_t); if (quickrace_hook(c, ip)) return; }
+    { int trafficcars_hook(CPU *, uint32_t); if (trafficcars_hook(c, ip)) return; }
     if (ip == 0x0065ae25u){
         uint32_t a1=MR32(c->esp+4u), a2=MR32(c->esp+8u), a3=MR32(c->esp+12u);
         if (!g_rec_esp0) g_rec_esp0 = c->esp;

@@ -21,14 +21,18 @@
 #include <stddef.h>
 
 #define RC_PROTO_VER     1          /* header byte 4; a different value is ignored */
-#define RC_CORE_VER      13        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
+#define RC_CORE_VER      16        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
                                        4: state extensions, RC_HF_STATEX; 5: race lobbies, RC_HF_LOBBY; 6: quick chat,
                                        RC_HF_SAY; 7: crews, RC_HF_CREW; 8: crews from the hub, RC_HF_HUBCREW;
                                        9: a HELLO to one peer names only that peer, roam_core.c fill_hello;
-                                       10: lists of up to RC_MAX_PEERS (48), and its HELLO to the hub ends in the links
+                                       10: lists of up to 48 (RC_PEERS_V13), and its HELLO to the hub ends in the links
                                        it wants, rc_config.links; 11: in an outrun, after the links, the id of its
                                        other player, rc_set_duel; 12: drift battles, RC_HF_DRIFT; 13: to a peer, after
-                                       the outrun's player, the player's flag, rc_config.flag) */
+                                       the outrun's player, the player's flag, rc_config.flag; 14: lists of up to
+                                       RC_MAX_PEERS (64); 15: one-way links, the hub's lists of up to RC_LIST_MAX
+                                       with RC_MARK_RXONLY / RC_MARK_TXONLY; 16: the hub's lists end in hints, which
+                                       of the players who only get our car are far off (RC_HINT_*) and why the hub let
+                                       the cars near us go that it no longer lists (RC_GONE_*, rc_hub_gone)) */
 #define RC_MAGIC0        0x4E       /* "N2FR" */
 #define RC_MAGIC1        0x32
 #define RC_MAGIC2        0x46
@@ -38,11 +42,14 @@
 #define RC_HDR           16
 #define RC_CRC           4
 #define RC_NAME_MAX      24
-#define RC_MAX_PLAYERS   49         /* the mesh: this machine + 48 peers */
+#define RC_MAX_PLAYERS   65         /* the mesh: this machine + 64 peers */
 #define RC_MAX_PEERS     (RC_MAX_PLAYERS - 1)
 #define RC_PEERS_V1      7          /* the most a core of version 1 reads in a HELLO's ids or a PEERS list */
 #define RC_PEERS_V9      32         /* ...a core of versions 2 to 9 */
-#define RC_TABLE         96         /* known addresses (configured, gossiped, heard): the peers and those going or coming */
+#define RC_PEERS_V13     48         /* ...a core of versions 10 to 13 */
+#define RC_LIST_MAX      96         /* the most a hub's list names to a core of version 15: the players whose cars we get
+                                       (our links, RC_MAX_PEERS at most) and the ones we send ours to (hub.rs one_way) */
+#define RC_TABLE         128        /* known addresses (configured, gossiped, heard): the peers and those going or coming */
 #define RC_SNAP_STATES   3          /* states per SNAP (newest first): loss redundancy */
 #define RC_STATE_BYTES   52
 #define RC_STATEX_BYTES  30         /* a state's extension (RC_HF_STATEX), its length byte included, at most */
@@ -259,10 +266,39 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
 /* header flags (HELLO): this player takes drift battles (RC_DA_DRIFT, RC_DUEL_SCORE); an older core sends none, reads a
  * drift battle's challenge as an outrun's and counts a SCORE as bad */
 #define RC_HF_DRIFT      0x1000
+/* header flags (HELLO): this endpoint is the second local player of the browser at its address (co-op free roam:
+ * player 2 beside player 1 on one screen, coop.c), on a port of its own; the hub never links it with that browser's
+ * other endpoints, marks it as nobody's friend, answers no map question of it and lets its car appear beside player
+ * 1's (web/server-rs crates/roam).  An older core and an older hub ignore it */
+#define RC_HF_SEAT2      0x2000
 /* in the hub's crew marks, past the crews' bits: that player's friendship with
  * this one goes both ways (the server's friends lists, EA Messenger's); a hub
  * of before sets none, a core of before reads only the crews' bits */
 #define RC_MARK_FRIEND   0x80
+/* ...and the way a link goes (to a core of version 15: hub.rs one_way): we get
+ * that player's car and send it nothing of ours, as it shows fewer players
+ * than we do (RXONLY); or it gets our car and sends us nothing (TXONLY).
+ * Neither: both ways, as every link of before */
+#define RC_MARK_RXONLY   0x20
+#define RC_MARK_TXONLY   0x40
+/* ...and after the marks, to a core of version 16, the hints (an older core
+ * skips them): a count byte, then a byte for each player who only gets our car
+ * (RC_MARK_TXONLY) and is far off, its entry's index, plus RC_HINT_VERYFAR
+ * when it is very far (the others are near).  We know of such a player no
+ * more than the hub tells: it sends us no car states of its own, so its
+ * snapshots come every 4th or 10th as a peer's would that far off
+ * (rc_push_state; before these, all of them at 20 a second).  Then a count
+ * byte (at most RC_GONE_MAX) and, for each car near us the hub left out of
+ * this list, its player's id (4 bytes) and why (a byte, RC_GONE_*) */
+#define RC_HINT_VERYFAR  0x80
+#define RC_GONE_MAX      32
+enum { RC_GONE_NONE = 0,
+       RC_GONE_ROOM = 1,            /* our links were full of cars as near or nearer, or that came near (or on) not long ago */
+       RC_GONE_SENDS = 2,           /* its player sends its car to as many players as it can, nearer ones than us */
+       RC_GONE_LIST = 3,            /* our list or its player's was full */
+       RC_GONE_AWAY = 4,            /* its player is off free roam (a shop, a race, the menus) */
+       RC_GONE_LEFT = 5,            /* its player is no longer in our room of free roam (gone, or no position for long) */
+       RC_GONE_OTHER = 6 };
 /* decoder results */
 enum { RC_OK = 0, RC_E_SHORT = -1, RC_E_MAGIC = -2, RC_E_VERSION = -3, RC_E_LENGTH = -4,
        RC_E_CRC = -5, RC_E_TYPE = -6, RC_E_FIELD = -7, RC_E_TRAIL = -8, RC_E_RANGE = -9 };
@@ -321,6 +357,10 @@ typedef struct {
     uint8_t  open;                 /* the car's open parts (RC_OPEN_*: hood, trunk, doors), 0: none */
     uint8_t  hibeam;               /* its headlights are on high beam (RC_OPEN_HIBEAM, in the open parts' byte) */
 } rc_state;
+/* one state as a SNAP carries it (RC_STATE_BYTES, then with ext its extension as RC_HF_STATEX's), for another
+ * channel's messages (racecars.c: the cars of a race between players); get: RC_OK / RC_E_* */
+void rc_state_put(rc_w *w, const rc_state *s, int ext);
+int  rc_state_get(rc_r *r, rc_state *s, int ext);
 
 typedef struct {
     uint8_t  ver, type;
@@ -391,8 +431,11 @@ typedef struct {
                  uint32_t duel;            /* after the links (the byte too, 0 or not): our outrun's other player, 0: none (core 11, to the hub) */
                  char flag[RC_FLAG_MAX + 1]; } hello;   /* after the duel (the links and the duel too, 0 or not): our flag, "" none
                                                            (core 13, to a peer: roam_game.c flags_*) */
-        struct { uint8_t n; struct { uint32_t ip; uint16_t port; uint32_t id; } e[RC_MAX_PEERS];
-                 uint8_t n_mine; uint32_t mine[RC_CREW_MAX]; uint8_t crew[RC_MAX_PEERS]; } peers;   /* the crew marks: with RC_HF_CREW only */
+        struct { uint8_t n; struct { uint32_t ip; uint16_t port; uint32_t id; } e[RC_LIST_MAX];
+                 uint8_t n_mine; uint32_t mine[RC_CREW_MAX]; uint8_t crew[RC_LIST_MAX];   /* the crew marks: with RC_HF_CREW only */
+                 uint8_t hints;            /* after the marks, the hints (a hub of core 16's): */
+                 uint8_t far[RC_LIST_MAX]; /* ...each entry's snapshots every 1, 4 or 10 (0: no hints) */
+                 uint8_t n_gone; struct { uint32_t id; uint8_t why; } gone[RC_GONE_MAX]; } peers;
         struct { uint8_t status, epoch; uint16_t cfg_rev; uint8_t n, clock; rc_state s[RC_SNAP_STATES]; } snap;
         struct { uint16_t cfg_rev; uint8_t frag, nfrag; uint16_t total, dlen; const uint8_t *data; } cfg;
         struct { uint16_t cfg_rev; uint8_t have_mask; } cfgreq;
@@ -561,6 +604,7 @@ typedef struct {
     int      links;                /* the players the hub links us with at most (our HELLO to it says so): the friends' cars
                                       the game shows, 1 .. RC_MAX_PEERS; 0: not said (the hub's own most, 32 for a core
                                       before version 10) */
+    int      seat2;                /* we are the second local player of our browser (HELLO says so: RC_HF_SEAT2) */
 } rc_config;
 
 enum { RC_PS_FREE = 0, RC_PS_CANDIDATE = 1, RC_PS_HEARD = 2, RC_PS_EST = 3 };
@@ -576,6 +620,8 @@ typedef struct {
                                       last found (0: not yet): its HELLOs and pings that much rarer (rc_tick) */
     int64_t  cfg_answer_us;        /* our record goes to it again (asked for, or at its join) from then on */
     int64_t  hub_listed_us;        /* the hub's list named it last (0: never) */
+    uint8_t  hub_far;              /* ...and how far it is, as the hub's hints have it: it gets every 1, 4 or 10th of our
+                                      SNAPs (0: no hints; snap_every) */
     char     name[RC_NAME_MAX + 1];
     char     flag[RC_FLAG_MAX + 1];  /* the flag before its name, as its last HELLO had it ("" none, or a core before 13) */
     uint8_t  platform, status;
@@ -589,6 +635,7 @@ typedef struct {
     uint8_t  n_crews;  uint32_t crews[RC_CREW_MAX];   /* its crews, as its last HELLO had them (an older core's, or no hub) */
     uint8_t  n_hub_crews; uint32_t hub_crews[RC_CREW_MAX];   /* our crews it is in too, as the hub's last list naming it said */
     uint8_t  hub_friend;                                     /* ...and that it is our friend (RC_MARK_FRIEND) */
+    uint8_t  hub_way;                                        /* ...and the way the link goes (RC_MARK_RXONLY, RC_MARK_TXONLY; 0 both) */
     uint16_t cfg_rev_seen;         /* what the peer announces */
     int      hears_us, lost;
     int      hears_miss;           /* with the hub: one HELLO without our id forgiven (hub mode only) */
@@ -637,6 +684,8 @@ typedef struct {
     uint32_t  hub_lists;           /* PEERS lists from the hub */
     uint32_t  rx_unlisted;         /* HELLOs of players the hub does not list for us: ignored */
     int64_t   hub_late_us;         /* a list came after none for over T_HUB_LATE (our link, or the whole page, stood): when */
+    /* why the hub let the cars near us go (its hints: RC_GONE_*), the newest last, for rc_hub_gone */
+    struct { uint32_t id; uint8_t why; int64_t at; } hub_gone[RC_GONE_MAX];  int n_hub_gone;
     /* our outrun's other player (rc_set_duel; 0: none): the hub hears of it, a peer of that id stays while the hub's
      * lists leave it out, and how it went if it went (RC_DGONE_*; 0 while it is here) */
     uint32_t  duel_with;  uint8_t duel_gone;
@@ -703,6 +752,12 @@ int  rc_peer_listed(const rc_session *s, int i);
 int  rc_peer_crew(const rc_session *s, int i);
 /* peer i is our friend, as the hub's last list naming it said (RC_MARK_FRIEND) */
 int  rc_peer_friend(const rc_session *s, int i);
+/* why the hub let the car of player `id` go, as one of its lists of the last 10 s said (RC_GONE_*; RC_GONE_NONE: none
+ * said, or a hub before core 16) */
+int  rc_hub_gone(const rc_session *s, uint32_t id, int64_t now_us);
+/* the way the hub's link with peer i goes (RC_MARK_RXONLY: we get its car only; RC_MARK_TXONLY: it gets ours only;
+ * 0: both ways, or no hub) */
+int  rc_peer_way(const rc_session *s, int i);
 /* our crews changed while the session runs: at most RC_CREW_MAX, 0s and
  * repeats left out; the hub (or without one, the peers) hears them at the
  * next tick */

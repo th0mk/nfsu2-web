@@ -289,14 +289,14 @@ static uint32_t build_map(KDev *d, uint32_t af, uint32_t flags){
 }
 /* ---- our keys ----------------------------------------------------------------
  * The keys the runtime and the page add on top of the game's: X drift mode (drift.c), O the show-off (showoff.c), N
- * the horn (horn.c), G the headlights (lightkey.c), and the page's I (Message a friend: web/src/app/messages.ts), F
- * (Add friend: friends.ts), 1 to 4 and Numpad 1 to 4 (quick chat: quickchat.ts).  None is one of the game's in its
- * driving map (0x7fcac0; G and Numpad 1 to 4 are its debug camera's, which the game never reads), but a player can
- * put any of the game's controls on any key (Options > Controls > Keyboard Configuration).  Then ours leave that key
- * to the game, for as long as the action map the keyboard reads has it so: the key's action there is not its default
- * (the action the map's semantics give it).  Each says so once in the log ("[keys] X is bound to Shift Up in the
- * game: drift mode stays off it").  The page's controls hear it through the status "keys" (status_web.c's block): a
- * bit for each of PAGE_KEYS, in its order, set while the game has that key.
+ * the horn (horn.c), G the headlights (lightkey.c), F10 hiding the HUD (photo.c), and the page's I (Message a friend:
+ * web/src/app/messages.ts), F (Add friend: friends.ts), 1 to 4 and Numpad 1 to 4 (quick chat: quickchat.ts).  None is
+ * one of the game's in its driving map (0x7fcac0; G and Numpad 1 to 4 are its debug camera's, which the game never
+ * reads), but a player can put any of the game's controls on any key (Options > Controls > Keyboard Configuration).
+ * Then ours leave that key to the game, for as long as the action map the keyboard reads has it so: the key's action
+ * there is not its default (the action the map's semantics give it).  Each says so once in the log ("[keys] X is bound
+ * to Shift Up in the game: drift mode stays off it").  The page's controls hear it through the status "keys"
+ * (status_web.c's block): a bit for each of PAGE_KEYS, in its order, set while the game has that key.
  * The player may give ours other keys (the start page's Controls, Site: settings.ini key_drift ..., NFSU2_KEY_DRIFT
  * ...: dikbd_site_key).  The page offers none the game has a control on by default; one set by hand in the file is
  * left to the game the same way when its default is one of the game's live controls (not the debug camera's). */
@@ -327,8 +327,8 @@ static const struct { const char *code; uint8_t dik; } k_codes[] = {
     {"F15",0x66},{"NumpadDivide",0xB5},{"Pause",0xC5},{"Home",0xC7},{"PageUp",0xC9},{"End",0xCF},{"PageDown",0xD1},
     {"Insert",0xD2},{"Delete",0xD3},
 };
-/* drift.c, showoff.c, horn.c, lightkey.c, page_keys: the key the variable env (NFSU2_KEY_DRIFT ...) gives one of ours:
- * its DIK, 0 for off; unset, or a name it does not know (said once), dflt */
+/* drift.c, showoff.c, horn.c, lightkey.c, photo.c, page_keys: the key the variable env (NFSU2_KEY_DRIFT ...) gives one
+ * of ours: its DIK, 0 for off; unset, or a name it does not know (said once), dflt */
 unsigned dikbd_site_key(const char *env, unsigned dflt){
     const char *v = getenv(env);
     if (!v || !*v) return dflt;
@@ -361,7 +361,8 @@ static void said_once(unsigned dik, uint32_t app, const char *name, const char *
     if (n < 32){ said[n].dik = (uint16_t)dik; said[n].app = app; n++; }
     fprintf(stderr, "[keys] %s is bound to %s in the game: %s stays off it\n", dik_name(dik) ? dik_name(dik) : "a key", name, what);
 }
-/* drift.c, showoff.c, horn.c: whether our control `what` takes the key dik now (1), or leaves it to the game (0) */
+/* drift.c, showoff.c, horn.c, lightkey.c, photo.c: whether our control `what` takes the key dik now (1), or leaves it to
+ * the game (0) */
 int dikbd_ours(unsigned dik, const char *what){
     const KDev *d = g_mapped;
     uint32_t app = d && d->fmt == FMT_ACTIONS ? rebound(d, dik) : NO_ACT;
@@ -454,6 +455,13 @@ static int key_by_how(const KDev *d, uint32_t obj, uint32_t how){
     return -1;
 }
 
+/* splitscreen.c: a key of co-op player 2's half of the keyboard, which the game's own keyboard does not see then */
+#ifdef __wasm__
+int split_kb_hidden(unsigned dik);
+#else
+static int split_kb_hidden(unsigned dik){ (void)dik; return 0; }
+#endif
+
 /* ---- methods ------------------------------------------------------------------- */
 uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint32_t *a){
     KDev *d = kdev(self);
@@ -470,6 +478,7 @@ uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
             if (g < 0){ r = DI_BUFFEROVERFLOW; s++; continue; }
             if (g == 0) break;
             s++;
+            if (e.down && split_kb_hidden(e.dik)) continue;     /* player 2's half in co-op (a release still goes) */
             uint32_t ofs, app = 0xFFFFFFFFu;
             if (d->fmt == FMT_RAW){
                 if (d->ofs_of[e.dik] < 0) continue;
@@ -503,7 +512,7 @@ uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
         uint8_t st[256]; kbd_state(st, 256);
         mem_commit(p, cb); memset(g_mem + p, 0, cb);
         for (int k = 1; k < 256; k++){
-            if (!st[k]) continue;
+            if (!st[k] || split_kb_hidden((unsigned)k)) continue;
             if (d->fmt == FMT_RAW && d->ofs_of[k] >= 0 && (uint32_t)d->ofs_of[k] < cb) MR8(p + (uint32_t)d->ofs_of[k]) = 0x80;
             else if (d->fmt == FMT_ACTIONS && d->act_of[k] >= 0 && 4u * (uint32_t)d->act_of[k] + 3u < cb)
                 MR32(p + 4u * (uint32_t)d->act_of[k]) = 0x80;

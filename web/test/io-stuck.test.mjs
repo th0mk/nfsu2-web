@@ -80,14 +80,21 @@ function dump(d = root, rel = '', out = {}) {
   for (const [n, k] of d.kids) { const r = rel ? rel + '/' + n : n; if (k.kind === 'directory') dump(k, r, out); else out[r] = new TextDecoder().decode(k.data); }
   return out;
 }
+// (W.track: a track's stream file of that many blocks too, TRACKS/STREAML4RA.BUN, made of the same bytes; every fetch of
+// a block noted with its file and time, for the reading ahead)
+const fetched = [];
 globalThis.fetch = async (url, o = {}) => {
-  if (url === '/data-manifest') return new Response(JSON.stringify({ files: [{ p: 'CARS', d: 1 }, { p: 'CARS/A.BIN', s: SIZE, m: 7 }],
+  if (url === '/data-manifest') return new Response(JSON.stringify({ files: [{ p: 'CARS', d: 1 }, { p: 'CARS/A.BIN', s: SIZE, m: 7 },
+    ...W.track ? [{ p: 'TRACKS', d: 1 }, { p: 'TRACKS/STREAML4RA.BUN', s: W.track * ${M}, m: 7 }] : []],
     blocks: { url: '/data-blocks/', size: ${M}, max: 4 } }), { status: 200 });
   if (W.hangFetch) return new Promise((_, no) => o.signal?.addEventListener('abort', () => no(new Error('aborted'))));
-  const b = +/[?&]b=(\\d+)/.exec(url)[1];
+  const b = +/[?&]b=(\\d+)/.exec(url)[1], track = /STREAML4RA/.test(url);
+  fetched.push({ track, b, t: performance.now() });
+  if (track) { await new Promise(r => setTimeout(r, W.trackMs ?? 0)); return new Response(new Uint8Array(${M}), { status: 200 }); }
   return new Response(file.slice(b * ${M}, Math.min(SIZE, (b + 1) * ${M})), { status: 200 });
 };
-parentPort.on('message', m => m && m.t === 'dump' ? parentPort.postMessage({ t: 'dumped', files: dump() }) : globalThis.onmessage({ data: m }));
+parentPort.on('message', m => m && m.t === 'dump' ? parentPort.postMessage({ t: 'dumped', files: dump() }) :
+  m && m.t === 'fetched' ? parentPort.postMessage({ t: 'fetches', list: fetched, now: performance.now() }) : globalThis.onmessage({ data: m }));
 `;
 
 /** the worker, as a game process has it: its memory, control words and RPC slots; the notes it writes */
@@ -153,9 +160,41 @@ async function start(opts) {
   const unlink = async p => call(22 /* PathUnlinkFile */, 4, 1024, str(1024, p));
   const rename = async (a, b) => call(23 /* PathRename */, 4, 1024, str(1024, a), 4, 1536, str(1536, b));
   const dump = () => new Promise(res => { const h = m => { if (m.t === 'dumped') { w.off('message', h); res(m.files); } }; w.on('message', h); w.postMessage({ t: 'dump' }); });
-  return { w, notes, msgs, ctl, open, openSave, call, pread, readAll, writeAll, mkdir, unlink, rename, dump, stop: () => w.terminate() };
+  /** the blocks fetched so far ({ track, b, t }, t on the worker's clock) and the worker's time now */
+  const fetches = () => new Promise(res => { const h = m => { if (m.t === 'fetches') { w.off('message', h); res(m); } }; w.on('message', h); w.postMessage({ t: 'fetched' }); });
+  return { w, notes, msgs, ctl, open, openSave, call, pread, readAll, writeAll, mkdir, unlink, rename, dump, fetches, stop: () => w.terminate() };
 }
 const expect = (pos, n) => Uint8Array.from({ length: n }, (_, k) => ((pos + k) * 7 + ((pos + k) >> 11)) & 255);
+
+// The track's reading ahead (readAhead) and a friend's car (a 20 Mbit/s line, 2026-11-05: in a meet's first 30 s a block
+// read ahead started in each gap between the car's reads, about half of what the line carried): no block is read ahead
+// until the game has fetched nothing for AHEAD_QUIET_MS (2 s), then the rest of the track comes.  Before (db588c0e)
+// the rest of the track was asked for at once, beside the car's reads.
+test('the track is read ahead only once the game has fetched nothing for 2 s', { timeout: 60_000 }, async () => {
+  const io = await start({ track: 6 });
+  try {
+    const tr = await io.open('TRACKS/STREAML4RA.BUN'), car = await io.open('CARS/A.BIN');
+    await io.pread(tr, 0, 64);                       // the game's own read of the track: the reading ahead begins
+    // a friend's car: a read, a pause, a read (two blocks of its file)
+    await io.pread(car, 0, 64);
+    await new Promise(r => setTimeout(r, 600));
+    await io.pread(car, M + 5, 64);
+    const { list, now } = await io.fetches();
+    const lastGame = Math.max(...list.filter(f => !f.track || f.b === 0).map(f => f.t));
+    assert.deepEqual(list.filter(f => f.track && f.b > 0), [], `read ahead while the car loaded: ${JSON.stringify(list)}`);
+    assert.ok(now - lastGame < 1500);
+    // then, quiet: the rest of the track, the first of it about 2 s after the car's last block
+    let all;
+    for (const t0 = performance.now(); performance.now() - t0 < 10_000;) {
+      all = (await io.fetches()).list.filter(f => f.track && f.b > 0);
+      if (all.length >= 5) break;
+      await new Promise(r => setTimeout(r, 200));
+    }
+    assert.equal(all.length, 5, `the rest of the track read ahead: ${JSON.stringify(all)}`);
+    const first = Math.min(...all.map(f => f.t));
+    assert.ok(first - lastGame >= 1900 && first - lastGame < 3000, `read ahead from ${(first - lastGame).toFixed(0)} ms after the game's last block`);
+  } finally { await io.stop(); }
+});
 
 test('a cache file that never opens: given up after 10 s, its reads come from the server, the log says so', { timeout: 60_000 }, async () => {
   const io = await start({ hangOpen: true });

@@ -1,5 +1,5 @@
 # The game throwing away the part animation banks with one of ours on the list (showoff.c sub_00438140).  New career ->
-# prologue free roam; O: the trunk opens, so the player's car type's PARTS_ANIMATIONS.BIN is loaded (showoff's own
+# prologue free roam; O: the hood opens, so the player's car type's PARTS_ANIMATIONS.BIN is loaded (showoff's own
 # bank); then a cover shoot's start and end (0x633A00 -> 0x61C600, 0x61C5B0: each unloads the car loader's record and
 # calls 0x438140(0)), twice, the second time after O has loaded ours again.  The live game of 2026-11-02 (7dd3a82)
 # crashed there (any car lot, garage, cover shoot or race lobby after a friend's car opened a part): 0x438140 read the

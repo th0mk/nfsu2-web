@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { SLURS, EDGE_OK, PID_STEMS, blockedName } from '../src/app/names.mjs';
+import { SLURS, EDGE_OK, PID_STEMS, HATE, blockedName } from '../src/app/names.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(REPO, 'out/web/test'); fs.mkdirSync(OUT, { recursive: true });
@@ -31,7 +31,12 @@ const BLOCKED = ['nigger', 'N1gg3r', 'n i g g e r', 'n.i.g.g.a', 'NiQQa', 'nlgga
   'tinyniga', 'SuperNiga', 'HOLYNIGA', 'gigaNyga', 'MrN1663r', 'BigN199a', 'N166ER', 'nupidor', 'JaPidor', 'LolP1dr',
   'TheAustrianArtist', 'austrian_painter', 'PintorAustriaco', 'Uncle_Adolf', 'Kitler88', 'AdolfFitler', 'XitIer',
   'Kristal_Nacht', 'HateJews', 'JewSlayer', 'GasJews', 'JEBAC_ZYDOW', 'pedophile', 'Pedofilo', 'OsamaBin',
-  'Al_Qaeda', 'xChigga', 'Nazista', 'ZyklonB'];
+  'Al_Qaeda', 'xChigga', 'Nazista', 'ZyklonB',
+  // hate aimed at a group as a phrase, with a word between (2026-11-05)
+  'GasTheJews', 'Gas_The_Jews', 'KillAllTheJews', 'HuntTheJews', 'DeathToJews', 'g4sTh3J3ws', 'BurnDaJews',
+  // the live server's names of 2026-11-05: spellings round the lists' words, phrases at other groups
+  'NatFigger', 'Nat_Figgers', 'BBHITLA', 'Adolph_Hitlr', 'HEIL_HTLER', 'gaskikes67', 'HateTheColored', 'Ihateneegr_s',
+  'GoodestGoy', 'TheGoodGoyim', 'PedoDave', 'killnig', 'nibb3r'];
 const UNICODE = ['ñigga', 'nіgga', 'ｎｉｇｇａ', 'ΝΙGGΑ', 'n̲i̲g̲g̲a̲', 'ⓕⓐⓖ', 'fаg', 'Ηitler', 'Ｈｉｔｌｅｒ', 'Lander１４８８'];
 // other words with those letters in them, the player names this server sees most (Turkish) among them
 const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'mustafagamer', 'Rafa96', 'Vefa', 'Safa',
@@ -49,10 +54,16 @@ const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'musta
   // the words that start or end a part as niga or nyga would, the new words' letters, a lone n and a year
   'Hoonigan', 'Hooniga', 'Minigame', 'Minigas', 'Kniga', 'Kunigas', 'Niigaki', 'NIGAMI', 'Nygard', 'TonyGamer',
   'Antony Gaming', 'Brony_Gamer', 'Higgins', 'Higgs', 'Austria', 'AustrianGP', 'Painter', 'Artist', 'Osama',
-  'TopiDrift', 'N1995', 'Doran1994TR'];
+  'TopiDrift', 'N1995', 'Doran1994TR',
+  // next to the words of 2026-11-05
+  'Figgy', 'Figgis', 'Fighter', 'Tauhitianboy', 'Tahitien', 'Kshitij', 'Hilti_Passat', 'hellhound057', 'Speedo', 'Torpedo',
+  'Goyo204', 'Nigro', 'KonigRider39', 'Rapper', 'Draped', 'KillNight',
+  // a hate phrase's words on their own
+  'Jewel', 'JewishRacer', 'Andrew', 'Matthew', 'KillerQueen', 'GasMonkey', 'Deadpool', 'Bombshell', 'Shooter'];
 
 test('names.mjs: the lists\' words, the ways round them, and not the other words', () => {
   for (const w of [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge]) assert.ok(blockedName(w), w);
+  for (const v of HATE.verbs) for (const b of ['', ...HATE.between]) for (const g of HATE.groups) assert.ok(blockedName(v + b + g), v + b + g);
   for (const n of [...BLOCKED, ...UNICODE]) assert.ok(blockedName(n), n);
   for (const n of ALLOWED) assert.ok(!blockedName(n), n);
   // a word of the whole list only as a part on its own
@@ -68,6 +79,9 @@ test('names.h has the lists of names.mjs', () => {
   assert.deepEqual(list('edge_ok_start'), [...EDGE_OK.start]);
   assert.deepEqual(list('edge_ok_end'), [...EDGE_OK.end]);
   assert.deepEqual(list('stems'), [...PID_STEMS]);
+  assert.deepEqual(list('hate_verbs'), [...HATE.verbs]);
+  assert.deepEqual(list('hate_between'), [...HATE.between]);
+  assert.deepEqual(list('hate_groups'), [...HATE.groups]);
 });
 
 test('names.h answers as names.mjs (25,000 ASCII names)', { skip: !haveClang && 'no clang' }, () => {
@@ -89,7 +103,8 @@ int main(void){
     let seed = 7;
     const rnd = n => { seed = (seed * 1103515245 + 12345) >>> 0; return (seed >>> 8) % n; };
     const pick = a => a[rnd(a.length)];
-    const pieces = [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge, ...EDGE_OK.start, ...EDGE_OK.end, ...PID_STEMS, 'mustafa', 'gs',
+    const pieces = [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge, ...EDGE_OK.start, ...EDGE_OK.end, ...PID_STEMS,
+      ...HATE.verbs, ...HATE.between, ...HATE.groups, 'jewel', 'mustafa', 'gs',
       'raccoon', 'spice', 'niger', 'nigeria', 'pakize', 'xx', 'gamer', 'a', 'g', 'dani', 'hakan', 'van', 'n', 'pid', 'topi', 'drift',
       '99', '1995', '1663', '69', '1488', '88'];
     const swap = { o: '0', i: '1!|l', e: '3', a: '4@', s: '5$', t: '7+', g: '69q', b: '8' };

@@ -1,25 +1,30 @@
-// This site's own controls beside the game's: drift mode, the trunk, hood and doors, the horn, the headlights, quick
-// chat, Message a friend, Add friend, photo mode, the page's menu, the next song and the frame-rate counter.  Each has
-// a key and, where one goes, a controller button, which the player sets on the start page (Controls, Site) by pressing
-// it, or turns off.  settings.ini keeps them (key_*, button_*: settings.ts, this device's); the runtime reads the ones
-// it handles (runtime/dinput_kbd.c dikbd_site_key: drift mode, the trunk, the horn, the headlights, and Message a
-// friend's and Add friend's, whose clashes it tells the page: gamekeys.ts; dinput_pad.c the buttons), the page the
-// others at Play (applySiteKeys with the game's environment) and on the start page as they change.  (The headlights'
-// controller has no button to set: the look's stick pushed straight up, runtime/lightkey.c.)
+// This site's own controls beside the game's: drift mode, the hood, trunk and doors, the horn, the headlights, the
+// controller's free look, quick chat, Message a friend, Add friend, photo mode, hiding the HUD, the page's menu, the
+// next song and the frame-rate counter.  Each has a key and, where one goes, a controller button, which the player sets
+// on the start page (Controls, Site) by pressing it, or turns off.  settings.ini keeps them (key_*, button_*:
+// settings.ts, this device's); the runtime reads the ones it handles (runtime/dinput_kbd.c dikbd_site_key: drift mode,
+// the hood, trunk and doors, the horn, the headlights, hiding the HUD (photo.c), and Message a friend's and Add
+// friend's, whose clashes it tells the page: gamekeys.ts; dinput_pad.c the buttons), the page the others at Play
+// (applySiteKeys with the game's environment) and on the start page as they change.  (The headlights' controller has
+// no button to set: the look's stick pushed straight up, runtime/lightkey.c; the free look has no key, only its
+// switch: Auto or Off, a click on its cap, runtime/dinput_pad.c pad_look_stick, which the headlights' stick goes with.)
 //   offered   a key the game has one of its controls on by default (its driving map's keys, its menus' for the ones
 //             that work in the menus too), the browser's F5 and F11, quick chat's 1 to 4 and another of ours are
 //             refused; the ones that work in the menus too (the page's menu, photo mode, the next song, the counter)
 //             take only keys that type nothing (F6 to F12, Page Up, Page Down, Pause, Scroll Lock, Delete), and the
-//             page's menu is never off.  A controller's: a D-pad direction held a second (drift mode, the trunk: a
-//             short press stays the game's) or a stick's click (the horn, quick chat); Home and both sticks pressed in
-//             always open the menu.
+//             page's menu is never off.  A controller's: a D-pad direction held a second (drift mode, the hood,
+//             trunk and doors: a short press stays the game's) or a stick's click (the horn, quick chat), and the free
+//             look Auto or Off; Home and both sticks pressed in always open the menu.  Hiding the HUD works only while
+//             driving, so its key need not be one that types nothing (F10 by default: the game has nothing on it, and
+//             the page keeps it from the browser's menu bar).
 //   bound     a key the player put one of the game's controls on (its Options, Controls: the game keeps those in
 //             registry.txt, runtime/dinput_kbd.c's user maps) stays the game's: its row says so.
 import { CODE_OF_DIK, CODES } from '../input/keymap';
+import { allPads } from '../input/steampad';
 import { N, t } from './i18n';
 
-export type OurId = 'drift' | 'showoff' | 'horn' | 'lights' | 'chat' | 'message' | 'friend' | 'photo' | 'menu' | 'song' | 'fps';
-export type ButtonKey = 'button_hold' | 'button_horn' | 'button_chat';
+export type OurId = 'drift' | 'showoff' | 'horn' | 'lights' | 'look' | 'chat' | 'message' | 'friend' | 'photo' | 'hud' | 'menu' | 'song' | 'fps';
+export type ButtonKey = 'button_hold' | 'button_horn' | 'button_chat' | 'button_look';
 
 export interface Our {
   id: OurId;
@@ -36,19 +41,24 @@ export interface Our {
   always?: boolean;
   /** its controller button's settings.ini key */
   button?: ButtonKey;
+  /** its button is a switch: a click on its cap is the next of its choices (BUTTONS), no press waited for */
+  toggle?: boolean;
 }
 
 /** ours, in the rows' order (each one's settings.ini key is in settings.ts too) */
 export const OURS: readonly Our[] = [
   { id: 'drift', name: N('Drift mode'), line: N('Drift mode (in free roam)'), key: 'key_drift', def: 'KeyX', button: 'button_hold' },
-  { id: 'showoff', name: N('Trunk, hood, doors'), line: N('Open trunk, then hood, then doors (parked, in free roam)'), key: 'key_showoff', def: 'KeyO',
-    button: 'button_hold' },
+  { id: 'showoff', name: N('Hood, trunk, doors'), line: N('Open hood, then trunk, then doors, then all (parked, in free roam)'), key: 'key_showoff',
+    def: 'KeyO', button: 'button_hold' },
   { id: 'horn', name: N('Horn'), line: N('Horn (with other players)'), key: 'key_horn', def: 'KeyN', button: 'button_horn' },
   { id: 'lights', name: N('Headlights'), line: N('Headlights off or on; hold for high beam'), key: 'key_lights', def: 'KeyG' },
+  { id: 'look', name: N('Free look'), line: N('Right stick looks round the car (Off: stick up no longer switches the headlights)'), button: 'button_look',
+    toggle: true },
   { id: 'chat', name: N('Quick chat'), line: N('Quick chat (with other players): group, then phrase'), fixed: '1–4', button: 'button_chat' },
   { id: 'message', name: N('Message a friend'), line: N('Message a friend (in free roam)'), key: 'key_message', def: 'KeyI' },
   { id: 'friend', name: N('Add friend'), line: N('Add a friend (front bumpers touching)'), key: 'key_friend', def: 'KeyF' },
   { id: 'photo', name: N('Photo mode'), line: N('Photo mode, then the photo'), key: 'key_photo', def: 'F12', menus: true },
+  { id: 'hud', name: N('Hide HUD'), line: N('Hide or show the HUD while driving (names and chat over cars too)'), key: 'key_hud', def: 'F10' },
   { id: 'menu', name: N('Menu'), line: N('Menu: full screen, controls, log, quit'), key: 'key_menu', def: 'F9', menus: true, always: true },
   { id: 'song', name: N('Next song'), line: N('Next song'), key: 'key_song', def: 'F7', menus: true },
   { id: 'fps', name: N('Frame-rate counter'), line: N('Frame-rate counter'), key: 'key_fps', def: 'F8', menus: true },
@@ -59,6 +69,7 @@ export const BUTTONS: Record<ButtonKey, readonly string[]> = {
   button_hold: ['ddown', 'dup', 'dleft', 'dright'],
   button_horn: ['ls', 'rs'],
   button_chat: ['rs', 'ls'],
+  button_look: ['auto', 'off'],
 };
 /** settings.ini's keys of ours (settings.ts has them too) */
 export const SITE_KEYS: readonly string[] = [...OURS.flatMap(o => o.key ? [o.key] : []), ...Object.keys(BUTTONS)];
@@ -119,6 +130,7 @@ export function buttonName(v: string, ps = false): string {
     case 'dright': return t('D-pad {arrow}', { arrow: '→' });
     case 'ls': return ps ? 'L3' : 'LS';
     case 'rs': return ps ? 'R3' : 'RS';
+    case 'auto': return t('Auto');
     default: return t('Off');
   }
 }
@@ -277,7 +289,7 @@ export class SiteKeysView {
     return out;
   }
   /** a cap: text its name (said), cap what it shows (a key's name, the D-pad's glyph: buttonCap); a button round it
-   *  where it can be set, its frame lime while it waits for a press */
+   *  where it can be set, its frame lime while it waits for a press (a switch's: a click is its next choice) */
   private cap_(o: Our, button: boolean, text: string, cap: HTMLElement): HTMLElement {
     const waiting = this.waiting?.id === o.id && this.waiting.button === button;
     const what = button ? t('{what}: controller button', { what: t(o.name) }) : t('{what}: key', { what: t(o.name) });
@@ -289,7 +301,10 @@ export class SiteKeysView {
       b.append(kbd(button ? t('Press a button') : t('Press a key')));
     } else b.append(cap);
     b.disabled = this.deps.readOnly();
-    b.onclick = () => { if (waiting) this.cancel(); else this.wait(o, button); };
+    if (button && o.toggle) {
+      const vals = BUTTONS[o.button!];
+      b.onclick = () => { this.cancel(); this.note = null; void this.take(o, true, vals[(vals.indexOf(this.buttonNow(o.button!)) + 1) % vals.length]); };
+    } else b.onclick = () => { if (waiting) this.cancel(); else this.wait(o, button); };
     return b;
   }
   /** under the row: why the last press was not taken, or that the game has its key */
@@ -331,7 +346,7 @@ export class SiteKeysView {
     const was = new Set<string>();
     const poll = () => {
       // a controller's press of a choice it offers (the standard mapping's places), not one held since the wait began
-      const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+      const pads = allPads();
       const down = new Set<string>();
       for (const g of pads) if (g?.connected) for (const [v, i] of Object.entries(PAD_INDEX)) if (g.buttons[i]?.pressed) down.add(v);
       const fresh = [...down].find(v => !was.has(v) && BUTTONS[o.button!].includes(v));
@@ -340,7 +355,7 @@ export class SiteKeysView {
       this.cancel();
       void this.take(o, true, fresh);
     };
-    if (button) { for (const g of navigator.getGamepads?.() ?? []) if (g?.connected) for (const [v, i] of Object.entries(PAD_INDEX)) if (g.buttons[i]?.pressed) was.add(v);
+    if (button) { for (const g of allPads()) if (g?.connected) for (const [v, i] of Object.entries(PAD_INDEX)) if (g.buttons[i]?.pressed) was.add(v);
       raf = requestAnimationFrame(poll); }
     this.stopWait = () => { window.removeEventListener('keydown', keydown, { capture: true }); cancelAnimationFrame(raf); };
     (this.box?.querySelector<HTMLElement>(`[data-our="${o.id}"] .selected`))?.focus();

@@ -19,6 +19,7 @@ mod friends;
 mod kept;
 mod lan;
 mod manifest;
+mod lastfm;
 mod names;
 mod pool;
 #[cfg(test)]
@@ -27,6 +28,7 @@ mod run;
 pub mod settings_days;
 #[cfg(test)]
 mod testkit;
+mod outbound;
 mod turnstile;
 mod url;
 mod vault;
@@ -231,6 +233,8 @@ pub struct App {
     pub vault: Option<vault::VaultRoute>,
     /// claimed names (/names), none without keyphrase saves
     pub names: Option<names::NamesRoute>,
+    /// Last.fm scrobbles (/lastfm), none without the API account's key and secret
+    pub lastfm: Option<lastfm::Lastfm>,
     /// free roam's friends (/friends and the pages' friend messages), none without the Online host, the hub or names
     pub friends: Option<Arc<friends::Friends>>,
     /// the operator's bans (the control socket: control.rs), checked at /lan
@@ -358,6 +362,7 @@ impl App {
             roam,
             vault: vault.map(vault::VaultRoute::new),
             names,
+            lastfm: lastfm::Lastfm::from_env(),
             friends,
             bans,
             days,
@@ -560,6 +565,9 @@ impl App {
         }
         if p == "/friends" {
             return self.friends_route(q, s, &u).await;
+        }
+        if p == "/lastfm" {
+            return self.lastfm(q, s, &u).await;
         }
         if q.method != "GET" && q.method != "HEAD" {
             return self

@@ -1,0 +1,41 @@
+# The pause menu's Options > Gameplay in career free roam: Show Player Names (runtime/shownames.c), the game's own row
+# of the LAN lobby's options, after Race Map Mode, before Save; from a career save in free roam (run-suite's
+# NFSU2_SAVE_SEED, roam-pair's --seed).  Left: Off ("[names] Show Player Names Off", the game's byte 0), back to the
+# game; again: On.  roam-pair --page app saves the page at each "log SHOT <name>":
+#   roam-pair --page app --solo --a Pau:roam_pause_names.txt --seed <save tree> --env NFSU2_ROAM=0 --out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++120  expect b:0x8500c9 == 1
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  tap RIGHT
++60   tap RIGHT
++60   tap RIGHT                                    # Options (after Return to Explore Mode, Save, ...)
++60   tap RETURN
++0    waitfng UI_PauseOptionsMain.fng 600
++120  tap RIGHT
++60   tap RIGHT                                    # Gameplay (after Audio, Display)
++60   log SHOT pause_options
++0    tap RETURN
++0    waitfng UI_PauseOptions.fng 600
++120  log SHOT pause_gameplay
++0    tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN                                     # Show Player Names
++90   log SHOT pause_names_on
++0    tap LEFT                                     # Off
++90   expect b:0x8500c9 == 0
++0    log SHOT pause_names_off
++0    tap DOWN                                     # Save, the last
++90   log SHOT pause_last
++0    tap ESCAPE
++120  tap ESCAPE
++120  tap ESCAPE                                   # back to the game
++120  expect b:0x8500c9 == 0
++0    log SHOT drive_names_off
++60   quit

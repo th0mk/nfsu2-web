@@ -1,0 +1,11 @@
+# Show Player Names (runtime/shownames.c) from the registry over a profile's: a career save in free roam whose profile
+# has it On (NFSU2_SAVE_SEED, e.g. work/seed/career/s4_outrun), and a registry.txt with it off: after the profile's
+# load, Off ("[names] Show Player Names Off (registry ShowPlayerNames), after a profile's load").
+#   NFSU2_SAVE_SEED=<save tree> run-suite --script roam_names_profile.txt
+#             --reg /tests/web/seed/registry_perf4_names_off.txt --marker "LOG names_off"
+0     bot on
++0    waitroam 6000
++0    bot off
++60   expect b:0x8500c9 == 0
++0    log LOG names_off
++10   quit

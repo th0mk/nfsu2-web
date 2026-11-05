@@ -1,0 +1,26 @@
+# Co-op free roam online, collisions per pair, instance A: player 2 (the keyboard's WASD half) stands behind player 1
+# in career free roam while B (coop_online_hit_b.txt) drives into player 2's car from behind.  B is linked with both
+# players, so its car is solid to player 2's and the hit is shared as player 1's are (roam_game.c roam_game_contact,
+# "player 2's car's velocity" lines): HITS_MIN=1.  With NFSU2_ROAM_TEST_C2_SEAT1=1 on A, B counts as player 1's link
+# alone: its car is a ghost to player 2's and passes through it (c2_pair), no hit, no near miss: HITS_MAX=0,
+# THROUGH_MIN=1.
+#   node web/tools/roam-pair.mjs --seed ~/projects/nsfu2/work/seed/career/s2_r7 \
+#        --a Alma:coop_online_hit_a.txt:HITS_MIN=1,HITS_MAX=1000,THROUGH_MIN=0 --b Boris:coop_online_hit_b.txt:COOP_PEER=Alma
+#   ... --a Alma:coop_online_hit_a.txt:HITS_MIN=0,HITS_MAX=0,THROUGH_MIN=1,NFSU2_ROAM_TEST_C2_SEAT1=1 ...
+0     roam fe2roam 14000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam coop join kb
++0    waitmem 0xd00030 2 1200
++150  roam coop state
++0    roam mp waitpeers2 1 3000
++0    roam mp waitcars 1 3000
++0    roam mp coop
++0    status coop_hit_ready
++1800 roam mp coop
++0    roam coop state
++0    roam mp status
++0    roam mp expectcoop hits ${HITS_MIN} ${HITS_MAX}
++0    roam mp expectcoop through ${THROUGH_MIN}
++0    status coop_hit_done
++300  quit

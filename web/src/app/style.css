@@ -89,7 +89,12 @@ h3 { font-size: 16px; line-height: 24px; color: var(--lime); margin: 32px 0 8px;
 .panel-head h3 { margin: 0; }
 .panel-head .hint { line-height: 24px; }
 .panel-head + .msg { margin: -12px 0 16px; }
-#settings[data-readonly] #settings-note, #online[data-readonly] #online-note { color: var(--warn); }
+#shots-head { gap: 4px 16px; }
+#shots-head .text-btn { padding: 0; height: 24px; }   /* Delete all, in line with the F12 hint */
+/* the play counted here beside the Profiles heading, as Cloud saves' "Synced 12:43" */
+#profiles-head { margin-bottom: 16px; }
+.head-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 16px; }
+#settings[data-readonly] :is(#settings-note, #mods-note), #online[data-readonly] #online-note { color: var(--warn); }
 
 /* who plays on this server now (players.ts PlayersPanel): three numbers in the game's value boxes */
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -193,8 +198,8 @@ kbd {
 .tabs.big[data-fit="rows"] > .tab, .stat span { hyphens: auto; overflow-wrap: anywhere; }
 .tabs.big[data-fit="rows"] > .tab[aria-selected="true"] { box-shadow: inset 0 -3px var(--lime); }
 .pane > :first-child { margin-top: 0; }
-#settings-note { margin-bottom: 16px; }
-#game-data > h3 { margin-top: 0; }
+#settings-note, #mods-note { margin-bottom: 16px; }
+#settings-lines h3 { margin-top: 32px; }          /* after the game data (the Game tab's end), not a pane's first */
 #cache-info { margin-bottom: 16px; }
 #controller-body:not(:empty) { margin-top: 32px; }
 
@@ -272,10 +277,11 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .val { color: var(--lime); font-size: 14px; line-height: 20px; min-width: 24px; }
 .unit { color: var(--muted); font-size: 14px; line-height: 20px; }
 
-/* a choice: the game's value box, the chosen value selected */
+/* a choice: the game's value box, the chosen value selected; a value whose words take two lines makes its option (and
+ * the others on its line) taller, 20 px a line */
 .seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: 8px; background: var(--field); }
 .opt {
-  position: relative; display: inline-flex; align-items: center; height: 32px; padding: 0 12px;
+  position: relative; display: inline-flex; align-items: center; min-height: 32px; padding: 4px 12px;
   border: 2px solid transparent; border-radius: 8px; color: var(--muted); font-size: 14px; line-height: 20px; cursor: pointer;
 }
 .opt input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
@@ -328,7 +334,15 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .listen:hover { border-color: var(--lime); }
 .listen[aria-pressed="true"] { border-color: var(--lime); background: var(--lime-fill); box-shadow: 0 0 8px var(--lime-glow); }
 .listen[aria-pressed="true"]::before { width: 12px; height: 12px; border: 0; background: var(--lime); transform: translate(-50%, -50%); }
-/* a small action as underlined text: a setting's Reset, the hero's Download log, Rename and Cancel in Saves */
+/* the picked flag beside Your flag, in Listen's box: /flags.png's 48x36 flags at 32x24, the picture, its size and
+   place set by settings-ui.ts */
+.flag-pic {
+  display: flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px;
+  border: 2px solid var(--edge); border-radius: 8px; background: var(--field);
+}
+.flag-pic[hidden] { display: none; }
+.flag-pic > span { width: 32px; height: 24px; border-radius: 2px; }
+/* a small action as underlined text: the hero's Download log, Rename and Cancel in Saves */
 .text-btn {
   height: 32px; padding: 0 8px; border: 0; border-radius: 8px; background: none;
   color: var(--muted); font-size: 14px; line-height: 20px; text-decoration: underline; text-underline-offset: 4px;
@@ -354,7 +368,7 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 }
 .set .phrase-col select { width: 100%; min-width: 0; height: 40px; font-size: 14px; line-height: 20px; text-overflow: ellipsis; }
 .set .phrase-head select { color: var(--text); font-style: normal; text-transform: uppercase; letter-spacing: 0.02em; }
-.phrases > .text-btn { padding: 0; }
+.phrases > .reset-btn { margin-left: -6px; }        /* its arrow in line with the boxes above */
 .crew-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* (its chips are pills of the line, the box after the last of them) */
 .crews { display: contents; list-style: none; }
@@ -410,7 +424,19 @@ summary:hover { color: var(--text); }
 /* Reset all settings: at the right of the "Edit settings.ini as text" line, which wraps beside it (a flex box
  * does not run under a float), and above the text box when that is open */
 .raw > .text-btn { float: right; margin: 8px 0 0 8px; }
-#settings-other li .text-btn { height: 24px; padding: 0 4px; }
+#settings-other li .reset-btn { display: inline-grid; width: 24px; height: 24px; vertical-align: middle; }
+
+/* the Mods tab (mods-ui.ts): a section's hint 4 px under its heading; the rows as the settings', a row without a control
+ * of its own (.set-plain) only its name and help.  The (i) right after a row's name, 8 px after its last word (its
+ * focus ring clear of it) and on that word's line (.set-name-end: the two never part), as tall as the name's 24 px line
+ * (the header's icon style: muted, lime when pointed at or focused).  It takes a touch 4 px around it as the icon
+ * buttons' 32 px do (::before: no box of its own, so the line stays 24) */
+.set-plain { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "help"; }
+.set-name-end { white-space: nowrap; }
+.set-name-end > .mod-about { position: relative; display: inline-grid; width: 24px; height: 24px; margin-left: 8px; vertical-align: top; border-radius: 50%; }
+.set-name-end > .mod-about::before { content: ''; position: absolute; inset: -4px; border-radius: 50%; }
+.icon-btn.mod-about svg { width: 24px; height: 24px; }
+.mod-about:focus-visible { color: var(--lime); }
 .raw textarea {
   display: block; width: 100%; margin-bottom: 12px; padding: 8px 12px; border: 2px solid var(--edge); border-radius: 8px;
   background: var(--field); color: var(--text); font: 14px/20px var(--mono); resize: vertical; white-space: pre; overflow-x: auto;
@@ -423,12 +449,20 @@ summary:hover { color: var(--text); }
 .profiles .name { color: var(--lime); margin-right: auto; }
 .profiles .meta { color: var(--muted); font-size: 14px; line-height: 24px; }   /* the name's line: on the grid beside it */
 .profiles .text-btn { padding: 0; }                 /* in line with the text above when wrapped */
-.profiles li > .text-btn { height: 24px; }            /* a row stays as tall as its name */
+/* Rename and Delete as the friends list's icons: 32 px in a 40 px row, Delete dimmed until pointed at */
+.profiles li:has(> .acts) { padding: 4px 4px 4px 12px; }
+.profiles .acts { display: flex; gap: 2px; }
+.profiles .delete-btn { color: var(--edge); opacity: 0.6; }
+.profiles .delete-btn:is(:hover, :focus-visible):not(:disabled) { color: var(--bad); opacity: 1; }
 .profiles li.renaming { flex-direction: column; align-items: stretch; gap: 8px; }
 .profiles li.renaming .msg { margin-top: 0; }
-/* the screenshots (shots.ts): four to a row, each cut to 16:9, the game's glow on the one pointed at; the newest
- * eight, the dialog pages through the rest */
+/* the screenshots (shots.ts): each cut to 16:9, the game's glow on the one pointed at; the newest across the section,
+ * the next four in a row under it, the dialog pages through the rest */
 .shots { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.shots li:first-child { grid-column: 1 / -1; }
+/* 16:9 rounded down to the 4 px grid (each tile its own width's container); where round() is missing, plain 16:9 */
+.shots li { container-type: inline-size; }
+@supports (height: round(down, 10px, 4px)) { .shots .shot { aspect-ratio: auto; height: round(down, 100cqw * 9 / 16, 4px); } }
 .shots:empty { display: none; }
 .shot {
   position: relative; display: block; width: 100%; padding: 0; border: 2px solid transparent; border-radius: 4px;
@@ -787,7 +821,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .toast {
   max-width: 560px; padding: 8px 16px; border-radius: 8px; background: rgba(0, 0, 0, 0.8);
-  font-size: 14px; line-height: 20px; pointer-events: none;
+  font-size: 14px; line-height: 20px; pointer-events: none; white-space: pre-line;
 }
 /* the game's pause menu: what opens the page's menu, under the game's panel (pausehint.ts places it), as a toast */
 /* the site's address under the title screen's copyright (titlemark.ts): drawn there, placed and faded by the game's status */
@@ -848,13 +882,23 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   content: ""; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--lime);
   box-shadow: 0 0 0 2px var(--panel);
 }
-.fl-contact { flex-basis: 100%; margin-top: -8px; padding-bottom: 8px; color: var(--muted); font-size: 14px; line-height: 20px; }
+.fl .fl-discord svg { fill: currentColor; stroke: none; }   /* (Discord's mark is a filled shape, the others are lines) */
 #friends > .set { box-shadow: inset 0 1px var(--line); }   /* under the Crews row, as the rows of a group */
 /* a request by name (friends.ts addField): the Crews row's box (its field's rules) under the list, a setting's 240 px
  * (the row's width on a phone), what the last one did under it */
 .fl-add { flex: none; width: 240px; }
 .friends-pop-box { margin-bottom: 16px; }
 .friends-pop-box .hint:last-child { margin-bottom: 0; }
+/* a copy button's toast (copy.ts copyToast): small, over the button (under it, .below, with no room above), in the top
+ * layer as a popover (its own box and place, not the browser's), gone after a moment */
+.copy-toast {
+  position: fixed; inset: auto; margin: 0; z-index: 30; width: max-content; max-width: calc(100vw - 16px); overflow: visible;
+  padding: 4px 12px; border: 0; border-radius: 8px; background: var(--field); color: var(--text); box-shadow: inset 0 0 0 1px var(--line);
+  font: 400 14px/20px var(--font); pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity 0.15s, transform 0.15s;
+}
+.copy-toast.below { transform: translateY(-4px); }
+.copy-toast.on { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .copy-toast, .copy-toast.below { transform: none; } }
 /* the away check (away.ts): in the middle, until the player is back; a kick or a ban (shell.ts netRemoved) the same,
  * over the touch controls it leaves; upright, in the middle of the picture */
 .toast.away {
@@ -944,9 +988,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 /* free roam: quick chat over the cars (quickchat.ts): the phrase in lime after a speech balloon, over the name the
  * game draws, sized with the HUD (--u, 16 units at the nearest) and scaled with the name by the line's transform
  * (quickchat.ts LINE_MIN: never below 70 %), which follows the game's marks every frame; it pops up, and fades out
- * at its end */
-/* photo mode (photo.ts): the panel, a column at the right edge (Take photo first, the keys under the buttons; it
- * scrolls on a screen too short for it), a flash at each picture, the camera's hand on the picture; the page's other
+ * at its end.  A long one (Granny shifting...) wraps past 20 em, centred, the balloon before its first line */
+/* photo mode (photo.ts): the panel, a column at the right edge in tabs (Take photo first under each; it scrolls on a
+ * screen too short for it), a flash at each picture, the camera's hand on the picture; the page's other
  * things on the game hidden while it is on (its toasts stay: the picture's) */
 .stage.photo :is(.touch, .qc-lines, .qc-picker, .drift-panel, .drift-pop, .pause-hint, .friend-prompt, .notices, .lobby, .lobby-cover, .hud-fps, .stage-menu) {
   display: none !important;
@@ -956,13 +1000,40 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .photo-panel {
   --pe: max(16px, env(safe-area-inset-top), env(safe-area-inset-bottom));
   position: absolute; right: max(16px, env(safe-area-inset-right)); top: var(--pe); z-index: 5;
-  width: 240px; max-height: calc(100% - 2 * var(--pe)); overflow-y: auto; overscroll-behavior: contain;
+  width: 268px; max-height: calc(100% - 2 * var(--pe)); overflow-y: auto; overscroll-behavior: contain;
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start;
   padding: 12px 14px 14px; border: 1px solid var(--line); border-radius: 10px; background: rgba(0, 0, 0, 0.78);
   font: 400 14px/20px var(--font); color: var(--text);
 }
-.ph-head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .ph-title { font-style: italic; font-weight: 700; text-transform: uppercase; color: var(--lime); }
+/* its tabs (Camera, Picture, Scene, Controls): the start page's underline tabs at the panel's size, each with its pane */
+.ph-tabs { display: flex; gap: 12px; box-shadow: inset 0 -1px var(--line); }
+.ph-tab { flex: none; height: 32px; padding: 0; border: 0; background: none; color: var(--muted); font: italic 700 14px/20px var(--font); cursor: pointer; }
+.ph-tab:hover { color: var(--text); }
+.ph-tab[aria-selected="true"] { color: var(--lime); box-shadow: inset 0 -3px var(--lime); }
+/* where a language's words do not fit on the line: smaller, then two rows of two, each on its own divider (photo.ts
+ * fitTabs, as the start page's tabs.ts) */
+.ph-tabs[data-fit="small"] { gap: 8px; }
+.ph-tabs[data-fit="small"] > .ph-tab { font-size: 12px; }
+.ph-tabs[data-fit="rows"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; box-shadow: none; }
+.ph-tabs[data-fit="rows"] > .ph-tab { box-shadow: inset 0 -1px var(--line); text-align: left; overflow-wrap: anywhere; }
+.ph-tabs[data-fit="rows"] > .ph-tab[aria-selected="true"] { box-shadow: inset 0 -3px var(--lime); }
+.ph-pane { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; }
+.ph-pane[hidden], .ph-check[hidden] { display: none; }
+.ph-pane > .ph-mode { justify-self: start; }
+/* a group's heading in a pane (Path, Cars), on a divider; the path's buttons (Add point and Clear, Play path under
+ * them); a line under them; two columns of boxes */
+.ph-sec { padding-top: 8px; border-top: 1px solid var(--line); font-style: italic; font-weight: 700; }
+.ph-row3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.ph-row3 > [data-act="play"] { grid-column: 1 / -1; order: 1; }
+.ph-row3 button {
+  padding: 4px 8px; border: 1px solid var(--edge); border-radius: 6px; background: var(--field);
+  font-style: italic; font-weight: 700; cursor: pointer;
+}
+.ph-row3 button:hover:not(:disabled) { border-color: var(--lime); }
+.ph-row3 button:disabled { opacity: 0.4; cursor: default; }
+.ph-note { margin-top: -6px; color: var(--muted); font-size: 12px; line-height: 18px; }
+.ph-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .ph-mode { display: inline-flex; border: 1px solid var(--edge); border-radius: 6px; overflow: hidden; }
 .ph-mode button { padding: 2px 10px; border: 0; background: none; color: var(--muted); cursor: pointer; }
 .ph-mode button.on { background: var(--lime-fill); color: var(--lime); }
@@ -970,7 +1041,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .ph-slider { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); }
 .ph-slider input { flex: 0 1 136px; min-width: 96px; margin: 0; accent-color: var(--lime); }
 .ph-slider > span, .ph-pick > span { min-width: 0; overflow-wrap: anywhere; }
-.ph-slider:has(input:disabled) { opacity: 0.4; }
+.ph-slider:has(input:disabled), .ph-pick:has(select:disabled), .ph-check:has(input:disabled) { opacity: 0.4; }
 /* a list in the mode buttons' frame */
 .ph-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); }
 .ph-pick select {
@@ -999,8 +1070,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   color: var(--muted); font-size: 12px; line-height: 18px;
 }
 .ph-hints kbd { margin-right: 6px; padding: 0 5px; border-radius: 3px; font: 700 0.9em/1.5 var(--font); }
+.ph-pane.ph-hints { padding-top: 0; border-top: 0; }
 @media (max-height: 480px) {
-  .photo-panel { width: 210px; gap: 6px; padding: 8px 10px 10px; }
+  .photo-panel { width: 240px; gap: 6px; padding: 8px 10px 10px; }
   .ph-buttons { gap: 6px; }
   .ph-buttons button { padding: 4px 12px; }
   .ph-buttons .ph-shoot { padding: 6px 12px; }
@@ -1008,20 +1080,23 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .photo-flash { position: absolute; inset: 0; z-index: 6; background: #fff; pointer-events: none; animation: photo-flash 0.35s ease-out both; }
 @keyframes photo-flash { from { opacity: 0.7; } to { opacity: 0; } }
 .qc-lines { --u: 1px; position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none; }
-.qc-line { position: absolute; left: 0; top: 0; transform-origin: 0 0; white-space: nowrap; transition: opacity 0.6s linear; }
+.qc-line { position: absolute; left: 0; top: 0; transform-origin: 0 0; transition: opacity 0.6s linear; }
 .qc-line.out { opacity: 0; }
 .qc-b {
-  display: flex; align-items: center; gap: calc(2.5 * var(--u)); transform-origin: 50% 100%; animation: qc-pop 0.22s ease-out both;
+  display: block; max-width: 20em; text-align: center; transform-origin: 50% 100%; animation: qc-pop 0.22s ease-out both;
   font: italic 700 max(14px, calc(16 * var(--u))) / 1 var(--font); color: var(--lime);
   text-shadow: 0 0 2px #000, 0 1px 3px #000, 0 0 calc(5 * var(--u)) rgba(0, 0, 0, 0.6);
 }
-.qc-b svg { width: 0.95em; height: 0.95em; flex: none; fill: currentColor; filter: drop-shadow(0 1px 2px #000); }
+.qc-b svg {
+  display: inline-block; width: 0.95em; height: 0.95em; margin-right: calc(2.5 * var(--u)); vertical-align: -0.1em;
+  fill: currentColor; filter: drop-shadow(0 1px 2px #000);
+}
 @keyframes qc-pop { 0% { opacity: 0; transform: translateY(30%) scale(0.6); } 70% { opacity: 1; transform: scale(1.06); } 100% { transform: none; } }
 /* the countdown, a special phrase (quickchat.ts): its stopwatch in the picker and over the car, dimmed in a race (it
  * does nothing there); its big number for the players near the one who said it, the chat lines' lime and shadow, in
  * the picture's middle a quarter down (placed by the page), a pop at each */
 svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertical-align: -0.14em; fill: none; stroke: var(--lime); stroke-width: 1.6; stroke-linecap: round; }
-.qc-b svg.qc-watch { width: 0.95em; height: 0.95em; margin-right: 0; fill: none; stroke: currentColor; }
+.qc-b svg.qc-watch { width: 0.95em; height: 0.95em; margin-right: calc(2.5 * var(--u)); fill: none; stroke: currentColor; }
 .qc-off { color: var(--muted); }
 .qc-off svg.qc-watch { stroke: var(--muted); }
 .qc-count { position: absolute; left: 50%; top: 24%; transform: translate(-50%, -50%); transition: opacity 0.6s linear; }
@@ -1172,6 +1247,19 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 #changelog-body ul { margin: 0; }
 #changelog-body li + li { margin-top: 8px; }
 #changelog-body strong { color: var(--text); font-style: italic; font-weight: 700; }
+/* a mod's popup (mods-ui.ts): the changelog's, its makers 4 px under the title (a shared row's: under each mod's name),
+ * what it does, its parts, its facts and its pages */
+.dlg.mod-info { width: min(560px, calc(100vw - 32px)); }
+.dlg.mod-info[open] { display: flex; flex-direction: column; overflow: hidden; }
+#mod-info-body { min-height: 0; overflow: hidden auto; }
+#mod-info-body h3:first-child { margin-top: 0; }
+.mod-info .dlg-head h2 { overflow-wrap: anywhere; }
+.mod-info .dlg-head .hint { margin: 4px 0 0; line-height: 24px; }   /* 56 px with the title: Close (40) on the grid beside it */
+#mod-info-body h3 + .mod-by { margin-top: -4px; }
+.mod-parts li + li { margin-top: 8px; }
+.mod-parts strong { color: var(--text); font-style: italic; font-weight: 700; }
+.dlg .mod-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+#mod-info-body > :last-child { margin-bottom: 0; }
 /* one screenshot (shots.ts): as large as the window allows, under it its place, Download and Delete */
 .dlg.shot-view { width: min(1232px, calc(100vw - 32px)); }
 .shot-view .dlg-head .hint { margin: 0; }
@@ -1187,7 +1275,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .menu-radio { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); }
 .menu-radio .btn { padding: 0 80px; overflow: hidden; }
 .menu-radio .btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-inline-end: 0.2em; }
-.menu-radio .icon { position: absolute; top: 6px; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: inherit; }
+.menu-radio .icon { position: absolute; top: 50%; translate: 0 -50%; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: inherit; }
 .menu-radio .icon:hover { color: var(--lime); }
 .menu-radio [data-act="radio-folder"] { right: 40px; }
 .menu-radio [data-act="playlist"] { right: 8px; }
@@ -1252,12 +1340,12 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .set { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "help" "ctl"; }
   .set-control { justify-content: flex-start; margin-top: 8px; flex-wrap: wrap; }
   .set-control > .seg { display: flex; flex: 1; flex-wrap: wrap; }   /* choices that do not fit on one line take two */
-  .set-control > .text-btn { order: 1; }            /* Reset after the control here, where the control is aligned left */
+  .set-control > .reset-btn { order: 1; }           /* Reset after the control here, where the control is aligned left */
   /* a value box fills the row, beside what stays at its own width (Listen) */
   .set-control > select, .set-control > input[type="text"], .set-control > input[type="number"], .set-control > .linkbox,
   .set-control .crew-add { flex: 1 1 160px; width: auto; min-width: 0; max-width: none; }
   .set-control .fl-add { flex: none; width: 100%; }   /* (in the Friends row's column: no basis, which is its height) */
-  .opt { flex: 1; justify-content: center; padding: 0 8px; }
+  .opt { flex: 1; justify-content: center; padding: 4px 8px; text-align: center; }
   /* Reset all settings on a line of its own, under the text editor's line (and the editor, when open) */
   .raw { display: flex; flex-direction: column; }
   .raw > .text-btn { float: none; order: 1; align-self: flex-start; margin: 0 0 8px; padding: 0; }
@@ -1269,11 +1357,46 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .tabs { gap: 16px; }
   html:not([data-touch]) .tabs { gap: 8px; }
 }
-/* a phone in landscape: the page menu's buttons in two columns, so Quit game needs no scrolling */
+/* a phone on its side (a short window): the page menu in as many columns as the dialog's width gives it, so no label is
+ * cut (the fixed two columns cut "Contador de FPS: desactivad…", and the radio's 80 px of icons left it "R…"), and a
+ * label too long for its button takes a second line as a row's button does on a narrow screen.  The radio and its two
+ * icons keep a line of their own, and dense placement fills the cells the row before it leaves empty.  The dialog takes
+ * the room the game's picture has there, and its margins tighten, so a landscape phone's menu (and Quit game) is in
+ * sight without scrolling. */
 @media (max-height: 479px) {
-  .menu-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dlg.menu { width: min(760px, calc(100vw - 32px)); padding: 16px; }
+  .dlg.menu h2 { margin-bottom: 4px; }
+  .dlg.menu .hint { margin-bottom: 8px; }
+  .dlg.menu #menu-save { margin-top: -8px; }
+  .menu-actions { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); grid-auto-flow: dense; gap: 4px; }
+  .menu-actions > .btn { height: auto; min-height: 40px; padding-block: 6px; white-space: normal; text-align: center; }
+  .menu-radio { grid-column: 1 / -1; }
+}
+/* the smallest phones: the radio's two icons take less of its button, so "Radio: desactivado" is whole too (its longest
+   word is 92 px, and 80 px each side left 72 on a 320 px screen) */
+@media (max-width: 399px) {
+  .menu-radio .btn { padding: 0 56px; }
+  .menu-radio .icon { width: 24px; height: 24px; }
+  .menu-radio [data-act="radio-folder"] { right: 32px; }
+  .menu-radio [data-act="playlist"] { right: 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
   .photo-flash { display: none !important; }          /* no white flash at all, rather than a still one */
 }
+
+/* ---------------------------------------------------------------- Last.fm */
+/* the Last.fm row's line about .fmbot (lastfm-ui.ts): one line under the row, a link of its own, in .fmbot's own blue with
+ * its wordmark (fmbot.png: the letters of github.com/fmbot-discord/fmbot's fmbotlogo.png as a mask, drawn white) */
+.fmbot {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; min-width: 0; height: 40px; margin-top: 8px; padding: 0 12px;
+  border-radius: 8px; background: #232b44; box-shadow: inset 0 0 0 1px #5674b9; color: var(--muted);
+  font-size: 14px; line-height: 20px; text-decoration: none; white-space: nowrap;
+}
+.fmbot-mark { flex: none; width: 72px; height: 18px; background: #8fa5dc; mask: url(./fmbot.png) center / contain no-repeat; }
+.fmbot-what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fmbot-go { color: #a9bbea; font-weight: 700; font-style: italic; text-decoration: underline; text-underline-offset: 4px; }
+.fmbot:hover { background: #28314d; }
+.fmbot:hover .fmbot-go { color: #fff; }
+/* /lastfm.html, the Last.fm popup's page, when the browser keeps the window open (lastfm-callback.ts) */
+.lastfm-closed { margin: 24px; }

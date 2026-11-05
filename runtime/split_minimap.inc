@@ -6,6 +6,10 @@ static struct { uint32_t obj, data; int child, group, marker; } mm_obj[MM_MAX];
 static uint8_t mm_snap[6][MM_MAX][0x54];
 static unsigned mm_count, mm_players, mm_frame, mm_drawn;
 static uint32_t mm_marker[6], mm_extended;
+/* the first seat whose map marker is one of ours: players 3+ in a split race; player 2 in co-op free roam, whose
+ * HUD (a copy of free roam's) has its own player arrow, free roam's having only one */
+static int mm_first_extra = 2;
+static int mm_near(uint32_t obj);
 static int mm_center = -1, mm_target = -1;
 /* Optional integration-test counters: actual rendered marker masks per map. */
 static int mm_test = -1;
@@ -48,17 +52,19 @@ static void mm_collect(CPU *c){
         snprintf((char *)g_mem + name, 160, "PlayerCarIndicator_%u", j+1);
         hashes[j] = split_call(c, 0x505450u, 0, 1, &name);
     }
+    mm_first_extra = split_coop_hud() ? 1 : 2;
     for (int k = 0; k < split_render_limit(); ++k){
-        mm_marker[k] = mm_find(pkg[k & ~1], hashes[k & 1]);
-        if (k >= 2) mm_add(mm_marker[k], 0);
+        mm_marker[k] = split_coop_hud() ? mm_find(pkg[k], hashes[0]) : mm_find(pkg[k & ~1], hashes[k & 1]);
+        /* co-op: both arrows go through the per-half placement (free roam's HUD is mapped, not made for a half) */
+        if (k >= mm_first_extra || split_coop_hud()) mm_add(mm_marker[k], 0);
     }
     for (uint32_t p = pkg[0] ? MR32(pkg[0] + 0x4c) : 0, guard = 0; p && guard++ < 2048; p = MR32(p + 4))
         if (mm_kind(p)) mm_add(p, 0);
 }
 static int mm_extend(CPU *c, uint32_t mgr){
     if (mm_extended == mgr) return 1;
-    for (int k = 2; k < split_render_limit(); ++k) if (!mm_marker[k]) return 0;
-    for (int k = 2; k < split_render_limit(); ++k){
+    for (int k = mm_first_extra; k < split_render_limit(); ++k) if (!mm_marker[k]) return 0;
+    for (int k = mm_first_extra; k < split_render_limit(); ++k){
         uint32_t pool = MR32(0x8364b4u), desc = split_call(c, 0x43f8f0u, 0, 1, &pool);
         if (!desc) return 0;
         uint32_t node = split_call(c, 0x440ec0u, 0, 0, 0);
@@ -96,7 +102,7 @@ void sub_004ca840(CPU *c){
             uint32_t data = MR32(mm_marker[j] + 0x2c);
             if (data) memcpy(g_mem + data, mm_colors[j], 16);
             /* Follow native HUD visibility, including pause/cutscene hiding. */
-            if (j >= 2) MR32(mm_marker[j]+0x1c) =
+            if (j >= mm_first_extra) MR32(mm_marker[j]+0x1c) =
                 (MR32(mm_marker[j]+0x1c) & ~1u) | (MR32(mm_marker[0]+0x1c) & 1u);
         }
         for (unsigned i = 0; i < mm_count; ++i)
@@ -105,26 +111,41 @@ void sub_004ca840(CPU *c){
     mm_center = -1; mm_players = split_render_limit(); ++mm_frame; *c = after;
     if (mm_test) MR32(0xd0d000u) = mm_players;
 }
+/* the map manager's entries for our extra player arrows taken out (they point at objects of HUDs that go away) */
+static void mm_drop_extras(CPU *c, uint32_t mgr){
+    for (uint32_t e = MR32(mgr), guard = 0; e && e != mgr && guard++ < 256;){
+        uint32_t next = MR32(e), desc = MR32(e+0x1c);
+        if (desc && MR32(desc+4) == 4 && MR32(e+8) >= (uint32_t)mm_first_extra){
+            uint32_t prev = MR32(e+4); MR32(prev) = next; MR32(next+4) = prev;
+            uint32_t a[] = {MR32(0x8364b4u), desc}; split_call(c, 0x43f920u, 0, 2, a);
+            a[0] = MR32(0x8364b8u); a[1] = e; split_call(c, 0x43f920u, 0, 2, a);
+        }
+        e = next;
+    }
+}
+/* co-op: player 2 leaves (coop.c, before its Player and HUD end): its arrow off the map */
+void split_coop_map_drop(CPU *c){
+    if (mm_extended) mm_drop_extras(c, mm_extended);
+    mm_extended = mm_players = mm_count = 0; mm_center = mm_target = -1;
+}
 void sub_004ecb80(CPU *c){
     uint32_t mgr = c->ecx;
-    if (mgr == mm_extended){
-        for (uint32_t e = MR32(mgr), guard = 0; e && e != mgr && guard++ < 256;){
-            uint32_t next = MR32(e), desc = MR32(e+0x1c);
-            if (desc && MR32(desc+4) == 4 && MR32(e+8) >= 2){
-                uint32_t prev = MR32(e+4); MR32(prev) = next; MR32(next+4) = prev;
-                uint32_t a[] = {MR32(0x8364b4u), desc}; split_call(c, 0x43f920u, 0, 2, a);
-                a[0] = MR32(0x8364b8u); a[1] = e; split_call(c, 0x43f920u, 0, 2, a);
-            }
-            e = next;
-        }
-    }
+    if (mgr == mm_extended) mm_drop_extras(c, mgr);
     mm_extended = mm_players = mm_count = 0; mm_center = mm_target = -1;
     if (mm_test > 0) MR32(0xd0d000u) = 0;
     sub_004ecb80_orig(c);
 }
+/* the map's centre in its HUD: the 2P race HUD's, or free roam's (co-op) */
+static float mm_cx(void){ return split_coop_hud() ? -223.f : -230.f; }
+static float mm_cy(void){ return split_coop_hud() ? 143.f : 5.f; }
+/* a blip's x without the edge anchoring's shift (co-op: see mm_transform) */
+float ws_hud_shift(float, float);
+static float mm_blip_x(float x, float y){
+    return split_coop_hud() && ws_hud_shift(x, y) == 0.f ? x - ws_hud_shift(mm_cx(), mm_cy()) : x;
+}
 static int mm_near(uint32_t obj){
     uint32_t d = MR32(obj + 0x2c);
-    return d && fabsf(MRF32(d+28) + 230.f) < 100.f && fabsf(MRF32(d+32) - 5.f) < 100.f;
+    return d && fabsf(mm_blip_x(MRF32(d+28), MRF32(d+32)) - mm_cx()) < 100.f && fabsf(MRF32(d+32) - mm_cy()) < 100.f;
 }
 static void mm_render(CPU *c, const CPU *before, uint32_t obj){
     *c = *before; MR32(c->esp+4) = obj;
@@ -139,7 +160,9 @@ void sub_005370a0(CPU *c){
     for (unsigned i = 0; i < mm_players; ++i) if (mm_marker[i] == obj) marker = i;
     if (at < 0 && !mm_kind(obj)){ sub_005370a0_orig(c); return; }
     CPU before = *c;
-    if (marker >= 0){
+    if (marker >= 0 && split_coop_hud()){
+        /* co-op: the arrows are drawn just after each half's map (below): free roam's HUD has them before it */
+    } else if (marker >= 0){
         if (marker < 2 && mm_drawn != mm_frame){
             mm_drawn = mm_frame;
             for (unsigned k = 0; k < mm_players; ++k){
@@ -156,9 +179,14 @@ void sub_005370a0(CPU *c){
             }
         }
     } else if (at >= 0){
+        int map = split_coop_hud() && MR32(obj + 0x10) == split_minimap_hashes[0];
         for (unsigned k = 0; k < mm_players; ++k){
             mm_apply(k); mm_target = k;
             if (!mm_obj[at].marker || mm_near(obj)) mm_render(c, &before, obj);
+            if (map) for (unsigned n = 1; n <= mm_players; ++n){     /* the other player's arrow, then this one's */
+                uint32_t m = mm_marker[(k + n) % mm_players];
+                if (m && !(MR32(m+0x1c) & 1u) && mm_near(m)) mm_render(c, &before, m);
+            }
         }
     }
     mm_apply(0); mm_target = -1; *c = before;
@@ -173,6 +201,23 @@ static int mm_transform(CPU *c){
         uint32_t copy = 0xd0c000u + (split_hud_copy++ & 15u)*0x60u;
         mem_commit(copy, 0x60); memcpy(g_mem + copy, g_mem + data, 0x54);
         if (group){ MRF32(copy+28) = MRF32(copy+32) = 0.f; }
+        else if (split_coop_hud()){
+            /* co-op: where the HUD mapping puts free roam's map in this player's half, as big as the HUD there */
+            unsigned w,h; void com_backbuffer_size(unsigned *, unsigned *); com_backbuffer_size(&w,&h);
+            float sc = split_coop_scale(), e = h ? 240.f*w/h : 320.f;
+            float bot = mm_target ? 240.f : 0.f;
+            float cx = -e + (mm_cx() + 320.f)*sc, cy = bot - (240.f - mm_cy())*sc;
+            float x = MRF32(copy+28), y = MRF32(copy+32);
+            /* places on the screen (top-level parts, and the player arrows inside the map's group, which free roam's
+             * map keeps in screen places too), not ones relative to the group: from the map's centre.  The blips
+             * were moved by the edge anchoring as the map placed them (widescreen.c, 0x51D655); its fixed parts are
+             * moved as they are drawn (0x51B198, from the place they have here, which the mapping changes: not at
+             * all then) */
+            if (!level || fabsf(x) > 150.f){ x = mm_blip_x(x, y) - mm_cx(); y -= mm_cy(); }
+            MRF32(copy+28) = cx + x*sc; MRF32(copy+32) = cy + y*sc;
+            for (unsigned j=4;j<=6;++j) MRF32(copy+j*4) *= sc;
+            MRF32(copy+56) *= sc; MRF32(copy+60) *= sc;
+        }
         else {
             unsigned w,h; void com_backbuffer_size(unsigned *, unsigned *); com_backbuffer_size(&w,&h);
             SplitCell cell = split_cell(mm_target);
