@@ -217,7 +217,7 @@ try {
       env.NFSU2_ROAM_NAME === 'Tester' && env.NFSU2_ROAM === '0' && env.NFSU2_HORN === 'train' && env.SNDSYNC === '0' && !('WINDOW' in env);
     // the raw editor: a refused value is kept in the file but shown as ignored; a setting the panel has no row for
     // (roam_rate) and one the browser ignores (roam_port, the Mac app's) are listed under the groups
-    await tab(page, 'other');
+    await tab(page, 'game');
     await page.click('#settings-raw summary');
     const ta = page.locator('#settings-text');
     await ta.fill((await ta.inputValue()).replace('#hud = wide', 'hud = ultrawide').replace('#roam_rate = 20', 'roam_rate = 30')
@@ -245,7 +245,7 @@ try {
     const file2 = (await readOpfs(page, SAVE, 'settings.ini')).text;
     // Reset on a line without a row (roam_rate): its template line back
     n0 = await saved(page);
-    await tab(page, 'other');
+    await tab(page, 'game');
     await page.click('#settings-other li:has-text("roam_rate") .reset-btn'); await settle(page, n0);
     const file3 = (await readOpfs(page, SAVE, 'settings.ini')).text;
     // Reset all settings: asks, then the template with the name (roam_port, the Mac app's line, goes too)
@@ -1421,13 +1421,17 @@ try {
       .map(async u => [u, (await fetch(u, { cache: 'no-store' })).status]))));
     const a11y = await s.evaluate(() => {
       const unnamed = [], undescribed = [];
-      for (const el of document.querySelectorAll(':is(#settings-body, #online-body) .set :is(input, [role="radiogroup"])')) {
+      for (const el of document.querySelectorAll(':is(#settings-body, #online-body, #mods-body) .set :is(input, [role="radiogroup"])')) {
         if (el.type === 'radio') continue;                           // named by its own label, the group by the row's
-        const named = el.labels?.length || el.getAttribute('aria-labelledby') && document.getElementById(el.getAttribute('aria-labelledby'))?.textContent;
+        const named = el.labels?.length || el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') && document.getElementById(el.getAttribute('aria-labelledby'))?.textContent;
         if (!named) unnamed.push(el.id || el.outerHTML.slice(0, 60));
         const desc = (el.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
         if (!desc.length || desc.some(id => !document.getElementById(id))) undescribed.push(el.id || el.outerHTML.slice(0, 60));
       }
+      // each mod's (i) named by its mod
+      const mods = [...document.querySelectorAll('#mods-body .mod-about')];
+      for (const b of mods) if (!b.getAttribute('aria-label')?.includes(b.closest('.set')?.querySelector('.set-label')?.textContent || '\u0000')) unnamed.push(`(i) ${b.dataset.mod}`);
+      if (mods.length < 10) unnamed.push(`${mods.length} (i) buttons in the Mods tab`);
       return { unnamed, undescribed, keys: document.querySelectorAll('#keys .keys > div').length, dialogsOpen: document.querySelectorAll('dialog[open]').length,
         headings: [...document.querySelectorAll('h1, h2')].map(h => `${h.tagName}:${h.textContent}`) };
     });

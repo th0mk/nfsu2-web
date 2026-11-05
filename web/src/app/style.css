@@ -94,7 +94,7 @@ h3 { font-size: 16px; line-height: 24px; color: var(--lime); margin: 32px 0 8px;
 /* the play counted here beside the Profiles heading, as Cloud saves' "Synced 12:43" */
 #profiles-head { margin-bottom: 16px; }
 .head-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 16px; }
-#settings[data-readonly] #settings-note, #online[data-readonly] #online-note { color: var(--warn); }
+#settings[data-readonly] :is(#settings-note, #mods-note), #online[data-readonly] #online-note { color: var(--warn); }
 
 /* who plays on this server now (players.ts PlayersPanel): three numbers in the game's value boxes */
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -198,8 +198,8 @@ kbd {
 .tabs.big[data-fit="rows"] > .tab, .stat span { hyphens: auto; overflow-wrap: anywhere; }
 .tabs.big[data-fit="rows"] > .tab[aria-selected="true"] { box-shadow: inset 0 -3px var(--lime); }
 .pane > :first-child { margin-top: 0; }
-#settings-note { margin-bottom: 16px; }
-#game-data > h3 { margin-top: 0; }
+#settings-note, #mods-note { margin-bottom: 16px; }
+#settings-lines h3 { margin-top: 32px; }          /* after the game data (the Game tab's end), not a pane's first */
 #cache-info { margin-bottom: 16px; }
 #controller-body:not(:empty) { margin-top: 32px; }
 
@@ -277,10 +277,11 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .val { color: var(--lime); font-size: 14px; line-height: 20px; min-width: 24px; }
 .unit { color: var(--muted); font-size: 14px; line-height: 20px; }
 
-/* a choice: the game's value box, the chosen value selected */
+/* a choice: the game's value box, the chosen value selected; a value whose words take two lines makes its option (and
+ * the others on its line) taller, 20 px a line */
 .seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: 8px; background: var(--field); }
 .opt {
-  position: relative; display: inline-flex; align-items: center; height: 32px; padding: 0 12px;
+  position: relative; display: inline-flex; align-items: center; min-height: 32px; padding: 4px 12px;
   border: 2px solid transparent; border-radius: 8px; color: var(--muted); font-size: 14px; line-height: 20px; cursor: pointer;
 }
 .opt input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
@@ -424,6 +425,19 @@ summary:hover { color: var(--text); }
  * does not run under a float), and above the text box when that is open */
 .raw > .text-btn { float: right; margin: 8px 0 0 8px; }
 #settings-other li .reset-btn { display: inline-grid; width: 24px; height: 24px; vertical-align: middle; }
+
+/* the Mods tab (mods-ui.ts): a section's hint 4 px under its heading; the rows as the settings', a row without a control
+ * of its own (.set-plain) only its name and help.  The (i) right after a row's name, 8 px after its last word (its
+ * focus ring clear of it) and on that word's line (.set-name-end: the two never part), as tall as the name's 24 px line
+ * (the header's icon style: muted, lime when pointed at or focused).  It takes a touch 4 px around it as the icon
+ * buttons' 32 px do (::before: no box of its own, so the line stays 24) */
+.mods-group > h3 + .hint { margin-top: -4px; }
+.set-plain { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "help"; }
+.set-name-end { white-space: nowrap; }
+.set-name-end > .mod-about { position: relative; display: inline-grid; width: 24px; height: 24px; margin-left: 8px; vertical-align: top; border-radius: 50%; }
+.set-name-end > .mod-about::before { content: ''; position: absolute; inset: -4px; border-radius: 50%; }
+.icon-btn.mod-about svg { width: 24px; height: 24px; }
+.mod-about:focus-visible { color: var(--lime); }
 .raw textarea {
   display: block; width: 100%; margin-bottom: 12px; padding: 8px 12px; border: 2px solid var(--edge); border-radius: 8px;
   background: var(--field); color: var(--text); font: 14px/20px var(--mono); resize: vertical; white-space: pre; overflow-x: auto;
@@ -1234,6 +1248,19 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 #changelog-body ul { margin: 0; }
 #changelog-body li + li { margin-top: 8px; }
 #changelog-body strong { color: var(--text); font-style: italic; font-weight: 700; }
+/* a mod's popup (mods-ui.ts): the changelog's, its makers 4 px under the title (a shared row's: under each mod's name),
+ * what it does, its parts, its facts and its pages */
+.dlg.mod-info { width: min(560px, calc(100vw - 32px)); }
+.dlg.mod-info[open] { display: flex; flex-direction: column; overflow: hidden; }
+#mod-info-body { min-height: 0; overflow: hidden auto; }
+#mod-info-body h3:first-child { margin-top: 0; }
+.mod-info .dlg-head h2 { overflow-wrap: anywhere; }
+.mod-info .dlg-head .hint { margin: 4px 0 0; line-height: 24px; }   /* 56 px with the title: Close (40) on the grid beside it */
+#mod-info-body h3 + .mod-by { margin-top: -4px; }
+.mod-parts li + li { margin-top: 8px; }
+.mod-parts strong { color: var(--text); font-style: italic; font-weight: 700; }
+.dlg .mod-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+#mod-info-body > :last-child { margin-bottom: 0; }
 /* one screenshot (shots.ts): as large as the window allows, under it its place, Download and Delete */
 .dlg.shot-view { width: min(1232px, calc(100vw - 32px)); }
 .shot-view .dlg-head .hint { margin: 0; }
@@ -1319,7 +1346,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .set-control > select, .set-control > input[type="text"], .set-control > input[type="number"], .set-control > .linkbox,
   .set-control .crew-add { flex: 1 1 160px; width: auto; min-width: 0; max-width: none; }
   .set-control .fl-add { flex: none; width: 100%; }   /* (in the Friends row's column: no basis, which is its height) */
-  .opt { flex: 1; justify-content: center; padding: 0 8px; }
+  .opt { flex: 1; justify-content: center; padding: 4px 8px; text-align: center; }
   /* Reset all settings on a line of its own, under the text editor's line (and the editor, when open) */
   .raw { display: flex; flex-direction: column; }
   .raw > .text-btn { float: none; order: 1; align-self: flex-start; margin: 0 0 8px; padding: 0; }

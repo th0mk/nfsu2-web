@@ -44,7 +44,7 @@ import { checkSaves, exists, filesOf, listProfiles, NO_SAVE, PROFILES_DIR, readT
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, PlayersPanel, queueText, roomHash, roomLine, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
-import { panelTabs } from './tabs';
+import { panelTabs, type PanelTabs } from './tabs';
 import { CREW_MAX, crewList, crewsOf, crewsValue, freeColour, rgbsValue, rgbWords, type Crew } from './crews';
 import { checkInvite, inviteLink, readInvite, sameName, tidyInvite, type Invite } from './invite';
 import { privacy, SCRUB_NOTE } from './privacy';
@@ -166,6 +166,7 @@ const msgStore = new MessageStore();      // messages between friends (messages.
 let friendMessages: FriendMessages;       // ...in the game: the log's lines, I and its card
 let chatDialog: ChatDialog;               // ...on the start page: one conversation
 let settings: SettingsPanel;
+let bigTabs: PanelTabs;
 let players: { now(): void; last(): PlayerCounts | null; fresh(ms: number): Promise<PlayerCounts | null> } | null = null;
 let playersPanel: PlayersPanel;
 /** the name the linked passphrase claims, as the line under Your name last heard (undefined: not asked yet) */
@@ -1048,7 +1049,7 @@ function onExit(s: GameSession, code: number) {
     // error code 1 in the first minute: the game's own program file did not load (runtime/mem.c), damaged in the
     // browser's copy or blocked by the network (HTTP 403): players asked what to do, the code said nothing
     const base = () => code === 0 ? t('The game closed normally after {time}.', { time: mins() }) : code === -1 ? t('The game was stopped after {time}.', { time: mins() })
-      : code === 1 && seconds < 60 ? t('The game\'s files didn\'t load properly. On this page: Other, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.')
+      : code === 1 && seconds < 60 ? t('The game\'s files didn\'t load properly. On this page: Game, Delete game data, then Play (your saves stay). If it happens again, your network may be blocking the game: try another network.')
       : t('The game stopped with error code {code} after {time}.', { code, time: mins() });
     // what is kept: the game's last profile save, never a claim it did not make
     const sv = saved;
@@ -2174,8 +2175,9 @@ export async function boot() {
   fps.extra = () => session?.stats() ?? {};
   // the language this browser showed last, at once (settings.ini says which it is: applyLanguage, once it is read)
   void setLanguage(lastLanguage(), logLine);
-  // the big panel's tabs (the one open last, or the one the address names: #friends) and About's
-  panelTabs($('#settings'), { store: 'nfsu2.page.tab', hash: true });
+  // the big panel's tabs (the one open last, or the one the address names: #friends) and About's; the Other tab's
+  // contents are at the Game tab's end since the Mods tab came (kept or named, #other opens Game there)
+  bigTabs = panelTabs($('#settings'), { store: 'nfsu2.page.tab', hash: true, moved: { other: { tab: 'game', at: '#game-data' } } });
   panelTabs($('#about'));
   // Last.fm: its row under the songs' settings, and the scrobbles of the songs the game plays (lastfm.ts)
   const lastfmApi = new LastfmApi(), lastfmRow = new LastfmRow({ api: lastfmApi, log: logLine, say: pageToast });
@@ -2366,8 +2368,9 @@ export async function boot() {
   showOverrides(given, dev);
   if (given.length) log.add(dev ? `[app] test settings from the page address: ${given.join(', ')}` : `[app] the page address's test settings (${given.join(', ')}) are ignored: not a development server`);
   if (q.has('fresh') && SAVE !== 'save') { await removeSaveDir(SAVE); forgetLink(SAVE); log.add(`[app] fresh save folder ${SAVE}`); }
-  // the settings and saves show at once (read only until this tab owns the saves), and again once it does
-  void settings.refresh();
+  // the settings and saves show at once (read only until this tab owns the saves), and again once it does; then the
+  // place the address named (#other) can be scrolled to
+  void settings.refresh().then(() => bigTabs.settled());
   void saves.refresh();
   void vault.start().then(() => friendsPanel.refresh(true));
   void instance.whenOwner.then(async () => {

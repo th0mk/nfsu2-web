@@ -104,8 +104,7 @@
       </div>
       <div class="pane prose" role="tabpanel" data-tab="credits" hidden>
         <p data-i18n-html>Source code on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. Based on Talha Müderrisoğlu's <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a>, the original x86 → C static recompiler for NFSU2, after <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>. This project was forked from NFSU2Recomp's <a href="https://github.com/TalhaMudo/NFSU2Recomp/tree/3d187ce7e5f1b99c0580866da4dbaa6d59dd23c7" target="_blank" rel="noopener noreferrer">MIT-licensed version of 16 October 2026</a> and uses only code from that version.</p>
-        <p data-i18n-html>Texture packs: LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>, JeansBig's <a href="https://nfsmods.xyz/mod/4485" target="_blank" rel="noopener noreferrer">Detailed Map</a>.</p>
-        <p data-i18n-html>Split screen: BirdSentinel (Zack)'s port of mihaits' <a href="https://github.com/mihaits/NFSU2-SplitScreen" target="_blank" rel="noopener noreferrer">NFSU2-SplitScreen</a>.</p>
+        <p data-i18n-html>Mods and their makers: the <a href="#mods">Mods</a> tab.</p>
       </div>
       <div class="pane prose" role="tabpanel" data-tab="translations" hidden>
         <p data-i18n-html>Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <a href="https://nfsmods.xyz/mod/5749" target="_blank" rel="noopener noreferrer">Multi 13 languages mod</a>, with Lee-Ryo's Thai support.</p>
@@ -130,8 +129,8 @@
         <button type="button" class="tab" role="tab" data-tab="online" data-i18n>Online</button>
         <button type="button" class="tab" role="tab" data-tab="friends" data-i18n>Friends &amp; crews</button>
         <button type="button" class="tab" role="tab" data-tab="game" data-i18n>Game</button>
+        <button type="button" class="tab" role="tab" data-tab="mods" data-i18n>Mods</button>
         <button type="button" class="tab" role="tab" data-tab="controls" data-i18n>Controls</button>
-        <button type="button" class="tab" role="tab" data-tab="other" data-i18n>Other</button>
       </div>
 
       <div class="pane" role="tabpanel" data-tab="saves" id="saves">
@@ -207,9 +206,41 @@
         <div id="friends"></div>
       </div>
 
+      <!-- the settings (settings-ui.ts), then the game data on this device (saves-ui.ts), the lines without a row and the
+           file as text (settings-ui.ts) -->
       <div class="pane" role="tabpanel" data-tab="game" hidden>
         <p class="hint" id="settings-note">Changes apply the next time you press Play.</p>
         <div id="settings-body"></div>
+        <div id="game-data">
+          <h3 data-i18n>Game data on this device</h3>
+          <p class="hint" id="cache-info">Counting…</p>
+          <div class="bar" id="data-bar" role="progressbar" data-i18n-attr="aria-label" aria-label="Game data preload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+            <div class="bar-fill"></div>
+          </div>
+          <div class="row">
+            <button type="button" class="btn" id="fetch-all" hidden>Preload the game data</button>
+            <button type="button" class="btn" id="clear-cache" data-i18n>Delete game data</button>
+          </div>
+          <p class="msg" id="data-msg" role="status"></p>
+        </div>
+        <div id="settings-lines"></div>
+        <div class="raw">
+          <button type="button" class="text-btn" id="settings-reset-all" data-i18n>Reset all settings</button>
+          <details id="settings-raw">
+            <summary data-i18n>Edit settings.ini as text</summary>
+            <textarea id="settings-text" spellcheck="false" rows="20" wrap="off" aria-label="settings.ini"></textarea>
+            <div class="row">
+              <button type="button" class="btn" id="settings-text-save" data-i18n>Save file</button>
+              <span class="hint" id="settings-text-msg" role="status"></span>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- the mods (mods.ts): their rows (mods-ui.ts; a setting's row is settings-ui.ts's) -->
+      <div class="pane" role="tabpanel" data-tab="mods" id="mods" hidden>
+        <p class="hint" id="mods-note">The mods in this game and their makers (translations: the Translations tab). Changes apply the next time you press Play.</p>
+        <div id="mods-body"></div>
       </div>
 
       <div class="pane" role="tabpanel" data-tab="controls" id="controls" hidden>
@@ -288,33 +319,6 @@
               <div class="key-only"><dt data-i18n-html>Hold <kbd>Esc</kbd></dt><dd data-i18n>Leave full screen</dd></div>
             </dl>
           </div>
-        </div>
-      </div>
-
-      <div class="pane" role="tabpanel" data-tab="other" hidden>
-        <div id="game-data">
-          <h3 data-i18n>Game data on this device</h3>
-          <p class="hint" id="cache-info">Counting…</p>
-          <div class="bar" id="data-bar" role="progressbar" data-i18n-attr="aria-label" aria-label="Game data preload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
-            <div class="bar-fill"></div>
-          </div>
-          <div class="row">
-            <button type="button" class="btn" id="fetch-all" hidden>Preload the game data</button>
-            <button type="button" class="btn" id="clear-cache" data-i18n>Delete game data</button>
-          </div>
-          <p class="msg" id="data-msg" role="status"></p>
-        </div>
-        <div id="settings-lines"></div>
-        <div class="raw">
-          <button type="button" class="text-btn" id="settings-reset-all" data-i18n>Reset all settings</button>
-          <details id="settings-raw">
-            <summary data-i18n>Edit settings.ini as text</summary>
-            <textarea id="settings-text" spellcheck="false" rows="20" wrap="off" aria-label="settings.ini"></textarea>
-            <div class="row">
-              <button type="button" class="btn" id="settings-text-save" data-i18n>Save file</button>
-              <span class="hint" id="settings-text-msg" role="status"></span>
-            </div>
-          </details>
         </div>
       </div>
     </section>
@@ -421,6 +425,18 @@
     <button class="btn" value="close" data-i18n>Close</button>
   </form>
   <div id="changelog-body"></div>
+</dialog>
+
+<!-- a Mods tab row's (i): its mod, both of a shared row, or a group of our changes (mods-ui.ts) -->
+<dialog class="dlg mod-info" id="mod-info" aria-labelledby="mod-info-title">
+  <form method="dialog" class="dlg-head">
+    <div>
+      <h2 id="mod-info-title"></h2>
+      <p class="hint" id="mod-info-by" hidden></p>
+    </div>
+    <button class="btn" value="close" autofocus data-i18n>Close</button>
+  </form>
+  <div id="mod-info-body"></div>
 </dialog>
 
 <dialog class="dlg" id="donate" aria-labelledby="donate-title">

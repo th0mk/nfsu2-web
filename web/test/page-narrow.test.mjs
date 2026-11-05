@@ -30,7 +30,7 @@ const PORT = +(process.env.NFSU2_TEST_PAGE_PORT || 8534);
 const WIDTH = 320;
 /** each tab measured: [the panel, its tab, the Controls sheet's tab in it] */
 const VIEWS = [['settings', 'saves'], ['settings', 'online'], ['settings', 'friends'], ['settings', 'game'],
-  ['settings', 'controls', 'keys'], ['settings', 'controls', 'pad'], ['settings', 'controls', 'site'], ['settings', 'other'],
+  ['settings', 'controls', 'keys'], ['settings', 'controls', 'pad'], ['settings', 'controls', 'site'], ['settings', 'mods'],
   ['about', 'credits'], ['about', 'translations']];
 const out = await esbuild.build({ entryPoints: [path.join(HERE, '../src/app/i18n.ts')], bundle: true, write: false, format: 'esm', platform: 'neutral' });
 const { LANGUAGES } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));

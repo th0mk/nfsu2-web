@@ -163,9 +163,9 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'language', env: 'NFSU2_LANGUAGE', kind: 'enum', vals: LANGUAGES.join('|'), scope: 'web' },
   // the movies' subtitles (runtime/language.c).  Not in bundle.m's table either
   { key: 'subtitles', env: 'NFSU2_SUBTITLES', kind: 'bool', scope: 'web' },
-  // the EA Trax songs: the game folder's (a soundtrack mod's uncensored versions) or EA's own, which the I/O worker
-  // reads in their place (pfdata/original: io-worker.ts dataFile; the page fetches ahead only the ones picked:
-  // datacache.ts).  Not in bundle.m's table either
+  // the EA Trax songs: the game folder's (xGMVx's Uncensored & Restored Soundtrack, nfsmods.xyz/mod/3649) or EA's
+  // own, which the I/O worker reads in their place (pfdata/original: io-worker.ts dataFile; the page fetches ahead
+  // only the ones picked: datacache.ts).  Not in bundle.m's table either
   { key: 'songs', env: 'NFSU2_SONGS', kind: 'enum', vals: 'uncensored|original', scope: 'web' },
   // the songs in drag and drift races too (runtime/drift.c race_music; off: none there, as in the original).  Not in
   // bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_RACE_MUSIC all the same
@@ -268,9 +268,10 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #subtitles = on
 
 # The EA Trax songs: uncensored = unedited, some in longer versions than
-# the game's (a soundtrack mod's); original = the versions the game shipped
-# with, where the server has them.  Its key (key_song, F7) plays the next
-# song while you play.
+# the game's (xGMVx's Uncensored & Restored Soundtrack,
+# nfsmods.xyz/mod/3649); original = the versions the game shipped with,
+# where the server has them.  Its key (key_song, F7) plays the next song
+# while you play.
 # [NFSU2_SONGS]
 #songs = uncensored
 

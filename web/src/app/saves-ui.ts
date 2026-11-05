@@ -3,7 +3,7 @@
 // overlay as a zip (profiles, registry.txt, settings.ini, screenshots) and
 // restoring one, or adding the PC game's profiles beside the ones here
 // (readBackup tells them apart), and the F12 screenshots (shots.ts); a keyphrase's saves come in as a
-// backup does (readVault, restoreVault: vault-ui.ts).  And the Other tab's game data on
+// backup does (readVault, restoreVault: vault-ui.ts).  And the Game tab's game data on
 // this device: how much of it, all of it downloaded ahead (predownload.ts), or
 // deleted.  The game data is never part of a backup and never written back:
 // it stays on the server.

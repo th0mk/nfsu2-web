@@ -139,7 +139,7 @@ async function open() {
   await page.goto(`${BASE}/`);
   await page.waitForFunction(() => ['ready', 'error'].includes(window.__nfsu2?.phase), null, { timeout: 60000 });
   await page.waitForFunction(() => !/Counting/.test(document.querySelector('#cache-info').textContent), null, { timeout: 30000 });
-  await page.click('#settings .tab[data-tab="other"]');               // where the game data's buttons are
+  await page.click('#settings .tab[data-tab="game"]');                // where the game data's buttons are (its end)
 }
 async function until(f, ms = 60000) {
   const t0 = Date.now();
