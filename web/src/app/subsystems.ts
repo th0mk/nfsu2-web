@@ -39,14 +39,14 @@ export const attachRenderer: AttachRenderer = async (proc, canvas, o) => {
 
 export const attachAudio: AttachAudio = async (proc, o) => {
   const a = await audioAttach(proc, { context: o.context, log: o.log });
-  return { detach: () => a.detach(), stats: () => a.stats(), state: () => a.context?.state ?? 'closed' };
+  return { detach: () => a.detach(), stats: () => a.stats(), state: () => a.context?.state ?? 'closed', shutter: () => a.shutter() };
 };
 
 export const attachInput: AttachInput = (proc, element, o) =>
   inputAttach(proc, element, { log: o.log, viewRect: o.viewRect, toggleFullscreen: o.toggleFullscreen, padPage: o.padPage });
 
 export const attachNet: AttachNet = (proc, o) => {
-  const link = netAttach(proc, { name: o.name, id: o.id, was: o.was, claim: o.claim, block: o.block, log: o.log, onNotice: o.notice, onLobby: o.lobby, onSay: o.say, onBump: o.bump, onBattle: o.battle, onCoop: o.coop, onFriend: o.friend, onBack: o.back,
+  const link = netAttach(proc, { name: o.name, id: o.id, was: o.was, claim: o.claim, block: o.block, log: o.log, onNotice: o.notice, onLobby: o.lobby, onSay: o.say, onBump: o.bump, onBattle: o.battle, onCoop: o.coop, onSpeedTrap: o.speedTrap, onFriend: o.friend, onBack: o.back,
     onQueue: o.queue, onRemoved: o.removed, onRaces: o.races, onRename: o.rename });
   const friends = () => link.peers.filter(p => !p.self);
   return {

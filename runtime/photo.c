@@ -113,6 +113,7 @@ int roam_game_online_here(void);                         /* ...free roam with ot
 int roam_game_names(CPU *c, uint32_t *obj, int max);
 uint32_t language_add_text(const char *name, const char *text);
 
+void roam_game_trap_edit(int cmd,int a,int b);
 void roam_game_hold(int on);                             /* roam_game.c: friends' cars held where they are */
 int roam_game_slot_kind(uint32_t car, const char **name);/* ...and what player's a car is (-1 none of theirs) */
 void horn_mute(int on);                                  /* horn.c: every horn quiet */
@@ -226,7 +227,7 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 enum { PH_HELLO = 0, PH_OPEN = 1, PH_HOLD = 2, PH_MOVE = 3, PH_TURN = 4, PH_DRAG = 5, PH_PAN = 6, PH_DOLLY = 7,
        PH_FOV = 8, PH_ROLL = 9, PH_MODE = 10, PH_RESET = 11, PH_NAMES = 12, PH_FOCUS = 13, PH_BLUR = 14, PH_CARS = 15, PH_FREEZE = 16,
        PH_SPEED = 17, PH_SMOOTH = 18, PH_LEVEL = 19, PH_SPIN = 20, PH_PATH = 21, PH_SHOW = 22, PH_LIGHTS = 23, PH_HORNS = 24,
-       PH_WEATHER = 25, PH_TARGET = 26, PH_SHUTTER = 27, PH_SIZE = 28, PH_SHIFT = 29, PH_LENS = 30 };
+       PH_WEATHER = 25, PH_TARGET = 26, PH_SHUTTER = 27, PH_SIZE = 28, PH_SHIFT = 29, PH_LENS = 30, PH_SURVEY_XY = 31, PH_SURVEY_VIEW = 32 };
 /* PH_PATH's: the camera's path */
 enum { PATH_CLEAR = 0, PATH_ADD = 1, PATH_PLAY = 2, PATH_STOP = 3 };
 /* PH_HOLD's bits: keys and buttons held */
@@ -243,6 +244,7 @@ enum { TARGET_MINE = 0, TARGET_MIDDLE = 1 };
 #define NONE_SET INT32_MIN
 static struct {
     atomic_int page, open, hold, move, lift, turn, dx, dy, px, py, dolly, fov, roll, mode, reset, names, focus, blur, cars, freeze;
+    atomic_int survey_x, survey_y, survey_z, survey_h;
     atomic_int speed, smooth, level, spin, path, path_ms;
     atomic_int show, lights, horns, weather, target;             /* the scene's: kinds of cars shown, their lights, horns,
                                                                     the weather; the car the camera is on */
@@ -286,6 +288,16 @@ void photo_input(int cmd, int a, int b){
     case PH_SIZE:  atomic_store(&I.size, a); break;                               /* the picture: 1 the screen's, 2 .. 4 times */
     case PH_SHIFT: atomic_store(&I.shift_x, a); atomic_store(&I.shift_y, b); break; /* lens shift, 1/1000 of the view's half */
     case PH_LENS:  atomic_store(&I.lens, a); break;                               /* 0 normal, 1 fisheye */
+    /* Development-only overhead capture for manual gate placement; centimetres. */
+    case 33: case 34: case 35:
+        if (getenv("NFSU2_GATE_EDITOR")) roam_game_trap_edit(cmd-14,a,b);
+        break;
+    case PH_SURVEY_XY:
+        if (getenv("NFSU2_GATE_EDITOR")){ atomic_store(&I.survey_x, a); atomic_store(&I.survey_y, b); }
+        break;
+    case PH_SURVEY_VIEW:
+        if (getenv("NFSU2_GATE_EDITOR")){ atomic_store(&I.survey_z, b); atomic_store(&I.survey_h, a >= 1000 && a <= 25000 ? a : 0); }
+        break;
     default: break;
     }
 }
@@ -643,7 +655,7 @@ static void leave(CPU *c, const char *why){
     P.target = 0; P.path_play = 0;
     memset(P.jit, 0, sizeof P.jit);
     gw_photo(0, 0, 0, 0);
-    P.on = 0; P.pause_at = 0;
+    P.on = 0; P.pause_at = 0; atomic_store(&I.survey_h, 0);
     fprintf(stderr, "[photo] f=%ld off (%s)\n", autotest_frame(), why);
 }
 
@@ -733,6 +745,16 @@ static void path_input(const float *cc){
 static int capture_view(const float *cc);         /* (below: a picture being taken, the camera waits) */
 /* the camera, one frame: what the page sends, then where it looks from and at */
 static void steer(uint32_t car, uint32_t mine, float dt){
+    if (atomic_load(&I.survey_h) > 0){
+        P.sl[0] = (float)atomic_load(&I.survey_x) / 100.f;
+        P.sl[1] = (float)atomic_load(&I.survey_y) / 100.f;
+        P.sl[2] = (float)atomic_load(&I.survey_z) / 100.f;
+        memcpy(P.se, P.sl, sizeof P.se);
+        P.se[2] += (float)atomic_load(&I.survey_h) / 100.f;
+        P.sl[1] += 0.01f; /* a stable north-up basis, avoiding a vertical look-at singularity */
+        P.fov = 60.f; P.roll = 0.f; P.blur = 0.f; P.names = 0; P.show = 0;
+        return;
+    }
     int hold = atomic_load(&I.hold), mv = atomic_load(&I.move), lift = atomic_load(&I.lift), tn = atomic_load(&I.turn);
     float spd = P.speed > 0.f ? P.speed : 1.f, fast = (hold & HB_FAST ? 3.f : 1.f) * spd;
     float mx = (float)(!!(hold & HB_RIGHT) - !!(hold & HB_LEFT)) + s16(mv, 0);
@@ -1072,7 +1094,7 @@ static void picture(void){
         return;
     }
     if (was == (int)GW_CAP_TILES) P.acc_n = 0;     /* the tiles taken: the still picture of the whole view again */
-    if (P.drive_on){ P.acc = P.acc_n = 0; gw_photo(4, 1, 1, P.gen); return; }   /* GW_PHOTO_NOW */
+    if (P.drive_on || atomic_load(&I.survey_h) > 0){ P.acc = P.acc_n = 0; gw_photo(4, 1, 1, P.gen); return; }   /* GW_PHOTO_NOW */
     if (!same || !w || !h){
         P.acc = 0; P.gen = P.gen % 0xfffeu + 1u;
         P.acc_n = (int)clampf(ceilf(PI * r_px * r_px / BLUR_PX_AREA), SAMPLES_SHARP, SAMPLES_BLUR);

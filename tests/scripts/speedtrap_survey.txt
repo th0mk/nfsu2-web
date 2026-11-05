@@ -1,0 +1,33 @@
+# Fresh profile -> career free roam, then a physical drive through the airport practice gate.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN
++300  tap RETURN
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN
++0    roam waitroam 3000
++0    roam smsauto on
+# The opening career sequence unlocks driving controls after its introduction.
+
++1000 teleport 1715 -845 24.6 0x4000
++120 walls at 1695 -845 24.6
++0 walls at 1680 -845 24.6
++0 walls at 1710 -845 24.6
++0 walls at 1695 -860 24.6
++0 walls at 1695 -830 24.6
++0 photo on
++30 photo drag 0 1.5
++0 photo dolly -20
++0 photo fov 110
++120 log SHOT survey
++600 quit

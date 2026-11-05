@@ -1,0 +1,2 @@
+import './traps/landing.css';
+const q=new URLSearchParams({trapeditor:'1',fresh:'',script:'/tests/scripts/speedtrap_editor.txt',reg:'/tests/web/seed/registry_perf4_native.txt'});for(const e of ['NOMOVIES=1','SNDSYNC=0','GPUVS=1','NFSU2_ROAM=1','NFSU2_ROAM_NAME=GateEditor','ROAM_PROFILE=GateEditor','NFSU2_ROAM_WEBTEST=vlan'])q.append('env',e);(document.querySelector('#start') as HTMLAnchorElement).href='/?'+q;

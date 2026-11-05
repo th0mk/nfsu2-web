@@ -20,6 +20,7 @@ use crate::links::{
     Cand, Found, Grid, Heap, Level, Near, Place, WALK_AHEAD, WALK_SOON, WALK_VIEW, before, distance, order_key, sort_stable, square, weigh,
 };
 use crate::results::{self, Results};
+use crate::speedtrap;
 use crate::watch::{self, Seen, Watch};
 use crate::wire::{self, F_DATA, KIND_UDP, Msg};
 use crate::{PeerEntry, ROAM_HUB_VIP, RoamOptions};
@@ -648,6 +649,8 @@ struct Player {
     checked: u64,
     /// when its owner's claim last heard it played (`Claims::seen`, at most every SEEN_EVERY_MS)
     seen_claim: f64,
+    /// The optional speed-trap challenge, kept out of the hot position fields.
+    trap: speedtrap::Traps,
 }
 
 impl Player {
@@ -1013,6 +1016,8 @@ pub struct Hub {
     /// the near links gone (`OneWay::gone`) as of the last `[roam] cars within ... that went` line, and when it was
     near_said: [u64; GONE_N],
     near_said_at: f64,
+    /// Earliest speed-trap HUD reply per browser; retained across endpoint restarts.
+    trap_at: HashMap<u32, f64>,
     /// when each virtual address's next world map is answered at the soonest (map_gap_ms), kept past its players: a BYE and a HELLO (or
     /// another port) make a new player, and when a player's own time was the limit, a new player's first answer came
     /// at once (the second security audit, 2026-10-22: a map walks every player on the hub's one thread, and a few
@@ -1093,6 +1098,7 @@ impl Hub {
             joined_pruned: 0.0,
             near_said: [0; GONE_N],
             near_said_at: 0.0,
+            trap_at: HashMap::new(),
             map_at: HashMap::new(),
             maps: HashMap::new(),
             lobbies_at: HashMap::new(),
@@ -1308,6 +1314,10 @@ impl Hub {
     /// of its own.  A race's results count the clients that report its winner (results.rs, its clean wins).
     pub fn frame_of(&mut self, from: u32, data: &[u8], owner: Option<&Arc<str>>, client: Option<&Arc<str>>) {
         self.st.frames += 1;
+        if data.len() == F_DATA + 4 && data[0] == KIND_UDP && &data[F_DATA..] == speedtrap::REQUEST {
+            self.trap_reply(from, u16::from_be_bytes([data[12], data[13]]));
+            return;
+        }
         if data.len() < F_DATA + wire::HDR + wire::CRC || data[0] != KIND_UDP {
             self.st.bad += 1;
             return;
@@ -1338,6 +1348,7 @@ impl Hub {
                     return;
                 }
                 self.insert(Player {
+                    trap: speedtrap::Traps::default(),
                     vip: from,
                     port: sport,
                     hub_port: dport,
@@ -1398,12 +1409,19 @@ impl Hub {
         let mut crewed = None;
         // (a HELLO: its name against the claims)
         let mut check = false;
+        let mut trap_scored = false;
         match m {
             Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links, duel, seat2 } => {
                 // another start of the game on the same endpoint (where its car was, and its clock's epochs, start again)
                 if p.id != sender {
                     p.links.clear();
                     p.watch.reset();
+                }
+                if p.id != sender || p.room != room {
+                    p.trap = speedtrap::Traps::default();
+                }
+                if status != 2 {
+                    p.trap.interrupt();
                 }
                 p.id = sender;
                 p.room = room;
@@ -1442,6 +1460,13 @@ impl Hub {
                 crewed = Some((was, p.crews[0] != 0));
             }
             Msg::Snap { sender, status, p: pos, v, heading, slope, t_us, clock } if sender == p.id => {
+                if status == 2 && !p.impostor {
+                    let before = p.trap.sequence;
+                    p.trap.observe(now, pos, v, t_us, clock);
+                    trap_scored = p.trap.sequence > before && p.trap.requested_at.is_some_and(|at| now - at <= 3000.0);
+                } else {
+                    p.trap.interrupt();
+                }
                 let (dx, dy) = (pos[0] - p.stay[0], pos[1] - p.stay[1]);
                 if p.p.is_none() || dx * dx + dy * dy > STAY_M * STAY_M || !matches!(status, 2 | 5) {
                     (p.stay, p.stay_at) = ([pos[0], pos[1]], now);
@@ -1492,6 +1517,7 @@ impl Hub {
             }
             _ => {}
         }
+        if trap_scored { self.trap_send(from, sport); }
         if let Some((op, lobby, race)) = heard {
             self.lobby_heard(slot, op, lobby, race, now);
         }
@@ -2030,8 +2056,86 @@ impl Hub {
         (self.send)(vip, Bytes::from(f));
     }
 
+    /// Browser-only optional HUD, requested through the existing authenticated switch endpoint.
+    /// No public HTTP endpoint, no client-submitted score, no new messages to old clients.
+    fn trap_reply(&mut self, vip: u32, port: u16) {
+        let now = (self.now)();
+        let Some(&slot) = self.by_key.get(&key(vip, port)) else { return };
+        if self.trap_at.get(&vip).is_some_and(|&at| now < at) {
+            return;
+        }
+        self.trap_at.insert(vip, now + 1000.0);
+        if let Some(Some(p)) = self.slots.get_mut(slot as usize) {
+            p.trap.requested_at = Some(now);
+        }
+        self.trap_send(vip, port);
+    }
+
+    // A confirmed crossing is pushed immediately to its recently subscribed endpoint, without waiting for polling.
+    fn trap_send(&mut self, vip: u32, port: u16) {
+        let now = (self.now)();
+        let Some(&slot) = self.by_key.get(&key(vip, port)) else { return };
+        let Some(p) = self.player(slot) else { return };
+        if p.impostor {
+            return;
+        }
+        let pos = p.p.unwrap_or(speedtrap::CENTER);
+        let mut nearest: Vec<_> = p.trap.catalog
+            .iter()
+            .enumerate()
+            .map(|(i, gate)| {
+                let dx = gate.center()[0] - pos[0];
+                let dy = gate.center()[1] - pos[1];
+                (i, dx.hypot(dy), dy.atan2(dx).to_degrees() - p.heading as f64 * 360.0 / 256.0)
+            })
+            .collect();
+        nearest.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+        let Some(&(index, distance, bearing)) = nearest.first() else { return };
+        let gate = &p.trap.catalog[index];
+        let run = &p.trap.runs[index];
+        let score_index = p.trap.event.map_or(index, |(i, _, _)| i);
+        let mut ranked: Vec<_> = self
+            .slots
+            .iter()
+            .flatten()
+            .filter(|q| q.room == p.room && !q.impostor && std::sync::Arc::ptr_eq(&q.trap.catalog, &p.trap.catalog) && q.trap.runs[score_index].best > 0 && !blocked(&self.blocks, p, q))
+            .collect();
+        ranked.sort_by(|a, b| b.trap.runs[score_index].best.cmp(&a.trap.runs[score_index].best).then(a.id.cmp(&b.id)).then(a.vip.cmp(&b.vip)));
+        let rows: Vec<_> =
+            ranked.iter().take(5).map(|q| json!({"name":q.name,"speed":q.trap.runs[score_index].best,"me":q.key()==p.key()})).collect();
+        // A bounded set of nearby camera pins keeps a city full of traps from flooding the HUD or UDP frame.
+        let nearby: Vec<_> = nearest
+            .iter()
+            .filter(|(_, d, _)| *d <= 600.0)
+            .take(4)
+            .map(|&(i, d, b)| json!({"id":p.trap.catalog[i].id,"distance":d.round(),"bearing":b}))
+            .collect();
+        let event = p.trap.event.map(|(i, speed, best)| {
+            json!({"id":p.trap.catalog[i].id,
+            "name":p.trap.catalog[i].name,"speed":speed,"best":best})
+        });
+        let active = p.status == 2 && p.p.is_some() && now - p.pos_at <= 2000.0;
+        let message = json!({"v":1,"id":gate.id,"name":gate.name,"active":active,
+            "distance":distance.round(), "bearing":bearing,
+            "best":run.best,"last":run.last,"passes":run.passes,
+            "sequence":p.trap.sequence,"event":event,"nearby":nearby,
+            "session":format!("{}:{}:{}",p.vip,p.id,p.room),"rows":rows,
+            "gate":[gate.center()[0],gate.center()[1],gate.center()[2],gate.half_width()]});
+        let body = message.to_string();
+        let mut f = vec![0u8; F_DATA + 4 + body.len()];
+        f[0] = KIND_UDP;
+        f[4..8].copy_from_slice(&ROAM_HUB_VIP.to_be_bytes());
+        f[8..12].copy_from_slice(&vip.to_be_bytes());
+        f[12..14].copy_from_slice(&p.hub_port.to_be_bytes());
+        f[14..16].copy_from_slice(&port.to_be_bytes());
+        f[F_DATA..F_DATA + 4].copy_from_slice(speedtrap::RESPONSE);
+        f[F_DATA + 4..].copy_from_slice(body.as_bytes());
+        (self.send)(vip, Bytes::from(f));
+    }
+
     /// browser `vip` left the switch
     pub fn peer_gone(&mut self, vip: u32) {
+        self.trap_at.remove(&vip);
         self.blocks.remove(&vip);
         self.pages.remove(&vip);
         self.friends.remove(&vip);

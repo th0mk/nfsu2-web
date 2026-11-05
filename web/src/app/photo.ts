@@ -455,6 +455,7 @@ export class PhotoMode {
   private update() {
     const s = this.session;
     if (!s) return;
+    if (document.body.classList.contains('gate-editing')) { this.root.hidden = true; return; }
     if (!this.hello && this.send(PH_HELLO)) this.hello = true;
     const st = s.status?.read();                  // null while the game writes it: the last state stands
     if (!st || !st.has('photo')) return;

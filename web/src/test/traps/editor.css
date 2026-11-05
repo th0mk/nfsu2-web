@@ -1,0 +1,40 @@
+.gate-editor-dock { position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:1200;display:flex;gap:12px;align-items:center;padding:8px 12px;background:#152029ed;border:1px solid #a8e36b;border-radius:8px;color:#edf5ef;font:13px system-ui;max-width:90vw; }
+.gate-editor { box-sizing:border-box;width:96vw;max-width:1600px;height:92vh;max-height:1000px;padding:0;border:1px solid #53646c;border-radius:12px;background:#121c23;color:#e2ecef;font:14px system-ui; }
+.gate-editor::backdrop { background:#030809b8; }
+.gate-editor header {display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid #324149;}
+.gate-editor h2,.gate-editor p {margin:0 0 8px;}.gate-editor h2 {font-size:22px;}.gate-editor header p {color:#9ab0bb;margin:0;}
+.gate-editor nav {display:flex;gap:8px;padding:12px 20px;flex-wrap:wrap;border-bottom:1px solid #324149;}
+.gate-editor button,.gate-editor-dock button {font:inherit;background:#263943;color:#eef7f8;border:1px solid #506875;border-radius:6px;padding:8px 12px;cursor:pointer;white-space:nowrap;}
+.gate-editor button:hover,.gate-editor-dock button:hover {background:#36515e;border-color:#a8e36b;}
+.gate-editor-body {display:grid;grid-template-columns:minmax(0,1fr) 290px;height:calc(100% - 150px);min-height:250px;}
+.gate-editor-map {position:relative;background:radial-gradient(ellipse at center,#182a33,#0d171e);min-height:0;overflow:hidden;}
+.gate-editor-map svg {width:100%;height:100%;touch-action:none;cursor:crosshair;display:block;}
+.gate-editor-map .roads path {fill:none;stroke:#6b8793;stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;}
+.gate-editor-map .gate {stroke:#7184ef;stroke-width:5;vector-effect:non-scaling-stroke;cursor:pointer;}
+.gate-editor-map .selected {stroke:#b3ef77;stroke-width:6;}.gate-editor-map .endpoint {fill:#132d20;stroke:#d4ffad;stroke-width:2;vector-effect:non-scaling-stroke;cursor:grab;}
+.gate-editor-map .pending {fill:#ffc25d;}.gate-editor-map .car {fill:#7deaff;stroke:#fff;stroke-width:1;vector-effect:non-scaling-stroke;}.gate-editor-map .gate-label {fill:#e7f8da;font-family:system-ui;paint-order:stroke;stroke:#12212a;stroke-width:2;vector-effect:non-scaling-stroke;}
+.gate-editor .map-help {position:absolute;bottom:0;left:0;right:0;margin:0;padding:12px;background:#101a23e8;color:#a9c0cc;font-size:12px;pointer-events:none;}
+.gate-editor aside {padding:16px;overflow:auto;border-left:1px solid #324149;}
+.gate-editor label {display:block;color:#a9c0cc;margin:8px 0;}.gate-editor input,.gate-editor select {box-sizing:border-box;display:block;width:100%;margin-top:4px;border:1px solid #435963;border-radius:5px;padding:7px;background:#0d171e;color:#e8f5f8;font:13px system-ui;}
+.gate-editor fieldset {border:1px solid #324149;border-radius:6px;margin:14px 0;padding:8px 12px;}.gate-editor legend {color:#b3ef77;padding:0 5px;}.gate-editor fieldset label {display:grid;grid-template-columns:80px 1fr;align-items:center;gap:6px;}.gate-editor .hint {font-size:12px;color:#9bb4bf;line-height:1.5;}
+.gate-editor-actions {display:flex;gap:6px;flex-wrap:wrap;margin:14px 0;}.gate-editor-message {color:#ffdb94;line-height:1.5;margin-top:14px!important;}
+@media(max-width:800px){.gate-editor-body{grid-template-columns:minmax(0,1fr) 230px;}.gate-editor nav{gap:4px;padding:8px;}.gate-editor button{padding:6px 8px;}}
+.gate-editor[open] { display:grid;grid-template-rows:auto auto minmax(0,1fr); }
+.gate-editor-body { height:auto;min-height:0; }
+.gate-editor nav select { width:auto;margin:0; }
+.gate-editor-dock[hidden] { display:none; }
+.gate-editor-map {background:#000;}
+.gate-editor-map canvas {position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;}
+.gate-editor-map svg {position:absolute;inset:0;}
+.gate-list {display:flex;flex-direction:column;gap:6px;margin-bottom:20px;}
+.gate-list button {text-align:left;}
+.gate-list button[aria-pressed="true"] {border-color:#b3ef77;background:#304630;}
+body.gate-editing .photo-panel {display:none!important;}
+.gate-editor-map .gate-editor-hold {z-index:1;}
+.gate-editor-map .gate-editor-hold[hidden] {display:none;}
+.gate-editor-map svg {z-index:2;}
+.gate-editor-map .map-help {z-index:3;}
+.gate-editor-map[data-view="overview"] {background:#101c27;}
+.gate-editor-map[data-view="overview"] .roads path {stroke:#9aaebb;stroke-width:3;stroke-linejoin:round;stroke-linecap:round;}
+.gate-editor-map .map-pin {fill:#7184ef;stroke:#101c27;stroke-width:2;cursor:pointer;}
+.gate-editor-map .map-pin.selected {fill:#b3ef77;stroke-width:2;}

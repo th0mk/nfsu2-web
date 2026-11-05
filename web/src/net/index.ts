@@ -71,6 +71,7 @@
 import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
 import * as P from './proto';
+import { trapResponse, trapRequest, type TrapState } from './speedtrap';
 import { N } from '../app/i18n';
 
 export interface NetOptions {
@@ -106,6 +107,7 @@ export interface NetOptions {
   /** co-op free roam: player 2 online (NET_KIND_COOP), as JSON from the game: {"name"} when its endpoint starts or
    *  renames, "{}" when it ends */
   onCoop?: (json: string) => void;
+  onSpeedTrap?: (state: TrapState) => void;
   /** free roam's friends: a {"t":"friend",...} message from the server (server-rs src/app/friends.rs) */
   onFriend?: (m: Record<string, unknown>) => void;
   /** the switch welcomed this page again after the link was lost (a server restart, as for a deploy) */
@@ -1050,6 +1052,7 @@ export class Link implements NetLink {
   }
   /** C's network thread hears of what came: now, or once the bundle it came in is taken apart */
   private rang(ep: Endpoint) { if (this.ringLater) this.ringLater.add(ep); else ep.ring(); }
+  private trapAsked = -Infinity;
   private rxFrame(b: ArrayBuffer) {
     if (b.byteLength < P.F_DATA) return;
     const kind = new Uint8Array(b, 0, 1)[0];
@@ -1061,6 +1064,13 @@ export class Link implements NetLink {
     const ep = this.roam, mode = ep ? ep.mode() : P.NET_MODE_CLOSED;
     if (!ep || (kind !== P.NET_KIND_UDP && kind !== P.NET_KIND_UDP_LOOP) || mode === P.NET_MODE_CLOSED ||
         (kind === P.NET_KIND_UDP) !== (mode === P.NET_MODE_VLAN)) { this.st.rxFiltered++; return; }
+    const bytes = new Uint8Array(b);
+    const trap = trapResponse(bytes);
+    if (trap) { this.o.onSpeedTrap?.(trap); return; }
+    if (this.o.onSpeedTrap && performance.now() - this.trapAsked >= 1000 && this.ws?.readyState === WebSocket.OPEN) {
+      const request = trapRequest(bytes);
+      if (request) { this.trapAsked = performance.now(); this.ws.send(request); }
+    }
     if (!ep.put(b)) { Atomics.add(ep.i32, P.W_RX_FULL_DROP, 1); this.st.rxFull++; return; }
     this.rang(ep);
     this.st.framesIn++; this.st.bytesIn += len;

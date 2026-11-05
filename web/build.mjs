@@ -23,12 +23,15 @@ const opts = {
     'test/play': 'src/test/play.ts',
     'test/shadercheck': 'src/test/shadercheck.ts',
     'test/aicheck': 'src/test/aicheck.ts',
+    'test/gate-sync': 'src/test/gate-sync.ts',
+    'test/trap-editor': 'src/test/trap-editor.ts',
+    'test/gates': 'src/test/gates.ts',
     'audio/worklet': 'src/audio/worklet.ts',
   },
   outdir: DIST, bundle: true, format: 'esm', target: ['chrome140', 'firefox145'], sourcemap: true, minify: !watch && !process.env.NOMINIFY,
   logLevel: 'info', write: false,
   // registry-defaults.txt and similar seeds go into the page as strings, the stylesheet's pictures as data: URLs
-  loader: { '.txt': 'text', '.png': 'dataurl' },
+  loader: { '.def': 'text', '.txt': 'text', '.png': 'dataurl' },
 };
 for (const [k, v] of Object.entries(opts.entryPoints)) if (!fs.existsSync(v)) delete opts.entryPoints[k];
 // boot.js: what the start page says when main.js never starts (src/boot.ts), a classic script that runs before it,
@@ -122,6 +125,7 @@ function changelog(md) {
 }
 const page =name => `<!doctype html><meta charset=utf-8><title>${name}</title><script type=module src="/test/${name}.js"></script>`;
 for (const name of ['play', 'hostcheck', 'shadercheck', 'aicheck']) fs.writeFileSync(path.join(DEV, 'test', `${name}.html`), page(name));
+fs.copyFileSync('src/test/gates.html', path.join(DEV, 'test', 'gates.html'));
 // the player's page takes its address's test parameters only from a server that serves this (--dev: shell.ts)
 fs.writeFileSync(path.join(DEV, 'test', 'dev.json'), '{"dev":true}\n');
 if (watch) {
