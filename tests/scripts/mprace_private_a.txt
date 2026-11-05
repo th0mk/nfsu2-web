@@ -1,0 +1,16 @@
+# A Friends & crew only lobby a stranger does not hear of, host side (with mprace_private_b.txt): A opens a lobby at
+# MP_RACE's spot and makes it Friends & crew only (mp private: the page's V); B is no friend of A's.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++60   roam mp private
++0    roam mp lobby
++3000 roam mp lobby                           # B's JOIN, if it came, refused
++0    log LOBBY DONE
++60   quit

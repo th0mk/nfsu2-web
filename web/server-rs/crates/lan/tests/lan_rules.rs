@@ -1,5 +1,5 @@
 //! The switch's own tests, the second half (tests/lan.rs has the first): the audit's F2 (what one client can make the
-//! switch send, and whom it can get cut), the store, the 14000 addresses, LAN play's broadcasts, a page that lets go,
+//! switch send, and whom it can get cut), the store, the 16000 addresses, LAN play's broadcasts, a page that lets go,
 //! the breakdown, bundles, a player behind on its path (lag.rs).
 
 mod harness;
@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use harness::*;
-use nfsu2_lan::{Breakdown, LanOptions, LanSwitch};
+use nfsu2_lan::{Breakdown, KindMsgs, LanOptions, LanSwitch, MSG_KINDS};
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
@@ -465,14 +465,14 @@ async fn with_a_store_an_address_nobody_came_back_for_is_gone_for_the_hosts() {
     sw.close().await;
 }
 
-// addresses: 14000 on 10.77.0.0/18, handed out round the fifty-six of its /24s; never .0, .1 or .252 and up; full past them
+// addresses: 16000 on 10.77.0.0/18, handed out round the sixty-four of its /24s; never .0, .1 or .252 and up; full past them
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn addresses_14000_round_the_fifty_six_24s_full_past_them() {
+async fn addresses_16000_round_the_sixty_four_24s_full_past_them() {
     let _s = serial().await;
-    let lan = LanSwitch::new(LanOptions { max_peers: 14000, ..LanOptions::default() }, "", None, None, None, None);
+    let lan = LanSwitch::new(LanOptions { max_peers: 16000, ..LanOptions::default() }, "", None, None, None, None);
     let mut got = Vec::new();
     let now = nfsu2_util::now_ms();
-    for i in 0..14000 {
+    for i in 0..16000 {
         let v = lan.allocate();
         assert!(v != 0, "address {i}");
         got.push(v);
@@ -482,10 +482,10 @@ async fn addresses_14000_round_the_fifty_six_24s_full_past_them() {
     let mut want: Vec<String> = (0..16).map(|b| format!("10.77.{b}.2")).collect();
     want.extend(["10.77.16.2".to_string(), "10.77.17.2".to_string()]);
     assert_eq!(first, want);
-    assert_eq!(ip_str(got[55]), "10.77.55.2");
-    assert_eq!(ip_str(got[56]), "10.77.0.3");
-    assert_eq!(ip_str(got[13999]), "10.77.55.251");
-    assert_eq!(got.iter().collect::<HashSet<_>>().len(), 14000, "all distinct");
+    assert_eq!(ip_str(got[63]), "10.77.63.2");
+    assert_eq!(ip_str(got[64]), "10.77.0.3");
+    assert_eq!(ip_str(got[15999]), "10.77.63.251");
+    assert_eq!(got.iter().collect::<HashSet<_>>().len(), 16000, "all distinct");
     let mut sorted = got.clone();
     sorted.sort();
     let mut all = all_vips();
@@ -610,6 +610,56 @@ async fn breakdown_online_lan_screens_free_roam_leaving_or_starting() {
     let list = all[1].got().ctl.iter().rev().find(|m| m["t"] == "peers").cloned().unwrap();
     let last = list["peers"].as_array().unwrap().last().unwrap().clone();
     assert_eq!(last, serde_json::json!({ "vip": 0x0A4D_0001u32, "name": "online", "server": true }));
+    for x in &all {
+        x.close().await;
+    }
+    sw.close().await;
+}
+
+// the messages by kind of player (src/app/run.rs, every 5 minutes): a page that sent LAN play's datagrams races, the
+// rest as the breakdown has them, free roam split by the page's own word that it drives; each call takes the counts
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn messages_by_kind_racing_first_then_as_the_breakdown_and_taken_each_time() {
+    let _s = serial().await;
+    let in_online = Arc::new(Mutex::new(HashSet::new()));
+    let in_roam = Arc::new(Mutex::new(HashSet::new()));
+    let online = Arc::new(FakeHost { vip: 0x0A4D_0001, name: "online".into(), listed: true, vips: in_online.clone(), gone: Default::default() });
+    let roam = Arc::new(FakeHost { vip: 0x0A4D_00FD, name: String::new(), listed: false, vips: in_roam.clone(), gone: Default::default() });
+    let sw = start_full(opts(), "", Some(online), Some(roam), None).await;
+    let mut all = Vec::new();
+    for (name, l) in [("Racer", Some(1)), ("Online", Some(1)), ("LanScreens", Some(1)), ("Driver", Some(0)), ("Away", Some(0)), ("Leaving", Some(0))] {
+        let mut c = Client::with(sw.port, name, "", Opts { lan: l, ..Opts::default() }).await;
+        c.welcome().await;
+        all.push(c);
+    }
+    for x in &all {
+        x.until_true(|g| g.count("peers") > 0).await;
+    }
+    in_online.lock().unwrap().insert(all[1].vip);
+    in_roam.lock().unwrap().extend([all[3].vip, all[4].vip]);
+    // (what came before is taken: the hellos, the welcomes, the peer lists)
+    sw.lan.messages_by_kind().await;
+    // the racer's LAN play to the LAN screens, each roamer's HELLO (status 2: driving; 0: the menus) to the other
+    let (mut driving, mut menus) = (roam_dgram(1), roam_dgram(1));
+    (driving[19], menus[19]) = (2, 0);
+    for _ in 0..3 {
+        all[0].udp(all[2].vip, 9999, 9999, b"race", 3, 0);
+    }
+    all[3].udp(all[4].vip, 47210, 47210, &driving, 1, 0);
+    all[4].udp(all[3].vip, 47210, 47210, &menus, 1, 0);
+    sleep(300).await;
+    let got = sw.lan.messages_by_kind().await;
+    assert_eq!(got.iter().map(|k| k.kind).collect::<Vec<_>>(), MSG_KINDS.to_vec());
+    assert_eq!(got.iter().map(|k| k.players).collect::<Vec<_>>(), [1, 1, 1, 1, 1, 1], "{got:?}");
+    let k = |i: usize| &got[i];
+    assert_eq!((k(0).msgs_in, k(3).msgs_in, k(4).msgs_in), (3, 1, 1), "each frame a message from its page: {got:?}");
+    assert!(k(2).msgs_out >= 1 && k(3).msgs_out >= 1 && k(4).msgs_out >= 1, "what reached them: {got:?}");
+    assert_eq!((k(1).msgs_in, k(5).msgs_in), (0, 0), "{got:?}");
+    // taken: a second call has the players and no messages
+    let again = sw.lan.messages_by_kind().await;
+    assert!(again.iter().all(|k| k.msgs_in == 0 && k.msgs_out == 0), "{again:?}");
+    assert_eq!(again[0], KindMsgs { kind: MSG_KINDS[0], players: 0, msgs_in: 0, msgs_out: 0 }, "no LAN play since: not racing");
+    assert_eq!(again[2].players, 2, "the racer, back on the LAN screens");
     for x in &all {
         x.close().await;
     }

@@ -151,6 +151,15 @@ pub(crate) struct Conn {
     /// it races nobody (a race ban: its hello's `HelloAnswer::no_races`, or `LanSwitch::set_races`): no frame that
     /// races another player goes from it or to it (`crate::races`)
     pub(crate) no_races: AtomicBool,
+    /// its WebSocket messages each way and LAN play's datagrams it sent, since the [players] line last took them
+    /// (`LanSwitch::messages_by_kind`): what each kind of player costs the kernel and cloudflared
+    pub(crate) msgs_in: AtomicU64,
+    pub(crate) msgs_out: AtomicU64,
+    pub(crate) lan_sent: AtomicU64,
+    /// its page echoes a compact bundle's stamp (its hello's "echo":1: `LanSwitch::probe`), and one is wanted: the next
+    /// compact bundle its writer makes carries it
+    pub(crate) echo: AtomicBool,
+    pub(crate) stamp: AtomicBool,
 }
 
 impl Conn {
@@ -177,6 +186,11 @@ impl Conn {
             browser: Default::default(),
             owner: Default::default(),
             no_races: AtomicBool::new(false),
+            msgs_in: AtomicU64::new(0),
+            msgs_out: AtomicU64::new(0),
+            lan_sent: AtomicU64::new(0),
+            echo: AtomicBool::new(false),
+            stamp: AtomicBool::new(false),
         }
     }
 
@@ -386,17 +400,28 @@ async fn write_loop<W: AsyncWrite + Unpin>(sw: Arc<LanSwitch>, conn: Arc<Conn>, 
             }
             let m = conn.compact.load(Relaxed);
             let (mode, others) = (m & !OTHERS, m & OTHERS != 0);
+            // a round trip timed by this batch's first compact bundle (LanSwitch::probe): its probe's ping now, as
+            // the bundle goes out behind what was queued before it
+            let stamp = (mode != PLAIN
+                && conn.stamp.load(Relaxed)
+                && items.iter().any(|it| matches!(it, Out::Dgram { .. }))
+                && conn.stamp.swap(false, Relaxed))
+            .then(|| conn.peer.lock().clone())
+            .flatten()
+            .map(|p| p.probe.lock().ping(nfsu2_util::mono_ms()));
             let c = (mode != PLAIN).then(|| Compact {
                 own: conn.vip.load(Relaxed),
                 refs: (mode >= DELTAS).then_some(&mut refs),
                 fp: (mode == FPRED).then_some(&mut fp),
                 others: others && mode >= DELTAS,
                 body: &mut body,
+                stamp,
             });
             let e = encode(&sw.stats, &items, &mut buf, &mut close_sent, c);
             if !buf.is_empty() {
                 sw.stats.msg(mix::OUT_WRITES);
             }
+            conn.msgs_out.fetch_add(e.msgs, Relaxed);
             conn.out.buffered.fetch_add(e.extra, Relaxed);
             // what the kernel takes leaves `buffered` as it goes (what was skipped after a close frame at the end)
             let mut at = 0;
@@ -453,6 +478,8 @@ struct Encoded {
     extra: usize,
     close: bool,
     end: bool,
+    /// the WebSocket messages it made (a close frame not among them, as in `Stats::msg`)
+    msgs: u64,
 }
 
 /// A page that takes compact bundles: the address it holds, the last bodies it was sent when it takes deltas (and the
@@ -464,6 +491,8 @@ pub(crate) struct Compact<'a> {
     /// every other datagram as what changed too (`OTHERS`)
     others: bool,
     body: &'a mut Vec<u8>,
+    /// a probe's ping for the first bundle's header (compact.rs `F_STAMPED`)
+    stamp: Option<[u8; 8]>,
 }
 
 /// the items into `buf` in order, the datagrams as bundles (compact ones for a page that takes them) where the first
@@ -488,31 +517,36 @@ fn encode(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, close_sent: &mut bool
                 // (every datagram of the batch, once)
                 if let Some(c) = compact.take() {
                     let start = buf.len();
-                    match c {
+                    e.msgs += match c {
                         Some(c) => bundle_compact(stats, items, buf, c),
                         None => bundle(stats, items, buf),
-                    }
+                    };
                     e.extra = buf.len() - start;
                 }
             }
             Out::Text(b) => {
                 stats.msg(mix::OUT_TEXT);
+                e.msgs += 1;
                 frame::encode(frame::TEXT, b, buf)
             }
             Out::Raw(b) => {
                 stats.msg(mix::OUT_HOST);
+                e.msgs += 1;
                 frame::encode(frame::BINARY, b, buf)
             }
             Out::Frame { data, src, dst } => {
                 stats.msg(mix::OUT_FRAME);
+                e.msgs += 1;
                 one_frame(buf, data, *src, *dst)
             }
             Out::Ping(p) => {
                 stats.msg(mix::OUT_PING);
+                e.msgs += 1;
                 frame::encode(frame::PING, p, buf)
             }
             Out::Pong(b) => {
                 stats.msg(mix::OUT_PONG);
+                e.msgs += 1;
                 frame::encode(frame::PONG, b, buf)
             }
             Out::Close(p) => {
@@ -542,12 +576,13 @@ fn one_frame(buf: &mut Vec<u8>, data: &[u8], src: u32, dst: u32) {
 
 /// the datagrams as bundles of at most BUNDLE_OUT (entries of n = 0: each with its destination in it); one alone
 /// goes as it is
-fn bundle(stats: &Stats, items: &[Out], buf: &mut Vec<u8>) {
+fn bundle(stats: &Stats, items: &[Out], buf: &mut Vec<u8>) -> u64 {
     let mut dgrams = items.iter().filter_map(|it| match it {
         Out::Dgram { data, src, dst, .. } => Some((data, *src, *dst)),
         _ => None,
     });
-    let Some(mut next) = dgrams.next() else { return };
+    let Some(mut next) = dgrams.next() else { return 0 };
+    let mut msgs = 0;
     let mut chunk: smallvec::SmallVec<[(&Bytes, u32, u32); 32]> = smallvec::SmallVec::new();
     loop {
         // a bundle takes datagrams while it stays within BUNDLE_OUT (the one that would not fit begins the next)
@@ -567,6 +602,7 @@ fn bundle(stats: &Stats, items: &[Out], buf: &mut Vec<u8>) {
                 None => break,
             }
         }
+        msgs += 1;
         if chunk.len() == 1 {
             let (d, src, dst) = chunk[0];
             stats.msg(mix::OUT_FRAME);
@@ -585,18 +621,22 @@ fn bundle(stats: &Stats, items: &[Out], buf: &mut Vec<u8>) {
         }
         match rest {
             Some(d) => next = d,
-            None => return,
+            None => return msgs,
         }
     }
 }
 
 /// the datagrams as compact bundles (compact.rs) of BUNDLE_OUT at most, a datagram alone in one too (its 16-byte
 /// header costs more than a bundle's 4 and an entry's 5)
-fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_>) {
-    let Compact { own, mut refs, mut fp, others, body } = c;
+fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_>) -> u64 {
+    let Compact { own, mut refs, mut fp, others, body, stamp } = c;
     body.clear();
     body.extend_from_slice(&[compact::KIND_COMPACT, 0, 0, 0]);
-    let mut n = 0;
+    if let Some(s) = stamp {
+        body[1] = compact::F_STAMPED;
+        body.extend_from_slice(&s);
+    }
+    let (mut n, mut msgs) = (0, 0);
     let (now, mut moved) = (now_us(), [0u8; compact::TIMED_MAX]);
     for it in items {
         let Out::Dgram { data, src, dst, at: queued } = it else { continue };
@@ -608,6 +648,9 @@ fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_
         // was written as the next one, in order, so the page reads the same entries the writer made)
         if n > 0 && body.len() > BUNDLE_OUT {
             compact_out(stats, buf, &body[..at]);
+            msgs += 1;
+            // (a stamp went with the first: what follows the header now is the next entry)
+            body[1] = 0;
             body.drain(4..at);
             n = 0;
         }
@@ -615,7 +658,9 @@ fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_
     }
     if n > 0 {
         compact_out(stats, buf, body);
+        msgs += 1;
     }
+    msgs
 }
 
 /// the switch's clock for a datagram's wait for the bundle clock: µs since its first reading, wrapping

@@ -1,0 +1,17 @@
+# Several lobbies at one start, the second host (with mprace_pick_a.txt): at A's start the card's first page is A's
+# lobby (Enter would join it), mp next (the page's E) turns it to "open a new lobby", Enter opens ours beside A's.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby                           # the card here: 1 lobbies and a new one's, page 1 of 2 (Ann)
++0    roam mp next
++30   roam mp lobby                           # page 2 of 2 (a new lobby)
++0    log LOBBY open beside
++0    tap RETURN
++60   roam mp lobby                           # hosting ours; Ann's heard of, at this start
++0    log LOBBY DONE
++600  quit

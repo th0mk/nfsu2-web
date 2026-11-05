@@ -197,6 +197,7 @@ pub async fn run(o: Options, cores: usize) {
         // LAN play's clock, 4 ms; NFSU2_LAN_MS another (0: none, each datagram at once), for measurements
         lan_ms: env_num("NFSU2_LAN_MS", d.lan_ms),
         fpred: env_num("NFSU2_FPRED", 1) != 0,
+        probe_echo: env_num("NFSU2_PROBE_ECHO", 1) != 0,
         send_buffer_os: lan_sndbuf,
         ..d
     };
@@ -340,6 +341,11 @@ pub async fn run(o: Options, cores: usize) {
                 }
                 if let Some(l) = nfsu2_lan::mix::msg_line(&b.msgs, &was.msgs, BREAKDOWN_EVERY.as_secs_f64()) {
                     log::line(&format!("[players] WebSocket messages since the last count: {l}"));
+                }
+                // the same by kind of player: who costs the messages (the one place that takes these counts)
+                let kinds = lan.messages_by_kind().await;
+                if let Some(l) = nfsu2_lan::mix::kinds_line(&kinds, BREAKDOWN_EVERY.as_secs_f64()) {
+                    log::line(&format!("[players] WebSocket messages by kind of player since the last count (those on now): {l}"));
                 }
                 // where the players are (Cloudflare's country) and how long their paths are: to the server, and from one
                 // player to another through it, of free roam's links and LAN play's pairs (nfsu2-lan paths.rs)

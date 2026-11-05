@@ -16,6 +16,9 @@
 //   would not copy), there and in the page menu's Friends popup
 // - the start page's Your Discord: the server's username in it; one typed is sent as Discord allows one (discordName),
 //   else refused on the page; what the server refused; none takes it away
+// - race invites: an Invite in the page menu's Friends for each friend in free roam in the player's room while the
+//   player hosts a race lobby with room in it, what the server said of it; a friend's invite: its line, the lobby key
+//   (Z) or a click joins its lobby (the game's LB_JOIN with the host's id, the lobby's and its race's hash)
 // - /friends asked with the keyphrase's token, its answer read leniently
 // The module is bundled from web/src with esbuild into a blank page.
 import { test } from 'node:test';
@@ -42,10 +45,11 @@ async function page() {
   await p.addScriptTag({ content: js });
   await p.evaluate(() => {
     const w = /** @type {any} */ (window);
-    w.sent = []; w.toasts = []; w.notices = []; w.placed = 0; w.room = '';
+    w.sent = []; w.toasts = []; w.notices = []; w.placed = 0; w.room = ''; w.hosted = null; w.joined = [];
     w.prompt = new w.F.FriendPrompt(document.getElementById('stage'), {
       send: m => { w.sent.push(m); return true; }, room: () => w.room, toast: s => w.toasts.push(s), log: () => {},
       notice: (name, text) => w.notices.push([name, text]), menu: () => 'the menu (F9)', placed: () => { w.placed++; },
+      hosted: () => w.hosted, joinLobby: (host, lobby, race) => { w.joined.push([host, lobby, race]); return true; },
     });
     w.prompt.start({ viewRect: () => ({ x: 0, y: 0, w: 640, h: 480 }) }, true);
   });
@@ -272,6 +276,56 @@ async function panel(p, lists) {
 }
 const rows = p => p.$$eval('#friends .fl li', rs => rs.map(r => [r.querySelector('.fl-name').firstChild.textContent, r.querySelector('.fl-st').textContent,
   [...r.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|'), r.className]));
+
+test('race invites: Invite in the menu\'s Friends while hosting, and a friend\'s invite joined by Z or a click', async () => {
+  const p = await page();
+  await raf(p);
+  await p.evaluate(() => { /** @type {any} */ (window).room = 'Night Owls'; });
+  await server(p, { op: 'list', me: 'Al_', friends: ['Bo_', 'Cy_'], asks: [] });
+  await server(p, { op: 'where', friends: [{ name: 'Bo_', where: 'roam', room: 'night owls' }, { name: 'Cy_', where: 'roam', room: 'Blue Room' }] });
+  await notices(p); await sent(p);
+  const rows = () => p.evaluate(() => {
+    const w = /** @type {any} */ (window), box = document.createElement('div');
+    document.body.append(box);
+    w.prompt.drawPlaced(box, () => {});
+    w.box = box;
+    return [...box.querySelectorAll('.fl li')].map(li => [li.querySelector('.fl-name').firstChild.textContent, li.querySelector('.fl-st').textContent,
+      [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]);
+  });
+  const done = () => p.evaluate(() => /** @type {any} */ (window).box.remove());
+  assert.deepEqual(await rows(), [['Bo_', 'free roam · your room', ''], ['Cy_', 'free roam · Blue Room', 'Join']], 'not hosting: no Invite');
+  await done();
+  await p.evaluate(() => { /** @type {any} */ (window).hosted = { kind: 'sprint', stage: 2, n: 1, max: 6 }; });
+  assert.deepEqual(await rows(), [['Bo_', 'free roam · your room', 'Invite Bo_ to your race'], ['Cy_', 'free roam · Blue Room', 'Join']],
+    'hosting: an Invite for a friend in our room only');
+  await p.evaluate(() => /** @type {any} */ (window).box.querySelector('.fl-invite').click());
+  await done();
+  assert.deepEqual((await sent(p)).filter(m => m.op !== 'where'), [{ op: 'invite', name: 'Bo_', kind: 'sprint', stage: 2 }]);
+  await server(p, { op: 'invite', name: 'Bo_', done: 'sent' });
+  assert.deepEqual(await toasts(p), ['Invite sent to Bo_']);
+  assert.deepEqual(await rows(), [['Bo_', 'free roam · your room · invited', ''], ['Cy_', 'free roam · Blue Room', 'Join']], 'invited: no Invite again for a while');
+  await done();
+  for (const [d, text] of [['away', 'Bo_ isn\'t in free roam in your room now'], ['full', 'Your race lobby is full'], ['nolobby', 'Open a race lobby first, then invite'],
+    ['rate', 'Too many invites at once: try again in a moment'], ['none', 'Bo_ can\'t be invited now']]) {
+    await server(p, { op: 'invite', name: 'Bo_', done: d });
+    assert.deepEqual(await toasts(p), [text], d);
+  }
+  // a friend's invite: its line just above the friend line; Z (the race lobby card's key) joins, a click on it too
+  const inv = () => p.evaluate(() => { const b = document.querySelector('.friend-prompt.invite'); return b.hidden ? null : b.textContent; });
+  await server(p, { op: 'invite', name: 'Dee', host: 0x11223344, lobby: 0xa1b2c3d4, race: 0xdeadbeef, kind: 'drift', n: 2, max: 6 });
+  assert.equal(await inv(), 'Dee invites you to a drift (2/6)ZJoin');
+  await p.keyboard.press('KeyZ');
+  assert.deepEqual(await p.evaluate(() => /** @type {any} */ (window).joined.splice(0)), [[0x11223344, 0xa1b2c3d4, 0xdeadbeef]]);
+  assert.equal(await inv(), null, 'gone once taken');
+  await p.keyboard.press('KeyZ');
+  assert.deepEqual(await p.evaluate(() => /** @type {any} */ (window).joined.splice(0)), [], 'Z does nothing without one');
+  await server(p, { op: 'invite', name: 'Dee', host: 1, lobby: 2, race: 3, kind: 'circuit', n: 1, max: 4 });
+  await p.click('.friend-prompt.invite');
+  assert.deepEqual(await p.evaluate(() => /** @type {any} */ (window).joined.splice(0)), [[1, 2, 3]], 'a click');
+  await server(p, { op: 'invite', name: 'Dee', host: 0, lobby: 2, race: 3 });
+  assert.equal(await inv(), null, 'an invite that names no lobby: none');
+  await p.close();
+});
 
 test('the start page\'s Friends', async () => {
   const p = await page();

@@ -65,13 +65,15 @@ pub struct WorkersBusy {
     metrics: tokio::runtime::RuntimeMetrics,
     busy: Duration,
     at: Instant,
+    /// `sample_over`'s samples
+    recent: Recent,
 }
 
 impl WorkersBusy {
     pub fn new(rt: &tokio::runtime::Handle) -> Self {
         let metrics = rt.metrics();
         let busy = Self::total(&metrics);
-        WorkersBusy { metrics, busy, at: Instant::now() }
+        WorkersBusy { metrics, busy, at: Instant::now(), recent: Recent::default() }
     }
 
     fn total(m: &tokio::runtime::RuntimeMetrics) -> Duration {
@@ -80,16 +82,52 @@ impl WorkersBusy {
 
     /// 0 to 1 since the last call
     pub fn sample(&mut self) -> f64 {
+        self.sample_wall().1
+    }
+
+    /// 0 to 1 over about the last `window`: what `sample` says of each call since then, each by its share of the time.
+    /// The workers' share is of wall time (a task's time on a worker counts while the kernel runs something else on
+    /// its core), so a half second in which the box had more to run than it has cores went up past 90 % with 65 % for
+    /// minutes around it (nfsu2.xyz, 2026-11-05, 13,400 players): over seconds, such a moment is one among many.
+    pub fn sample_over(&mut self, window: Duration) -> f64 {
+        let (wall, share) = self.sample_wall();
+        self.recent.add(wall, share, window)
+    }
+
+    /// the seconds since the last call, and the share of them the workers were busy
+    fn sample_wall(&mut self) -> (f64, f64) {
         let busy = Self::total(&self.metrics);
         let now = Instant::now();
-        let wall = now.duration_since(self.at).as_secs_f64() * self.metrics.num_workers().max(1) as f64;
+        let secs = now.duration_since(self.at).as_secs_f64();
+        let wall = secs * self.metrics.num_workers().max(1) as f64;
         let used = busy.saturating_sub(self.busy).as_secs_f64();
         self.busy = busy;
         self.at = now;
         if wall <= 0.0 {
+            return (0.0, 0.0);
+        }
+        (secs, (used / wall).clamp(0.0, 1.0))
+    }
+}
+
+/// Samples of a share (0 to 1), each with the seconds it covers, oldest first: their mean, each by its seconds, over
+/// about the last window (at least the newest sample, however long)
+#[derive(Default)]
+struct Recent(VecDeque<(f64, f64)>);
+
+impl Recent {
+    fn add(&mut self, secs: f64, share: f64, window: Duration) -> f64 {
+        if secs > 0.0 {
+            self.0.push_back((secs, share));
+        }
+        let mut total: f64 = self.0.iter().map(|r| r.0).sum();
+        while self.0.len() > 1 && total - self.0[0].0 >= window.as_secs_f64() {
+            total -= self.0.pop_front().map_or(0.0, |r| r.0);
+        }
+        if total <= 0.0 {
             return 0.0;
         }
-        (used / wall).clamp(0.0, 1.0)
+        self.0.iter().map(|&(t, s)| t * s).sum::<f64>() / total
     }
 }
 
@@ -104,8 +142,8 @@ pub struct QuotaBusy {
     /// each group's folder, its path in the cgroup tree, and its usage_usec at the last sample
     groups: Vec<(PathBuf, String, u64)>,
     at: Instant,
-    /// `sample_over`'s samples, oldest first: each one's seconds and the fullest quota's share in them
-    recent: VecDeque<(f64, f64)>,
+    /// `sample_over`'s samples: each one's seconds and the fullest quota's share in them
+    recent: Recent,
 }
 
 /// What the group with the fullest quota used between two samples.
@@ -145,7 +183,7 @@ impl QuotaBusy {
             let Some(up) = p.parent() else { break };
             p = up;
         }
-        (!groups.is_empty()).then(|| QuotaBusy { groups, at: Instant::now(), recent: VecDeque::new() })
+        (!groups.is_empty()).then(|| QuotaBusy { groups, at: Instant::now(), recent: Recent::default() })
     }
 
     /// the groups with a quota now, and its cores
@@ -194,17 +232,7 @@ impl QuotaBusy {
     fn sample_over_at(&mut self, now: Instant, window: Duration) -> f64 {
         let wall = now.duration_since(self.at).as_secs_f64();
         let share = self.sample_use_at(now).map_or(0.0, |u| u.share());
-        if wall > 0.0 {
-            self.recent.push_back((wall, share));
-        }
-        let mut total: f64 = self.recent.iter().map(|r| r.0).sum();
-        while self.recent.len() > 1 && total - self.recent[0].0 >= window.as_secs_f64() {
-            total -= self.recent.pop_front().map_or(0.0, |r| r.0);
-        }
-        if total <= 0.0 {
-            return 0.0;
-        }
-        self.recent.iter().map(|&(t, s)| t * s).sum::<f64>() / total
+        self.recent.add(wall, share, window)
     }
 }
 
@@ -327,6 +355,27 @@ mod tests {
 
     // the share over the last window: half-second shares of 62 and 88 % in turn are 75 % over it, a full one counts for
     // as long as it lasts, and the samples older than the window go
+    // the window's mean weighs each sample by its seconds, keeps at least the newest, and lets go of the oldest once the
+    // rest still cover the window: one busy half second among ten seconds of 65 % stays under 85 %
+    #[test]
+    fn recent_is_the_windows_mean_by_time() {
+        let w = Duration::from_secs(10);
+        let mut r = Recent::default();
+        assert_eq!(r.add(0.0, 0.9, w), 0.0, "nothing yet");
+        for _ in 0..19 {
+            r.add(0.5, 0.65, w);
+        }
+        let m = r.add(0.5, 0.95, w);
+        assert!((m - (19.0 * 0.65 + 0.95) / 20.0).abs() < 1e-9 && m < 0.85, "{m}");
+        for _ in 0..20 {
+            r.add(0.5, 0.95, w);
+        }
+        assert!((r.add(0.5, 0.95, w) - 0.95).abs() < 1e-9, "ten seconds busy: busy");
+        assert!(r.0.len() <= 21, "{} samples kept", r.0.len());
+        let mut one = Recent::default();
+        assert_eq!(one.add(30.0, 0.4, w), 0.4, "a sample longer than the window is the window");
+    }
+
     #[test]
     fn quota_busy_over_a_window_is_the_share_of_its_samples_together() {
         let root = std::env::temp_dir().join(format!("nfsu2-cgroup-window-{}", std::process::id()));
@@ -349,7 +398,7 @@ mod tests {
             }
         }
         assert!((highest - 0.75).abs() < 0.02, "every half-second share at most 88 %, the window's {highest}");
-        assert!(q.recent.len() <= 21, "{} samples kept for 10 s", q.recent.len());
+        assert!(q.recent.0.len() <= 21, "{} samples kept for 10 s", q.recent.0.len());
         // a full slice for 5 s: half of the window
         for _ in 0..10 {
             usec += 7_000_000;

@@ -1,0 +1,15 @@
+# A Friends & crew only lobby a stranger does not hear of (with mprace_private_a.txt): B may hear of A's lobby before
+# it goes private; after that none, at its start the card offers only a new lobby, and an invite's Join of it (mp
+# farjoin, the lobby no longer heard of) goes nowhere.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++600  roam mp lobby                           # Ann's lobby went private: none heard of
++0    roam mp farjoin Ann
++0    careergo ${MP_RACE}
++300  roam mp lobby                           # at its start: none here, the card's one page a new lobby
++0    log LOBBY DONE
++60   quit

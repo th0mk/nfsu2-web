@@ -42,9 +42,9 @@ pub fn ip_str(v: u32) -> String {
     nfsu2_util::vip_str(v)
 }
 
-/// every address the switch hands out: host bytes 2-251 in each of 10.77.0-55.x (10.77.0.0/18)
+/// every address the switch hands out: host bytes 2-251 in each of 10.77.0-63.x (10.77.0.0/18)
 pub fn all_vips() -> Vec<u32> {
-    (0..56u32).flat_map(|b| (0..250u32).map(move |i| (10 << 24) | (77 << 16) | (b << 8) | (i + 2))).collect()
+    (0..64u32).flat_map(|b| (0..250u32).map(move |i| (10 << 24) | (77 << 16) | (b << 8) | (i + 2))).collect()
 }
 
 /// the tests' options: WebSocket messages of up to 1 MiB taken (max_payload), so that the switch's own limits decide
@@ -183,7 +183,7 @@ async fn serve(lan: Arc<LanSwitch>, mut s: TcpStream) {
 /// what the page tests read of the switch (sw.lan.peers, info(), reserved)
 async fn state(lan: &LanSwitch) -> Value {
     let peers: Vec<Value> =
-        lan.peers_view().iter().map(|p| json!({ "vip": p.vip, "name": p.name, "hello": p.hello, "lan": p.lan })).collect();
+        lan.peers_view().iter().map(|p| json!({ "vip": p.vip, "name": p.name, "hello": p.hello, "lan": p.lan, "rtt": p.rtt })).collect();
     json!({ "peers": peers, "info": lan.info().await, "reserved": lan.reserved_view().len() })
 }
 

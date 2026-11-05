@@ -5,9 +5,11 @@ mod kit;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 
 use kit::*;
-use nfsu2_roam::RoamOptions;
+use nfsu2_claims::owner_of_token;
+use nfsu2_roam::{Hosted, RoamOptions};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
@@ -34,10 +36,17 @@ fn join(k: &mut Kit, i: u32, room: &str, lobbies: bool) {
     k.from(W(i), &with_flags(h, if lobbies { 0x0080 } else { 0 }));
 }
 
-/// a LOBBY datagram as roam_core.c lays it out (op arg state max, to, lobby, race, x y, t, n, reserved, ids)
+/// a LOBBY datagram as roam_core.c lays it out (op arg state max, to, lobby, race, x y, t, n, away seconds, ids)
 #[allow(clippy::too_many_arguments)]
 fn lobby(sender: u32, op: u8, to: u32, id: u32, race: u32, x: i16, y: i16, state: u8, max: u8, ids: &[u32]) -> Vec<u8> {
+    lobby_t(sender, op, to, id, race, x, y, state, max, ids, 0)
+}
+
+/// `lobby` with its t (an ADVERT's: 0x8000 its counts said, 0x0040 for its host's friends and crew-mates only)
+#[allow(clippy::too_many_arguments)]
+fn lobby_t(sender: u32, op: u8, to: u32, id: u32, race: u32, x: i16, y: i16, state: u8, max: u8, ids: &[u32], t: u16) -> Vec<u8> {
     let mut p = vec![0u8; 24 + 4 * ids.len()];
+    p[20..22].copy_from_slice(&t.to_le_bytes());
     p[0] = op;
     p[2] = state;
     p[3] = max;
@@ -544,4 +553,153 @@ fn a_race_that_counted_in_the_career_says_so() {
     assert_eq!(lines.len(), 1, "{lines:?}");
     assert!(lines[0].starts_with("[race] lobby 000000a3"), "{lines:?}");
     assert!(lines[0].ends_with("power x1.000; a friend's win in the career"), "{lines:?}");
+}
+
+fn owner(c: char) -> Arc<str> {
+    owner_of_token(&c.to_string().repeat(43)).unwrap()
+}
+
+/// a player that takes lobbies and reads the hub's crew marks (id 100 + i, browser W(i)), named `name`, of keyphrase
+/// `key`, in `crews`, at (x, y)
+fn put(k: &mut Kit, i: u32, name: &[u8], key: Option<char>, crews: &[u32], at: [f64; 2]) {
+    let h = hello_with(100 + i, &HelloOpts { core: 9, name, crews: Some(crews), flags: 0x0080 | HF_HUBCREW, ..Default::default() });
+    let o = key.map(owner);
+    k.hub.frame_from(W(i), &frame(W(i), &h), o.as_ref());
+    k.hub.frame_from(W(i), &frame(W(i), &snap(100 + i, [at[0], at[1], 0.0])), o.as_ref());
+}
+
+// A player a lobby lists far from its start is linked with its host when its own last ask to join (its JOIN's copy to
+// the hub) was for that lobby, of any age: a friend the host invited joins from wherever it is.  One it lists that never
+// asked is not (an advert may list anyone: the third security audit), nor one whose last ask was for another lobby.
+// (every pair | the grid; the host's 4 links full of a crowd at its start)
+#[test]
+fn a_far_player_of_a_lobby_is_linked_with_its_host_only_when_it_asked_to_join() {
+    for (how, o) in ways() {
+        let mut k = Kit::new(RoamOptions { degree: 4, away_m: 1e-9, ..o });
+        for i in 0..7 {
+            join(&mut k, i, "", true);
+        }
+        // 0 the host at the start; 1 to 4 a crowd 1 m from it, in a race; 5 far off (300 m), asked to join; 6 far off the other
+        // way, asked to join another lobby
+        let snaps = |k: &mut Kit| {
+            k.from(W(0), &snap(100, [0.0, 0.0, 0.0]));
+            for (i, at) in [[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, -1.0]].iter().enumerate() {
+                k.from(W(1 + i as u32), &snap_n(101 + i as u32, [at[0], at[1], 0.0], 3, 1));
+            }
+            k.from(W(5), &snap(105, [300.0, 0.0, 0.0]));
+            k.from(W(6), &snap(106, [-300.0, 0.0, 0.0]));
+        };
+        let linked = |k: &Kit, a: u32, b: u32| {
+            let l = k.lists();
+            let has = |x: u32, y: u32| l.get(&format!("{}:47210", W(x))).is_some_and(|v| v.iter().any(|e| e.vip == W(y)));
+            assert_eq!(has(a, b), has(b, a), "{how}: a link is listed at both ends");
+            has(a, b)
+        };
+        k.from(W(5), &lobby(105, 2, 0, 0xA0, 0x1111, 0, 0, 0, 6, &[100]));
+        k.from(W(6), &lobby(106, 2, 0, 0xEE, 0x1111, 0, 0, 0, 6, &[100]));
+        k.from(W(0), &lobby(100, 1, 0, 0xA0, 0x1111, 0, 0, 0, 6, &[100, 105, 106]));
+        snaps(&mut k);
+        k.hub.tick();
+        assert!(linked(&k, 0, 5), "{how}: the far player that asked to join");
+        assert!(!linked(&k, 0, 6), "{how}: not the far one that asked for another lobby");
+        // its ask long past (LOBBY_JOIN_MS): still in the lobby, still linked
+        for _ in 0..4 {
+            k.step(2500.0);
+            k.from(W(0), &lobby(100, 1, 0, 0xA0, 0x1111, 0, 0, 0, 6, &[100, 105, 106]));
+            snaps(&mut k);
+            k.clear();
+            k.hub.tick();
+        }
+        assert!(linked(&k, 0, 5) && !linked(&k, 0, 6), "{how}: 10 s on, the same");
+        assert_eq!(k.info("lobbyLinks"), 1.0, "{how}: one link for the lobby");
+        // 5 asks another lobby to join: no longer linked for this one
+        k.from(W(5), &lobby(105, 2, 0, 0xEF, 0x1111, 0, 0, 0, 6, &[100]));
+        for _ in 0..4 {
+            k.step(2500.0);
+            k.from(W(0), &lobby(100, 1, 0, 0xA0, 0x1111, 0, 0, 0, 6, &[100, 105, 106]));
+            snaps(&mut k);
+            k.clear();
+            k.hub.tick();
+        }
+        assert!(!linked(&k, 0, 5), "{how}: its last ask was for another lobby");
+        assert_eq!(k.info("lobbyLinks"), 0.0, "{how}: none for the lobby");
+    }
+}
+
+// A lobby for its host's friends and crew-mates only (its advert's t: 0x8000 | 0x0040) is on the world map of its
+// host, of the players it lists, of the host's friends (both ways) and crew-mates, and of nobody else; the same lobby
+// without the bit, or with it but not 0x8000 (an older game's t is 0), is everyone's
+#[test]
+fn a_lobby_for_friends_and_crew_is_on_their_maps_only() {
+    let x = fnv1a("x crew");
+    let mut k = Kit::new(RoamOptions::default());
+    put(&mut k, 0, b"carl", Some('C'), &[x], [0.0, 0.0]);
+    put(&mut k, 1, b"anna", Some('A'), &[], [5.0, 0.0]);
+    put(&mut k, 2, b"dave", None, &[fnv1a("y crew"), x], [10.0, 0.0]);
+    put(&mut k, 3, b"bob", Some('B'), &[fnv1a("y crew")], [15.0, 0.0]);
+    put(&mut k, 4, b"eve", Some('E'), &[], [20.0, 0.0]);
+    put(&mut k, 5, b"fred", Some('F'), &[], [25.0, 0.0]);
+    k.hub.friends(W(0), owner('C'), vec![owner('A'), owner('F')]);
+    k.hub.friends(W(1), owner('A'), vec![owner('C')]);
+    // (fred is on carl's list, carl not on fred's: a friend one way is none)
+    k.hub.tick();
+    let seen = |k: &mut Kit, i: u32| {
+        k.clear();
+        k.from(W(i), &mapreq_base(100 + i, 1, 2048, 0));
+        lobbies(k).first().is_some_and(|l| !l.2.is_empty())
+    };
+    let who = |k: &mut Kit| (0..6).filter(|&i| seen(k, i)).collect::<Vec<u32>>();
+    let all = || vec![0, 1, 2, 3, 4, 5];
+    for (t, want) in [(0x8041u16, vec![0, 1, 2, 4]), (0x8001, all()), (0x0041, all()), (0, all())] {
+        // (a browser's lobbies go with its map's answer once a second at most)
+        k.step(1100.0);
+        k.from(W(0), &lobby_t(100, 1, 0, 0xC1, 0x1111, 0, 0, 0, 6, &[100, 104], t));
+        assert_eq!(who(&mut k), want, "t {t:#06x}");
+    }
+}
+
+// A lobby for its host's friends and crew-mates only takes only them of the players near its start for its links
+// first (nobody else may join it): a stranger and a friend at its start make two lobby links for an open lobby, one for
+// that one
+#[test]
+fn a_lobby_for_friends_and_crew_links_only_them_at_its_start() {
+    for (how, o) in ways() {
+        for (t, want) in [(0x8000u16, 2.0), (0x8040, 1.0)] {
+            let mut k = Kit::new(RoamOptions { degree: 4, ..o.clone() });
+            put(&mut k, 0, b"carl", Some('C'), &[], [0.0, 0.0]);
+            put(&mut k, 1, b"anna", Some('A'), &[], [10.0, 0.0]);
+            put(&mut k, 2, b"bob", Some('B'), &[], [5.0, 0.0]);
+            k.hub.friends(W(0), owner('C'), vec![owner('A')]);
+            k.hub.friends(W(1), owner('A'), vec![owner('C')]);
+            k.from(W(0), &lobby_t(100, 1, 0, 0xC1, 0x1111, 0, 0, 0, 6, &[100], t));
+            k.hub.tick();
+            assert_eq!(k.info("lobbyLinks"), want, "{how}: t {t:#06x}");
+        }
+    }
+}
+
+// hosted: the lobby a browser's player hosts, as its last advert had it, while it is fresh and open (full or not);
+// none for a browser that hosts none (one in another's lobby), a lobby starting, or an advert gone stale
+#[test]
+fn hosted_is_the_open_lobby_a_browser_hosts() {
+    let mut k = Kit::new(RoamOptions::default());
+    let red = fnv1a("red");
+    let h = hello_with(100, &HelloOpts { core: 9, room: red, flags: 0x0080, ..Default::default() });
+    k.from(W(0), &h);
+    join(&mut k, 1, "red", true);
+    k.from(W(0), &lobby(100, 1, 0, 0xA0, 0x1111, 0, 0, 0, 6, &[100, 101]));
+    let want = Some(Hosted { host: 100, lobby: 0xA0, race: 0x1111, n: 2, max: 6, room: red });
+    assert_eq!(k.hub.hosted(W(0)), want);
+    assert_eq!(k.hub.hosted(W(1)), None, "its player is in it, not hosting it");
+    assert_eq!(k.hub.hosted(W(9)), None, "no such browser");
+    k.from(W(0), &lobby(100, 1, 0, 0xA0, 0x1111, 0, 0, 0, 2, &[100, 101]));
+    assert_eq!(k.hub.hosted(W(0)).map(|h| (h.n, h.max)), Some((2, 2)), "full: still its lobby (the invite says full)");
+    k.from(W(0), &lobby(100, 1, 0, 0xA0, 0x1111, 0, 0, 1, 6, &[100, 101]));
+    assert_eq!(k.hub.hosted(W(0)), None, "starting");
+    k.from(W(0), &lobby(100, 1, 0, 0xA0, 0x1111, 0, 0, 0, 6, &[100, 101]));
+    k.step(3100.0);
+    assert_eq!(k.hub.hosted(W(0)), None, "stale");
+    k.from(W(0), &lobby(100, 1, 0, 0xA0, 0x1111, 0, 0, 0, 6, &[100, 101]));
+    k.from(W(0), &lobby(100, 5, 0, 0xA0, 0x1111, 0, 0, 0, 6, &[]));
+    assert_eq!(k.hub.hosted(W(0)), None, "closed");
 }
