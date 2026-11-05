@@ -833,7 +833,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "Auto sa prispôsobí obrazovke. 30 je stabilnejšie na pomalých telefónoch a šetrí batériu. Závody cez internet a LAN bežia najviac na 120; animácie na 30.",
   "Auto": "Auto",
   "Menus, HUD and maps": "Ponuky, HUD a mapy",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Vylepšené: Upscaled HUD od LunicAura106 a Detailed Map od JeansBig, ostré pri vysokých rozlíšeniach. Asi 25 MB na stiahnutie a na telefónoch viac pamäte.",
   "Pixelated textures": "Pixelové textúry",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Textúry bez vyhladzovania, kockaté ako v prvých hrách na PC. Nahrádza nastavenie hry Filtrovanie textúr.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1537,5 +1536,26 @@
   "Play the path": "Prehrať dráhu",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Pravou páčkou sa rozhliadaš okolo auta (Vyp.: páčka hore už neprepína ani svetlomety)",
   "Hide HUD": "Skryť HUD",
-  "Hide or show the HUD while driving (names and chat over cars too)": "Skryť alebo zobraziť HUD počas jazdy (aj mená a chat nad autami)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "Skryť alebo zobraziť HUD počas jazdy (aj mená a chat nad autami)",
+  "Quebec": "Québec",
+  "Map only": "Len mapa",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "Len mapa: Detailed Map od JeansBig, asi 20 MB na stiahnutie. Vylepšené: aj Upscaled HUD od LunicAura106, asi 25 MB. Ostré pri vysokých rozlíšeniach; na telefónoch viac pamäte.",
+  "{h} h {m} min": "{h} h {m} min",
+  "Played in this browser: {time}": "Odohrané v tomto prehliadači: {time}",
+  "Played in this browser: at least {time}": "Odohrané v tomto prehliadači: najmenej {time}",
+  "Last game: {time}": "Posledná hra: {time}",
+  "Delete all": "Vymazať všetky",
+  "Delete {n} screenshots ({size})?": {
+    "one": "Vymazať {n} snímku obrazovky ({size})?",
+    "few": "Vymazať {n} snímky obrazovky ({size})?",
+    "many": "Vymazať {n} snímky obrazovky ({size})?",
+    "other": "Vymazať {n} snímok obrazovky ({size})?"
+  },
+  "They are deleted from this browser; downloaded backups keep their copies.": "Z tohto prehliadača sa vymažú; stiahnuté zálohy si svoje kópie ponechajú.",
+  "{n} screenshots were not deleted: {error}": {
+    "one": "{n} snímka obrazovky sa nevymazala: {error}",
+    "few": "{n} snímky obrazovky sa nevymazali: {error}",
+    "many": "{n} snímky obrazovky sa nevymazalo: {error}",
+    "other": "{n} snímok obrazovky sa nevymazalo: {error}"
+  }
 }

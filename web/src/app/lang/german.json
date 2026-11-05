@@ -404,7 +404,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "Auto folgt dem Bildschirm. 30 läuft auf langsamen Handys gleichmäßiger und schont den Akku. Online- und LAN-Rennen laufen mit bis zu 120, Zwischensequenzen mit 30.",
   "Auto": "Auto",
   "Menus, HUD and maps": "Menüs, HUD und Karten",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Hochskaliert: Upscaled HUD von LunicAura106 und Detailed Map von JeansBig, scharf bei hohen Auflösungen. Etwa 25 MB Download und auf Handys mehr Speicher.",
   "Pixelated textures": "Verpixelte Texturen",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Texturen ohne Glättung, pixelig wie in frühen PC-Spielen. Ersetzt die Spieloption „Texturfilter“.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1483,5 +1482,22 @@
   "Play the path": "Den Pfad abspielen",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Rechter Stick schaut ums Auto herum (Aus: Stick nach oben schaltet auch die Scheinwerfer nicht mehr)",
   "Hide HUD": "HUD ausblenden",
-  "Hide or show the HUD while driving (names and chat over cars too)": "HUD beim Fahren aus- oder wieder einblenden (auch Namen und Chat über den Autos)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "HUD beim Fahren aus- oder wieder einblenden (auch Namen und Chat über den Autos)",
+  "Map only": "Nur Karte",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "Nur Karte: Detailed Map von JeansBig, etwa 20 MB Download. Hochskaliert: dazu Upscaled HUD von LunicAura106, etwa 25 MB. Scharf bei hohen Auflösungen; auf Handys mehr Speicher.",
+  "Quebec": "Québec",
+  "{h} h {m} min": "{h} Std. {m} Min.",
+  "Played in this browser: {time}": "In diesem Browser gespielt: {time}",
+  "Played in this browser: at least {time}": "In diesem Browser gespielt: mindestens {time}",
+  "Last game: {time}": "Letztes Spiel: {time}",
+  "Delete all": "Alle löschen",
+  "Delete {n} screenshots ({size})?": {
+    "one": "{n} Screenshot löschen ({size})?",
+    "other": "{n} Screenshots löschen ({size})?"
+  },
+  "They are deleted from this browser; downloaded backups keep their copies.": "Sie werden aus diesem Browser gelöscht; heruntergeladene Backups behalten ihre Kopie.",
+  "{n} screenshots were not deleted: {error}": {
+    "one": "{n} Screenshot wurde nicht gelöscht: {error}",
+    "other": "{n} Screenshots wurden nicht gelöscht: {error}"
+  }
 }

@@ -404,7 +404,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "Auto följer skärmen. 30 är jämnare på långsamma telefoner och sparar batteri. Online- och LAN-race körs i upp till 120; mellansekvenser i 30.",
   "Auto": "Auto",
   "Menus, HUD and maps": "Menyer, HUD och kartor",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Uppskalad: LunicAura106:s Upscaled HUD och JeansBigs Detailed Map, skarpa i höga upplösningar. Cirka 25 MB att ladda ned, och mer minne på telefoner.",
   "Pixelated textures": "Pixliga texturer",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Texturer utan utjämning, pixliga som i tidiga pc-spel. Ersätter spelets Texturfiltrering.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1483,5 +1482,22 @@
   "Play the path": "Spela banan",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Höger styrspak ser runt bilen (Av: spaken uppåt växlar inte heller strålkastarna längre)",
   "Hide HUD": "Dölj HUD",
-  "Hide or show the HUD while driving (names and chat over cars too)": "Dölj eller visa HUD:en under körning (även namn och chatt över bilarna)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "Dölj eller visa HUD:en under körning (även namn och chatt över bilarna)",
+  "Map only": "Bara karta",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "Bara karta: JeansBigs Detailed Map, cirka 20 MB att ladda ned. Uppskalad: även LunicAura106:s Upscaled HUD, cirka 25 MB. Skarpa i höga upplösningar; mer minne på telefoner.",
+  "Quebec": "Québec",
+  "{h} h {m} min": "{h} tim {m} min",
+  "Played in this browser: {time}": "Spelat i den här webbläsaren: {time}",
+  "Played in this browser: at least {time}": "Spelat i den här webbläsaren: minst {time}",
+  "Last game: {time}": "Senaste spelet: {time}",
+  "Delete all": "Radera alla",
+  "Delete {n} screenshots ({size})?": {
+    "one": "Radera {n} skärmbild ({size})?",
+    "other": "Radera {n} skärmbilder ({size})?"
+  },
+  "They are deleted from this browser; downloaded backups keep their copies.": "De raderas från den här webbläsaren; nedladdade säkerhetskopior behåller sina kopior.",
+  "{n} screenshots were not deleted: {error}": {
+    "one": "{n} skärmbild raderades inte: {error}",
+    "other": "{n} skärmbilder raderades inte: {error}"
+  }
 }

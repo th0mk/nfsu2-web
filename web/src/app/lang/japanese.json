@@ -365,7 +365,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "「自動」はディスプレイに合わせます。遅いスマートフォンでは30のほうが安定し、バッテリーも節約できます。オンラインとLANのレースは最大120、カットシーンは30で動きます。",
   "Auto": "自動",
   "Menus, HUD and maps": "メニュー、HUD、マップ",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "アップスケール: LunicAura106のUpscaled HUDとJeansBigのDetailed Mapで、高解像度でもくっきり表示されます。ダウンロードは約25 MBで、スマートフォンではメモリを多く使います。",
   "Pixelated textures": "ピクセル化テクスチャ",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "テクスチャをスムージングせず、初期のPCゲームのようにドットが目立つ表示にします。ゲームの「テクスチャフィルタリング」より優先されます。",
   "Upscaled HUD": "Upscaled HUD",
@@ -1402,5 +1401,16 @@
   "Play the path": "パスを再生",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "右スティックで車の周りを見る（オフ：スティックを上に倒してもヘッドライトは切り替わりません）",
   "Hide HUD": "HUDを隠す",
-  "Hide or show the HUD while driving (names and chat over cars too)": "運転中にHUDを隠す・表示する（車の上の名前とチャットも）"
+  "Hide or show the HUD while driving (names and chat over cars too)": "運転中にHUDを隠す・表示する（車の上の名前とチャットも）",
+  "Map only": "マップのみ",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "マップのみ: JeansBigのDetailed Mapで、ダウンロードは約20 MB。アップスケール: LunicAura106のUpscaled HUDも加わり、約25 MB。高解像度でもくっきり表示され、スマートフォンではメモリを多く使います。",
+  "Quebec": "ケベック",
+  "{h} h {m} min": "{h}時間{m}分",
+  "Played in this browser: {time}": "このブラウザでのプレイ時間: {time}",
+  "Played in this browser: at least {time}": "このブラウザでのプレイ時間: {time}以上",
+  "Last game: {time}": "前回のゲーム: {time}",
+  "Delete all": "すべて削除",
+  "Delete {n} screenshots ({size})?": "{n}枚のスクリーンショット（{size}）を削除しますか？",
+  "They are deleted from this browser; downloaded backups keep their copies.": "このブラウザから削除されます。ダウンロード済みのバックアップには、そのコピーが残ります。",
+  "{n} screenshots were not deleted: {error}": "{n}枚のスクリーンショットを削除できませんでした: {error}"
 }

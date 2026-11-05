@@ -2,7 +2,9 @@
 // next frame as a PNG at the top of the save folder (shell.ts screenshot,
 // saveScreenshot here), so a backup carries it with the saves.  Shown newest
 // first, four to a row, the newest eight.  One opens in the #shot-view dialog
-// to page through all of them (the arrow keys too), download or delete.
+// to page through all of them (the arrow keys too), download or delete.  Delete
+// all in the section's head deletes every one, after a question that says how
+// many and how much (2026-11-05: a player's backup was too large to download).
 // Thumbnails are made one at a time (a 4K PNG takes about 0.1 s to decode) and
 // kept while the page lives.  TGA files (what the game's own F12 wrote before
 // the page took the key, black in this port, and the PC game's) are decoded
@@ -11,13 +13,15 @@
 import { exists, removePath, saveRoot, writeFile, type Entry } from './savefs';
 import { downloadBlob, stamp } from './logs';
 import { fmtBytes } from './checks';
-import { dateLocale, t } from './i18n';
+import { dateLocale, t, tn } from './i18n';
 
 export interface ShotsDeps {
   saveDir: string;
   confirm(title: string, body: Node | string, ok: string, danger?: boolean): Promise<boolean>;
   /** a screenshot was deleted: the section lists the save folder again */
   changed(): void;
+  /** a line for the player in the section (Delete all's trouble) */
+  say(text: string): void;
 }
 
 /** two rows of four, the newest; the dialog pages through the rest */
@@ -110,6 +114,7 @@ export class ScreenshotsPart {
 
   constructor(private root: HTMLElement, private deps: ShotsDeps) {
     this.dlg = root.ownerDocument.querySelector<HTMLDialogElement>('#shot-view')!;
+    root.querySelector<HTMLButtonElement>('#shots-clear')!.onclick = () => void this.removeAll();
     this.dlg.addEventListener('click', e => {
       const a = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]')?.dataset.act;
       if (a === 'newer') this.step(-1); else if (a === 'older') this.step(1);
@@ -144,6 +149,7 @@ export class ScreenshotsPart {
   private render() {
     const n = this.shots.length;
     this.root.querySelector<HTMLElement>('#shots-info')!.hidden = n > 0;
+    this.root.querySelector<HTMLElement>('#shots-clear')!.hidden = n === 0;
     const ul = this.root.querySelector<HTMLUListElement>('#shots')!;
     ul.replaceChildren(...this.shots.slice(0, SHOWN).map((s, i) => {
       const b = this.tile(s);
@@ -232,5 +238,20 @@ export class ScreenshotsPart {
     if (!this.shots.length) this.dlg.close();
     else void this.view(Math.min(i, this.shots.length - 1));
     this.deps.changed();
+  }
+
+  /** Delete all: every screenshot, after the question */
+  private async removeAll() {
+    const all = [...this.shots], size = all.reduce((a, s) => a + s.size, 0);
+    if (!all.length || !await this.deps.confirm(tn(all.length, 'Delete {n} screenshot ({size})?', 'Delete {n} screenshots ({size})?', { size: fmtBytes(size) }),
+      t('They are deleted from this browser; downloaded backups keep their copies.'), t('Delete all'), true)) return;
+    let failed = 0, error = '';
+    for (const s of all) {
+      try { await removePath(this.deps.saveDir, s.path); }
+      catch (e) { failed++; error = String(e); }
+    }
+    if (this.dlg.open) this.dlg.close();
+    this.deps.changed();
+    if (failed) this.deps.say(tn(failed, '{n} screenshot was not deleted: {error}', '{n} screenshots were not deleted: {error}', { error }));
   }
 }

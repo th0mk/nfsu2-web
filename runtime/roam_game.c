@@ -2548,7 +2548,7 @@ static const uint8_t g_flags_bin[] = {
 #embed "flags.bin"
 };
 #pragma clang diagnostic pop
-#define FLAG_N_MAX      300           /* flags.bin's at most (254 now) */
+#define FLAG_N_MAX      300           /* flags.bin's at most (255 now) */
 #define FLAG_TEX        64u           /* a flag's texture: FLAG_TEX square (it shows 4:3), and its mipmaps down to 8 */
 #define FLAG_MIPS       4u
 #define FLAG_TEX_BYTES  (4u * (64u * 64u + 32u * 32u + 16u * 16u + 8u * 8u))

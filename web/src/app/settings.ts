@@ -173,9 +173,10 @@ export const KEYS: readonly KeyDef[] = [
   // the player's horn, which the others hear too (runtime/horn.c).  Not in bundle.m's table either: NFSU2_HORN there
   { key: 'horn', env: 'NFSU2_HORN', kind: 'enum', vals: HORNS.join('|'), scope: 'web' },
   // the menus', HUD's and maps' textures: texture packs in place of the game's (runtime/web/texrep_web.c; the page
-  // fetches ahead only those picked: datacache.ts).  uhud also turns on the maps' pack (resolveEnv: NFSU2_MAP_TEXTURES).
-  // Not in bundle.m's table: the Mac's packs are "textures"
-  { key: 'ui_textures', env: 'NFSU2_UI_TEXTURES', kind: 'enum', vals: 'original|uhud', scope: 'web', device: true },
+  // fetches ahead only those picked: datacache.ts).  uhud also turns on the maps' pack (resolveEnv: NFSU2_MAP_TEXTURES);
+  // map turns on only that one (uiPack: no pack of the menus' and HUD's).  Not in bundle.m's table: the Mac's packs
+  // are "textures"
+  { key: 'ui_textures', env: 'NFSU2_UI_TEXTURES', kind: 'enum', vals: 'original|map|uhud', scope: 'web', device: true },
   // the players this one blocks in free roam, by name (the page's hello to the server: net/index.ts).  Not in bundle.m's
   // table: the Mac's free roam has no hub
   { key: 'roam_block', env: 'NFSU2_ROAM_BLOCK', kind: 'names', ic: true, scope: 'web' },
@@ -360,15 +361,15 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # original game.  [NFSU2_HEADLIGHTS]
 #other_headlights = players
 
-# The menus', the HUD's and the maps' textures: original = the game's; uhud =
-# LunicAura106's Upscaled HUD (nfsmods.xyz/mod/4319): the menus, the race
-# HUD, the fonts and the car and brand logos redrawn at four times their
-# size, and JeansBig's Detailed Map (nfsmods.xyz/mod/4485): the minimap's
-# and the world map's maps redrawn at 2048x2048 with the missing shortcuts,
-# where this server has the mods' texture packs (a language pack's own
-# fonts stay; most phones' GPUs decode the larger textures into four times
-# the memory; NFSU2_MAP_TEXTURES = original keeps the game's maps).
-# [NFSU2_UI_TEXTURES]
+# The menus', the HUD's and the maps' textures: original = the game's; map =
+# JeansBig's Detailed Map (nfsmods.xyz/mod/4485): the minimap's and the
+# world map's maps redrawn at 2048x2048 with the missing shortcuts, the
+# menus and the HUD the game's; uhud = the Detailed Map and LunicAura106's
+# Upscaled HUD (nfsmods.xyz/mod/4319): the menus, the race HUD, the fonts
+# and the car and brand logos redrawn at four times their size; where this
+# server has the mods' texture packs (a language pack's own fonts stay; most
+# phones' GPUs decode the larger textures into four times the memory;
+# NFSU2_MAP_TEXTURES = original keeps the game's maps).  [NFSU2_UI_TEXTURES]
 #ui_textures = original
 # Textures without smoothing (point sampling), blocky like early PC games;
 # on overrides the game's Texture Filtering.  [NFSU2_PIXELATED_TEXTURES]
@@ -923,6 +924,13 @@ export interface Resolved {
   other: { line: number; phys: number; key: string; env: string; value: string; refused?: string; why?: Why }[];
 }
 
+/** the menus' and HUD's texture pack a ui_textures value (NFSU2_UI_TEXTURES) names, as runtime/web/texrep_web.c reads
+ *  TEXPACKS/<name>.pak: '' for original and for map (the maps' pack alone: resolveEnv's NFSU2_MAP_TEXTURES) */
+export function uiPack(v: string | undefined): string {
+  const x = (v ?? '').trim().toLowerCase();
+  return x === 'original' || x === 'map' ? '' : x;
+}
+
 /**
  * The process environment for one launch: bundle.m's app_load_settings +
  * app_set_defaults + app_setup, in its order.  `environment` is the real
@@ -988,8 +996,8 @@ export function resolveEnv(text: string | null, environment: Record<string, stri
   }
   for (const [k, v] of Object.entries(APP_DEFAULTS)) if (!(k in env)) { env[k] = v; source[k] = 'default'; }
   for (const [k, v] of Object.entries(host)) if (!(k in env)) { env[k] = v; source[k] = 'host'; }
-  // the maps' pack (TEXPACKS/detailed.pak) comes with the menus' and HUD's: ui_textures = uhud shows both.
-  // NFSU2_MAP_TEXTURES = original in settings.ini keeps the game's maps (a test knob)
+  // the maps' pack (TEXPACKS/detailed.pak) comes with the menus' and HUD's: ui_textures = uhud shows both, map only the
+  // maps' (uiPack).  NFSU2_MAP_TEXTURES = original in settings.ini keeps the game's maps (a test knob)
   const ui = (env.NFSU2_UI_TEXTURES ?? '').toLowerCase();
   if (!('NFSU2_MAP_TEXTURES' in env) && ui && ui !== 'original') { env.NFSU2_MAP_TEXTURES = 'detailed'; source.NFSU2_MAP_TEXTURES = source.NFSU2_UI_TEXTURES; }
   return { env, source, notes, file, byEnv, other };

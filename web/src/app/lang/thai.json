@@ -365,7 +365,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "อัตโนมัติ: ตามจอแสดงผล 30 จะนิ่งกว่าบนโทรศัพท์ที่ช้าและประหยัดแบตเตอรี่ การแข่งออนไลน์และ LAN รันได้สูงสุด 120 ส่วนคัตซีนที่ 30",
   "Auto": "อัตโนมัติ",
   "Menus, HUD and maps": "เมนู HUD และแผนที่",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "อัปสเกล: Upscaled HUD ของ LunicAura106 และ Detailed Map ของ JeansBig คมชัดที่ความละเอียดสูง ต้องดาวน์โหลดประมาณ 25 MB และบนโทรศัพท์ใช้หน่วยความจำมากขึ้น",
   "Pixelated textures": "เท็กซ์เจอร์แบบพิกเซล",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "เท็กซ์เจอร์แบบไม่ทำให้เรียบ เป็นพิกเซลเหลี่ยมเหมือนเกม PC ยุคแรก ใช้แทนตัวเลือก “การกรองเท็กซ์เจอร์” ของเกม",
   "Upscaled HUD": "Upscaled HUD",
@@ -1402,5 +1401,16 @@
   "Play the path": "เล่นเส้นทาง",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "อนาล็อกขวามองรอบรถ (ปิด: ดันอนาล็อกขึ้นจะไม่สลับไฟหน้าอีกต่อไป)",
   "Hide HUD": "ซ่อน HUD",
-  "Hide or show the HUD while driving (names and chat over cars too)": "ซ่อนหรือแสดง HUD ขณะขับ (รวมถึงชื่อและแชตเหนือรถ)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "ซ่อนหรือแสดง HUD ขณะขับ (รวมถึงชื่อและแชตเหนือรถ)",
+  "Map only": "เฉพาะแผนที่",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "เฉพาะแผนที่: Detailed Map ของ JeansBig ต้องดาวน์โหลดประมาณ 20 MB อัปสเกล: เพิ่ม Upscaled HUD ของ LunicAura106 ด้วย ประมาณ 25 MB คมชัดที่ความละเอียดสูง บนโทรศัพท์ใช้หน่วยความจำมากขึ้น",
+  "Quebec": "ควิเบก",
+  "{h} h {m} min": "{h} ชม. {m} นาที",
+  "Played in this browser: {time}": "เวลาเล่นในเบราว์เซอร์นี้: {time}",
+  "Played in this browser: at least {time}": "เวลาเล่นในเบราว์เซอร์นี้: อย่างน้อย {time}",
+  "Last game: {time}": "เกมล่าสุด: {time}",
+  "Delete all": "ลบทั้งหมด",
+  "Delete {n} screenshots ({size})?": "ต้องการลบภาพหน้าจอ {n} ภาพ ({size}) หรือไม่",
+  "They are deleted from this browser; downloaded backups keep their copies.": "ภาพจะถูกลบออกจากเบราว์เซอร์นี้ ไฟล์สำรองที่ดาวน์โหลดไว้ยังมีสำเนาอยู่",
+  "{n} screenshots were not deleted: {error}": "ลบภาพหน้าจอ {n} ภาพไม่สำเร็จ: {error}"
 }

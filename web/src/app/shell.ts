@@ -39,7 +39,7 @@ import { DriftPanel } from './drift';
 import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
 import type { NetBanCase, NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
-import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
+import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, uiPack, type Resolved } from './settings';
 import { checkSaves, exists, filesOf, listProfiles, NO_SAVE, PROFILES_DIR, readText, removeSaveDir, SavesOff, setWritesOff, settleStaged, UNREADABLE, writeFile, type SavesCheck } from './savefs';
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
@@ -66,7 +66,7 @@ import { PAD_LS, PAD_RS } from '../input/proto';
 import { GameSession } from './game';
 import { AwayCheck, AWAY_LIMITS, type AwayLimits } from './away';
 import { changelog } from './changelog';
-import { gamesStarted, playedMs, PlayTime, SMS_AFTER_MS } from './playtime';
+import { gamesStarted, lastGameMs, playedMs, playedText, PlayTime, SMS_AFTER_MS } from './playtime';
 import { canKeep } from './pwkeep';
 import { keepPageId, PAGE_ID_FILE, pageId, seen } from './page-id';
 import { digitsFor, NameClaims, onlineName, readsAsSlur } from './claim';
@@ -319,8 +319,8 @@ function resolved(host: Record<string, string> = {}): Resolved { return resolveE
 /** the game's language (runtime/language.c): which language pack the page fetches ahead and counts */
 const language = (r: Resolved = resolved()) => (r.env.NFSU2_LANGUAGE ?? 'english').toLowerCase();
 /** the texture packs picked (runtime/web/texrep_web.c), comma-separated, '' for none: the ones the page fetches ahead
- *  and counts.  Each setting's value names its pack */
-const texpack = (r: Resolved = resolved()) => [r.env.NFSU2_UI_TEXTURES, r.env.NFSU2_MAP_TEXTURES]
+ *  and counts.  Each setting's value names its pack (ui_textures = map: none of the menus' and HUD's, uiPack) */
+const texpack = (r: Resolved = resolved()) => [uiPack(r.env.NFSU2_UI_TEXTURES), r.env.NFSU2_MAP_TEXTURES]
   .map(v => (v ?? '').toLowerCase()).filter(v => v && v !== 'original').join(',');
 /** the data the settings pick (datacache.ts Packs): the texture pack and the songs (EA's own: io-worker.ts dataFile) */
 const packs = (r: Resolved = resolved()): Packs => ({ texpack: texpack(r), songs: (r.env.NFSU2_SONGS ?? '').trim().toLowerCase() });
@@ -801,8 +801,11 @@ async function startGame() {
     // longer than the game), and a closure from this function would keep its
     // scope, and with it this game, reachable
     const ids = net ? await keepPageId() : null;
+    // Menus, HUD and maps on Map only: the maps' pack alone (resolveEnv turned it on), the menus' and HUD's the
+    // game's (the game reads the variable's value as a pack's name; r.env keeps the setting, for the day's count)
+    const env = r.env.NFSU2_UI_TEXTURES !== undefined && !uiPack(r.env.NFSU2_UI_TEXTURES) ? { ...r.env, NFSU2_UI_TEXTURES: 'original' } : r.env;
     session = await GameSession.start({
-      module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle, coop: coopMsg,
+      module: loaded!.module, info: loaded!.info, saveDir: SAVE, env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle, coop: coopMsg,
       friend: friendMsg,
       netBack, netQueue, onSaved, onSaveGone: saveGone, onRemoved, onLost, onSaveTrouble,
       netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved, netRaces, netRename,
@@ -2210,6 +2213,10 @@ export async function boot() {
       end === 'error' && why !== 'exit' ? why : undefined);
     $('#log-btn').hidden = $('#lastgame').hidden = false;
     $('#report').hidden = end === 'left';
+  } else {
+    // else the last game's play (playtime.ts): a game that ends on this page says its time in the status line instead
+    const ms = lastGameMs();
+    if (playedText(ms)) { live($('#lastgame'), () => t('Last game: {time}', { time: playedText(ms) })); $('#lastgame').hidden = false; }
   }
   fps = new FpsOverlay($('#fps'));
   lobbyPanel = new LobbyPanel($('#lobby'), $('#lobby-cover'), logLine);

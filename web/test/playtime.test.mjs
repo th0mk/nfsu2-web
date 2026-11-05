@@ -1,6 +1,8 @@
 // The app's play counter (web/src/app/playtime.ts) on a fake clock: two hours of play with some input in sight ask
 // the game for our message on its phone, again in each game until the game's status says the inbox has it; then
-// never again.  Idle and hidden time does not count; the count carries over to the next game (localStorage).
+// never again.  Idle and hidden time does not count; the count carries over to the next game (localStorage).  The
+// start page's figures: the latest game's play (kept as it goes), the whole, and "at least" for a count from before
+// the page showed it (decided once).
 //   node --test web/test/playtime.test.mjs
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,7 +12,7 @@ import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const js = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/playtime.ts')], bundle: true, format: 'esm', write: false })).outputFiles[0].text;
-const { PlayTime, SMS_AFTER_MS } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const { PlayTime, SMS_AFTER_MS, lastGameMs, playedMs, playedAtLeast, playedText } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 
 const MIN = 60_000;
 let t = 1000;
@@ -77,4 +79,27 @@ test('idle and hidden time does not count', () => {
   a.play(2 * MIN);
   assert.deepEqual(a.asked, [1]);
   a.end();
+});
+
+test('the start page\'s figures: the latest game, the whole, and "at least" for a count from before', () => {
+  store.clear();
+  assert.equal(playedAtLeast(), false, 'no count yet: all of it counted from here');
+  const a = game();
+  a.play(30 * MIN);
+  assert.equal(lastGameMs(), 30 * MIN, 'kept as the game goes (a page stopped now keeps it)');
+  a.end();
+  const b = game();
+  assert.equal(lastGameMs(), 0, 'a new game starts its own');
+  b.play(80 * MIN);
+  b.idle(20 * MIN);
+  b.end();
+  assert.equal(lastGameMs(), 85 * MIN - 5000, 'its play, and input less than 5 min ago');
+  assert.equal(playedMs(), 30 * MIN + 85 * MIN - 5000);
+  assert.equal(playedAtLeast(), false, 'decided once');
+  store.clear();
+  store.set('nfsu2.play.ms', String(3 * 3600_000));
+  assert.equal(playedAtLeast(), true, 'a count from before: it may miss play');
+  store.set('nfsu2.play.ms', '0');
+  assert.equal(playedAtLeast(), true, 'decided once');
+  assert.deepEqual([59_999, 60_000, 45 * MIN + 59_000, 60 * MIN, 200 * MIN].map(playedText), ['', '1 min', '45 min', '1 h 0 min', '3 h 20 min']);
 });

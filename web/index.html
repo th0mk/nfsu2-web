@@ -143,11 +143,15 @@
           </div>
         </div>
         <p class="msg" id="saves-msg" role="status"></p>
+        <p class="hint" id="played" hidden></p>
         <ul class="profiles" id="profiles" data-i18n-attr="aria-label" aria-label="Profiles in this browser"></ul>
         <p class="hint" data-i18n-html>To save while playing: <span class="key-only"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>
         <div class="panel-head sub">
           <h3 data-i18n>Screenshots</h3>
-          <p class="hint key-only" data-i18n-html>Screenshot with <kbd>F12</kbd></p>
+          <div class="row" id="shots-head">
+            <p class="hint key-only" data-i18n-html>Screenshot with <kbd>F12</kbd></p>
+            <button type="button" class="text-btn" id="shots-clear" hidden data-i18n>Delete all</button>
+          </div>
         </div>
         <p class="hint" id="shots-info" hidden data-i18n>None yet.</p>
         <ul class="shots" id="shots" data-i18n-attr="aria-label" aria-label="Screenshots in this browser"></ul>

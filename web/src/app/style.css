@@ -89,6 +89,9 @@ h3 { font-size: 16px; line-height: 24px; color: var(--lime); margin: 32px 0 8px;
 .panel-head h3 { margin: 0; }
 .panel-head .hint { line-height: 24px; }
 .panel-head + .msg { margin: -12px 0 16px; }
+#shots-head { gap: 4px 16px; }
+#shots-head .text-btn { padding: 0; height: 24px; }   /* Delete all, in line with the F12 hint */
+#played { margin: -12px 0 16px; }                  /* the play counted here, 4 px under the Profiles head (or its message) */
 #settings[data-readonly] #settings-note, #online[data-readonly] #online-note { color: var(--warn); }
 
 /* who plays on this server now (players.ts PlayersPanel): three numbers in the game's value boxes */
@@ -328,6 +331,14 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .listen:hover { border-color: var(--lime); }
 .listen[aria-pressed="true"] { border-color: var(--lime); background: var(--lime-fill); box-shadow: 0 0 8px var(--lime-glow); }
 .listen[aria-pressed="true"]::before { width: 12px; height: 12px; border: 0; background: var(--lime); transform: translate(-50%, -50%); }
+/* the picked flag beside Your flag, in Listen's box: /flags.png's 48x36 flags at 32x24, the picture, its size and
+   place set by settings-ui.ts */
+.flag-pic {
+  display: flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px;
+  border: 2px solid var(--edge); border-radius: 8px; background: var(--field);
+}
+.flag-pic[hidden] { display: none; }
+.flag-pic > span { width: 32px; height: 24px; border-radius: 2px; }
 /* a small action as underlined text: a setting's Reset, the hero's Download log, Rename and Cancel in Saves */
 .text-btn {
   height: 32px; padding: 0 8px; border: 0; border-radius: 8px; background: none;

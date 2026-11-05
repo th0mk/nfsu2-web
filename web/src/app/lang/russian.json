@@ -430,7 +430,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "«Авто» подстраивается под экран. 30 стабильнее на медленных телефонах и бережёт батарею. Гонки через Интернет и по локальной сети идут с частотой до 120; заставки — с 30.",
   "Auto": "Авто",
   "Menus, HUD and maps": "Меню, HUD и карты",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "«Улучшенный»: Upscaled HUD от LunicAura106 и Detailed Map от JeansBig, чёткие на высоких разрешениях. Около 25 MB для загрузки и больше памяти на телефонах.",
   "Pixelated textures": "Пиксельные текстуры",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Текстуры без сглаживания, с крупными пикселями, как в ранних играх для ПК. Заменяет настройку игры «Фильтрация текстур».",
   "Upscaled HUD": "Upscaled HUD",
@@ -1537,5 +1536,26 @@
   "Play the path": "Пуск пути",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Правый стик — обзор вокруг машины (Откл.: стик вверх больше не переключает и фары)",
   "Hide HUD": "Скрыть HUD",
-  "Hide or show the HUD while driving (names and chat over cars too)": "Скрыть или показать HUD за рулём (имена и чат над машинами тоже)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "Скрыть или показать HUD за рулём (имена и чат над машинами тоже)",
+  "Map only": "Только карта",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "«Только карта»: Detailed Map от JeansBig, около 20 MB для загрузки. «Улучшенный»: ещё и Upscaled HUD от LunicAura106, около 25 MB. Чёткие на высоких разрешениях; больше памяти на телефонах.",
+  "Quebec": "Квебек",
+  "{h} h {m} min": "{h} ч {m} мин",
+  "Played in this browser: {time}": "Сыграно в этом браузере: {time}",
+  "Played in this browser: at least {time}": "Сыграно в этом браузере: не меньше {time}",
+  "Last game: {time}": "Последняя игра: {time}",
+  "Delete all": "Удалить все",
+  "Delete {n} screenshots ({size})?": {
+    "one": "Удалить {n} скриншот ({size})?",
+    "few": "Удалить {n} скриншота ({size})?",
+    "many": "Удалить {n} скриншотов ({size})?",
+    "other": "Удалить {n} скриншота ({size})?"
+  },
+  "They are deleted from this browser; downloaded backups keep their copies.": "Они будут удалены из этого браузера; в скачанных резервных копиях их копии останутся.",
+  "{n} screenshots were not deleted: {error}": {
+    "one": "{n} скриншот не удалён: {error}",
+    "few": "{n} скриншота не удалены: {error}",
+    "many": "{n} скриншотов не удалены: {error}",
+    "other": "{n} скриншота не удалены: {error}"
+  }
 }

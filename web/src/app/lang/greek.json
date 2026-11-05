@@ -374,7 +374,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "Το «Αυτόματα» ακολουθεί την οθόνη. Τα 30 καρέ είναι πιο σταθερά σε αργά τηλέφωνα και εξοικονομούν μπαταρία. Οι διαδικτυακοί αγώνες και οι αγώνες LAN εκτελούνται έως τα 120 καρέ, ενώ οι κινηματογραφικές σκηνές στα 30.",
   "Auto": "Αυτόματα",
   "Menus, HUD and maps": "Μενού, ενδείξεις και χάρτες",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Αυξημένη ανάλυση: Upscaled HUD του LunicAura106 και Detailed Map του JeansBig, με ευκρίνεια σε υψηλές αναλύσεις. Περίπου 25 MB για λήψη και περισσότερη χρήση μνήμης στα τηλέφωνα.",
   "Pixelated textures": "Υφές με εμφανή εικονοστοιχεία",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Υφές χωρίς εξομάλυνση, με τετράγωνα εικονοστοιχεία όπως στα παλιά παιχνίδια υπολογιστή. Υπερισχύει του φιλτραρίσματος υφών του παιχνιδιού.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1376,5 +1375,22 @@
   "a country code such as nl, or gb-eng, gb-sct, gb-wls or gb-nir": "κωδικός χώρας όπως nl ή gb-eng, gb-sct, gb-wls ή gb-nir",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Ο δεξιός μοχλός κοιτάζει γύρω από το αυτοκίνητο (Ανενεργό: ο μοχλός πάνω δεν ανάβει ούτε σβήνει πια τους προβολείς)",
   "Hide HUD": "Απόκρυψη ενδείξεων",
-  "Hide or show the HUD while driving (names and chat over cars too)": "Απόκρυψη ή εμφάνιση των ενδείξεων στην οδήγηση (και των ονομάτων και της συνομιλίας πάνω από τα αυτοκίνητα)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "Απόκρυψη ή εμφάνιση των ενδείξεων στην οδήγηση (και των ονομάτων και της συνομιλίας πάνω από τα αυτοκίνητα)",
+  "Map only": "Μόνο χάρτης",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "Μόνο χάρτης: Detailed Map του JeansBig, περίπου 20 MB για λήψη. Αυξημένη ανάλυση: και Upscaled HUD του LunicAura106, περίπου 25 MB. Ευκρίνεια σε υψηλές αναλύσεις· περισσότερη μνήμη στα τηλέφωνα.",
+  "Quebec": "Κεμπέκ",
+  "{h} h {m} min": "{h} ώρ. {m} λεπ.",
+  "Played in this browser: {time}": "Χρόνος παιχνιδιού σε αυτό το πρόγραμμα περιήγησης: {time}",
+  "Played in this browser: at least {time}": "Χρόνος παιχνιδιού σε αυτό το πρόγραμμα περιήγησης: τουλάχιστον {time}",
+  "Last game: {time}": "Τελευταίο παιχνίδι: {time}",
+  "Delete all": "Διαγραφή όλων",
+  "Delete {n} screenshots ({size})?": {
+    "one": "Να διαγραφεί {n} στιγμιότυπο ({size});",
+    "other": "Να διαγραφούν {n} στιγμιότυπα ({size});"
+  },
+  "They are deleted from this browser; downloaded backups keep their copies.": "Διαγράφονται από αυτό το πρόγραμμα περιήγησης. Τα αντίγραφα ασφαλείας που έχουν ληφθεί διατηρούν τα δικά τους αντίγραφα.",
+  "{n} screenshots were not deleted: {error}": {
+    "one": "{n} στιγμιότυπο δεν διαγράφηκε: {error}",
+    "other": "{n} στιγμιότυπα δεν διαγράφηκαν: {error}"
+  }
 }

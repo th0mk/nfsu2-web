@@ -282,7 +282,7 @@ that room.
 | Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, subtitles, songs (uncensored or original), music in drag and drift races, autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
-| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
+| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original, map only or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -321,8 +321,9 @@ that room.
   HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the server has
   their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times their size,
   and the minimap's, world map's and race menus' maps at 2048x2048, with the missing shortcuts, and shortcuts and
-  off-road in their own colour. The game's layout stays as it is. Your browser fetches the packs only with Upscaled
-  (about 25 MB in all; the maps as the game loads them). A language with fonts of its own (Russian,
+  off-road in their own colour. Map only shows the Detailed Map alone, with the game's own menus and HUD. The game's
+  layout stays as it is. Your browser fetches the packs only with Map only (about 20 MB) or Upscaled (about 25 MB in
+  all; the maps as the game loads them). A language with fonts of its own (Russian,
   Polish, Turkish, Chinese, Japanese, Thai) keeps them. Most phones decode the larger textures into four times the
   memory.
 - **Radio:** the menu (F9) has a Radio line. It plays the music files of a folder on your device in place of the
@@ -442,7 +443,13 @@ that room.
   own name field takes them. Its career, cars and DVD and magazine covers go with it. Quit the game first. When
   "Your name" is empty, the other players see the new name.
 - **Screenshots:** F12 while playing saves the picture as a PNG beside your saves. Saves on the start page shows
-  them, newest first; click one to see it large, page through with the arrow keys, download or delete it.
+  them, newest first; click one to see it large, page through with the arrow keys, download or delete it. **Delete
+  all** beside the heading deletes every one, after a question that says how many and how much (a backup with many
+  screenshots can be too large for the browser to download). Downloaded backups keep theirs.
+- **Play time:** Saves shows how long you have played in this browser, and the start page under Play how long the
+  last game was. Only play counts (the game in sight, some input in the last 5 minutes), in this browser only (not
+  synced; a private window counts nothing). Counting began on 26 October 2026 and stopped at about 2 hours until
+  31 October, so a browser that played before the page showed the time says "at least".
 - **Backup:** Saves, Download backup gives one zip with your profiles, the game's options (`registry.txt`),
   `settings.ini` and F12 screenshots.
 - **Restore:** Saves, Restore puts a zip back, on this PC or on another one. It replaces what this browser
@@ -477,7 +484,8 @@ or use a Room to keep to a group.
    Not now, and Esc is Not now); it asks once, and the switch changes the answer later. While the server's free
    roam is busy (it gives each player fewer than 24 cars) it doesn't ask, and asks at a later Play instead.
    **Online, Your name** is the name the others see (empty: your profile name); the question shows it once there
-   is one, to change. Typed before you have a profile, it is also what the game's name box for your first profile
+   is one, to change. **Online, Your flag** puts a flag before it (a country, England, Scotland, Wales, Northern
+   Ireland or Quebec; none at first). Typed before you have a profile, it is also what the game's name box for your first profile
    starts with, instead of `NAME` (its letters and digits, 7 at most; Enter takes it).
 2. Everyone plays from the same server's address.
 3. Each player starts or loads a career and drives in free roam. Players find each other by themselves, and their

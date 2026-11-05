@@ -24,6 +24,8 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY app/registry-defaults.txt /src/app/
 COPY CHANGELOG.md /src/
+# the flags' pictures for Your flag (/flags.png)
+COPY runtime/flags.bin /src/runtime/
 COPY web/build.mjs web/index.html ./
 # boot.js's texts in every language (bootTexts)
 COPY web/tools/i18n-keys.mjs tools/

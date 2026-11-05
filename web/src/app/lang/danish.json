@@ -404,7 +404,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "Auto følger skærmen. 30 er mere stabilt på langsomme telefoner og sparer batteri. Online- og LAN-løb kører med op til 120; mellemsekvenser med 30.",
   "Auto": "Auto",
   "Menus, HUD and maps": "Menuer, HUD og kort",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Opskaleret: LunicAura106's Upscaled HUD og JeansBigs Detailed Map, skarpe ved høje opløsninger. Omkring 25 MB at hente og mere hukommelse på telefoner.",
   "Pixelated textures": "Pixelerede teksturer",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Teksturer uden udglatning, pixelerede som i tidlige pc-spil. Tilsidesætter spillets Teksturfilter.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1483,5 +1482,22 @@
   "Play the path": "Afspil ruten",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Højre stick ser rundt om bilen (Fra: stick op skifter heller ikke forlygterne længere)",
   "Hide HUD": "Skjul HUD",
-  "Hide or show the HUD while driving (names and chat over cars too)": "Skjul eller vis HUD'en under kørsel (også navne og chat over bilerne)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "Skjul eller vis HUD'en under kørsel (også navne og chat over bilerne)",
+  "Map only": "Kun kort",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "Kun kort: JeansBigs Detailed Map, omkring 20 MB at hente. Opskaleret: også LunicAura106's Upscaled HUD, omkring 25 MB. Skarpe ved høje opløsninger; mere hukommelse på telefoner.",
+  "Quebec": "Québec",
+  "{h} h {m} min": "{h} t {m} min",
+  "Played in this browser: {time}": "Spillet i denne browser: {time}",
+  "Played in this browser: at least {time}": "Spillet i denne browser: mindst {time}",
+  "Last game: {time}": "Sidste spil: {time}",
+  "Delete all": "Slet alle",
+  "Delete {n} screenshots ({size})?": {
+    "one": "Slet {n} skærmbillede ({size})?",
+    "other": "Slet {n} skærmbilleder ({size})?"
+  },
+  "They are deleted from this browser; downloaded backups keep their copies.": "De slettes fra denne browser; hentede sikkerhedskopier beholder deres kopier.",
+  "{n} screenshots were not deleted: {error}": {
+    "one": "{n} skærmbillede blev ikke slettet: {error}",
+    "other": "{n} skærmbilleder blev ikke slettet: {error}"
+  }
 }

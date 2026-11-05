@@ -629,7 +629,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "Az Automatikus a kijelzőhöz igazodik. A 30 lassú telefonon egyenletesebb, és kíméli az akkumulátort. Az online és LAN versenyek legfeljebb 120 fps-sel futnak, az átvezetők 30-cal.",
   "Auto": "Automatikus",
   "Menus, HUD and maps": "Menük, HUD és térképek",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Felskálázott: LunicAura106 Upscaled HUD modja és JeansBig Detailed Map modja, nagy felbontáson is élesek. Kb. 25 MB letöltés, telefonon pedig több memória.",
   "Pixelated textures": "Pixeles textúrák",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Simítás nélküli textúrák, pixelesek, mint a korai PC-s játékokban. Felülírja a játék „Textúra Szűrés” beállítását.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1405,5 +1404,16 @@
   "Play the path": "Útvonal lejátszása",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "A jobb analóg karral körbenézel az autó körül (Ki: a kar felfelé már a fényszórót sem kapcsolja)",
   "Hide HUD": "HUD elrejtése",
-  "Hide or show the HUD while driving (names and chat over cars too)": "HUD elrejtése vagy megjelenítése vezetés közben (az autók feletti nevek és a chat is)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "HUD elrejtése vagy megjelenítése vezetés közben (az autók feletti nevek és a chat is)",
+  "Map only": "Csak térkép",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "Csak térkép: JeansBig Detailed Map modja, kb. 20 MB letöltés. Felskálázott: LunicAura106 Upscaled HUD modja is, kb. 25 MB. Nagy felbontáson is élesek; telefonon több memória.",
+  "Quebec": "Québec",
+  "{h} h {m} min": "{h} óra {m} perc",
+  "Played in this browser: {time}": "Játékidő ebben a böngészőben: {time}",
+  "Played in this browser: at least {time}": "Játékidő ebben a böngészőben: legalább {time}",
+  "Last game: {time}": "Legutóbbi játék: {time}",
+  "Delete all": "Összes törlése",
+  "Delete {n} screenshots ({size})?": "{n} képernyőkép törlése ({size})?",
+  "They are deleted from this browser; downloaded backups keep their copies.": "Törlődnek ebből a böngészőből; a letöltött biztonsági mentésekben megmarad a másolatuk.",
+  "{n} screenshots were not deleted: {error}": "{n} képernyőképet nem sikerült törölni: {error}"
 }

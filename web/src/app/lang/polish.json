@@ -430,7 +430,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "„Auto” dopasowuje się do ekranu. 30 jest stabilniejsze na wolnych telefonach i oszczędza baterię. Wyścigi w trybie sieciowym i przez LAN działają z maksymalnie 120; przerywniki z 30.",
   "Auto": "Auto",
   "Menus, HUD and maps": "Menu, HUD i mapy",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "„Ulepszony”: Upscaled HUD od LunicAura106 i Detailed Map od JeansBig, ostre w wysokich rozdzielczościach. Około 25 MB do pobrania i więcej pamięci na telefonach.",
   "Pixelated textures": "Pikselowe tekstury",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Tekstury bez wygładzania, z wyraźnymi pikselami, jak we wczesnych grach na PC. Zastępuje opcję gry „Filtrowanie tekstur”.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1537,5 +1536,26 @@
   "Play the path": "Odtwórz trasę",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Prawa gałka rozgląda się wokół auta (Wył.: gałka w górę nie przełącza już też świateł)",
   "Hide HUD": "Ukryj HUD",
-  "Hide or show the HUD while driving (names and chat over cars too)": "Ukryj lub pokaż HUD podczas jazdy (także nazwy i czat nad autami)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "Ukryj lub pokaż HUD podczas jazdy (także nazwy i czat nad autami)",
+  "Map only": "Tylko mapa",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "„Tylko mapa”: Detailed Map od JeansBig, około 20 MB do pobrania. „Ulepszony”: także Upscaled HUD od LunicAura106, około 25 MB. Ostre w wysokich rozdzielczościach; więcej pamięci na telefonach.",
+  "Quebec": "Quebec",
+  "{h} h {m} min": "{h} godz. {m} min",
+  "Played in this browser: {time}": "Czas gry w tej przeglądarce: {time}",
+  "Played in this browser: at least {time}": "Czas gry w tej przeglądarce: co najmniej {time}",
+  "Last game: {time}": "Ostatnia gra: {time}",
+  "Delete all": "Usuń wszystkie",
+  "Delete {n} screenshots ({size})?": {
+    "one": "Usunąć {n} zrzut ekranu ({size})?",
+    "few": "Usunąć {n} zrzuty ekranu ({size})?",
+    "many": "Usunąć {n} zrzutów ekranu ({size})?",
+    "other": "Usunąć {n} zrzutu ekranu ({size})?"
+  },
+  "They are deleted from this browser; downloaded backups keep their copies.": "Zostaną usunięte z tej przeglądarki; pobrane kopie zapasowe zachowają ich kopie.",
+  "{n} screenshots were not deleted: {error}": {
+    "one": "{n} zrzut ekranu nie został usunięty: {error}",
+    "few": "{n} zrzuty ekranu nie zostały usunięte: {error}",
+    "many": "{n} zrzutów ekranu nie zostało usuniętych: {error}",
+    "other": "{n} zrzutu ekranu nie usunięto: {error}"
+  }
 }

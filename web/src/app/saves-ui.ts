@@ -16,6 +16,7 @@ import { fmtBytes } from './checks';
 import { resolveEnv, withDevice } from './settings';
 import { gameDataKept, type DownloadState, type DownloadStatus, type Predownload } from './predownload';
 import { ScreenshotsPart } from './shots';
+import { playedAtLeast, playedMs, playedText } from './playtime';
 import { GAMEFILE, isCover, keeps, kept } from './vault';
 import { dateLocale, listOf, live, N, t, tn, tvars, type Msg } from './i18n';
 
@@ -521,7 +522,7 @@ export class SavesPanel {
     inp.onchange = () => { const f = inp.files?.[0]; inp.value = ''; if (f) void this.doImport(f); };
     dataPanel.querySelector<HTMLButtonElement>('#clear-cache')!.onclick = () => void this.doClearCache();
     dataPanel.querySelector<HTMLButtonElement>('#fetch-all')!.onclick = () => void this.doDownload();
-    this.shots = new ScreenshotsPart(root, { saveDir: deps.saveDir, confirm: deps.confirm, changed: () => void this.refresh() });
+    this.shots = new ScreenshotsPart(root, { saveDir: deps.saveDir, confirm: deps.confirm, changed: () => void this.refresh(), say: text => this.msg(text) });
   }
 
   private shots: ScreenshotsPart;
@@ -560,6 +561,7 @@ export class SavesPanel {
     if (this.said.saves === UNREADABLE) this.msg('');
     this.profiles = await listProfiles(this.deps.saveDir, files);
     this.shots.show(files.filter(f => isScreenshot(f.path)));
+    this.showPlayed();
     const busy = this.deps.busy();
     // a name being typed stays as it is (the list is shown again when the edit ends)
     if (!this.profiles.some(p => p.name === this.renaming)) { this.renaming = null; this.showProfiles(); }
@@ -579,6 +581,14 @@ export class SavesPanel {
     if (n !== this.counted) return;
     this.kept = kept; this.data = data;
     this.showData();
+  }
+
+  /** the play counted in this browser (playtime.ts), under the head; nothing under a minute.  "At least" where the
+   *  count began before it counted all play */
+  private showPlayed() {
+    const el = this.root.querySelector<HTMLElement>('#played')!, ms = playedMs(), least = playedAtLeast();
+    el.hidden = !playedText(ms);
+    live(el, () => least ? t('Played in this browser: at least {time}', { time: playedText(ms) }) : t('Played in this browser: {time}', { time: playedText(ms) }));
   }
 
   /** The download's progress (Predownload's onChange), or what is kept when none runs. */

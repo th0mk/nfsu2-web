@@ -448,7 +448,11 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   but no longer get in the way; Upscaled HUD in the start page's Game, Display, more: Menus, HUD and maps (Upscaled),
   which since 09e907f1
   also shows JeansBig's Detailed Map: the minimap's, world map's and race menus' maps sharp, with the missing
-  shortcuts; photo mode with F12 or the pause menu's
+  shortcuts, and Map only in the same row shows the Detailed Map alone, with the game's own menus and HUD; the time
+  played in this browser in Saves, and the last game's under Play (counted only in this browser, not synced; counting
+  began on 26 October and stopped at 2 hours until 31 October, so older browsers show "at least"); Delete all for
+  the F12 screenshots in Saves, Screenshots (also the way out of a Download backup too big for the browser: "RangeError", "Blob size"); Quebec in
+  Online, Your flag; photo mode with F12 or the pause menu's
   Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and
   Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for the eyes, in
   the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in the start page's Game, more:

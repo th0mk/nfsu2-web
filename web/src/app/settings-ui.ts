@@ -17,7 +17,9 @@ import { roomHash } from './players';
 import { checkRoom, inviteLink } from './invite';
 import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
-import { flagCode, flagName, flagsByName, type FlagCode } from './flags';
+import { FLAG_CODES, FLAG_H, FLAG_SHEET_COLS, FLAG_W, flagAt, flagCode, flagName, flagsByName, type FlagCode } from './flags';
+/** Your flag's picture: /flags.png's 48x36 flags drawn at 32x24 (style.css .flag-pic) */
+const FLAG_SHOWN = 2 / 3;
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
 import { SITE_KEYS } from './sitekeys';
 
@@ -100,7 +102,7 @@ const GROUPS: Group[] = [
     { key: 'fullscreen', label: N('Full screen on Play'), help: N('Off: play in the window; the menu has full screen. Hold Esc to leave it.'), c: { t: 'switch' } },
     { key: 'render', label: N('Resolution scale'), help: N('Lower is faster but softer: 50% renders a quarter of the pixels. Phones start at 75%.'), c: { t: 'seg', opts: [['scale:0.5', '50%'], ['scale:0.75', '75%'], ['backing', '100%'], ['scale:1.5', '150%'], ['scale:2', '200%']] } },
     { key: 'fps', label: N('Frame rate'), help: N('Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.'), c: { t: 'seg', opts: [['auto', N('Auto')], ['30', '30'], ['60', '60'], ['120', '120'], ['240', '240']] } },
-    { key: 'ui_textures', label: N('Menus, HUD and maps'), help: N('Upscaled: LunicAura106\'s Upscaled HUD and JeansBig\'s Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.'), link: [{ text: N('Upscaled HUD'), href: 'https://nfsmods.xyz/mod/4319' }, { text: N('Detailed Map'), href: 'https://nfsmods.xyz/mod/4485' }], c: { t: 'seg', opts: [['original', N('Original')], ['uhud', N('Upscaled')]] }, more: true },
+    { key: 'ui_textures', label: N('Menus, HUD and maps'), help: N('Map only: JeansBig\'s Detailed Map, about 20 MB to download. Upscaled: also LunicAura106\'s Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.'), link: [{ text: N('Upscaled HUD'), href: 'https://nfsmods.xyz/mod/4319' }, { text: N('Detailed Map'), href: 'https://nfsmods.xyz/mod/4485' }], c: { t: 'seg', opts: [['original', N('Original')], ['map', N('Map only')], ['uhud', N('Upscaled')]] }, more: true },
     { key: 'pixelated_textures', label: N('Pixelated textures'), help: N('Textures without smoothing, blocky like early PC games. Overrides the game\'s Texture Filtering.'), c: { t: 'switch' }, more: true },
     { key: 'hud', label: N('Race HUD'), help: N('Wide anchors it to the screen edges; 4:3 is the original centred layout.'), c: { t: 'seg', opts: [['wide', N('Wide')], ['43', '4:3']] }, more: true },
     { key: 'movie_framing', label: N('Movie framing'), help: N('Fit keeps the 4:3 movies whole; fill crops them; stretch widens them.'), c: { t: 'seg', opts: [['fit', N('Fit')], ['fill', N('Fill')], ['stretch', N('Stretch')]] }, more: true },
@@ -721,8 +723,20 @@ export class SettingsPanel {
       add('', t('No flag'));
       if (this.country) add(this.country, flagName(this.country));
       for (const f of flagsByName()) add(f.code, f.name);
-      sel.onchange = () => void this.put(it.key, sel.value || null);
-      ctl.append(sel);
+      // the picked flag on the list's left, as the game draws it (/flags.png), in a box like Your horn's Listen; none
+      // with No flag
+      const pic = document.createElement('span'); pic.className = 'flag-pic'; pic.setAttribute('aria-hidden', 'true');
+      const flag = document.createElement('span'); pic.append(flag);
+      flag.style.background = `url(/flags.png) 0 0 / ${FLAG_SHEET_COLS * FLAG_W * FLAG_SHOWN}px `
+        + `${Math.ceil(FLAG_CODES.length / FLAG_SHEET_COLS) * FLAG_H * FLAG_SHOWN}px`;
+      const show = (v: string) => {
+        const at = flagAt(v);
+        pic.hidden = !at;
+        if (at) flag.style.backgroundPosition = `${-at[0] * FLAG_SHOWN}px ${-at[1] * FLAG_SHOWN}px`;
+      };
+      show(sel.value);
+      sel.onchange = () => { show(sel.value); void this.put(it.key, sel.value || null); };
+      ctl.append(pic, sel);
       described = sel;
       if (!this.countryAsked) { this.countryAsked = true; void this.askCountry(); }
     } else if (c.t === 'crews') {

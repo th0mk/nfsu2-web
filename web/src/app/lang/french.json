@@ -417,7 +417,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "Auto : suit l'écran. 30 est plus stable sur les téléphones lents et ménage la batterie. Les courses en ligne et en réseau local tournent jusqu'à 120 ; les cinématiques à 30.",
   "Auto": "Auto",
   "Menus, HUD and maps": "Menus, HUD et cartes",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Upscaled : l'Upscaled HUD de LunicAura106 et la Detailed Map de JeansBig, nets aux hautes résolutions. Environ 25 MB à télécharger, et plus de mémoire sur les téléphones.",
   "Pixelated textures": "Textures pixelisées",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Textures sans lissage, pixelisées comme dans les premiers jeux PC. Remplace l'option Filtrage textures du jeu.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1510,5 +1509,24 @@
   "Play the path": "Lire le trajet",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "Le stick droit regarde autour de la voiture (Désactivé : le stick vers le haut ne commande plus les phares non plus)",
   "Hide HUD": "Masquer le HUD",
-  "Hide or show the HUD while driving (names and chat over cars too)": "Masquer ou afficher le HUD en conduisant (noms et chat au-dessus des voitures aussi)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "Masquer ou afficher le HUD en conduisant (noms et chat au-dessus des voitures aussi)",
+  "Map only": "Carte seule",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "Carte seule : la Detailed Map de JeansBig, environ 20 MB à télécharger. Upscaled : aussi l'Upscaled HUD de LunicAura106, environ 25 MB. Nets aux hautes résolutions ; plus de mémoire sur les téléphones.",
+  "Quebec": "Québec",
+  "{h} h {m} min": "{h} h {m} min",
+  "Played in this browser: {time}": "Joué dans ce navigateur : {time}",
+  "Played in this browser: at least {time}": "Joué dans ce navigateur : au moins {time}",
+  "Last game: {time}": "Dernière partie : {time}",
+  "Delete all": "Tout supprimer",
+  "Delete {n} screenshots ({size})?": {
+    "one": "Supprimer {n} capture d'écran ({size}) ?",
+    "many": "Supprimer {n} captures d'écran ({size}) ?",
+    "other": "Supprimer {n} captures d'écran ({size}) ?"
+  },
+  "They are deleted from this browser; downloaded backups keep their copies.": "Elles sont supprimées de ce navigateur ; les copies de sauvegarde téléchargées gardent leur exemplaire.",
+  "{n} screenshots were not deleted: {error}": {
+    "one": "{n} capture d'écran n'a pas été supprimée : {error}",
+    "many": "{n} captures d'écran n'ont pas été supprimées : {error}",
+    "other": "{n} captures d'écran n'ont pas été supprimées : {error}"
+  }
 }

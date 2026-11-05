@@ -1,7 +1,7 @@
 // The texture packs the page picks and fetches (web/src/app/settings.ts resolveEnv, web/src/host/datacache.ts):
 //   node --test web/test/texpacks.test.mjs
 // - ui_textures = uhud turns on the maps' pack too (NFSU2_MAP_TEXTURES = detailed), unless NFSU2_MAP_TEXTURES says
-//   otherwise; original turns on neither
+//   otherwise; map only the maps' (uiPack: no pack of the menus' and HUD's); original turns on neither
 // - the preload fetches each pack picked and its .tracks, and no other pack
 // The modules are bundled from web/src with esbuild, as web/test/songs.test.mjs does.
 import { test } from 'node:test';
@@ -28,6 +28,15 @@ test('Upscaled turns on the HUD\'s and the maps\' packs; Original neither', () =
   assert.equal(S.resolveEnv('', {}, {}, { ui_textures: 'uhud' }).env.NFSU2_MAP_TEXTURES, 'detailed', 'a device\'s default too');
 });
 
+test('Map only turns on the maps\' pack alone', () => {
+  const env = (ini) => S.resolveEnv(ini, {}, {}).env;
+  assert.equal(env('ui_textures = map\n').NFSU2_UI_TEXTURES, 'map', 'the setting as it is (the row shows it)');
+  assert.equal(env('ui_textures = map\n').NFSU2_MAP_TEXTURES, 'detailed');
+  assert.equal(env('NFSU2_MAP_TEXTURES = original\nui_textures = map\n').NFSU2_MAP_TEXTURES, 'original', 'the test knob');
+  assert.deepEqual(['map', 'MAP', 'original', '', undefined, 'uhud'].map(S.uiPack), ['', '', '', '', '', 'uhud']);
+  assert.deepEqual(S.checkSetting('ui_textures', 'Map'), { ok: true, env: 'NFSU2_UI_TEXTURES', value: 'map' });
+});
+
 test('the preload fetches the packs picked and their .tracks', () => {
   const files = ['TEXPACKS/uhud.pak', 'TEXPACKS/detailed.pak', 'TEXPACKS/detailed.tracks', 'TEXPACKS/other.pak', 'TRACKS/L4RA.BUN']
     .map(p => ({ path: p, size: 10, mtime: 1 }));
@@ -35,4 +44,5 @@ test('the preload fetches the packs picked and their .tracks', () => {
   assert.deepEqual(ahead(''), ['TRACKS/L4RA.BUN']);
   assert.deepEqual(ahead('uhud'), ['TEXPACKS/uhud.pak', 'TRACKS/L4RA.BUN']);
   assert.deepEqual(ahead('uhud,detailed'), ['TEXPACKS/detailed.pak', 'TEXPACKS/detailed.tracks', 'TEXPACKS/uhud.pak', 'TRACKS/L4RA.BUN']);
+  assert.deepEqual(ahead('detailed'), ['TEXPACKS/detailed.pak', 'TEXPACKS/detailed.tracks', 'TRACKS/L4RA.BUN'], 'Map only');
 });

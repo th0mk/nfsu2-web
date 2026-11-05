@@ -365,7 +365,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "自動：跟隨螢幕。在較慢的手機上，30 會更穩定，也更省電。線上與區域網路比賽最高以 120 執行；過場動畫為 30。",
   "Auto": "自動",
   "Menus, HUD and maps": "選單、HUD 與地圖",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "高解析：LunicAura106 的 Upscaled HUD 與 JeansBig 的 Detailed Map，在高解析度下依然清晰。下載約 25 MB，在手機上會佔用更多記憶體。",
   "Pixelated textures": "像素化材質",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "材質不做平滑處理，像早期 PC 遊戲一樣呈現方塊狀。會取代遊戲的「材質過濾」選項。",
   "Upscaled HUD": "Upscaled HUD",
@@ -1402,5 +1401,16 @@
   "Play the path": "播放路徑",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "右搖桿環顧車子四周（關閉時，搖桿往上也不再開關車頭燈）",
   "Hide HUD": "隱藏 HUD",
-  "Hide or show the HUD while driving (names and chat over cars too)": "開車時隱藏或顯示 HUD（車子上方的名字與聊天也一樣）"
+  "Hide or show the HUD while driving (names and chat over cars too)": "開車時隱藏或顯示 HUD（車子上方的名字與聊天也一樣）",
+  "Map only": "僅地圖",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "僅地圖：JeansBig 的 Detailed Map，下載約 20 MB。高解析：再加上 LunicAura106 的 Upscaled HUD，約 25 MB。在高解析度下依然清晰；在手機上會佔用更多記憶體。",
+  "Quebec": "魁北克",
+  "{h} h {m} min": "{h} 小時 {m} 分鐘",
+  "Played in this browser: {time}": "在此瀏覽器中已玩：{time}",
+  "Played in this browser: at least {time}": "在此瀏覽器中至少已玩：{time}",
+  "Last game: {time}": "上一場遊戲：{time}",
+  "Delete all": "全部刪除",
+  "Delete {n} screenshots ({size})?": "要刪除 {n} 張截圖（{size}）嗎？",
+  "They are deleted from this browser; downloaded backups keep their copies.": "它們將從此瀏覽器中刪除；已下載的備份仍保有它們的副本。",
+  "{n} screenshots were not deleted: {error}": "有 {n} 張截圖未能刪除：{error}"
 }

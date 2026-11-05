@@ -365,7 +365,6 @@
   "Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.": "'자동'은 디스플레이에 맞춰요. 느린 휴대폰에서는 30이 더 안정적이고 배터리도 아껴요. 온라인과 LAN 레이스는 최대 120, 컷신은 30으로 실행돼요.",
   "Auto": "자동",
   "Menus, HUD and maps": "메뉴, HUD와 맵",
-  "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "업스케일: LunicAura106의 Upscaled HUD와 JeansBig의 Detailed Map으로, 고해상도에서도 선명해요. 다운로드는 약 25 MB이고, 휴대폰에서는 메모리를 더 사용해요.",
   "Pixelated textures": "픽셀화된 텍스처",
   "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "텍스처를 부드럽게 처리하지 않아 초창기 PC 게임처럼 각진 픽셀로 보여요. 게임의 '텍스처 필터링'보다 우선해요.",
   "Upscaled HUD": "Upscaled HUD",
@@ -1402,5 +1401,16 @@
   "Play the path": "경로 재생",
   "Right stick looks round the car (Off: stick up no longer switches the headlights)": "오른쪽 스틱으로 차 주위 둘러보기(꺼짐: 스틱을 위로 밀어도 헤드라이트가 바뀌지 않아요)",
   "Hide HUD": "HUD 숨기기",
-  "Hide or show the HUD while driving (names and chat over cars too)": "주행 중 HUD 숨기기/보이기(차 위의 이름과 채팅도)"
+  "Hide or show the HUD while driving (names and chat over cars too)": "주행 중 HUD 숨기기/보이기(차 위의 이름과 채팅도)",
+  "Map only": "지도만",
+  "Map only: JeansBig's Detailed Map, about 20 MB to download. Upscaled: also LunicAura106's Upscaled HUD, about 25 MB. Sharp at high resolutions; more memory on phones.": "지도만: JeansBig의 Detailed Map으로, 다운로드는 약 20 MB예요. 업스케일: LunicAura106의 Upscaled HUD까지, 약 25 MB예요. 고해상도에서도 선명하고, 휴대폰에서는 메모리를 더 사용해요.",
+  "Quebec": "퀘벡",
+  "{h} h {m} min": "{h}시간 {m}분",
+  "Played in this browser: {time}": "이 브라우저에서 플레이한 시간: {time}",
+  "Played in this browser: at least {time}": "이 브라우저에서 플레이한 시간: {time} 이상",
+  "Last game: {time}": "지난 게임: {time}",
+  "Delete all": "모두 삭제",
+  "Delete {n} screenshots ({size})?": "스크린샷 {n}개({size})를 삭제할까요?",
+  "They are deleted from this browser; downloaded backups keep their copies.": "이 브라우저에서 삭제돼요. 다운로드한 백업에는 사본이 남아 있어요.",
+  "{n} screenshots were not deleted: {error}": "스크린샷 {n}개를 삭제하지 못했어요: {error}"
 }
