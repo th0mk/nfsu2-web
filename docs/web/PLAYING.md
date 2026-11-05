@@ -405,6 +405,10 @@ Room set, the Room row says how many are in that room.
   say: for 20 s after your bank changes (a race's or an outrun's prize, a purchase, a money icon), for 10 s when free
   roam starts, and for 8 s after the pause menu, the map or a shop. In the original game it is always there. The
   magazine and DVD cover rewards show as before.
+- **The box at the top left in free roam:** the box with the D-pad and its icons (the envelope of an SMS waiting,
+  Engage, an outrun) shows the same way: for 20 s after a new message, while your car is at a race marker, a shop's
+  door or an outrun's tuner, for 10 s when free roam starts, and for 8 s after the pause menu, the map or a shop. In the
+  original game it is always there.
 - **Exposure and White Level:** for eyes that a bright picture tires. The game's Options, Display (also the pause
   menu's) has two sliders after Level Of Detail. Exposure makes the whole picture darker or brighter, from half to
   twice as bright (the middle, the default, is the game's own). White Level is the brightest the picture gets, from

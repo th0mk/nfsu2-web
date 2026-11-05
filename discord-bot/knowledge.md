@@ -484,7 +484,9 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   (Power Units in Options, Gameplay; Show Player Names there too since 31cc3384 (also in the pause menu's Options, Gameplay): Off
   hides the names over other players' cars, in free roam and LAN races; the Bank box in career free roam shows only
   for 20 s after the bank changes, 10 s when free roam starts and 8 s after the pause menu, the map or a shop, the
-  answer to "hide the Bank"; Jump Camera Off in Options, Gameplay (also the pause menu's; it may take the next race
+  answer to "hide the Bank"; the box at the top left with the D-pad and its icons (SMS envelope, Engage, outrun) the
+  same way, for 20 s after a new message and while the car is at a race marker, a shop's door or an outrun's tuner,
+  in the release after d4efa0a7; Jump Camera Off in Options, Gameplay (also the pause menu's; it may take the next race
   or free roam to apply) turns off both the jump camera and the slow-motion camera after a crash, the answer to
   "disable the jump and crash cutscenes" (thread 1567563824121249905); drift mode with X, and since 19f84c9 with the drift races' handling and the car's
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
