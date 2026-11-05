@@ -73,6 +73,7 @@
   "This browser's passphrase did not claim {name}: another one did, first.": "Prístupová fráza tohto prehliadača meno {name} nezarezervovala: iná to stihla skôr.",
   "Is {name} yours? Enter your passphrase under Cloud saves to get it back here.": "Je meno {name} tvoje? Zadaj svoju prístupovú frázu v časti Uloženia v cloude a získaj ho tu späť.",
   "Your name": "Tvoje meno",
+  "Player 2's name": "Meno hráča 2",
   "Another player claimed {name}.": "Meno {name} si zarezervoval iný hráč.",
   "{name} isn't allowed here.": "Meno {name} tu nie je povolené.",
   "{name} is yours.": "Meno {name} je tvoje.",
