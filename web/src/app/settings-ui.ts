@@ -53,7 +53,7 @@ const LANGUAGE_NAMES: Record<Language, string> = {
   english: N('English'), french: N('French'), german: N('German'), italian: N('Italian'), spanish: N('Spanish'), dutch: N('Dutch'),
   swedish: N('Swedish'), danish: N('Danish'), korean: N('Korean'), chinese: N('Chinese'), japanese: N('Japanese'), russian: N('Russian'),
   thai: N('Thai'), portuguese: N('Portuguese (Brazil)'), polish: N('Polish'), turkish: N('Turkish'), hungarian: N('Hungarian'),
-  ukrainian: N('Ukrainian'),
+  ukrainian: N('Ukrainian'), czech: N('Czech'), slovak: N('Slovak'), greek: N('Greek'),
 };
 const LANGUAGE_OPTS = LANGUAGES.map(l => [l, LANGUAGE_NAMES[l]] as [string, string]);
 
@@ -392,6 +392,9 @@ export interface SettingsDeps {
   confirm?(title: string, body: string, ok: string, danger?: boolean): Promise<boolean>;
   /** Your name's row as made: its claim line and button go in (claim-ui.ts NameRow) */
   nameRow?(row: HTMLElement, input: HTMLInputElement, ctl: HTMLElement): void;
+  /** a value saved that its row's own line explains, with no "applies the next time you press Play" (Your name: another
+   *  name than the passphrase's claimed one, which Play does not use: claim-ui.ts) */
+  quietSave?(key: string, value: string | null): boolean;
 }
 
 export class SettingsPanel {
@@ -478,7 +481,7 @@ export class SettingsPanel {
     if (key === 'roam' && !removed) for (const k of ROAM_ROWS) this.rerow(k);
     this.root.dataset.saved = String(++this.saves);
     const it = ITEMS.get(key), cur = this.current(key);
-    if (!site) this.deps.say?.(() => {
+    if (!site && !this.deps.quietSave?.(key, value)) this.deps.say?.(() => {
       const v = { what: it ? t(it.label) : key, value: it ? shown(it, cur) : value ?? '' };
       return value === null ? t('Saved: {what}, {value} (the default). Applies the next time you press Play.', v) : t('Saved: {what}, {value}. Applies the next time you press Play.', v);
     });

@@ -601,7 +601,7 @@ pub async fn run(o: Options, cores: usize) {
     lines.push(format!(
         "  free roam : {}",
         if o.roam_hub {
-            "the hub at 10.77.0.253 on the switch links each player to the nearest, as many as its game shows cars (64 at most; --roam-hub off: groups of 65 by broadcast)"
+            "the hub at 10.77.0.253 on the switch gives each player the cars of its nearest, as many as its game shows (64 at most), one way where they show fewer (core 15; --roam-hub off: groups of 65 by broadcast)"
         } else {
             "no hub (--roam-hub off): players find each other by broadcast, groups of 65"
         }

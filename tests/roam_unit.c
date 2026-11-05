@@ -477,6 +477,8 @@ static int g_hub_ncrews[NN]; static uint32_t g_hub_crews[NN][RC_CREW_MAX];   /* 
 static uint32_t g_hub_duel[NN];             /* ...and its outrun's other player (rc_set_duel) */
 static uint32_t g_hub_room[NN];             /* ...and its room */
 static uint16_t g_hub_flags[NN];            /* ...and its flags: with RC_HF_HUBCREW its lists end in crew marks */
+static uint8_t g_hub_way[NN][NN];           /* the way node i's link with node j goes, as the hub marks it in i's list (RC_MARK_RXONLY, _TXONLY) */
+static int g_snap_tx[NN][NN];               /* SNAPs each node sent each other one */
 static rc_lobby g_hub_lobby_last[NN];
 static int64_t g_hub_next;
 static void hub_in(int from, const uint8_t *b, int len){
@@ -494,7 +496,7 @@ static void net_send(void *u, uint32_t ip, uint16_t port, const uint8_t *buf, in
     if (len > 5 && buf[5] == RC_MSG_CFG) g_cfg_tx[from]++;
     if (to >= 0 && len > 5 && buf[5] == RC_MSG_PING) g_ping_tx[from][to]++;
     if (to >= 0 && len > 5 && buf[5] == RC_MSG_HELLO) g_hello_tx[from][to]++;
-    if (to >= 0 && len > 15 && buf[5] == RC_MSG_SNAP){ if (buf[14] & RC_HF_STATEX) g_snapx_rx[to]++; else g_snap_rx[to]++; }
+    if (to >= 0 && len > 15 && buf[5] == RC_MSG_SNAP){ if (buf[14] & RC_HF_STATEX) g_snapx_rx[to]++; else g_snap_rx[to]++; g_snap_tx[from][to]++; }
     if (to < 0 || g_drop[from][to]) return;
     if (to == g_nocrew_from && len > 15 && buf[5] == RC_MSG_HELLO){ rc_msg d; if (rc_decode(buf, len, &d) == RC_OK && d.u.hello.n_crews) g_crew_to_old++; }
     if (len > 15 && buf[5] == RC_MSG_HELLO){ rc_msg d; if (rc_decode(buf, len, &d) == RC_OK && d.u.hello.n_crews) g_crew_p2p++; }
@@ -559,8 +561,10 @@ static void net_run(int64_t until, int nn){
                     m.h.flags = RC_HF_CREW; m.u.peers.n_mine = (uint8_t)g_hub_ncrews[i];
                     memcpy(m.u.peers.mine, g_hub_crews[i], sizeof m.u.peers.mine);
                 }
+                for (int j = 0; j < nn; j++) if (g_hub_link[i][j] && g_hub_way[i][j]) m.h.flags = RC_HF_CREW;   /* (one-way links: marks) */
                 for (int j = 0; j < nn; j++)
                     if (g_hub_link[i][j] && m.u.peers.n < RC_MAX_PEERS){
+                        m.u.peers.crew[m.u.peers.n] = g_hub_way[i][j];
                         m.u.peers.e[m.u.peers.n].ip = node_ip(j); m.u.peers.e[m.u.peers.n].port = node_port(j);
                         m.u.peers.e[m.u.peers.n].id = g_n[j].conf.self_id;
                         for (int c = 0; m.h.flags && c < g_hub_ncrews[i]; c++)
@@ -735,6 +739,46 @@ static void t_hub(void){
     rc_shutdown(&g_n[3], 0);
     CHECK(g_hub_bye[3] == 1, "hub: a BYE when we stop");
     g_hub_on = 0;
+}
+
+/* ---- 4c'. one-way links (core 15): we get a car and send it nothing of ours, or the other way round -- */
+static void t_oneway(void){
+    mesh(3, 8);
+    g_hub_on = 1; g_hub_next = 0; memset(g_hub_link, 0, sizeof g_hub_link); memset(g_hub_way, 0, sizeof g_hub_way);
+    for (int i = 0; i < 3; i++){ g_n[i].conf.hub_ip = HUB_IP; g_n[i].conf.hub_port = HUB_PORT; }
+    uint32_t id[3]; for (int i = 0; i < 3; i++) id[i] = g_n[i].conf.self_id;
+    hub_links(0, 1); hub_links(0, 2);
+    g_hub_way[0][1] = RC_MARK_RXONLY; g_hub_way[1][0] = RC_MARK_TXONLY;    /* 0 gets 1's car, 1 gets nothing of 0's */
+    g_n[0].conf.max_players = 2;          /* a group of 2 by broadcast: the hub's list decides, both peers come */
+    drive(3, g_now + 3000000);
+    memset(g_snap_tx, 0, sizeof g_snap_tx);
+    drive(3, g_now + 3000000);
+    int k01 = peer_of(0, id[1]), k10 = peer_of(1, id[0]), k02 = peer_of(0, id[2]);
+    CHECK(k01 >= 0 && k10 >= 0 && k02 >= 0 && g_n[0].peer[k01].state == RC_PS_EST && g_n[1].peer[k10].state == RC_PS_EST &&
+          g_n[0].peer[k02].state == RC_PS_EST, "one way: both ends established, past max_players with the hub's list");
+    CHECK(rc_peer_way(&g_n[0], k01) == RC_MARK_RXONLY && rc_peer_way(&g_n[1], k10) == RC_MARK_TXONLY && rc_peer_way(&g_n[0], k02) == 0,
+          "one way: the hub's marks read (%d %d %d)", rc_peer_way(&g_n[0], k01), rc_peer_way(&g_n[1], k10), rc_peer_way(&g_n[0], k02));
+    CHECK(g_snap_tx[0][1] == 0 && g_snap_tx[1][0] > 40 && g_snap_tx[0][2] > 40 && g_snap_tx[2][0] > 40,
+          "one way: no SNAP to a player who gets nothing of ours, to the others as before (%d %d %d %d)",
+          g_snap_tx[0][1], g_snap_tx[1][0], g_snap_tx[0][2], g_snap_tx[2][0]);
+    CHECK(g_n[0].peer[k01].mo.n > 0 && g_n[1].peer[k10].mo.n == 0 && !g_n[1].peer[k10].lost,
+          "one way: its car at our end, none of ours at its end, and it does not count us lost");
+    /* a game that sends anyway (it ignores RC_MARK_RXONLY): its SNAPs are not taken at the other end */
+    uint32_t pol = g_n[1].rx_policy;
+    for (int r = 0; r < 10; r++){
+        g_n[0].peer[k01].hub_way = 0;
+        rc_state st; memset(&st, 0, sizeof st); st.q[3] = 1; st.t_us = (uint32_t)g_now;
+        g_n[0].next_snap_us = 0; rc_push_state(&g_n[0], &st, g_now);
+        net_run(g_now + 20000, 3);
+    }
+    CHECK(g_n[1].peer[k10].mo.n == 0 && g_n[1].rx_policy > pol, "one way: SNAPs of a player who should send none are dropped (%u)", g_n[1].rx_policy - pol);
+    /* both ways again: SNAPs both ways */
+    memset(g_hub_way, 0, sizeof g_hub_way);
+    drive(3, g_now + 2000000);
+    memset(g_snap_tx, 0, sizeof g_snap_tx);
+    drive(3, g_now + 2000000);
+    CHECK(rc_peer_way(&g_n[0], k01) == 0 && g_snap_tx[0][1] > 20, "one way, then both ways: our SNAPs to it again (%d)", g_snap_tx[0][1]);
+    g_hub_on = 0; for (int i = 0; i < 3; i++) g_n[i].conf.hub_ip = 0;
 }
 
 /* ---- 4d. friends far away: their HELLOs and pings as much rarer as their snapshots -- */
@@ -1855,6 +1899,7 @@ int main(int argc, char **argv){
     t_session();
     t_review();
     t_hub();
+    t_oneway();
     t_far();
     t_duel();
     t_flag();

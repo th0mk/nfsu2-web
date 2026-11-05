@@ -465,6 +465,7 @@ typedef struct {
     int      ghost;                           /* solid cars: no collision body until clear of the player's car */
     int      duel;                            /* the outrun's opponent, solid for the outrun (du_solid; body_update) */
     int      soft;                            /* passable now (SOFT_*): no collision body, whatever the ghost rule */
+    int      oneway;                          /* its player's game does not show ours (PeerView.oneway) */
     int64_t  idle_since;                      /* the friend's car stands since (0: it moves) */
     float    drawn[3];                        /* where the car was drawn last frame (+0x60) */
     float    drawn_v[3];                      /* ...and its velocity there (+0x70) */
@@ -497,6 +498,7 @@ typedef struct {
      * ghost until clear of it, and its reasons to be passable (the friend's own, soft_r, and player 2's) */
     int      seats;
     int      ghost2, soft_r, soft2;
+    int      friend;                          /* a friend (in a crew of ours or not): photo mode's Friends */
 } Slot;
 static Slot g_sl[NSLOT];
 /* Co-op free roam online (coop.c): player 2 is a second endpoint of this browser, a session of its own (roam_web.c
@@ -1058,9 +1060,13 @@ static void ghost2_all(void){ for (int k = 0; k < NSLOT; k++) g_sl[k].ghost2 = 1
  * is passable whoever sees it: its own game says so, and every other game
  * sees its type, so a game that does not say so cannot keep it solid.  A
  * player in a drift battle (du_battling) lets every car through theirs and
- * drives through every other, the other player's too: nobody wrecks a drift. */
+ * drives through every other, the other player's too: nobody wrecks a drift.
+ * A car whose player's game does not show ours (the server's hub links us one
+ * way only: they show fewer players than we do, roam_core rc_peer_way) is
+ * passable too: their game never sees a hit, so a solid car of theirs would
+ * be a wall that nothing moves (SOFT_ONEWAY). */
 enum { SOFT_PAUSED = 1, SOFT_IDLE = 2, SOFT_DOOR = 4, SOFT_SPAWN = 8, SOFT_EVENT = 16, SOFT_SAYS = 32, SOFT_BLOCK = 64,
-       SOFT_TRAFFIC = 128, SOFT_BATTLE = 256 };
+       SOFT_TRAFFIC = 128, SOFT_BATTLE = 256, SOFT_ONEWAY = 512 };
 /* an open event: its trigger's box, and what it leads to (FN_MARKER_WHAT's
  * out[kind]: 1 a race, 2 a shop, 3 a showcase (a cover shoot), 4 another
  * (the table at 0x838424: STAGE_2_SHOW_1, STAGE_3_PERF_1, ...)) */
@@ -1260,7 +1266,7 @@ static void soft_update(Slot *s, const rc_pose *pose, int64_t host){
     else if (!s->idle_since) s->idle_since = host;
     int theirs = (s->paused ? SOFT_PAUSED : 0) | (s->idle_since && host - s->idle_since >= IDLE_US ? SOFT_IDLE : 0) |
                  (near_door(pose->p[0], pose->p[1]) ? SOFT_DOOR : 0) | (pose->bits & RC_BIT_PASS ? SOFT_SAYS : 0) |
-                 (traffic_car(s->car, 0, 0) ? SOFT_TRAFFIC : 0);
+                 (traffic_car(s->car, 0, 0) ? SOFT_TRAFFIC : 0) | (s->oneway ? SOFT_ONEWAY : 0);
     int soft = g_pass.me | theirs;
     if (du_solid(s->car)) soft &= ~(SOFT_EVENT | SOFT_BLOCK | SOFT_SAYS | SOFT_IDLE);
     if (s->soft && !soft) s->ghost = 1;
@@ -1476,7 +1482,11 @@ static void park_all(CPU *c){
 static void release(CPU *c, int k, const char *why){
     Slot *s = &g_sl[k];
     if (s->st == SL_FREE || s->st == SL_PARKED) return;
-    rlog("[roam] f=%ld slot %d: %s's car removed (%s)\n", rh_frame(), k, s->name, why);
+    /* where it went, for the logs of cars that vanished (a shown car: where it was last drawn) */
+    float dx = s->drawn[0] - g_lp[0], dy = s->drawn[1] - g_lp[1];
+    if (s->st == SL_ACTIVE && !s->hidden)
+        rlog("[roam] f=%ld slot %d: %s's car removed (%s), %.0f m away\n", rh_frame(), k, s->name, why, (double)rc_sqrtf(dx * dx + dy * dy));
+    else rlog("[roam] f=%ld slot %d: %s's car removed (%s)\n", rh_frame(), k, s->name, why);
     g_releases++;
     if (s->h_new){ unload_later(s->h_new); s->h_new = 0; s->pending_cfg = 0; }
     /* not made yet: forget it.  A car made whose first look cannot load now
@@ -3904,7 +3914,9 @@ typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; char flag[RC_
                  int horn;             /* their horn (horn.h's kinds) */
                  int crew;             /* in our crew number crew - 1 (rc_peer_crew + 1; FRIEND_CREW: our friend in none
                                           of them, rc_peer_friend; 0: none) */
-                 int seats;            /* co-op: whose peer it is (Slot seats) */ } PeerView;
+                 int seats;            /* co-op: whose peer it is (Slot seats) */
+                 int oneway;           /* the hub links us one way: we get their car, their game does not show ours
+                                          (rc_peer_way RC_MARK_RXONLY) */ } PeerView;
 /* idx: the peer's place in player 1's session (0 .. RC_TABLE - 1), or in player 2's past it (co-op: RC_TABLE + its
  * place there), a view a peer: player 1's session's first */
 #define PV_MAX          (2 * RC_TABLE)
@@ -4581,7 +4593,7 @@ static const PeerView *du_pv(uint32_t id){ for (int i = 0; i < g_npv; i++) if (g
 /* the friend can race now: shown, in free roam and not paused, takes challenges */
 static int du_able(int k){
     const PeerView *v = k >= 0 ? du_pv(g_sl[k].peer_id) : 0;
-    return v && v->visible && !v->paused && v->duels && !g_sl[k].paused;
+    return v && v->visible && !v->paused && v->duels && !v->oneway && !g_sl[k].paused;
 }
 /* the friend's game says it takes no outrun now (near a door or one of their
  * events, in a marker, racing): none offered (the challenge goes on once made) */
@@ -6584,7 +6596,7 @@ static struct {
 #define MSG_MP_MULTI    0x4d505302u
 #define MSG_MP_BACK     0x4d505303u
 /* The card's question and its buttons in the game's language: the languages whose fonts draw their own letters
- * (language_game_letters: Latin-1, Polish's, Turkish's and Hungarian's as their packs have them), as photo.c and
+ * (language_game_letters: Latin-1, Polish's, Turkish's, Hungarian's, Czech's and Slovak's as their packs have them), as photo.c and
  * sms.c do theirs; English for the others (Russian, Ukrainian, Chinese, Japanese, Korean, Thai: their fonts draw
  * ASCII only).  UTF-8 here.  q_lobby: the host's name, then the race's kind (in brackets: every language keeps that
  * order).  Each language's texts in one row of one brace (web/test/log-english.test.mjs takes such a row for the
@@ -6643,6 +6655,14 @@ static const MpTexts mp_texts[] = {
       "Más játékosokkal versenyzel vagy egyedül? Másokkal csak a pénzdíj kerül a karrieredbe.",
       "%s többjátékos versenyt indít itt (%s). Csatlakozol vagy egyedül versenyzel?", " A győzelem mindkét esetben beszámít a karrieredbe.",
       "verseny", "URL verseny", "kör", "sprint", "Street X", "drag", "drift", "Egyedül", "Többjátékos", "Csatlakozás", "Mégse" },
+    { "czech", "Závodit s dalšími hráči, nebo sám? Výhra se ti započítá do kariéry v obou případech, stejně jako výhra kamaráda nebo člena tvé party v tvém závodě.",
+      "Závodit s dalšími hráči, nebo sám? S ostatními jde do kariéry jen finanční odměna.",
+      "%s tu spouští závod více hráčů (%s). Připojit se, nebo jet sám?", " Výhra se ti započítá do kariéry v obou případech.",
+      "závod", "závod URL", "okruh", "sprint", "Street X", "tažení", "drift", "Sólo", "Více hráčů", "Připojit", "Zrušit" },
+    { "slovak", "Pretekať s ďalšími hráčmi, alebo sám? Výhra sa ti započíta do kariéry v oboch prípadoch, rovnako ako výhra kamaráta alebo člena tvojej partie v tvojom závode.",
+      "Pretekať s ďalšími hráčmi, alebo sám? S ostatnými ide do kariéry len finančná odmena.",
+      "%s tu spúšťa závod pre viac hráčov (%s). Pripojiť sa, alebo ísť sám?", " Výhra sa ti započíta do kariéry v oboch prípadoch.",
+      "závod", "závod URL", "okruh", "šprint", "Street X", "drag", "drift", "Sólo", "Viac hráčov", "Pripojiť sa", "Zrušiť" },
 };
 const char *language_name(void);
 void language_game_letters(const char *utf8, char *out, size_t n);
@@ -8093,6 +8113,7 @@ static void cost_add(uint64_t t0){
     g_cost_win_sum += ns; g_cost_win_n++; if (ns > g_cost_win_max) g_cost_win_max = ns;
 }
 static uint32_t g_cp_n_get(void);
+static struct { uint64_t frames, calls, us; } g_lsv;   /* load_service: frames it ran in, its calls, its time */
 static void periodic_log(int64_t host){
     if (!g_cost_win_t0) g_cost_win_t0 = host;
     if (host - g_cost_win_t0 < 30000000) return;
@@ -8112,6 +8133,11 @@ static void periodic_log(int64_t host){
         rlog("[roam]   player 2 (co-op, port %u): %d friend(s), tx %u (%.1f KB), rx %u, bad %u, hub %s, %u lists; contacts let through %u\n",
              g_c2.port, rc_established(&g_c2.s), g_c2.s.tx, g_c2.s.tx_bytes / 1024.0, g_c2.s.rx, g_c2.s.rx_bad,
              g_c2.s.hub_was == 2 ? "answering" : g_c2.s.hub_was == 1 ? "no answer yet" : "silent", g_c2.s.hub_lists, g_cp_n_get());
+    if (g_lsv.frames){
+        rlog("[roam]   friends' cars' reads served again in %llu frame(s), %llu time(s), %.1f ms in all\n", (unsigned long long)g_lsv.frames,
+             (unsigned long long)g_lsv.calls, g_lsv.us / 1e3);
+        memset(&g_lsv, 0, sizeof g_lsv);
+    }
     if (g_shold.n){
         rlog("[roam]   friends' cars waited for the city's sections %d time(s), %.1f s in all, the longest %.0f ms%s\n", g_shold.n,
              g_shold.us / 1e6, g_shold.max / 1e3, g_shold.gone ? " (some went after 5 s)" : "");
@@ -8130,6 +8156,41 @@ static void periodic_log(int64_t host){
     }
     roam_plat_unlock();
     g_cost_win_t0 = host; g_cost_win_sum = g_cost_win_n = g_cost_win_max = 0;
+}
+
+/* Friends' cars load in fewer frames.  The game finishes at most one read
+ * a frame (0x57EF60, from the main loop at 0x5814C7: it starts the reads
+ * queued, then ends the first one under way and calls its callback), and a
+ * friend's car is some 30 to 50 reads one after another (GEOMETRY.BIN's,
+ * merged 16 at a time, TEXTURES.BIN's, the vinyls'), each one's callback
+ * asking for the next: 30 to 60 frames a car, 0.25 to 0.5 s at 120 fps and
+ * twice that at 60 (players' logs of 2026-11-03, 48 cars: median 270 to 290
+ * ms, p90 560 to 710 ms), so the cars of a busy place took 15 to 30 s to
+ * show.  In the browser a read is done when ReadFile returns (fileio.c: the
+ * I/O worker's pread, from the device's cache in well under a ms), so while
+ * a friend's car is in the loader and the city's sections have nothing to
+ * read, the service runs again, until the loader is done or LOAD_SERVICE_US
+ * went by.  (A block from the network holds the game up as long as it does
+ * at the main loop's own call.)  Not on Windows: there a read is the
+ * system's, under way for a while.  NFSU2_ROAM_LOAD_SERVICE=0 (test aid):
+ * once a frame, as the game does. */
+#define READ_SERVICE    0x0057ef60u
+#define LOAD_SERVICE_US 2000
+static void load_service(CPU *c){
+#ifndef ROAM_HOST_WIN
+    static int off = -1;
+    if (off < 0){ const char *e = rh_opt("NFSU2_ROAM_LOAD_SERVICE"); off = e && *e == '0'; }
+    if (off || !rd32(G_CARLOADER + LOADER_BUSY) || rd32(G_TRACKSTREAMER + 0x168u) || !loads_in_loader(c)) return;
+    int64_t t0 = roam_plat_now_us(), t = t0;
+    int n = 0;
+    for (; n < 64 && rd32(G_CARLOADER + LOADER_BUSY) && !rd32(G_TRACKSTREAMER + 0x168u) && t - t0 < LOAD_SERVICE_US; n++){
+        gcall0(c, READ_SERVICE, 0);
+        t = roam_plat_now_us();
+    }
+    g_lsv.frames++; g_lsv.calls += (uint64_t)n; g_lsv.us += (uint64_t)(t - t0);
+#else
+    (void)c;
+#endif
 }
 
 static int loads_waiting(void){
@@ -8294,6 +8355,38 @@ static void assign(CPU *c, int64_t host){
         rlog("[roam] f=%ld slot %d (%s) for %s, %.0f m away\n", rh_frame(), k,
                 k < NOPP ? "free-roam opponent car" : "car of our own", s->name, (double)v->dist);
     }
+}
+
+/* A test aid (NFSU2_ROAM_COUNTS=1, in a scripted run only): once a second,
+ * how many friends' cars show and why the others do not, for the car meet
+ * runs (tests/scripts/roam_crowd_meet.txt): cars shown, loading, parked;
+ * peers, the ones the hub lists, and the ones waiting for a slot (listed,
+ * in free roam, a record and a place known, no slot) */
+static void counts_log(int64_t host){
+    static int on = -1; static int64_t at;
+    if (on < 0){ const char *s = rh_opt("NFSU2_INPUT_SCRIPT"), *e = rh_opt("NFSU2_ROAM_COUNTS"); on = s && *s && e && *e == '1'; }
+    if (!on || host - at < 1000000) return;
+    at = host;
+    int shown = 0, loading = 0, parked = 0, listed = 0, waiting = 0, near = 0, near_shown = 0, mid = 0, mid_shown = 0, oneway = 0;
+    for (int k = 0; k < NSLOT; k++){
+        const Slot *s = &g_sl[k];
+        shown += s->st == SL_ACTIVE && !s->hidden;
+        loading += s->st == SL_LOADING || s->st == SL_CREATING || (s->st == SL_ACTIVE && s->h_new);
+        parked += s->st == SL_PARKED;
+    }
+    for (int i = 0; i < g_npv; i++){
+        const PeerView *v = &g_pv[i];
+        int slotted = 0;
+        for (int k = 0; k < NSLOT; k++)
+            if (g_sl[k].st != SL_FREE && g_sl[k].st != SL_PARKED && g_sl[k].peer == v->idx && g_sl[k].peer_id == v->id) slotted = 1 + (g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden);
+        listed += v->listed;
+        oneway += v->oneway && slotted == 2;
+        waiting += !slotted && v->visible && v->listed && v->has_cfg && v->have_pose;
+        if (v->visible && v->dist < 60.f){ near++; near_shown += slotted == 2; }
+        if (v->visible && v->dist < 150.f){ mid++; mid_shown += slotted == 2; }
+    }
+    rlog("[roam] f=%ld counts: t %.1f s, shown %d (%d one way), loading %d, parked %d; peers %d, listed %d, waiting %d; within 60 m %d, shown %d; "
+         "within 150 m %d, shown %d\n", rh_frame(), host / 1e6, shown, oneway, loading, parked, g_npv, listed, waiting, near, near_shown, mid, mid_shown);
 }
 
 /* a different world: every slot of the old one is gone */
@@ -8912,13 +9005,14 @@ void roam_game_frame(CPU *c){
             /* (outruns are player 1's: with its session's peers only) */
             v->paused = p->status == RC_ST_PAUSED; v->duels = ses == &g_s && p->duels; v->drifts = ses == &g_s && p->drifts;
             v->listed = rc_peer_listed(ses, i);
+            v->oneway = (rc_peer_way(ses, i) & RC_MARK_RXONLY) != 0;
             v->roams = p->status == RC_ST_ROAM || p->status == RC_ST_PAUSED;
             v->crew = rc_peer_crew(ses, i) + 1;
             if (!v->crew && rc_peer_friend(ses, i)) v->crew = FRIEND_CREW;
             v->cfg_gen = p->cfg_gen; v->cfg_len = 0; v->has_cfg = p->cfg_len > 0; v->err = 0;
             int slotted = -1;
             for (int k = 0; k < NSLOT; k++) if (g_sl[k].st != SL_FREE && g_sl[k].st != SL_PARKED && g_sl[k].peer == gi && g_sl[k].peer_id == p->id) slotted = k;
-            if (slotted >= 0) g_sl[slotted].crew = v->crew;
+            if (slotted >= 0){ g_sl[slotted].crew = v->crew; g_sl[slotted].friend = rc_peer_friend(ses, i) != 0; }
             /* the record only when a slot will need it */
             if (p->cfg_len && (slotted < 0 || g_sl[slotted].cfg_gen != p->cfg_gen)){
                 memcpy(v->cfg, p->cfg, (size_t)p->cfg_len); v->cfg_len = p->cfg_len; v->look = rc_fnv1a_bytes(p->cfg, (uint32_t)p->cfg_len); }
@@ -9000,6 +9094,7 @@ void roam_game_frame(CPU *c){
             if (!v) continue;
             s->seats = v->seats;
             if (strcmp(s->flagcode, v->flag)){ memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode); }
+            s->oneway = v->oneway;
             /* a second first: a hitch in the friend's game (streaming) is a pause too */
             if (!v->paused) s->paused_since = 0;
             else if (!s->paused_since) s->paused_since = host;
@@ -9057,7 +9152,9 @@ void roam_game_frame(CPU *c){
             } else if (!s->hidden && !(g_du.st == DU_RACE && s->car == g_du.car)){ soft_park(c, s->car); s->hidden = 1; }
             /* (an outrun's opponent stays where it was: parked, the game would count it 120 km behind) */
         }
+        load_service(c);
         if (!g_photo_hold) cars_cut(c, w, host);
+        counts_log(host);
         arrows_update(c, w);
         arrow_colours(c, w);
         near_update(c, w, host, 1);
@@ -9157,14 +9254,19 @@ int roam_game_placed(uint32_t data){
 /* photo mode (photo.c): whether friends' names can show here, and the names over their cars, and the player's own over
  * theirs, placed for photo mode's camera (its frame of the front end, which draws them alone): the FE objects shown */
 int roam_game_names_here(void){ return O.on && g_net_ok && O.labels && g_in_roam && MR8(G_SHOW_NAMES); }
-/* photo mode's Cars: Friends & crews: whether the car of this render info (car +0x554) is one of ours whose player is
- * a friend or in one of the player's crews (its slot's crew, FRIEND_CREW for a friend in none) */
-int roam_game_buddy_car(uint32_t ri){
-    for (int k = 0; k < NSLOT && ri; k++){
+/* ...and whether other players' cars can be here at all (photo mode's Friends, Crews and Players boxes) */
+int roam_game_online_here(void){ return O.on && g_net_ok && g_in_roam; }
+/* photo mode's cars shown and the car its camera is on: what player this car is (the slot's car itself): -1 none of
+ * ours (the player's own, traffic, the game's racers), 0 another player, 1 a friend, 2 a crew-mate (a friend in a crew
+ * of ours: 1); name: theirs */
+int roam_game_slot_kind(uint32_t car, const char **name){
+    for (int k = 0; k < NSLOT && car; k++){
         const Slot *s = &g_sl[k];
-        if (s->st == SL_ACTIVE && s->crew && ok(s->car, 0x558) && MR32(s->car + 0x554u) == ri) return 1;
+        if (s->st != SL_ACTIVE || s->car != car) continue;
+        if (name) *name = s->name;
+        return s->friend || s->crew == FRIEND_CREW ? 1 : s->crew ? 2 : 0;
     }
-    return 0;
+    return -1;
 }
 int roam_game_names(CPU *c, uint32_t *obj, int max){
     if (!roam_game_names_here()) return 0;
@@ -9429,12 +9531,13 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
                     car ? MR32(car + 0x24u) : 0, car ? MR32(car + 0x28u) : 0, car ? MR32(car + 0x554u) : 0, car ? (int16_t)MR16(car + 8u) : -1,
                     car ? (double)MRF32(car + 0x50u) : 0, car ? (double)MRF32(car + 0x54u) : 0, car ? (double)MRF32(car + 0x58u) : 0);
             uint32_t body = car ? rd32(car + 0x3cu) : 0;
-            if (car) rlog("[roam]     %s%s%s%s%s%s%s%s%s%s%s; collision body %s%s; %u hit(s) with my car (at most %.1f m/s)\n", g_sl[k].duel ? "the outrun's, " : "",
+            if (car) rlog("[roam]     %s%s%s%s%s%s%s%s%s%s%s%s; collision body %s%s; %u hit(s) with my car (at most %.1f m/s)\n", g_sl[k].duel ? "the outrun's, " : "",
                           !O.collide && !g_sl[k].duel ? "solid cars off" : g_sl[k].soft ? "passable:" : g_sl[k].ghost ? "a ghost" : "solid",
                           g_sl[k].soft & SOFT_PAUSED ? " paused" : "", g_sl[k].soft & SOFT_IDLE ? " standing" : "",
                           g_sl[k].soft & SOFT_DOOR ? " near a door" : "", g_sl[k].soft & SOFT_SPAWN ? " at the start" : "",
                           g_sl[k].soft & SOFT_EVENT ? " near my event" : "", g_sl[k].soft & SOFT_BLOCK ? " my car in the way" : "",
                           g_sl[k].soft & SOFT_SAYS ? " says so" : "", g_sl[k].soft & SOFT_TRAFFIC ? " a traffic car" : "",
+                          g_sl[k].soft & SOFT_ONEWAY ? " theirs shows fewer (one way)" : "",
                           g_sl[k].soft && g_sl[k].ghost ? " (then a ghost)" : "",
                           !ok(body, 0x20) ? "none" : MR8(body + 0x17u) ? "off" : "on", DUELS && du_busy(k) ? "; takes no outrun now" : "",
                           g_sl[k].hits, (double)g_sl[k].hit_max);

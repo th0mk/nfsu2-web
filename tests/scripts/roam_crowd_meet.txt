@@ -1,0 +1,47 @@
+# Free roam at a car meet (web/tools/roam-crowd.mjs --meet): about 50 players
+# standing round the new career's start and 40 driving by, and a second
+# meet at the car lot, 2.4 km off.  The player stands among the first one
+# for MEET_STAND frames, then jumps to the car lot and back JUMPS times,
+# MEET_STAY frames at each: how many friends' cars show, how many load and
+# go, and how long they take to show after each jump in (NFSU2_ROAM_COUNTS's
+# line once a second, the slots' lines, "waitcars ... satisfied after").
+#   web: roam-crowd --n 90 --meet 1695,-884,24.1 --links 64 --cars all and
+#        roam-crowd --n 70 --first 90 --meet -727,-890,17 --links 64 --cars all
+#        on the same server (--max-peers 1000), then run-suite.mjs --script
+#        roam_crowd_meet.txt --marker meet_end --net <name> --env NFSU2_ROAM=1
+#        --env NFSU2_ROAM_WEBTEST=vlan --env ROAM_PROFILE=<name>
+#        --env NFSU2_ROAM_MAX_CARS=64 --env NFSU2_ROAM_COUNTS=1
+#        --env NFSU2_ROAM_COLLIDE=0 --env MEET_CARS=58 --env MEET_WAIT=3600
+#        --env MEET_STAND=10800 --env MEET_STAY=3600 --env JUMPS=3
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    log MEET first
++0    roam mp waitcars ${MEET_CARS} ${MEET_WAIT}
++${MEET_STAND} log MEET stood
++0    loop ${JUMPS}
++0    log MEET to the car lot
++0    roam shopgo CC_CAR_LOT_1
++0    roam mp waitcars ${MEET_CARS} ${MEET_WAIT}
++${MEET_STAY} log MEET back
++0    teleport 1695 -884 24
++0    roam mp waitcars ${MEET_CARS} ${MEET_WAIT}
++${MEET_STAY} log MEET stayed
++0    endloop
++60   status meet_end
++60   quit

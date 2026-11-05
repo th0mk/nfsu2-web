@@ -188,6 +188,105 @@ fn a_name_change_takes_the_lists_along() {
     assert!(w.logged("lists moved from \"alpha\""), "{:?}", w.text());
 }
 
+// a name changed on the start page, the Messenger never opened: the page's next look at its lists moves them, into
+// the list the new name got meanwhile (a request to it), and the friend's list names it so, over a restart too
+#[test]
+fn a_name_change_on_the_page_takes_the_lists_along() {
+    use crate::buddy::FriendAsk::{Ask, List};
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("online");
+    let claims = Arc::new(Claims::in_memory());
+    let mut w = world_with(&claims, Some(dir.clone()));
+    let [a, b, c] = ['A', 'B', 'C'].map(|k| owner_of_token(&token(k)).unwrap());
+    for (n, o) in [("Alpha", &a), ("Bravo", &b), ("Charlie", &c)] {
+        claims.claim(n, o, now(&w)).unwrap();
+    }
+    let g: Arc<str> = Arc::from("g1");
+    let names = |r: &crate::buddy::FriendReply| r.friends.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+    assert_eq!(w.core.friends(&a, &g, Ask("Bravo".into())).done, "asked");
+    assert_eq!(w.core.friends(&b, &g, Ask("Alpha".into())).done, "friends");
+    w.core.buddy_save();
+    claims.claim("Speedy", &a, now(&w)).unwrap();
+    assert_eq!(w.core.friends(&c, &g, Ask("Speedy".into())).done, "asked");
+    let r = w.core.friends(&a, &g, List);
+    assert_eq!((r.me.as_deref(), names(&r), r.asks.clone()), (Some("Speedy"), vec!["Bravo".to_string()], vec!["Charlie".to_string()]));
+    assert_eq!(names(&w.core.friends(&b, &g, List)), ["Speedy"]);
+    assert!(w.core.buddies.list("Alpha").is_none());
+    assert!(w.logged("lists moved from \"alpha\""), "{:?}", w.text());
+    // once only: the next look finds nothing left under the old name
+    let moves = |w: &World| w.text().iter().filter(|l| l.contains("lists moved")).count();
+    let n = moves(&w);
+    assert_eq!(names(&w.core.friends(&a, &g, List)), ["Bravo"]);
+    assert_eq!(moves(&w), n);
+    w.core.stop();
+    let text = crate::buddy::shelf_texts(&dir).join("\n");
+    assert!(!text.contains("\"Alpha\""), "{text}");
+    let mut w = world_with(&claims, Some(dir.clone()));
+    assert_eq!(names(&w.core.friends(&a, &g, List)), ["Bravo"]);
+    assert_eq!(names(&w.core.friends(&b, &g, List)), ["Speedy"]);
+}
+
+// the two lists in one stay within a list's limits, on both sides: requests to the old name and to the new one, more
+// than a list keeps, leave the newest; the askers whose request went no longer have it as sent
+#[test]
+fn a_name_change_keeps_both_sides_within_the_limits() {
+    use crate::buddy::FriendAsk::{Ask, List};
+    let claims = Arc::new(Claims::in_memory());
+    let mut w = world_with(&claims, None);
+    let a = owner_of_token(&token('A')).unwrap();
+    claims.claim("Alpha", &a, now(&w)).unwrap();
+    let askers: Vec<(String, Arc<str>)> = (0..30)
+        .map(|i| {
+            let o = owner_of_token(&format!("{i:0>43}")).unwrap();
+            let n = format!("Fan{i}");
+            claims.claim(&n, &o, now(&w)).unwrap();
+            (n, o)
+        })
+        .collect();
+    let g: Arc<str> = Arc::from("g1");
+    for (i, (_, o)) in askers.iter().enumerate() {
+        if i == 15 {
+            claims.claim("Speedy", &a, now(&w)).unwrap();
+        }
+        w.advance(1000.0);
+        // (each from its own network: a network makes only so many lists)
+        let gi: Arc<str> = Arc::from(format!("g{i}"));
+        assert_eq!(w.core.friends(o, &gi, Ask(if i < 15 { "Alpha" } else { "Speedy" }.into())).done, "asked", "{i}");
+    }
+    let r = w.core.friends(&a, &g, List);
+    assert_eq!(r.me.as_deref(), Some("Speedy"));
+    assert_eq!(r.asks.len(), 20, "{:?}", r.asks);
+    for (n, o) in &askers {
+        let sent = w.core.friends(o, &g, List).sent;
+        let kept = r.asks.contains(n);
+        assert_eq!(sent, if kept { vec!["Speedy".to_string()] } else { vec![] }, "{n}: kept {kept}");
+    }
+    assert!(r.asks.contains(&"Fan29".to_string()), "the newest stay");
+}
+
+// a list of another keyphrase's claim on the new name, ended (its cloud saves deleted) while the list stayed in
+// memory, is not taken in: the player who claims that name next gets its own friends only
+#[test]
+fn a_name_change_takes_no_one_elses_list() {
+    use crate::buddy::FriendAsk::{Ask, List};
+    let claims = Arc::new(Claims::in_memory());
+    let mut w = world_with(&claims, None);
+    let [a, b, c, x] = ['A', 'B', 'C', 'X'].map(|k| owner_of_token(&token(k)).unwrap());
+    for (n, o) in [("Alpha", &a), ("Bravo", &b), ("Charlie", &c), ("Speedy", &x)] {
+        claims.claim(n, o, now(&w)).unwrap();
+    }
+    let g: Arc<str> = Arc::from("g1");
+    let names = |r: &crate::buddy::FriendReply| r.friends.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+    assert_eq!(w.core.friends(&x, &g, Ask("Bravo".into())).done, "asked");
+    assert_eq!(w.core.friends(&b, &g, Ask("Speedy".into())).done, "friends");
+    assert_eq!(w.core.friends(&a, &g, Ask("Charlie".into())).done, "asked");
+    assert_eq!(w.core.friends(&c, &g, Ask("Alpha".into())).done, "friends");
+    assert_eq!(claims.release(&x), 1);
+    claims.claim("Speedy", &a, now(&w)).unwrap();
+    let r = w.core.friends(&a, &g, List);
+    assert_eq!((r.me.as_deref(), names(&r)), (Some("Speedy"), vec!["Charlie".to_string()]));
+}
+
 // free roam's pages befriend through the Messenger's lists, as their keyphrase's claimed name: a request waits on
 // both lists, a request back makes friends, and the Messenger hears of it; names nobody claimed take no part
 #[test]

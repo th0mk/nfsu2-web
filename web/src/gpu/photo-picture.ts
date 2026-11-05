@@ -4,10 +4,19 @@
 // the eye over a lens: the blur away from the focus), which add up, frame n weighing 1/n.  The canvas shows that
 // average with the picture's look (photo mode's panel: exposure, filter, vignette) and the crop's preview (the rest
 // dimmed, lines of thirds), and F12 keeps it: the same look at the picture's own size, the crop's rectangle of it, read
-// back (index.ts).  The look is wgsl.ts PHOTO.
+// back (index.ts).  The look is wgsl.ts PHOTO.  A picture bigger than the screen comes as tiles, each a still picture
+// of its part of the view, read out as it is whole (shot() with the tile's place: the vignette is the whole picture's)
+// while the canvas keeps showing the whole view as it was (hold()); a fisheye bends the picture round as it is shown
+// and kept (the game draws it wider: GwPhoto's fov).
 import { PHOTO } from './wgsl';
 
 export const PH_OFF = 0, PH_LIVE = 1, PH_ADD = 2, PH_DONE = 3, PH_NOW = 4;
+const LOOK_BYTES = 112;
+
+/** a tile's place in the whole picture: its column and row of n a side */
+export interface PhotoTile { x: number; y: number; n: number }
+/** the fisheye: the field of view the frame was drawn with (degrees across), its width over its height */
+export interface PhotoFisheye { fov: number; aspect: number }
 
 /** the picture's look (app/photo.ts) */
 export interface PhotoLook {
@@ -30,9 +39,12 @@ export class PhotoPicture {
   private addPipe: GPURenderPipeline;
   private lookPipes = new Map<GPUTextureFormat, GPURenderPipeline>();
   private bufShow: GPUBuffer; private bufShot: GPUBuffer;
-  private args = new Float32Array(20);
+  private args = new Float32Array(LOOK_BYTES / 4);
   private acc: GPUTexture | null = null; private accView: GPUTextureView | null = null;
   private shotTex: GPUTexture | null = null; private shotView: GPUTextureView | null = null;
+  private holdTex: GPUTexture | null = null; private holdView: GPUTextureView | null = null;
+  /** the fisheye the picture is shown and kept with (null: as drawn) */
+  fisheye: PhotoFisheye | null = null;
   private bgs = new WeakMap<GPUTextureView, Map<string, GPUBindGroup>>();
   /** the frames in the average */
   count = 0;
@@ -55,8 +67,8 @@ export class PhotoPicture {
       vertex: { module: this.mod, entryPoint: 'vs_full' },
       fragment: { module: this.mod, entryPoint: 'fs_add', targets: [{ format: 'rgba16float', blend: { color: blend, alpha: blend } }] },
       primitive: { topology: 'triangle-list' } });
-    this.bufShow = d.createBuffer({ label: 'photo look', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.bufShot = d.createBuffer({ label: 'photo look (picture)', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.bufShow = d.createBuffer({ label: 'photo look', size: LOOK_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.bufShot = d.createBuffer({ label: 'photo look (picture)', size: LOOK_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   }
 
   private bg(src: GPUTextureView, smp: GPUSampler, buf: GPUBuffer, key: string): GPUBindGroup {
@@ -86,9 +98,9 @@ export class PhotoPicture {
    *  it is in: frames the page skips never leave a gap, and a frame drawn twice counts once) */
   add(enc: GPUCommandEncoder, src: GPUTextureView, w: number, h: number, smp: GPUSampler, state: number, n: number, target: number, gen: number) {
     if (!this.acc || this.acc.width !== w || this.acc.height !== h) {
-      this.acc?.destroy(); this.shotTex?.destroy(); this.shotTex = this.shotView = null;
+      this.acc?.destroy(); this.shotTex?.destroy(); this.shotTex = this.shotView = null; this.release();
       this.acc = this.device.createTexture({ label: 'photo average', size: [w, h], format: 'rgba16float',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
       this.accView = this.acc.createView();
       this.count = 0; this.gen = 0;
     }
@@ -107,14 +119,30 @@ export class PhotoPicture {
     pass.end();
   }
 
-  private fill(look: PhotoLook, tone: ArrayLike<number> | null, preview: [number, number] | null) {
-    const a = this.args, c = look.crop;
+  private fill(look: PhotoLook, tone: ArrayLike<number> | null, preview: [number, number] | null, tile?: PhotoTile) {
+    const a = this.args, c = look.crop, n = tile?.n ?? 1, f = this.fisheye;
+    // the fisheye's: the tangent of the picture's half diagonal as drawn (its half width's times the diagonal's share)
+    const tc = f ? Math.tan(Math.min(170, Math.max(1, f.fov)) * Math.PI / 360) * Math.hypot(1, 1 / f.aspect) : 0;
     a.set([look.exposure, look.contrast, look.saturation, look.vignette,
       look.tint[0], look.tint[1], look.tint[2], look.fade,
       tone ? tone[0] : 1, tone ? tone[1] : 1, tone ? tone[2] : 1, tone ? 1 : 0,
       c[0], c[1], c[2], c[3],
-      look.grid ? 1 : 0, preview ? 1 : 0, preview ? preview[0] * (c[2] - c[0]) : 0, preview ? preview[1] * (c[3] - c[1]) : 0]);
+      look.grid ? 1 : 0, preview ? 1 : 0, preview ? preview[0] * (c[2] - c[0]) : 0, preview ? preview[1] * (c[3] - c[1]) : 0,
+      (tile?.x ?? 0) / n, (tile?.y ?? 0) / n, 1 / n, 1 / n,
+      f ? 1 : 0, tc, f?.aspect ?? 1, 0]);
   }
+
+  /** the canvas keeps showing the picture as it is now (a picture in tiles is being taken: the average holds tiles) */
+  hold(enc: GPUCommandEncoder) {
+    if (!this.acc || this.holdTex) return;
+    this.holdTex = this.device.createTexture({ label: 'photo picture held', size: [this.acc.width, this.acc.height], format: 'rgba16float',
+      usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING });
+    this.holdView = this.holdTex.createView();
+    enc.copyTextureToTexture({ texture: this.acc }, { texture: this.holdTex }, [this.acc.width, this.acc.height]);
+  }
+  /** ...and the average again */
+  release() { this.holdTex?.destroy(); this.holdTex = this.holdView = null; }
+  get holding() { return !!this.holdTex; }
 
   /** the average with its look into dst (the canvas), in the viewport vp, with Exposure and White Level (tone) and the
    *  crop's preview */
@@ -125,15 +153,15 @@ export class PhotoPicture {
     this.device.queue.writeBuffer(this.bufShow, 0, this.args);
     const pass = enc.beginRenderPass({ colorAttachments: [{ view: dst, loadOp: 'clear', clearValue: [0, 0, 0, 1], storeOp: 'store' }], timestampWrites: ts });
     pass.setPipeline(this.lookPipe(format));
-    pass.setBindGroup(0, this.bg(this.accView, smp, this.bufShow, 'show'));
+    pass.setBindGroup(0, this.bg(this.holdView ?? this.accView, smp, this.bufShow, 'show'));
     pass.setViewport(vp[0], vp[1], vp[2], vp[3], 0, 1);
     pass.draw(3);
     pass.end();
   }
 
   /** the picture as kept: the look over the average at its own size (no Exposure and White Level, no preview), and the
-   *  crop's rectangle of it in pixels */
-  shot(enc: GPUCommandEncoder, smp: GPUSampler, look: PhotoLook): { tex: GPUTexture; x: number; y: number; w: number; h: number } | null {
+   *  crop's rectangle of it in pixels (a tile's: the whole tile, its look as the whole picture's part) */
+  shot(enc: GPUCommandEncoder, smp: GPUSampler, look: PhotoLook, tile?: PhotoTile): { tex: GPUTexture; x: number; y: number; w: number; h: number } | null {
     if (!this.acc || !this.accView) return null;
     const W = this.acc.width, H = this.acc.height;
     if (!this.shotTex) {
@@ -141,18 +169,19 @@ export class PhotoPicture {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
       this.shotView = this.shotTex.createView();
     }
-    this.fill(look, null, null);
+    this.fill(look, null, null, tile);
     this.device.queue.writeBuffer(this.bufShot, 0, this.args);
     const pass = enc.beginRenderPass({ colorAttachments: [{ view: this.shotView!, loadOp: 'clear', clearValue: [0, 0, 0, 1], storeOp: 'store' }] });
     pass.setPipeline(this.lookPipe('bgra8unorm'));
     pass.setBindGroup(0, this.bg(this.accView, smp, this.bufShot, 'shot'));
     pass.draw(3);
     pass.end();
+    if (tile) return { tex: this.shotTex, x: 0, y: 0, w: W, h: H };
     const c = look.crop;
     const x = Math.max(0, Math.min(W - 1, Math.round(c[0] * W))), y = Math.max(0, Math.min(H - 1, Math.round(c[1] * H)));
     const w = Math.max(1, Math.min(W - x, Math.round((c[2] - c[0]) * W))), h = Math.max(1, Math.min(H - y, Math.round((c[3] - c[1]) * H)));
     return { tex: this.shotTex, x, y, w, h };
   }
 
-  destroy() { this.acc?.destroy(); this.shotTex?.destroy(); this.acc = this.shotTex = null; this.accView = this.shotView = null; }
+  destroy() { this.acc?.destroy(); this.shotTex?.destroy(); this.release(); this.acc = this.shotTex = null; this.accView = this.shotView = null; }
 }

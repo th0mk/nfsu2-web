@@ -44,7 +44,9 @@ and it says something only when it is worth it:
   seconds that pings the asker: one line in their language, made only of what that answer says (the page's labels
   as the page names them, as for the FAQ's buttons). The asker's lines of 8 seconds make one question; one Haiku
   call reads them in the chat around them and names the answer and writes the line, or none when unsure. Nothing for staff, chat, answers
-  to others, or someone already answered; the same answer to a person once a day, 5 a person a day, 60 an hour.
+  to others, or someone already answered; the same answer to a person once a day (a follow-up within 20 minutes may
+  get another part of it, never a line they had), 5 a person a day, 60 an hour. Besides the FAQ's buttons it answers
+  from `faq.md`'s "Only in #help" section, which has no buttons.
   Each answer gets 👍 and 👎 from the bot, for the staff: the daily note counts the votes on the answers 6 hours old
   or more (the bot's own left out) and lists the ones with a 👎; every counted answer goes to `state/help-votes.jsonl`
   (time, FAQ answer, language, votes, the question, the line, its link).

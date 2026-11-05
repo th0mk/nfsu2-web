@@ -511,6 +511,8 @@ export class FriendsPanel {
     const say = (text: string, warn: boolean) => { this.addNote = { text, warn }; };
     if (done === 'asked') say(t('Friend request sent to {name}', { name: shown }), false);
     else if (done === 'friends') say(t('You and {name} are friends', { name: shown }), false);
+    // (the server says "claim" for this player's own name too: its claim gone since the list was drawn)
+    else if (done === 'claim' && !r?.me) say(t('Claim your name (Online, Your name) to add friends.'), true);
     else if (done === 'claim') say(t('{name} has no claimed name, so can\'t add friends yet', { name }), true);
     else if (done === 'self') say(t('That\'s your own name'), true);
     else if (done === 'name') say(t('Not a player\'s name'), true);

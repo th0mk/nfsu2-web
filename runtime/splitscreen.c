@@ -716,8 +716,9 @@ static void split_main_react(CPU *c){
 }
 /* ---- the labels in the game's language ---------------------------------------------------------------
  * The Latin-script languages: texts of ours, in each game's own words ("Splitscreen", "Ecran partagé" ...), into
- * the letters their fonts draw (language.c language_game_letters: Polish's, Turkish's, Hungarian's own).  The
- * others' fonts spell in orders of their own, so theirs are cut from the game's own texts in that language:
+ * the letters their fonts draw (language.c language_game_letters: Polish's, Turkish's, Hungarian's, Czech's,
+ * Slovak's own).  The others' fonts spell in orders of their own, so theirs are cut from the game's own texts in
+ * that language:
  * 0x6A2B93EB "2 Player Split-Screen" (the menu item's name, which ours replaces), 0xD9DC2F12 "PLAYER", 0xD87133BC
  * "Player 1", 0x1F181F57 "Press START" (0xEEEB248E "Press START button" where that is empty).  English where a cut
  * does not find what it expects (a language pack of another make). */
@@ -762,6 +763,12 @@ static const struct { const char *lang, *split, *players, *player, *player_up, *
     { "hungarian",  "Osztott képernyő", "%u játékos", "%u. Játékos", "%u. JÁTÉKOS",
                       "%u. Játékos: nyomj START gombot", "%u. Játékos: nyomj START vagy Enter gombot",
                       "%u. Játékos: nyomj START vagy Szóköz gombot" },
+    { "czech",      "Rozdělená obrazovka", "%u hráči", "Hráč %u", "HRÁČ %u",
+                      "Hráč %u: stiskni START", "Hráč %u: stiskni START nebo Enter",
+                      "Hráč %u: stiskni START nebo mezerník" },
+    { "slovak",     "Rozdelená obrazovka", "%u hráči", "Hráč %u", "HRÁČ %u",
+                      "Hráč %u: stlač START", "Hráč %u: stlač START alebo Enter",
+                      "Hráč %u: stlač START alebo medzerník" },
 };
 /* a text of the game's in its own letters (empty when it has none) */
 static int split_game_text(uint32_t hash, char *out, size_t n){

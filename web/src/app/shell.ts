@@ -475,7 +475,7 @@ function playDeps(): PlayNameDeps {
   return {
     claims, seed: pageId, linked: () => vault.linked(), log: logLine,
     choose: (title, body, ok, cancel) => choiceBox(title, body, ok, cancel),
-    save: n => settings.putName(n),
+    save: n => settings.putName(n), claimed: () => claimedName ?? null,
   };
 }
 
@@ -496,7 +496,7 @@ async function playName(): Promise<string | null> {
   if (r.env.NFSU2_ROAM !== '1' && r.env.NFSU2_ONLINE === '0') return null;
   const typed = await typedName();
   const name = await settleName(playDeps(), typed, SAVE, quietCheck);
-  if (name && name !== onlineName(typed)) log.add('[app] your name: this game plays under another (digits, or one picked)');
+  if (name && name !== onlineName(typed)) log.add('[app] your name: this game plays under another (the claimed name, digits, or one picked)');
   return name;
 }
 
@@ -2199,6 +2199,7 @@ export async function boot() {
     // the tab that owns the saves is the one whose Play reads the file: another tab only looks
     readOnly: () => !instance.owner, say: pageToast, confirm: confirmBox,
     nameRow: (row, input, ctl) => nameRow.attach(row, input, ctl),
+    quietSave: (key, value) => key === 'roam_name' && nameRow.notPlayed(value),
   }, $('#online'));
   // the language picker at the top: the same setting as the Game tab's Language
   const pick = $<HTMLSelectElement>('#lang-pick');

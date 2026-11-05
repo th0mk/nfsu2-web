@@ -47,6 +47,15 @@ pub(crate) const HF_HUBCREW: u16 = 0x0400;
 pub(crate) const HF_SEAT2: u16 = 0x2000;
 /// in a list's crew marks, past the crews' bits: that player is a friend (roam_core.h RC_MARK_FRIEND; `write_peers`)
 pub(crate) const MARK_FRIEND: u8 = 0x80;
+/// in a list's marks of a player whose core reads one-way links (CORE_ONEWAY: `write_peers`): we get that player's
+/// car (its states) and send it nothing of ours, as it shows fewer players than we do (roam_core.h RC_MARK_RXONLY);
+/// or it gets ours and sends us nothing of its own (RC_MARK_TXONLY)
+pub(crate) const MARK_RXONLY: u8 = 0x20;
+pub(crate) const MARK_TXONLY: u8 = 0x40;
+/// the core version from which a player takes one-way links (roam_core.h RC_CORE_VER 15), and the most players its
+/// list then names: the ones it gets cars from (its links) and the ones it sends its own to (roam_core.h RC_LIST_MAX)
+pub(crate) const CORE_ONEWAY: u16 = 15;
+pub(crate) const LIST_MAX: usize = 96;
 /// the most crews a player is in (roam_core.h RC_CREW_MAX: the start page's four words)
 pub(crate) const CREWS: usize = 4;
 /// the most ids a HELLO names (roam_core.h RC_MAX_PEERS: its decoder takes no more)

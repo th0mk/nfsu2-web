@@ -281,13 +281,16 @@ that room.
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
-  Thai, Portuguese (Brazil), Polish, Turkish, Hungarian or Ukrainian, for the menus and all the game's text. Where the
-  server has the language packs, French, German, Italian, Spanish, Japanese and Russian also play with
-  their dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish,
-  Turkish, Hungarian and Ukrainian with their text at all. Without the packs those six play in English, and the other
+  Thai, Portuguese (Brazil), Polish, Turkish, Hungarian, Ukrainian, Czech, Slovak or Greek, for the menus and all the
+  game's text. Where the server has the language packs, French, German, Italian, Spanish, Japanese and Russian also play
+  with their dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish,
+  Turkish, Hungarian, Ukrainian, Czech, Slovak and Greek with their text at all. Without the packs those nine play in English, and the other
   languages with English voices and movies. Your browser fetches only your language's files: the dubbed voices are
   about 50 MB (Russian 94 MB), and the dubbed movies are smaller than the English ones they replace. Hungarian's
-  text writes ő and ű as õ and û, as its translation does: the game's fonts have no ő or ű. The start page follows the
+  text writes ő and ű as õ and û, as its translation does: the game's fonts have no ő or ű. Czech's writes č, ř, š and
+  the other letters with the caron as c, r, s ..., as its translation does, for the same reason; Slovak's has every
+  letter, with the fonts its translation brings, and Greek's with Greek letters added to the game's fonts. The start
+  page follows the
   same choice (the list at its top sets it too): its text, settings and messages in that language, English until you
   pick another.
   Its problems and errors carry a short code (`GPU-ADAPTER-WIN`), the same in every language, to quote when you ask
@@ -414,8 +417,9 @@ that room.
   - The server keeps the copy of an earlier day too: "Go back to ..." brings it back when a day went wrong.
   - Your passphrase can also claim your name (**Online, Your name**: no one else plays under it; see "Your name is
     yours" under Online), so in another browser your name comes back with your saves.
-  - Stop syncing leaves the saves where they are, and the passphrase in the box; Delete from cloud deletes them on the
-    server (your browsers keep theirs), and frees the name it claimed. A passphrase nobody used for two years is
+  - Stop syncing leaves the saves where they are, and the passphrase in the box (your claimed name stays the
+    passphrase's: without it, this browser plays it with digits); Delete from cloud deletes them on the server (your
+    browsers keep theirs), and frees the name it claimed for anyone to claim. A passphrase nobody used for two years is
     deleted from the server. A browser
     whose passphrase the server no longer has keeps it and sends nothing; Sync now looks again and offers to send its
     saves there.
@@ -482,7 +486,9 @@ Good to know:
   offline (or, the first time, says so in its free-roam question). The server pairs each player with the players
   nearest to them, as many as their game shows cars (fewer while it is busy, 8 at the least): 32 on computers, 24 on
   tablets and 16 on phones, or what you pick (Online: Players' cars shown: 16, 24, 32, 48 or 64; more cars can lower
-  the frame rate). Their names show
+  the frame rate). Since 5 November (pending release) you get the cars of your nearest players even where they show
+  fewer than you: their game sends you their car without showing yours, and their car lets yours through (no outrun
+  or race invite between the two). Their names show
   over the cars within 100 m, and each gets an arrow on the minimap when it is near and a marker on the world map (M),
   in the game's orange. The game's own outrun challengers are grey on both (the legend's Opponent Car too), so you can
   tell them from players. The minimap also has an arrow, the same as a car's, for the players near you whose cars
@@ -828,8 +834,11 @@ Good to know:
   or another player's. **Claim** there claims it with your passphrase (the one of your cloud saves), after a check from
   Cloudflare that a person, not a script, claims it (usually it passes by itself). Without a passphrase, Claim makes
   one and turns cloud saves on, then shows it to keep: it is the only way to play under the name again, in another
-  browser or after this browser's data is cleared, and the only way back to your saves. With a passphrase, Play
-  claims a free name by itself; Cloudflare's check shows only when it wants a click.
+  browser or after this browser's data is cleared, and the only way back to your saves. With a passphrase that has
+  no name yet, Play claims a free name by itself; Cloudflare's check shows only when it wants a click.
+  - One name: once your passphrase holds a name, you always play as it, whatever Your name says. Another name you
+    type there is played only after **Change name**, and the line under Your name says which name you play as. With
+    the box empty, you play as your claimed name too.
   - While it is yours nobody else plays under it: in the Online menu and in free roam they get your name with four
     digits added (`Alex` becomes `Alex4821`; a name longer than 11 characters loses its end to them), the same
     digits each time for their browser. If someone was online under it before you came, the lobby gives it back to
@@ -837,10 +846,11 @@ Good to know:
   - It stays yours as long as your passphrase does: until you delete your cloud saves, or they go unused for two
     years. In another browser, load your passphrase under Cloud saves and the name is yours there too.
   - One name a passphrase. **Change name** (type another name) changes it once a week; the old name stays yours for
-    14 more days, and your EA Messenger friends move to the new one (their lists show it).
+    14 more days, and your friends move to the new one (their lists show it).
   - `NAME`, the game's default profile name, and `Player` can't be claimed: Play asks once for a name of your own,
     and until you pick one you play as `NAME` with your four digits. A name another player claimed: Play asks once
-    for another, and you play as it with your digits until then. Neither applies offline or with the network off.
+    for another, and you play as it with your digits until then. Neither applies offline or with the network off, nor
+    with a claimed name of your own (you play as that one).
   - A name that reads as a slur can't be claimed (the rules below).
   - Without a claim your name is anyone's: whoever is online under it first keeps it (the others get digits), and
     EA Messenger keeps no lists for it: your friends, blocked players and requests last until you leave Online.

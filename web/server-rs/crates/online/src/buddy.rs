@@ -727,7 +727,10 @@ impl Buddies {
 
     /// the persona `old`'s list (lower case) is `name`'s now: its owner changed its name (nfsu2-claims), and the lists
     /// that had it as a friend, and the requests to and from it, have the new name instead (the ones in memory: the
-    /// caller reads its friends' and askers' lists first)
+    /// caller reads its friends' and askers' lists first, and name's own and its friends' and askers').  A list name
+    /// has already (a request to the new name, a friend made as it, before the move; the caller made sure it is the
+    /// same keyphrase's) takes old's in, within a list's limits: what does not fit (the new name's last friends, the
+    /// oldest requests) goes from both sides, so no friendship is left one-sided.
     fn move_list(&mut self, old: &str, name: &str) {
         let Some(mut l) = self.take_list(old) else { return };
         if let Some(dir) = &self.dir {
@@ -737,6 +740,46 @@ impl Buddies {
         let k = lower(name);
         l.name = name.to_string();
         let (sent, got): (Vec<String>, Vec<String>) = (l.r.keys().cloned().collect(), l.q.keys().cloned().collect());
+        if let Some(cur) = self.take_list(&k) {
+            l.b.extend(cur.b);
+            l.i.extend(cur.i);
+            // (a request both had: the later)
+            for (m, theirs) in [(&mut l.r, cur.r), (&mut l.q, cur.q)] {
+                for (x, (n, t)) in theirs {
+                    if m.get(&x).is_none_or(|(_, was)| *was < t) {
+                        m.insert(x, (n, t));
+                    }
+                }
+            }
+            l.m.extend(cur.m);
+            l.contact = cur.contact.or(l.contact);
+            l.seen = cur.seen;
+        }
+        // (the player itself under either name is no friend or request of its own)
+        for x in [old, k.as_str()] {
+            l.b.shift_remove(x);
+            l.i.shift_remove(x);
+            l.r.shift_remove(x);
+            l.q.shift_remove(x);
+        }
+        // the limits a list is read back with (list_of_json): old's own first, the newest requests and messages
+        let unfriended: Vec<String> = l.b.keys().skip(MAX_LIST).cloned().collect();
+        l.b.truncate(MAX_LIST);
+        l.i.truncate(MAX_LIST);
+        let newest = |m: &mut IndexMap<String, (String, f64)>| -> Vec<String> {
+            if m.len() <= MAX_ASKED {
+                return Vec::new();
+            }
+            m.sort_by(|_, (_, a), _, (_, b)| b.total_cmp(a));
+            let cut = m.keys().skip(MAX_ASKED).cloned().collect();
+            m.truncate(MAX_ASKED);
+            cut
+        };
+        let unasked = [newest(&mut l.r), newest(&mut l.q)];
+        if l.m.len() > MAX_MAIL {
+            l.m.sort_by(|a, b| a.t.total_cmp(&b.t));
+            l.m.drain(..l.m.len() - MAX_MAIL);
+        }
         self.put_list(k.clone(), l);
         let rename = |m: &mut IndexMap<String, (String, f64)>| match m.shift_remove(old) {
             Some((_, t)) => {
@@ -762,7 +805,22 @@ impl Buddies {
                     changed.push(f.clone());
                 }
             }
-            self.fans.entry(k).or_default().extend(fans);
+            self.fans.entry(k.clone()).or_default().extend(fans);
+        }
+        // what did not fit, off the other side too (by now every one of them names k)
+        for x in &unfriended {
+            if self.remove_friend(x, &k) {
+                changed.push(x.clone());
+            }
+        }
+        for (cut, theirs_q) in [(&unasked[0], true), (&unasked[1], false)] {
+            for x in cut {
+                if let Some(wl) = self.lists.get_mut(x)
+                    && (if theirs_q { &mut wl.q } else { &mut wl.r }).shift_remove(&k).is_some()
+                {
+                    changed.push(x.clone());
+                }
+            }
         }
         for f in changed {
             self.mark(&f);
@@ -1267,33 +1325,82 @@ impl Core {
                 self.buddies.drop_list(&k);
                 self.touch_lists();
             }
-            if self.buddies.lists.contains_key(&k) {
-                return;
-            }
         }
-        if !mine {
-            return;
-        }
-        if let Some(mut l) = self.buddies.dormant(&k) {
-            l.owner = owner;
+        let Some(o) = owner.filter(|_| mine) else { return };
+        if !self.buddies.lists.contains_key(&k)
+            && let Some(mut l) = self.buddies.dormant(&k)
+        {
+            l.owner = Some(o.clone());
             l.name = persona.to_string();
             let lobby = &self.lobby.by_persona;
             self.buddies.make_room(&|x| lobby.contains_key(x));
             self.buddies.put_list(k, l);
             self.touch_lists();
-        } else if let Some(old) = owner.as_deref().and_then(|o| c.previous(o, now))
-            && self.buddy_fetch(&old)
-            && self.buddies.lists.get(&old).is_some_and(|l| l.owner == owner)
+        }
+        self.lists_from_before(persona, &o);
+    }
+
+    /// The lists of the name keyphrase `owner` had before its last change (nfsu2-claims `previous`, while that name is
+    /// still its own) move to its current name `persona`, into any list it has there already: at its EA Messenger
+    /// login, and whenever its page asks for its lists (`friends`), whichever comes first.  (Until 2026-11-05 only the
+    /// Messenger's login moved them, and only to a name without a list yet: a player who changed its name on the start
+    /// page and never opened the Online menu left its friends under the old name, gone with its claim.)
+    fn lists_from_before(&mut self, persona: &str, owner: &str) {
+        let Some(c) = self.buddies.claims.clone() else { return };
+        let k = lower(persona);
+        let Some(old) = c.previous(owner, self.bnow() as i64).filter(|o| *o != k) else { return };
+        // both lists the keyphrase's (a session's own under the new name: the move waits for the session's end)
+        if !self.own_list(&old, owner) || !self.buddies.lists.contains_key(&old) || !self.own_list(&k, owner) {
+            return;
+        }
+        // (its friends' lists and the ones of its requests each way, under either name, in memory to be renamed)
+        let others: Vec<String> = [&old, &k]
+            .into_iter()
+            .filter_map(|n| self.buddies.lists.get(n))
+            .flat_map(|l| l.b.keys().chain(l.r.keys()).chain(l.q.keys()).cloned())
+            .collect();
+        for o in &others {
+            self.buddy_fetch(o);
+        }
+        self.buddies.move_list(&old, persona);
+        (self.log)(&format!("[online] \"{persona}\": EA Messenger lists moved from \"{old}\" (a name change)"), None);
+        // (written now: the old name's file is gone already)
+        if let Some(e) = self.buddies.write_dirty() {
+            (self.log)(&format!("[online] the friends lists could not be written: {e}"), None);
+        }
+        self.touch_lists();
+    }
+
+    /// k's list (lower case), if any, is keyphrase `owner`'s, the claimer of its name, from now on (in memory then):
+    /// one of before claims (on the shelf, or in memory without a keyphrase) becomes its, as at a Messenger login; one
+    /// of another keyphrase (a claim that ended while the list stayed in memory) goes.  False: a session's own list (a
+    /// name nobody claimed when its Messenger logged in), left alone.
+    fn own_list(&mut self, k: &str, owner: &str) -> bool {
+        if !self.buddy_fetch(k)
+            && let Some(mut l) = self.buddies.dormant(k)
         {
-            // (its friends' lists and the ones of its requests each way, in memory to be renamed)
-            let l = &self.buddies.lists.get(&old).expect("fetched");
-            let others: Vec<String> = l.b.keys().chain(l.r.keys()).chain(l.q.keys()).cloned().collect();
-            for o in others {
-                self.buddy_fetch(&o);
-            }
-            self.buddies.move_list(&old, persona);
-            (self.log)(&format!("[online] \"{persona}\": EA Messenger lists moved from \"{old}\" (a name change)"), None);
+            l.owner = Some(Arc::from(owner));
+            let lobby = &self.lobby.by_persona;
+            self.buddies.make_room(&|x| lobby.contains_key(x));
+            self.buddies.put_list(k.to_string(), l);
             self.touch_lists();
+            return true;
+        }
+        let Some(l) = self.buddies.lists.get_mut(k) else { return true };
+        match l.owner.as_deref() {
+            _ if l.temp => false,
+            Some(o) if o == owner => true,
+            Some(_) => {
+                self.buddies.drop_list(k);
+                self.touch_lists();
+                true
+            }
+            None => {
+                l.owner = Some(Arc::from(owner));
+                self.buddies.mark(k);
+                self.touch_lists();
+                true
+            }
         }
     }
 
@@ -1441,7 +1548,8 @@ impl Core {
             return FriendReply { done: "claim", ..Default::default() };
         };
         let mk = lower(&me);
-        self.buddy_fetch(&mk);
+        self.own_list(&mk, owner);
+        self.lists_from_before(&me, owner);
         let mut mail = Vec::new();
         let done = match ask {
             FriendAsk::List => "ok",

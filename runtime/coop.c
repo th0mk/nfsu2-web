@@ -605,6 +605,12 @@ static const struct { const char *lang, *add, *rem, *ask, *kb, *cancel, *next, *
     { "hungarian", "2. játékos hozzáadása", "2. játékos eltávolítása",
       "2. játékos: nyomd meg a START gombot a kontrollereden, vagy válaszd a Billentyűzetet, hogy a billentyűzet bal felén játssz.", "Billentyűzet", "Mégse", "Következő autó", "Vezetés", "A 2. játékos vezet:",
       "Versenyzel a 2. játékossal, vagy egyedül? (A karrierben csak az 1. játékos helyezése számít.)", "Együtt", "Egyedül" },
+    { "czech", "Přidat hráče 2", "Odebrat hráče 2",
+      "Hráč 2: stiskni START na svém ovladači, nebo zvol Klávesnice a hraj na levé polovině této klávesnice.", "Klávesnice", "Zrušit", "Další auto", "Jet", "Hráč 2 jede:",
+      "Závodit s hráčem 2, nebo sám? (V kariéře se počítá jen umístění hráče 1.)", "Spolu", "Sám" },
+    { "slovak", "Pridať hráča 2", "Odobrať hráča 2",
+      "Hráč 2: stlač START na svojom ovládači alebo zvoľ Klávesnica a hraj na ľavej polovici tejto klávesnice.", "Klávesnica", "Zrušiť", "Ďalšie auto", "Jazdiť", "Hráč 2 jazdí:",
+      "Pretekať s hráčom 2 alebo sám? (V kariére sa počíta len umiestnenie hráča 1.)", "Spolu", "Sám" },
 };
 static struct { const char *lang; uint32_t add, rem, kb, cancel, next, drive, together, alone; char ask[256], drives[64], rt[256]; } T;
 static void coop_texts(CPU *c){

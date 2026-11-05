@@ -41,9 +41,11 @@ web/start.sh --data "/path/to/Need for Speed Underground 2"
 
 Open **http://localhost:8080/** in Chrome or Firefox and press **Play**. The start page has the settings, your saves
 and the controls. The player's guide is [docs/web/PLAYING.md](docs/web/PLAYING.md). The game plays in any of its
-thirteen languages, in Brazilian Portuguese, in Polish, in Turkish, in Hungarian or in Ukrainian; the dubbed voices and
-movies and the Portuguese, Polish, Hungarian and Ukrainian text come from mods, the Turkish text is this repository's own translation
-(`tools/lang/turkish.json`, with a mod's fonts), as language packs. The menus and HUD can be redrawn at four times
+thirteen languages, in Brazilian Portuguese, in Polish, in Turkish, in Hungarian, in Ukrainian, in Czech, in Slovak or in Greek; the
+dubbed voices and movies and the Portuguese, Polish, Hungarian, Ukrainian, Czech and Slovak text come from mods (Czech's
+with this repository's own texts for what it left in German or empty, `tools/lang/czech.json`), the Turkish text is this repository's own translation
+(`tools/lang/turkish.json`, with a mod's fonts), the Greek text a contributor's (`tools/lang/greek.json`, with Greek
+letters drawn into the game's fonts by `tools/greekfont`), as language packs. The menus and HUD can be redrawn at four times
 their size, from a mod as a texture pack.
 
 To play with friends, run the server behind HTTPS (other PCs need a secure context): `web/deploy/` has a Docker setup.
@@ -74,7 +76,8 @@ translation (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro), fr
 [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), from muntazam's
 [Turkish translation](https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch) (its fonts), from
 GameHunter's [Hungarian translation](http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html)
-(L_zooltan) and from Clark X.'s [Ukrainian translation](https://kuli.com.ua/need-for-speed-underground-2). The texture pack is built from LunicAura106's
+(L_zooltan), from Clark X.'s [Ukrainian translation](https://kuli.com.ua/need-for-speed-underground-2), from ROXOR's and
+PINĎA & syn's Czech translation and from MixerX's Slovak one ([abcgames.cz](https://www.abcgames.cz/?p=preklady_zobraz&id=7774)). The texture pack is built from LunicAura106's
 [Upscaled HUD](https://nfsmods.xyz/mod/4319). Built with the help of Claude Code.
 
 ## License

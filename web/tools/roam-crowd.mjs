@@ -6,7 +6,7 @@
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
 //        [--race 1-3:60:120] [--paused 1-3] [--prefix Bot] [--links 64] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
-//        [--flags nl,br,gb-eng]
+//        [--flags nl,br,gb-eng] [--meet x,y,z] [--seed n]
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
 //          one tick or one received message made them send goes as one message, a snapshot to several friends once
@@ -40,6 +40,11 @@
 // --track  a pose log (NFSU2_ROAM_POSELOG): the first player's L rows, a real drive; every simulated player
 //          follows it from its own point along it, so they spread over the route.  Without one: circles of 20 to
 //          120 m around the new career's start (1695, -884, 24), or --spread m apart (6 circles, the first at --spread).
+// --meet   a car meet round this place: each player now parked at a spot of it (8 to 60 m from it, pointing any way)
+//          for 1.5 to 6 minutes, now driving by on straight lines through and past it (up to 200 m off, 600 m either side,
+//          15 to 35 m/s), now driving in to a spot (from 500 m) or off from one; about 55 % stand at a time, so --n 90
+//          is about 50 standing and 40 driving by, a number that changes as they come and go (tests/meet.rs of the
+//          roam crate simulates the same).  --seed: its random numbers (by default a new one each run, logged).
 // Each player is its own client address for the server's per-address limits (X-Forwarded-For, which the
 // server takes from this machine, its trusted proxy).  Every 10 s one line: players on the switch, their peers
 // (min, mean, max: the hub gives each at most 32), datagrams a second in and out, joins and "out of range"
@@ -66,6 +71,7 @@ const ALL_CARS = ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUG
   'LANCEREVO8', 'RX7', 'IMPREZAWRX'];
 const CARS = opt('cars', '') === 'all' ? ALL_CARS : opt('cars', '') ? opt('cars', '').split(',') : [CAR];
 const LOBBIES = (opt('lobbies', '').match(/^(\d+):(.+)$/) ?? []).slice(1);
+const MEET = opt('meet', '') ? opt('meet', '').split(',').map(Number) : null, SEED = +opt('seed', String(Date.now() % 1e9 | 0));
 const HUB = 0x0A4D00FD, PORT = 47210;
 
 // the core for wasm: no C library (wasip1 for its headers: names.h's <string.h>), bulk memory for the copies
@@ -113,11 +119,58 @@ if (TRACK) {
   };
 }
 
+if (MEET) {
+  // mulberry32: the meet's random numbers, from --seed
+  let a = SEED >>> 0;
+  const unit = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const range = (lo, hi) => lo + (hi - lo) * unit(), TAU = 2 * Math.PI, [cx, cy, cz] = MEET;
+  const spot = () => { const r = Math.sqrt(range(64, 3600)), w = unit() * TAU; return [cx + r * Math.cos(w), cy + r * Math.sin(w)]; };
+  const line = t => {
+    const w = unit() * TAU, d = [Math.cos(w), Math.sin(w)], n = [-d[1], d[0]], b = range(-200, 200);
+    return { leg: { a: [cx + n[0] * b - d[0] * 600, cy + n[1] * b - d[1] * 600], b: [cx + n[0] * b + d[0] * 600, cy + n[1] * b + d[1] * 600], t0: t, s: range(15, 35), park: false } };
+  };
+  const bots = [];
+  const start = () => unit() < 0.55 ? { p: spot(), h: unit() * TAU, until: range(10, 360) } : line(-range(0, 40));
+  let parked = 0;
+  track = (t, i) => {
+    const b = bots[i] ??= start();
+    if (b.until !== undefined && t >= b.until) {
+      const d = [Math.cos(b.h), Math.sin(b.h)];
+      Object.assign(b, { until: undefined, leg: { a: b.p, b: [b.p[0] + d[0] * 600, b.p[1] + d[1] * 600], t0: t, s: range(15, 25), park: false } });
+    }
+    if (b.leg) {
+      const { a: p0, b: p1, t0, s } = b.leg, dx = p1[0] - p0[0], dy = p1[1] - p0[1], len = Math.hypot(dx, dy), u = Math.min(len, (t - t0) * s);
+      const d = [dx / len, dy / len];
+      b.p = [p0[0] + d[0] * u, p0[1] + d[1] * u]; b.h = Math.atan2(d[1], d[0]);
+      if (u < len) return { p: [b.p[0], b.p[1], cz], v: [d[0] * s, d[1] * s, 0], h: b.h };
+      if (b.leg.park) { b.leg = null; b.until = t + range(90, 360); parked++; }
+      else if (unit() < 0.4) { const sp = spot(), w = unit() * TAU; b.leg = { a: [sp[0] - Math.cos(w) * 500, sp[1] - Math.sin(w) * 500], b: sp, t0: t, s: range(12, 20), park: true }; }
+      else b.leg = line(t).leg;
+    }
+    return { p: [b.p[0], b.p[1], cz], v: [0, 0, 0], h: b.h };
+  };
+  track.standing = () => bots.filter(b => b && !b.leg).length;
+  console.log(`roam-crowd: a car meet at ${cx} ${cy} ${cz}, seed ${SEED}`);
+}
+
 const st = { inDg: 0, outDg: 0, inB: 0, outB: 0, inMsg: 0, outMsg: 0, joins: 0, outOfRange: 0, otherLeaves: 0, notes: 0 }, why = {};
 const tally = t => { const k = t.replace(/^Bot\d+/, '<bot>').replace(/\d+(\.\d+)*(:\d+)?/g, '#'); why[k] = (why[k] ?? 0) + 1; };
 /** the frames of one tick (or one received message) as bundles, as the page's TxBundle makes them: a snapshot of
- *  the same bytes to another friend in the entry before it, unless something for that friend came between */
+ *  the same bytes to another friend in the entry before it, unless something for that friend came between; bundles
+ *  of NET_BUNDLE_MAX bytes at most, as the page's (the switch closes a connection whose message is over 64 KB: 1009) */
+const NET_BUNDLE_MAX = 32 << 10;
 function bundled(q) {
+  const out = [];
+  let part = [], bytes = 4;
+  for (const f of q) {
+    const n = 4 + 4 * 64 + f.length;
+    if (part.length && bytes + n > NET_BUNDLE_MAX) { out.push(...bundle1(part)); part = []; bytes = 4; }
+    part.push(f); bytes += n;
+  }
+  if (part.length) out.push(...bundle1(part));
+  return out;
+}
+function bundle1(q) {
   const e = [], last = new Map();
   for (const f of q) {
     const dst = f.readUInt32BE(8);
@@ -221,8 +274,8 @@ class Bot {
     }
     if (paused && !this.paused) { this.paused = true; this.x.crowd_status(5); }
     if (racing || !snap) { this.x.crowd_wait(nowUs()); this.flush(); return; }
-    const { p, v } = track(t, this.i);
-    this.x.crowd_tick(nowUs(), p[0], p[1], p[2], v[0], v[1], v[2], Math.atan2(v[1], v[0]));
+    const { p, v, h } = track(t, this.i);
+    this.x.crowd_tick(nowUs(), p[0], p[1], p[2], v[0], v[1], v[2], h ?? Math.atan2(v[1], v[0]));
     if (LOBBIES.length && this.i % +LOBBIES[0] === 0 && t - (this.advT ?? -9) >= 1) {
       const races = LOBBIES[1].split(',');
       this.advT = t;
@@ -252,7 +305,8 @@ const report = setInterval(() => {
     inMsgPerS: Math.round((st.inMsg - last.inMsg) / dt), outMsgPerS: Math.round((st.outMsg - last.outMsg) / dt),
     joins: st.joins - last.joins, outOfRange: st.outOfRange - last.outOfRange, otherLeaves: st.otherLeaves - last.otherLeaves };
   samples.push(s);
-  console.log(`roam-crowd: t=${s.t}s players ${s.players}, peers ${s.peersMin}/${s.peersMean}/${s.peersMax}, datagrams ${s.inPerS}/s in ${s.outPerS}/s out ` +
+  if (track.standing) s.standing = track.standing();
+  console.log(`roam-crowd: t=${s.t}s players ${s.players}${track.standing ? ` (${s.standing} standing)` : ''}, peers ${s.peersMin}/${s.peersMean}/${s.peersMax}, datagrams ${s.inPerS}/s in ${s.outPerS}/s out ` +
     `(${s.inKBs} / ${s.outKBs} KB/s with the switch's 16-byte header) in ${s.inMsgPerS} / ${s.outMsgPerS} messages a second, ` +
     `joins ${s.joins}, out of range ${s.outOfRange}, other leaves ${s.otherLeaves}`);
   last = { ...st }; lastT = performance.now();
