@@ -81,6 +81,12 @@ pub(crate) const LOBBY_ADVERT: u8 = 1;
 /// a player's ask to join (to its host, and a copy to the hub: the hub links the two first)
 pub(crate) const LOBBY_JOIN: u8 = 2;
 pub(crate) const LOBBY_CLOSE: u8 = 5;
+/// An ADVERT's t (roam_game.c MP_COUNTS_ON): set, its low 6 bits say whom a win counts for in the career (a START's
+/// t is its countdown), and LOBBY_PRIVATE says the lobby takes its host's friends and crew-mates only (roam_game.c
+/// MP_PRIVATE, "Friends & crew only"): its host sends its adverts to them alone, and the hub lists it and links its
+/// start's players for it to them alone.  An older game sends neither (t 0: its lobby is anyone's).
+pub(crate) const LOBBY_COUNTS_ON: u16 = 0x8000;
+pub(crate) const LOBBY_PRIVATE: u16 = 0x0040;
 /// a LOBBIES entry: x, y (i16 LE, m), race (u32 LE), players, most players, state (u8); at most LOBBIES_MAX of them
 pub(crate) const LOBBIES_ENTRY: usize = 11;
 pub(crate) const LOBBIES_MAX: usize = 96;
@@ -175,6 +181,8 @@ pub(crate) enum Msg<'a> {
         state: u8,
         /// its players (n of them, the host first), 0 after them
         ids: [u32; LOBBY_PLAYERS],
+        /// an ADVERT of a lobby for its host's friends and crew-mates only (LOBBY_PRIVATE)
+        private: bool,
     },
     /// a player's report of a race it raced (roam_core.h rc_racerep), checked as roam_core.c's racerep_ok
     RaceRep(RaceRep<'a>),
@@ -484,7 +492,7 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             Msg::NearReq { req: u16_le(d, 16), max: u16_le(d, 18), base: u16_le(d, 20), radius: u16_le(d, 22) }
         }
         MSG_LOBBY => {
-            // op arg state max, to, lobby, race, x y, t, n, a reserved byte, then n ids (roam_core.c rc_encode)
+            // op arg state max, to, lobby, race, x y, t, n, its host's away seconds, then n ids (roam_core.c rc_encode)
             if end < HDR + 24 {
                 return None;
             }
@@ -500,7 +508,10 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             if lobby == 0 || race == 0 || ids[..n].iter().enumerate().any(|(i, &v)| v == 0 || ids[..i].contains(&v)) {
                 return None;
             }
-            Msg::Lobby { op, to: u32_le(d, 20), lobby, race, x: u16_le(d, 32) as i16, y: u16_le(d, 34) as i16, n: n as u8, max, state, ids }
+            let t = u16_le(d, 36);
+            let private = op == LOBBY_ADVERT && t & LOBBY_COUNTS_ON != 0 && t & LOBBY_PRIVATE != 0;
+            let (x, y) = (u16_le(d, 32) as i16, u16_le(d, 34) as i16);
+            Msg::Lobby { op, to: u32_le(d, 20), lobby, race, x, y, n: n as u8, max, state, ids, private }
         }
         MSG_RACEREP if end == HDR + RACEREP_BYTES => Msg::RaceRep(racerep(d, HDR)?),
         MSG_RACERES => Msg::RaceRes(raceres(d, HDR, end - HDR)?),

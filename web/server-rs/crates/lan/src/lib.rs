@@ -435,6 +435,9 @@ pub struct LanOptions {
     pub lan_ms: u64,
     /// friends' car states by their fields to a page whose hello asks for them (fpred.rs); false: as byte deltas still
     pub fpred: bool,
+    /// a page driving in free roam whose hello said "echo":1 has its round trip timed by a compact bundle's stamp that
+    /// its next bundle echoes (`probe`), not by a WebSocket ping and its pong; false: pings for all
+    pub probe_echo: bool,
     /// SO_SNDBUF for /lan connections (NFSU2_LAN_SNDBUF; 0: the kernel's own, which Linux grows to megabytes)
     pub send_buffer_os: usize,
     /// the largest WebSocket message a client may send (the server's `limits::WS_MAX_PAYLOAD`, the ws library's
@@ -482,6 +485,7 @@ impl Default for LanOptions {
             away_ms: 500,
             lan_ms: 4,
             fpred: true,
+            probe_echo: true,
             send_buffer_os: 0,
             max_payload: 64 << 10,
         }
@@ -631,6 +635,26 @@ pub struct Breakdown {
     pub waited: u64,
 }
 
+/// One kind of player on the switch now, and the WebSocket messages its pages sent and were sent since the last
+/// `LanSwitch::messages_by_kind` (those of pages gone since are left out)
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct KindMsgs {
+    pub kind: &'static str,
+    pub players: usize,
+    pub msgs_in: u64,
+    pub msgs_out: u64,
+}
+
+/// `messages_by_kind`'s kinds, in its order: a page counts under the first that fits
+pub const MSG_KINDS: [&str; 6] = [
+    "racing or in a race lobby",
+    "in Online mode",
+    "on the LAN or Online screens",
+    "driving in free roam",
+    "in free roam, not driving",
+    "leaving or starting",
+];
+
 /// a player this far behind on its path counts in `Breakdown::behind` (ms)
 pub const BEHIND_MS: f64 = 1000.0;
 /// a player whose own free-roam HELLO or SNAP came within this, and said it drives, is timed by every probe (its page
@@ -667,6 +691,8 @@ pub(crate) struct Stats {
     shed: Counter,
     /// free roam's snapshots left out for a receiver behind on its path (lag.rs)
     thinned: Counter,
+    /// stamps the pages echoed: round trips timed without a ping (`LanSwitch::probe`)
+    echoes: Counter,
     /// LAN broadcasts not sent to a page with LAN play open: no socket there on their port (`Peer::takes_udp`), and
     /// their bytes
     bcast_skipped: Counter,
@@ -1247,6 +1273,43 @@ impl LanSwitch {
     /// the LAN or Online screens open, free roam (the hub's vips()), the rest (leaving: the page lets go 10 s after the
     /// last network feature; or starting: free roam not yet heard by the hub); and apart from that, how many of them
     /// are behind on their path and get fewer snapshots (lag.rs)
+    /// The WebSocket messages each kind of player sent and was sent since the last call (`MSG_KINDS`; each page's
+    /// counts are taken: call it from one place).  A page that sent LAN play's datagrams since counts as racing (the
+    /// game's races, Online's and free roam's lobby races all go as LAN play's UDP); the rest as `breakdown` has them,
+    /// free roam's split by its pages' own word that they drive (away.rs).  Messages are what the kernel and
+    /// cloudflared pay for one by one: a page driving in free roam sends and gets about 20 a second, one racing its
+    /// game's frames.
+    pub async fn messages_by_kind(&self) -> Vec<KindMsgs> {
+        let online = match &self.online {
+            Some(h) => h.vips().await.unwrap_or_default(),
+            None => Default::default(),
+        };
+        let roam = match &self.roam {
+            Some(h) => h.vips().await.unwrap_or_default(),
+            None => Default::default(),
+        };
+        let mut out: Vec<KindMsgs> = MSG_KINDS.iter().map(|&kind| KindMsgs { kind, ..KindMsgs::default() }).collect();
+        for p in self.all.load().iter() {
+            let c = &p.conn;
+            let (raced, i, o) = (c.lan_sent.swap(0, Relaxed) > 0, c.msgs_in.swap(0, Relaxed), c.msgs_out.swap(0, Relaxed));
+            let k = if raced {
+                0
+            } else if online.contains(&p.vip) {
+                1
+            } else if p.lan() {
+                2
+            } else if roam.contains(&p.vip) {
+                if p.away.load(Relaxed) { 4 } else { 3 }
+            } else {
+                5
+            };
+            out[k].players += 1;
+            out[k].msgs_in += i;
+            out[k].msgs_out += o;
+        }
+        out
+    }
+
     pub async fn breakdown(&self) -> Breakdown {
         let online = match &self.online {
             Some(h) => h.vips().await.unwrap_or_default(),
@@ -1504,6 +1567,7 @@ impl LanSwitch {
             ("refused", &s.refused),
             ("shed", &s.shed),
             ("thinned", &s.thinned),
+            ("echoes", &s.echoes),
             ("bcastSkipped", &s.bcast_skipped),
             ("bcastSkippedBytes", &s.bcast_skipped_bytes),
             ("bundlesIn", &s.bundles_in),
@@ -1597,7 +1661,11 @@ impl LanSwitch {
     /// follow them, lag.rs, and a player who is not driving gets one in 16 of those anyway, away.rs), and each ping and
     /// its pong were two of the messages cloudflared carries for every page, the 4,500 on the LAN or Online screens or
     /// in the menus too, and the 3,700 in free roam not driving (nfsu2.xyz 2026-10-31).  The keepalive's pings still go
-    /// to all.
+    /// to all.  A page that said "echo":1 in its hello gets a stamp in the header of its next compact bundle instead
+    /// (`LanOptions::probe_echo`), which its own next bundle echoes with how long the page held it (reader.rs): its
+    /// bundles go 20 a second each way while it drives, so the ping and the pong were two messages more for nothing
+    /// (about 3 % of them all, nfsu2.xyz 2026-11-05).  The stamp waits in line behind what was queued before it, as
+    /// the ping did; the page's own wait is taken off.
     #[doc(hidden)]
     pub fn probe(&self) {
         let now = nfsu2_util::mono_ms();
@@ -1606,6 +1674,11 @@ impl LanSwitch {
             let at = p.roam_at.load(Relaxed);
             let drives = at > 0 && now - (at as f64) < PROBE_ROAM_MS && !p.away.load(Relaxed);
             if !drives && (round + u64::from(p.vip)) % PROBE_OTHERS != 0 {
+                continue;
+            }
+            // a page that echoes: its next compact bundle stamped instead (conn.rs `write_loop`), and a ping only when
+            // the last second sent it none to stamp (its friends away, say)
+            if drives && p.conn.echo.load(Relaxed) && !p.conn.stamp.swap(true, Relaxed) {
                 continue;
             }
             let data = p.probe.lock().ping(now);
@@ -1655,6 +1728,7 @@ impl LanSwitch {
                 lan: p.lan(),
                 open: p.open(),
                 buffered: p.conn.out.buffered(),
+                rtt: p.probe.lock().rtt(),
             })
             .collect()
     }
@@ -1727,6 +1801,8 @@ pub struct PeerView {
     pub open: bool,
     /// bytes queued to it and not yet taken by the kernel (its `OutQueue::buffered`)
     pub buffered: usize,
+    /// its last round trip (ms; lag.rs), None before the first
+    pub rtt: Option<f64>,
 }
 
 /// A player on the switch, or one who left in the last `GONE_MS`, as the operator's `who` sees it.

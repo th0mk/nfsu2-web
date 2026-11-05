@@ -37,6 +37,7 @@ int64_t roam_plat_now_us(void){
 uint32_t roam_plat_random(void){ uint32_t r; do r = arc4random(); while (!r); return r; }
 void roam_plat_notice(const char *name, const char *what){ fprintf(stderr, "[roam] notice: %s%s\n", name ? name : "", what); }
 int roam_plat_lobby(const char *json){ (void)json; return 0; }      /* no panel: the game's top line */
+int roam_plat_lobby_act(uint32_t *host, uint32_t *lobby, uint32_t *race){ (void)host; (void)lobby; (void)race; return ROAM_LB_NONE; }   /* no page */
 int roam_plat_solid(void){ return -1; }                              /* no menu: the setting */
 int roam_plat_quickchat(void){ return 0; }                           /* no page: no picker and no lines */
 int roam_plat_say_pick(void){ return -1; }

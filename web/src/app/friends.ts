@@ -17,7 +17,8 @@
 // - FriendsApi: /friends, asked with the keyphrase's token (claim.ts NameClaims does the same for /names).
 import type { GameSession } from './game';
 import { touchFirst } from './device';
-import { gameHas, KEY_FRIEND } from './gamekeys';
+import { gameHas, KEY_FRIEND, KEY_LOBBY_INVITE } from './gamekeys';
+import { raceKindText, type Hosted } from './lobby';
 import { t } from './i18n';
 import { keyName, siteKey } from './sitekeys';
 import { pageDialog } from './padnav';
@@ -111,6 +112,8 @@ export function whereText(f: Friend, mine?: string): string {
 /** the signs of the friends' icons (24-unit boxes, as settings-ui.ts's) */
 const CHECK = 'M5 12.5l4.5 4.5L19 7.5', CROSS = 'M6 6l12 12M18 6L6 18';
 const JOIN = 'M10 17l5-5-5-5M15 12H3M14 4h6v16h-6', ENVELOPE = 'M3 6h18v12H3zM3 7l9 6 9-6', PLUS = 'M12 5v14M5 12h14';
+/** a race's flag on its pole: Invite to the player's race lobby */
+const FLAG = 'M5 21V4M5 4h13l-3 4.5 3 4.5H5';
 /** Discord's mark (as the start page's Discord button has it): a filled shape, the icon's class says so (style.css) */
 const DISCORD = 'M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z';
 
@@ -165,6 +168,8 @@ type St = 'wait' | 'new' | 'asks' | 'asked' | 'friends' | 'claim' | 'theirs';
 /** the line's top edge, in the game's HUD units from the middle of the picture: just above the game's outrun line
  *  (runtime/roam_game.c du_hud: its middle at -165), which shows too, as the cars are near each other */
 const LINE_TOP_U = -195;
+/** a friend's invite's line, this far above that (HUD units) */
+const INVITE_ABOVE_U = 26;
 /** the line's icon (18x16 units): a person with a plus while it offers something, else a person */
 const PERSON_PLUS = 'M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM0 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5zM14.5 3.25h1.5v2h2v1.5h-2v2h-1.5v-2h-2v-1.5h2z';
 const PERSON = 'M9 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5z';
@@ -189,8 +194,19 @@ export interface FriendPromptDeps {
   menu(): string;
   /** where the friends play changed (the page menu's Friends popup is drawn again) */
   placed(): void;
+  /** the race lobby the player hosts now, with room in it (lobby.ts: null none): its friends in free roam in its room
+   *  get an Invite in the page menu's Friends */
+  hosted(): Hosted | null;
+  /** a friend's invite taken: its lobby joined from wherever the player is (the game: input LB_JOIN) */
+  joinLobby(host: number, lobby: number, race: number): boolean;
   log(line: string): void;
 }
+
+/** how long a friend shows "invited" in the Friends popup, and an invite's line shows, after it was sent (ms) */
+const INVITED_MS = 60_000, INVITE_LINE_MS = 20_000;
+/** an invite from a friend that waits for the player's answer: who, its lobby (the host's id, the lobby's, its race's
+ *  hash), what race, until when its line shows */
+interface Invite { name: string; host: number; lobby: number; race: number; kind: string; n: number; max: number; until: number }
 
 export class FriendPrompt {
   private root: HTMLButtonElement;
@@ -212,6 +228,11 @@ export class FriendPrompt {
   private whereAt = 0;
   /** where the line was put last (place) */
   private spot = '';
+  /** the friends invited lately (by name in lower case: when), and a friend's invite that waits for an answer, its line */
+  private invited = new Map<string, number>();
+  private invite: Invite | null = null;
+  private inviteEl: HTMLButtonElement;
+  private inviteTimer = 0;
 
   /** stage: the game's box; the line goes over the picture while the cars touch (place) */
   constructor(stage: HTMLElement, private deps: FriendPromptDeps) {
@@ -220,6 +241,12 @@ export class FriendPrompt {
     b.onpointerdown = e => e.preventDefault();     // the canvas keeps the focus (and with it the keyboard)
     b.onclick = () => this.act();
     stage.append(b);
+    // a friend's invite to its race: a line of the same look, just above the friend line (a click or a tap joins)
+    const iv = this.inviteEl = document.createElement('button');
+    iv.type = 'button'; iv.className = 'friend-prompt offer invite'; iv.tabIndex = -1; iv.hidden = true; iv.dataset.nfsu2Ui = '';
+    iv.onpointerdown = e => e.preventDefault();
+    iv.onclick = () => this.takeInvite();
+    stage.append(iv);
     // caught before the game's input: F is the game's for nothing (its key maps: dinput_kbd.c), and only while the
     // line offers something
     window.addEventListener('keydown', e => this.key(e), { capture: true });
@@ -233,7 +260,7 @@ export class FriendPrompt {
       const now = performance.now();
       if (!this.listed && now - this.triedAt > LIST_TRY_MS) { this.triedAt = now; this.listed = this.deps.send({ op: 'list' }); }
       if (this.listed && this.friends.length && now - this.whereAt > WHERE_MS) this.askWhere();
-      if (!this.root.hidden) this.place();         // (the window may change size while it shows)
+      if (!this.root.hidden || !this.inviteEl.hidden) this.place();   // (the window may change size while they show)
       this.raf = requestAnimationFrame(tick);
     };
     if (on) this.raf = requestAnimationFrame(tick);
@@ -241,6 +268,7 @@ export class FriendPrompt {
   stop() {
     cancelAnimationFrame(this.raf);
     this.session = null; this.on = false; this.who = null;
+    this.dropInvite();
     this.draw();
   }
 
@@ -326,10 +354,64 @@ export class FriendPrompt {
         if (mine && this.who) this.who = { name, st: 'friends' };
         else this.deps.toast(t('You and {name} are friends now', { name }));
         break;
+      case 'invite':
+        if (typeof m.done === 'string') return this.inviteAnswer(name, m.done);
+        this.invitedBy(m);
+        return;
       default:
         return;
     }
     this.draw();
+  }
+
+  /** an invite of ours to friend `name`: the server's answer (friends.rs "invite") */
+  private inviteAnswer(name: string, done: string) {
+    this.deps.log(`[friends] the invite to ${name}: ${done}`);
+    switch (done) {
+      case 'sent': this.invited.set(name.toLowerCase(), performance.now()); this.deps.toast(t('Invite sent to {name}', { name })); break;
+      case 'away': this.deps.toast(t('{name} isn\'t in free roam in your room now', { name })); break;
+      case 'nolobby': this.deps.toast(t('Open a race lobby first, then invite')); break;
+      case 'full': this.deps.toast(t('Your race lobby is full')); break;
+      case 'claim': this.deps.toast(t('Claim your name on the start page to invite friends')); break;
+      case 'rate': this.deps.toast(t('Too many invites at once: try again in a moment')); break;
+      default: this.deps.toast(t('{name} can\'t be invited now', { name }));
+    }
+    this.deps.placed();
+  }
+
+  /** a friend's invite to its race (friends.rs: it hosts the lobby, we are both in free roam in one room): its line for
+   *  INVITE_LINE_MS, the player's key, a click or a tap joins from wherever the player is */
+  private invitedBy(m: any) {
+    const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v >>> 0 : 0;
+    const name = typeof m.name === 'string' ? m.name : '', host = num(m.host), lobby = num(m.lobby), race = num(m.race);
+    if (!name || !host || !lobby || !race) return;
+    const kind = typeof m.kind === 'string' ? m.kind : 'race', n = num(m.n), max = num(m.max);
+    this.deps.log(`[friends] ${name} invites us to a ${kind} (${n}/${max}), lobby ${lobby.toString(16)}`);
+    this.invite = { name, host, lobby, race, kind, n, max, until: performance.now() + INVITE_LINE_MS };
+    clearTimeout(this.inviteTimer);
+    this.inviteTimer = window.setTimeout(() => this.dropInvite(), INVITE_LINE_MS);
+    this.draw();
+  }
+  private dropInvite() {
+    clearTimeout(this.inviteTimer);
+    this.invite = null;
+    this.inviteEl.hidden = true;
+  }
+  /** the invite taken: its lobby joined (the game leaves one it is in for it) */
+  private takeInvite() {
+    const iv = this.invite;
+    if (!iv) return;
+    this.deps.log(`[friends] taking ${iv.name}'s invite`);
+    if (!this.deps.joinLobby(iv.host, iv.lobby, iv.race)) this.deps.toast(t('{name} can\'t be invited now', { name: iv.name }));
+    this.dropInvite();
+  }
+
+  /** invite friend `name` to the player's race lobby (the page menu's Friends) */
+  inviteFriend(name: string) {
+    const h = this.deps.hosted();
+    if (!h) { this.deps.toast(t('Open a race lobby first, then invite')); return; }
+    this.deps.log(`[friends] inviting ${name} to our ${h.kind}`);
+    if (!this.deps.send({ op: 'invite', name, kind: h.kind, stage: h.stage })) this.deps.toast(t('{name} can\'t be invited now', { name }));
   }
 
   /** the server's "where": a notice for each friend that came into free roam since the last one (or is there at the
@@ -357,14 +439,20 @@ export class FriendPrompt {
     if (!all) { box.replaceChildren(p(t('Checking.'))); return; }
     const roam = all.filter(f => f.where === 'roam');
     const nodes: Node[] = [];
+    const hosted = this.deps.hosted(), now = performance.now();
     if (roam.length) {
-      nodes.push(friendList(roam.map(f => ({
-        name: f.name, state: whereText(f, room), ok: true,
-        acts: [
-          ...(f.contact ? [discordIcon(f.contact)] : []),
-          ...(f.room !== undefined && !inRoom(f, room) ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : []),
-        ],
-      }))));
+      nodes.push(friendList(roam.map(f => {
+        const at = this.invited.get(f.name.toLowerCase()), sent = at !== undefined && now - at < INVITED_MS;
+        return {
+          name: f.name, state: sent ? `${whereText(f, room)} · ${t('invited')}` : whereText(f, room), ok: true,
+          acts: [
+            ...(f.contact ? [discordIcon(f.contact)] : []),
+            ...(f.room !== undefined && !inRoom(f, room) ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : []),
+            // (a friend in our room, while we host a lobby with room in it: the invite joins it from where it is)
+            ...(hosted && inRoom(f, room) && !sent ? [icon('fl-invite', t('Invite {name} to your race', { name: f.name }), FLAG, () => this.inviteFriend(f.name))] : []),
+          ],
+        };
+      })));
     } else {
       nodes.push(p(t('None of your friends is in free roam now.')));
     }
@@ -393,6 +481,14 @@ export class FriendPrompt {
   }
 
   private key(e: KeyboardEvent) {
+    if (this.invite && e.code === siteKey('lobbyInvite') && !e.metaKey && !e.ctrlKey && !e.altKey && !gameHas(this.session, KEY_LOBBY_INVITE)) {
+      const el = e.target as HTMLElement | null;
+      if (!el?.closest?.('input, textarea, select') && !pageDialog()) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (!e.repeat) this.takeInvite();
+        return;
+      }
+    }
     if (e.code !== siteKey('friend') || e.metaKey || e.ctrlKey || e.altKey || !this.actionable()) return;
     const el = e.target as HTMLElement | null;
     // (a control of the game's the player put on F: the game's alone, gamekeys.ts; a click on the line still adds)
@@ -409,13 +505,28 @@ export class FriendPrompt {
     const spot = `${x} ${y} ${u}`;
     if (spot === this.spot) return;
     this.spot = spot;
-    const s = this.root.style;
-    s.left = `${x}px`;
-    s.setProperty('--y', `${y}px`);
-    s.setProperty('--u', `${u}px`);
+    for (const [el, dy] of [[this.root, 0], [this.inviteEl, -INVITE_ABOVE_U * u]] as const) {
+      const s = el.style;
+      s.left = `${x}px`;
+      s.setProperty('--y', `${y + dy}px`);
+      s.setProperty('--u', `${u}px`);
+    }
+  }
+
+  private drawInvite() {
+    const iv = this.invite, el = this.inviteEl;
+    if (!iv || !this.on) { el.hidden = true; return; }
+    const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };
+    const ik = siteKey('lobbyInvite'), key = ik && !touchFirst() && !gameHas(this.session, KEY_LOBBY_INVITE) ? [kbd(keyName(ik))] : [];
+    const text = (s: string) => Object.assign(document.createElement('span'), { textContent: s });
+    const kind = raceKindText(iv.kind), count = iv.max ? ` (${iv.n}/${iv.max})` : '';
+    el.replaceChildren(personIcon(PERSON), text(t('{name} invites you to a {kind}', { name: iv.name, kind }) + count), ...key, text(t('Join')));
+    this.place();
+    el.hidden = false;
   }
 
   private draw() {
+    this.drawInvite();
     const w = this.who, b = this.root;
     if (!w || w.st === 'wait') { b.hidden = true; return; }
     const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };

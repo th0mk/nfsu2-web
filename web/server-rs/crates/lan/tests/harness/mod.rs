@@ -183,7 +183,7 @@ async fn serve(lan: Arc<LanSwitch>, mut s: TcpStream) {
 /// what the page tests read of the switch (sw.lan.peers, info(), reserved)
 async fn state(lan: &LanSwitch) -> Value {
     let peers: Vec<Value> =
-        lan.peers_view().iter().map(|p| json!({ "vip": p.vip, "name": p.name, "hello": p.hello, "lan": p.lan })).collect();
+        lan.peers_view().iter().map(|p| json!({ "vip": p.vip, "name": p.name, "hello": p.hello, "lan": p.lan, "rtt": p.rtt })).collect();
     json!({ "peers": peers, "info": lan.info().await, "reserved": lan.reserved_view().len() })
 }
 

@@ -2340,8 +2340,8 @@ static void push_pose(Slot *s, rc_pose *P, int64_t newest, int64_t rt, float dt)
 #define TAG_GAME        6             /* the HUD's ONLINE_PLAYER_1..6 */
 #define TAG_N           NSLOT
 #define TAG_DUEL        TAG_N         /* one more: the outrun's line of text (du_hud) */
-#define TAG_MP0         (TAG_N + 1)   /* and four: labels over race spots and lobbies (mp_labels) */
-#define TAG_MPN         4
+#define TAG_MP0         (TAG_N + 1)   /* and eight: labels over race spots and lobbies, the lines of a start's stack (mp_labels) */
+#define TAG_MPN         8
 #define TAG_ALL         (TAG_N + 1 + TAG_MPN)
 #define TAG_DUEL_MAX    120
 /* the names' objects in a HUD; co-op free roam has a set for each player's (its half of the screen) */
@@ -5664,8 +5664,11 @@ static const char *const mp_st[] = { "idle", "hosting", "asked to join", "in a l
  * player i's career (mp_counts in that player's game: each JOIN says it, the host's ADVERT has them all; a game
  * without it says none).  On the wire both go in t_ms, a START's countdown, unused by the other ops (older games and
  * the hub skip it there): MP_COUNTS_ON | the bits */
-typedef struct { uint32_t id, host, race; float x, y; uint8_t n, max, state, away_s, counts; uint32_t ids[RC_LOBBY_MAX]; int64_t heard; } MpLobby;
+/* priv: Friends & crew only (its host's switch, the lobby card's V): only the host's friends and crew-mates hear of it
+ * and may join (MP_PRIVATE in an ADVERT's t_ms, beside the counts; an older game takes it as any) */
+typedef struct { uint32_t id, host, race; float x, y; uint8_t n, max, state, away_s, counts, priv; uint32_t ids[RC_LOBBY_MAX]; int64_t heard; } MpLobby;
 #define MP_COUNTS_ON    0x8000u
+#define MP_PRIVATE      0x0040u
 static struct {
     int      st;
     MpLobby  l;                                  /* ours (hosting) or the one we are in */
@@ -5683,9 +5686,14 @@ static struct {
     int64_t  said_at;                            /* our last quick chat pick (say_frame) */
     int64_t  idle_us;                            /* MP_IDLE_US, or the test's */
     uint32_t asked_host, asked_id; int64_t asked_at;   /* the lobby we last sent a JOIN to (its host, its id), and when */
+    int      asked_far;                          /* ...from afar (an invite's Join: mp_far_join) */
+    int      far;                                /* in a lobby we joined from afar: no distance rule (the race leaves from here) */
+    uint32_t pick;                               /* idle at a start, the lobby card's page (mp_pick_at): a lobby's host's id,
+                                                    MP_PICK_NEW "open a new lobby", 0 the first (Enter's own pick) */
     char     names[RC_LOBBY_MAX][RC_NAME_MAX + 1];   /* on the trip: the lobby's players' names (their links end in the menus) */
     char     lan[RC_LOBBY_MAX][13];              /* ...and their LAN names (lan_names), the race's results' */
     uint8_t  friend_mask, crew_mask, trip_counts; /* ...which are our friends (bit i), crew-mates (not friends), and whether a win counts in our career */
+    uint8_t  far_mask;                           /* hosting: which of our players joined from afar (bit i: mp_away keeps them wherever they are) */
     uint32_t tids[RC_LOBBY_MAX]; int tn;         /* hosting: the players its START named (Enter's), as every START names them */
     int      srv;                                /* hosting: its LAN server started early (mprace_server_start: 1 runs, -1 failed) */
     int      host_up;                            /* in a lobby: its host says its LAN server takes logins (a START's RC_LS_RACING) */
@@ -5737,9 +5745,10 @@ static void mp_to(int st, int64_t host){
     if (st != g_mp.st){ g_mp.alone_at = g_mp.roam_at = 0; g_mp.input_at = host; }
     if (st != g_mp.st && g_mp.st == MP_HOST) g_mp.l.away_s = 0;      /* (the countdown's adverts: not away) */
     g_mp.st = st; g_mp.since = host;
-    if (st == MP_IDLE){ memset(&g_mp.l, 0, sizeof g_mp.l); g_mp.host_up = 0; g_mp.host_ip = 0; g_mp.tn = 0; g_mp.srv = 0; }
+    if (st == MP_IDLE){ memset(&g_mp.l, 0, sizeof g_mp.l); g_mp.host_up = 0; g_mp.host_ip = 0; g_mp.tn = 0; g_mp.srv = 0; g_mp.far = 0; g_mp.far_mask = 0; }
 }
 static int mp_in(const MpLobby *l, uint32_t id){ for (int i = 0; i < l->n; i++) if (l->ids[i] == id) return 1; return 0; }
+static int mp_in_ids(const uint32_t *ids, int n, uint32_t id){ for (int i = 0; i < n && i < RC_LOBBY_MAX; i++) if (ids[i] == id) return 1; return 0; }
 /* hosting: player i out of our lobby (its id, since when it looked gone, its name on the trip) */
 static void mp_drop(int i){
     for (int k = i; k + 1 < g_mp.l.n; k++){
@@ -5750,6 +5759,7 @@ static void mp_drop(int i){
     g_mp.l.counts = (uint8_t)((g_mp.l.counts & ((1u << i) - 1u)) | ((g_mp.l.counts >> (i + 1)) << i));
     g_mp.friend_mask = (uint8_t)((g_mp.friend_mask & ((1u << i) - 1u)) | ((g_mp.friend_mask >> (i + 1)) << i));
     g_mp.crew_mask = (uint8_t)((g_mp.crew_mask & ((1u << i) - 1u)) | ((g_mp.crew_mask >> (i + 1)) << i));
+    g_mp.far_mask = (uint8_t)((g_mp.far_mask & ((1u << i) - 1u)) | ((g_mp.far_mask >> (i + 1)) << i));
     g_mp.l.n--;
 }
 static const rc_peer *mp_peer(uint32_t id){
@@ -5816,17 +5826,23 @@ static void mp_send_of(const MpLobby *l, uint8_t op, uint8_t arg, uint32_t to){
     m.x = (int16_t)(l->x < -32767.f ? -32767.f : l->x > 32767.f ? 32767.f : l->x);
     m.y = (int16_t)(l->y < -32767.f ? -32767.f : l->y > 32767.f ? 32767.f : l->y);
     if (op == RC_LOBBY_START){ int64_t t = (g_mp.start_at - roam_plat_now_us()) / 1000; m.t_ms = (uint16_t)(t < 0 ? 0 : t > 60000 ? 60000 : t); }
-    else if (op == RC_LOBBY_ADVERT) m.t_ms = (uint16_t)(MP_COUNTS_ON | (l->counts & 0x3fu));
+    else if (op == RC_LOBBY_ADVERT) m.t_ms = (uint16_t)(MP_COUNTS_ON | (l->counts & 0x3fu) | (l->priv ? MP_PRIVATE : 0u));
     else if (op == RC_LOBBY_JOIN) m.t_ms = (uint16_t)(MP_COUNTS_ON | (mp_counts(l->race) ? 1u : 0u));
     memcpy(m.ids, l->ids, sizeof m.ids);
     rc_send_lobby(&g_s, &m);
 }
 /* one about our lobby (g_mp.l) */
 static void mp_send(uint8_t op, uint8_t arg, uint32_t to){ mp_send_of(&g_mp.l, op, arg, to); }
-/* the host's lobby to every peer that takes lobbies, and to the hub */
+/* the host's lobby to every peer that takes lobbies, and to the hub; a private one's adverts only to its players and our
+ * friends and crew-mates (the hub leaves it off the others' world maps too) */
 static void mp_send_all(uint8_t op, uint8_t arg){
     roam_plat_lock();
-    for (int i = 0; i < RC_TABLE; i++) if (g_s.peer[i].state == RC_PS_EST && g_s.peer[i].lobbies) mp_send(op, arg, g_s.peer[i].id);
+    for (int i = 0; i < RC_TABLE; i++){
+        const rc_peer *p = &g_s.peer[i];
+        if (p->state != RC_PS_EST || !p->lobbies) continue;
+        if (op == RC_LOBBY_ADVERT && g_mp.l.priv && !mp_in(&g_mp.l, p->id) && !mp_mate(p->id)) continue;
+        mp_send(op, arg, p->id);
+    }
     mp_send(op, arg, 0);
     roam_plat_unlock();
 }
@@ -5957,29 +5973,58 @@ static const MpSpot *mp_spot_here(void){
     }
     return only && !in_event(x, y) ? only : 0;
 }
-/* the lobby nearest the player that it may join now: open, room in it, not one we are kept out of (mp_kept_out), its
- * start within MP_JOIN_M, its host linked with us (the hub links a lobby's host with the players near its start
- * first: a JOIN goes over that link) */
-static MpLobby *mp_joinable(void){
-    MpLobby *best = 0; float bd = MP_JOIN_M;
-    for (int i = 0; i < g_mp.nseen; i++){
-        MpLobby *l = &g_mp.seen[i];
-        if (l->state != RC_LS_OPEN || l->n >= l->max || !l->race || !mp_peer(l->host) || mp_kept_out(l)) continue;
-        float d = mp_dist(l->x, l->y);
-        if (d < bd){ bd = d; best = l; }
-    }
-    return best;
-}
-/* an open lobby at this start, room in it, that keeps us out (mp_kept_out): while it waits there no other opens here,
- * one race at a start (Enter opened one of our own beside it, and the players past its stage stood a crowd of
- * lobbies at one start, 2026-11-03).  A full one does not: Enter opens another beside it, as before */
-static const MpLobby *mp_keeps_out(void){
-    for (int i = 0; i < g_mp.nseen; i++){
-        const MpLobby *f = &g_mp.seen[i];
-        if (f->state == RC_LS_OPEN && f->race && f->n < f->max && mp_kept_out(f) && mp_dist(f->x, f->y) < MP_JOIN_M) return f;
-    }
+/* The lobbies at the player's start: several may wait at one (a busy start had a crowd of them on one spot, and Enter
+ * took whichever it heard of first, so friends standing side by side went into different races: a player's
+ * screenshot, 2026-11-05).  The lobby card pages through them (mp_panel, the page's E), Enter takes the page shown,
+ * and after them a page "open a new lobby" where Enter opens one beside them.
+ * mp_here: those within MP_JOIN_M of the player, open, with a race, their host linked with us (the hub links a lobby's
+ * host with the players near its start first: a JOIN goes over that link), a private one only of a friend or
+ * crew-mate; in the card's order, Enter's own pick first: the ones we may join before the full ones and those that
+ * keep us out (mp_kept_out), of each a lobby a friend or crew-mate of ours is in first, then a race that counts in
+ * our career (mp_counts), then the fuller, then by id (the order holds while nothing changes) */
+#define MP_PICK_NEW     0xffffffffu
+static int mp_can_join(const MpLobby *l){ return l->n < l->max && !mp_kept_out(l); }
+static int mp_mates_in(const MpLobby *l){
+    for (int i = 0; i < l->n && i < RC_LOBBY_MAX; i++) if (l->ids[i] != g_s.conf.self_id && mp_mate(l->ids[i])) return 1;
     return 0;
 }
+static int mp_before(const MpLobby *a, const MpLobby *b){
+    int x = mp_can_join(a), y = mp_can_join(b);
+    if (x != y) return x;
+    if ((x = mp_mates_in(a)) != (y = mp_mates_in(b))) return x;
+    if ((x = mp_counts(a->race) != 0) != (y = mp_counts(b->race) != 0)) return x;
+    if (a->n != b->n) return a->n > b->n;
+    return a->id < b->id;
+}
+static int mp_here(MpLobby **out){
+    int n = 0;
+    for (int i = 0; i < g_mp.nseen && n < MP_SEEN; i++){
+        MpLobby *l = &g_mp.seen[i];
+        if (l->state != RC_LS_OPEN || !l->race || !mp_peer(l->host) || mp_dist(l->x, l->y) >= MP_JOIN_M || (l->priv && !mp_mate(l->host))) continue;
+        int k = n++;
+        for (; k > 0 && mp_before(l, out[k - 1]); k--) out[k] = out[k - 1];
+        out[k] = l;
+    }
+    return n;
+}
+/* the card's "open a new lobby" page: at a multiplayer-only spot, and at an open race's only beside lobbies (alone
+ * there the game's own card is all: its Accept asks Solo or Multiplayer) */
+static int mp_new_page(const MpSpot *sp, int n){ return sp && (sp->kind == MPS_ONLY || n > 0); }
+/* the page picked of the n lobbies here (h, mp_here's) and the new lobby's (spot: there is one, after them): its index,
+ * n for the new lobby's, -1 none.  A page whose lobby went (or none picked yet) is the first */
+static int mp_pick_at(MpLobby *const *h, int n, int spot){
+    if (g_mp.pick == MP_PICK_NEW && spot) return n;
+    for (int i = 0; i < n; i++) if (h[i]->host == g_mp.pick) return i;
+    return n ? 0 : spot ? n : -1;
+}
+/* the lobby of the card's page here (0: none, or the new lobby's page) */
+static MpLobby *mp_picked(void){
+    MpLobby *h[MP_SEEN]; int n = mp_here(h);
+    int k = mp_pick_at(h, n, mp_new_page(mp_spot_here(), n));
+    return k >= 0 && k < n ? h[k] : 0;
+}
+/* the lobby Enter joins here: the card's page, if we may join it (else Enter opens a new one at a spot) */
+static MpLobby *mp_joinable(void){ MpLobby *l = mp_picked(); return l && mp_can_join(l) ? l : 0; }
 /* the JOIN to the host, and its copy to the hub: the hub links us with the host first (were it not linking us, the
  * JOIN would go nowhere) */
 static void mp_ask_in(void){ roam_plat_lock(); mp_send(RC_LOBBY_JOIN, 0, g_mp.l.host); mp_send(RC_LOBBY_JOIN, 0, 0); roam_plat_unlock(); }
@@ -5987,6 +6032,7 @@ static int mp_join(int64_t host, MpLobby *l){
     if (g_mp.st != MP_IDLE || !l) return 0;
     const char *no = mp_cannot();
     if (no){ mp_note(host, no); return 0; }
+    g_mp.asked_far = 0;
     if (mp_outpaced(l->race))
         rlog("[roam] f=%ld race lobby: joining a stage %d race in a class %d car (warned: its cars are usually much faster)\n",
              rh_frame(), mp_outpaced(l->race), mprace_car_class(player_car()));
@@ -6005,6 +6051,10 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
     case RC_LOBBY_ADVERT:
     case RC_LOBBY_START: {
         if (!r){ rlog("[roam] f=%ld race lobby: %s's race %08x is not in this game's table\n", rh_frame(), mp_name(from), m->race); return; }
+        /* Friends & crew only: its host sends it its players and friends and crew-mates alone; one that came to us
+         * anyway (a friendship ended since) is none of ours */
+        int priv = m->op == RC_LOBBY_ADVERT && (m->t_ms & MP_COUNTS_ON) && (m->t_ms & MP_PRIVATE);
+        if (priv && !mp_mate(from) && !mp_in_ids(m->ids, m->n, self)){ mp_forget(from); return; }
         MpLobby *l = mp_seen(from, 0);
         if (!l && m->state == RC_LS_OPEN && m->n < m->max){
             /* a lobby we hear of first: a message over the game */
@@ -6012,7 +6062,7 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
             roam_plat_lock(); roam_plat_notice(mp_name(from), t); roam_plat_unlock();
         }
         if (!l) l = mp_seen(from, 1);
-        if (m->op == RC_LOBBY_ADVERT) l->counts = m->t_ms & MP_COUNTS_ON ? (uint8_t)(m->t_ms & 0x3fu) : 0;   /* (a START's is its countdown) */
+        if (m->op == RC_LOBBY_ADVERT){ l->counts = m->t_ms & MP_COUNTS_ON ? (uint8_t)(m->t_ms & 0x3fu) : 0; l->priv = (uint8_t)priv; }   /* (a START's is its countdown) */
         l->id = m->lobby; l->host = from; l->race = r; l->x = m->x; l->y = m->y; l->n = m->n; l->max = m->max; l->state = m->state;
         l->away_s = m->op != RC_LOBBY_ADVERT ? 0 : m->away_s > MP_IDLE_WARN_US / 1000000 ? MP_IDLE_WARN_US / 1000000 : m->away_s;
         memcpy(l->ids, m->ids, sizeof l->ids); l->heard = host;
@@ -6048,7 +6098,9 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
              * security audit) */
             int asked = from == g_mp.asked_host && m->lobby == g_mp.asked_id && host - g_mp.asked_at <= MP_LATE_US;
             int open = m->op == RC_LOBBY_ADVERT && m->state == RC_LS_OPEN;
-            if (open && asked && mp_dist(l->x, l->y) <= MP_STAY_M){ g_mp.asked_host = 0; g_mp.l = *l; g_mp.joined++; mp_to(MP_IN, host); }
+            if (open && asked && (mp_dist(l->x, l->y) <= MP_STAY_M || g_mp.asked_far)){
+                g_mp.asked_host = 0; g_mp.l = *l; g_mp.joined++; mp_to(MP_IN, host); g_mp.far = g_mp.asked_far;
+            }
             else { roam_plat_lock(); mp_send_of(l, RC_LOBBY_LEAVE, RC_LL_LEFT, from); roam_plat_unlock(); }   /* about its lobby: ours is none */
         }
         return; }
@@ -6056,10 +6108,32 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
         if (g_mp.st != MP_HOST || m->lobby != g_mp.l.id) return;
         if (mp_in(&g_mp.l, from)){ mp_send_one(RC_LOBBY_ADVERT, 0, from); return; }            /* our answer was lost */
         if (g_mp.l.n >= g_mp.l.max || g_mp.l.state != RC_LS_OPEN){ mp_send_one(RC_LOBBY_LEAVE, RC_LL_FULL, from); return; }
+        float jd = 0.f;                                                  /* (how far from the start it asked) */
+        {
+            /* Friends & crew only: a stranger's JOIN (an older game's: it heard of the lobby before the switch) is as a
+             * full lobby's.  From afar (past MP_STAY_M: an invite's Join, mp_far_join) only a friend or crew-mate.  A
+             * friend or crew-mate stays in it wherever it drives (mp_away): its link to us may be a moment old, its car
+             * not seen yet, and its own game leaves the lobby when it drives off from a start it joined at */
+            int mate = mp_mate(from);
+            const PeerView *v = du_pv(from);
+            float d = v && v->have_pose ? rc_sqrtf((v->pose.p[0] - g_mp.l.x) * (v->pose.p[0] - g_mp.l.x) +
+                                                   (v->pose.p[1] - g_mp.l.y) * (v->pose.p[1] - g_mp.l.y)) : 0.f;
+            if (g_mp.l.priv && !mate){
+                rlog("[roam] f=%ld race lobby %08x: a JOIN from a player not a friend or crew-mate: Friends & crew only\n", rh_frame(), g_mp.l.id);
+                mp_send_one(RC_LOBBY_LEAVE, RC_LL_FULL, from); return;
+            }
+            if (d > MP_STAY_M && !mate){
+                rlog("[roam] f=%ld race lobby %08x: a JOIN from %.0f m away, not a friend or crew-mate: not taken\n", rh_frame(), g_mp.l.id, (double)d);
+                mp_send_one(RC_LOBBY_LEAVE, RC_LL_LEFT, from); return;
+            }
+            if (mate) g_mp.far_mask |= (uint8_t)(1u << g_mp.l.n); else g_mp.far_mask &= (uint8_t)~(1u << g_mp.l.n);
+            jd = d;
+        }
         if ((m->t_ms & MP_COUNTS_ON) && (m->t_ms & 1u)) g_mp.l.counts |= (uint8_t)(1u << g_mp.l.n);
         else g_mp.l.counts &= (uint8_t)~(1u << g_mp.l.n);
         g_mp.away[g_mp.l.n] = 0; g_mp.l.ids[g_mp.l.n++] = from;
-        rlog("[roam] f=%ld race lobby %08x: %s joined, %d of %d\n", rh_frame(), g_mp.l.id, mp_name(from), g_mp.l.n, g_mp.l.max);
+        rlog("[roam] f=%ld race lobby %08x: %s joined, %d of %d%s\n", rh_frame(), g_mp.l.id, mp_name(from), g_mp.l.n, g_mp.l.max,
+             jd > MP_STAY_M ? " (from afar)" : "");
         mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host;
         return;
     case RC_LOBBY_LEAVE:
@@ -6180,12 +6254,6 @@ static int mp_engage_spot(int64_t host, uint32_t r){
     if (no){ mp_note(host, no); return 0; }
     MpLobby *l = mp_joinable();
     if (l) return mp_join(host, l);
-    const MpLobby *k = mp_keeps_out();
-    if (k){                                                         /* (the panel, or the top line, says why) */
-        char nm[40]; race_name(k->race, nm, sizeof nm);
-        rlog("[roam] f=%ld race lobby: none opened: lobby %08x here (%s) is for players up to stage %d\n", rh_frame(), k->id, nm, mp_kept_out(k));
-        return 0;
-    }
     return mp_open(host, r);
 }
 /* hosting: players gone from free roam, or away from the start, for MP_AWAY_US (a player who just joined, whose car
@@ -6195,7 +6263,7 @@ static void mp_away(int64_t host){
         const PeerView *v = du_pv(g_mp.l.ids[i]);
         float far = v && v->have_pose ? rc_sqrtf((v->pose.p[0] - g_mp.l.x) * (v->pose.p[0] - g_mp.l.x) +
                                                  (v->pose.p[1] - g_mp.l.y) * (v->pose.p[1] - g_mp.l.y)) : 0.f;
-        int gone = !v || !v->visible || far > MP_STAY_M + 10.f;
+        int gone = !v || !v->visible || (far > MP_STAY_M + 10.f && !(g_mp.far_mask >> i & 1u));
         if (!gone){ g_mp.away[i] = 0; continue; }
         if (!g_mp.away[i]) g_mp.away[i] = host;
         if (host - g_mp.away[i] < MP_AWAY_US) continue;
@@ -6240,10 +6308,58 @@ static void mp_starts(int64_t host, int k){
     roam_plat_unlock();
     g_mp.up_tx = host;
 }
+/* An invite's Join (the page: a friend who hosts a lobby invited us, friends.ts): the lobby of host hid, its id lid and
+ * its race's hash rh as the server had them, joined from wherever we are.  Our JOIN's copy to the hub links us with
+ * the host (wherever we are: we asked); the host takes a friend's JOIN from afar (mp_recv), and its race's trip leaves
+ * from here and comes back here, as any trip does.  A lobby we are in already is left for it; our own is not */
+static void mp_far_join(int64_t host, int in_roam, uint32_t hid, uint32_t lid, uint32_t rh){
+    if (!in_roam || !hid || !lid || hid == g_s.conf.self_id) return;
+    if (g_mp.st == MP_HOST){ mp_note(host, "Call off your own race first: drive away from its start"); return; }
+    if (g_mp.st == MP_COUNT || g_mp.st == MP_TRIP) return;
+    if ((g_mp.st == MP_ASKED || g_mp.st == MP_IN) && g_mp.l.id == lid) return;                /* (in it, or asking, already) */
+    if (g_mp.st == MP_ASKED || g_mp.st == MP_IN) mp_close(host, RC_LL_LEFT, 0);
+    uint32_t r = race_by_hash(rh);
+    if (!r || !race_lan(r)){ rlog("[roam] f=%ld race lobby %08x: an invite's race %08x is not one of this game's\n", rh_frame(), lid, rh); return; }
+    MpLobby l; memset(&l, 0, sizeof l);
+    l.id = lid; l.host = hid; l.race = r; l.max = (uint8_t)race_max(r); l.state = RC_LS_OPEN; l.n = 1; l.ids[0] = hid; l.heard = host;
+    if (!race_place(r, &l.x, &l.y)) return;
+    if (!mp_join(host, &l)) return;
+    g_mp.asked_far = g_mp.far = 1;
+    rlog("[roam] f=%ld race lobby %08x: joining from afar (an invite), %.0f m from its start\n", rh_frame(), lid, (double)mp_dist(l.x, l.y));
+}
+/* the page's lobby actions (roam_plat_lobby_act): the card's next page, Friends & crew only, leave, an invite's Join */
+static void mp_act(int64_t host, int in_roam, int act, uint32_t a, uint32_t b, uint32_t r){
+    switch (act){
+    case ROAM_LB_NEXT: {
+        if (g_mp.st != MP_IDLE) return;
+        MpLobby *h[MP_SEEN]; int n = mp_here(h), spot = mp_new_page(mp_spot_here(), n), pages = n + spot;
+        if (pages < 2) return;
+        int k = (mp_pick_at(h, n, spot) + 1) % pages;
+        g_mp.pick = k < n ? h[k]->host : MP_PICK_NEW;
+        rlog("[roam] f=%ld race lobby: the card's page %d of %d (%s)\n", rh_frame(), k + 1, pages, k < n ? "a lobby" : "a new lobby");
+        return; }
+    case ROAM_LB_PRIVATE:
+        if (g_mp.st != MP_HOST) return;
+        g_mp.l.priv ^= 1;
+        rlog("[roam] f=%ld race lobby %08x: Friends & crew only %s\n", rh_frame(), g_mp.l.id, g_mp.l.priv ? "on" : "off");
+        g_mp.tx_at = 0;                                                  /* (its adverts at once) */
+        return;
+    case ROAM_LB_LEAVE:
+        if (g_mp.st == MP_ASKED || g_mp.st == MP_IN) mp_close(host, RC_LL_LEFT, "You left the race");
+        return;
+    case ROAM_LB_JOIN:
+        mp_far_join(host, in_roam, a, b, r);
+        return;
+    }
+}
 /* per frame */
 static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const uint32_t *from, const rc_lobby *in, int nin){
     for (int i = 0; i < nin; i++) mp_recv(host, from[i], &in[i]);
     for (int i = 0; i < g_mp.nseen; i++) if (host - g_mp.seen[i].heard > MP_GONE_US) mp_forget(g_mp.seen[i--].host);
+    {
+        uint32_t a, b, r; int act;
+        for (int k = 0; k < 8 && (act = roam_plat_lobby_act(&a, &b, &r)) != ROAM_LB_NONE; k++) mp_act(host, in_roam, act, a, b, r);
+    }
     int eng = in_roam && world_runs && !(rd32(G_ACTIONS) & (1u << ACT_ENGAGE));
     int press = eng && !g_mp.engage;
     g_mp.engage = eng;
@@ -6333,6 +6449,7 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
         const MpSpot *sp = mp_spot_here();
         mp_ui_frame(c, host, in_roam, press, sp);
         if (press && !sp && g_mp.st == MP_IDLE){ MpLobby *l = mp_joinable(); if (l) mp_join(host, l); }
+        if (!sp && g_mp.pick && g_mp.st == MP_IDLE){ MpLobby *h[MP_SEEN]; if (!mp_here(h)) g_mp.pick = 0; }   /* (away from a start: Enter's own pick again) */
         break; }
     case MP_HOST:
         if (mp_dist(g_mp.l.x, g_mp.l.y) > MP_STAY_M){ mp_close(host, RC_LL_GONE, "You drove away: the race is called off"); break; }
@@ -6368,12 +6485,13 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
         if (host - g_mp.tx_at >= MP_ADVERT_US){ mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host; }
         break;
     case MP_ASKED:
-        if (host - g_mp.since > MP_ASK_US){ mp_note(host, "The race did not take you"); mp_to(MP_IDLE, host); break; }
+        /* (from afar the hub links us with the host first: a little longer) */
+        if (host - g_mp.since > (g_mp.far ? 2 : 1) * MP_ASK_US){ mp_note(host, "The race did not take you"); mp_to(MP_IDLE, host); break; }
         if (host - g_mp.tx_at >= 500000){ mp_ask_in(); g_mp.tx_at = host; }
         break;
     case MP_IN:
         if (host - g_mp.l.heard > MP_GONE_US){ mp_note(host, "The race is off: its host is gone"); mp_to(MP_IDLE, host); break; }
-        if (mp_dist(g_mp.l.x, g_mp.l.y) > MP_STAY_M){ mp_close(host, RC_LL_LEFT, "You drove away: you left the race"); break; }
+        if (!g_mp.far && mp_dist(g_mp.l.x, g_mp.l.y) > MP_STAY_M){ mp_close(host, RC_LL_LEFT, "You drove away: you left the race"); break; }
         break;
     case MP_COUNT:
         if (g_mp.l.host == g_s.conf.self_id){
@@ -6430,19 +6548,17 @@ static int mp_line(int64_t host, char *tx, int n){
             return 1;
         }
         if (sp && sp->kind == MPS_ONLY){
-            /* a lobby here we are kept out of: said, and Enter opens none (mp_keeps_out); one with no room left:
-             * said, as Enter starts another */
-            const MpLobby *k = mp_keeps_out();
-            if (k){
+            /* the card's lobby, one we may not join (kept out, or full): said, as Enter starts another beside it */
+            const MpLobby *k = mp_picked();
+            if (k && mp_kept_out(k)){
                 char hn[24]; snprintf(hn, sizeof hn, "%s", mp_name(k->host));
-                snprintf(tx, (size_t)n, "%s's %s is for players up to stage %d and %s's friends and crew", hn, race_kind(k->race), mp_kept_out(k), hn);
+                snprintf(tx, (size_t)n, "%s's %s is for players up to stage %d and %s's friends and crew. Enter starts another", hn, race_kind(k->race),
+                         mp_kept_out(k), hn);
                 return 1;
             }
-            for (int i = 0; i < g_mp.nseen; i++){
-                const MpLobby *f = &g_mp.seen[i];
-                if (f->state != RC_LS_OPEN || !f->race || f->n < f->max || mp_dist(f->x, f->y) >= MP_JOIN_M) continue;
-                char hn[24]; snprintf(hn, sizeof hn, "%s", mp_name(f->host));
-                snprintf(tx, (size_t)n, "%s's %s is full (%d of %d). Press Enter to start another", hn, race_kind(f->race), f->n, f->max);
+            if (k){
+                char hn[24]; snprintf(hn, sizeof hn, "%s", mp_name(k->host));
+                snprintf(tx, (size_t)n, "%s's %s is full (%d of %d). Press Enter to start another", hn, race_kind(k->race), k->n, k->max);
                 return 1;
             }
             snprintf(tx, (size_t)n, "Multiplayer %s here (%s): press Enter to open a lobby", race_kind(sp->race),
@@ -6641,19 +6757,22 @@ static void mp_panel(int64_t host, int in_roam){
             if (s <= 60) js_int(&j, "closes", (int)(s < 0 ? 0 : s));
         }
         if ((g_mp.st == MP_HOST || g_mp.st == MP_IN) && g_mp.l.away_s) js_int(&j, "away", g_mp.l.away_s);
+        if (g_mp.st == MP_HOST || g_mp.st == MP_IN) js_int(&j, "priv", g_mp.l.priv);
+        if ((g_mp.st == MP_ASKED || g_mp.st == MP_IN) && g_mp.far) js_int(&j, "far", 1);
     } else if (hud){
+        /* the card's page of the lobbies here (mp_here; the page's E turns it, pg of pgs), "open a new lobby" after
+         * them at a spot; card: an open race's, where Enter brings the game's own card and its question joins the
+         * page's lobby (or opens one) */
         const MpSpot *sp = mp_spot_here();
-        MpLobby *l = mp_joinable();
-        /* a lobby here we are kept out of (Enter opens none), else a full one (Enter opens another) */
-        const MpLobby *keeps = !l && sp && sp->kind == MPS_ONLY ? mp_keeps_out() : 0, *full = keeps;
-        for (int i = 0; !l && !keeps && sp && sp->kind == MPS_ONLY && i < g_mp.nseen; i++){
-            const MpLobby *f = &g_mp.seen[i];
-            if (f->state == RC_LS_OPEN && f->race && f->n >= f->max && mp_dist(f->x, f->y) < MP_JOIN_M) full = f;
-        }
+        MpLobby *h[MP_SEEN]; int nh = mp_here(h), spot = mp_new_page(sp, nh), pages = nh + spot, k = mp_pick_at(h, nh, spot);
+        MpLobby *p = k >= 0 && k < nh ? h[k] : 0, *l = p && mp_can_join(p) ? p : 0;
+        const MpLobby *full = p && !l ? p : 0;
+        int card = sp && sp->kind == MPS_OPEN;
         /* a message first, for its few seconds (back from the race at the spot: the place and the prize) */
-        if (g_mp.note[0] && host < g_mp.note_until){ js_str(&j, "v", "note"); js_str(&j, "text", g_mp.note); }
-        else if (l && (!sp || sp->kind == MPS_ONLY) && mp_cannot()){ js_str(&j, "v", "note"); js_str(&j, "text", mp_cannot()); }
-        else if (l && (!sp || sp->kind == MPS_ONLY)){ js_str(&j, "v", "join"); js_race(&j, l->race); js_players(&j, l); js_int(&j, "fee", mprace_quit_fee());
+        if (g_mp.note[0] && host < g_mp.note_until){ js_str(&j, "v", "note"); js_str(&j, "text", g_mp.note); pages = 0; }
+        else if (l && mp_cannot()){ js_str(&j, "v", "note"); js_str(&j, "text", mp_cannot()); pages = 0; }
+        else if (l){ js_str(&j, "v", "join"); js_race(&j, l->race); js_players(&j, l); js_int(&j, "fee", mprace_quit_fee());
+            if (card) js_int(&j, "card", 1);
             if (l->race && mprace_evened(race_net_mode(l->race))) js_int(&j, "even", 1);
             /* (a car usually outpaced in the race's stage: the join view warns, once in the log a lobby) */
             static uint32_t warned;
@@ -6664,11 +6783,14 @@ static void mp_panel(int64_t host, int in_roam){
                 warned = l->id;
             } }
         else if (full){ js_str(&j, "v", "full"); js_race(&j, full->race); js_players(&j, full);
-            if (keeps) js_int(&j, "only", mp_kept_out(keeps)); }              /* (kept out: up to this stage, Enter opens none) */
-        else if (sp && sp->kind == MPS_ONLY){
+            if (mp_kept_out(full)) js_int(&j, "only", mp_kept_out(full));     /* (kept out: up to this stage; Enter opens another) */
+            if (card) js_int(&j, "card", 1); }
+        else if (k == nh && spot){
             js_str(&j, "v", "spot"); js_race(&j, sp->race);
             if (mp_counts(sp->race)) js_int(&j, "counts", 1); else js_str(&j, "why", mpw_text[sp->why]);
-        }
+            if (card) js_int(&j, "card", 1);
+        } else pages = 0;
+        if (pages > 1){ js_int(&j, "pg", k + 1); js_int(&j, "pgs", pages); }
     }
     js_raw(&j, "}");
     if (!strcmp(buf, last)) return;
@@ -6901,11 +7023,7 @@ static void mp_card(CPU *c){
     if (msg == MSG_BUTTON && ok(obj, 0x14) && MR32(obj + 0x10u) == CARD_ACCEPT && !MR8(self + 0x51u) && g_mp.st == MP_IDLE){
         uint32_t r = rd32(G_ENGAGED_RACE);
         if (!r || !race_lan(r)){ sub_00499c00(c); return; }                        /* a race no LAN race can be: as before */
-        MpLobby *l = mp_joinable();
-        if (!l && mp_keeps_out()){                                                  /* a lobby here we may not join, and no other opens: Solo */
-            rlog("[roam] f=%ld race card: a lobby here keeps us out (up to stage %d): Solo, no question\n", rh_frame(), mp_kept_out(mp_keeps_out()));
-            sub_00499c00(c); return;
-        }
+        MpLobby *l = mp_joinable();                                                /* (the lobby card's page: else a new lobby) */
         char t[320];
         /* (with others a win counts too where it counts with Solo: mp_counts; a friend's win too); in the game's
          * language, in its letters */
@@ -6969,8 +7087,8 @@ int roam_game_card_question(void){ return g_mpd.dlg == MPD_CARD; }
 /* A lobby shows its host, race and players over its start (gold, from
  * MP_SEE_LOBBY_M), a multiplayer-only spot near the player what it is
  * (light blue, from MP_SEE_ONLY_M); the game draws its own markers for the
- * open races.  The nearest TAG_MPN on the screen get one, as the names over
- * friends' cars (tags_update), after the HUD's update. */
+ * open races.  The nearest starts on the screen get their lines (mp_labels: TAG_MPN
+ * in all), as the names over friends' cars (tags_update), after the HUD's update. */
 #if MPRACES
 #define MP_SEE_LOBBY_M  250.f
 #define MP_SEE_ONLY_M   50.f
@@ -6991,13 +7109,20 @@ static float race_z(uint32_t r){
     uint32_t me = player_car();
     return me ? MRF32(me + 0x68u) : 0.f;
 }
+/* several lobbies at one start (within MP_STACK_M of each other) stack their words there, a line each, the fuller
+ * first, at most MP_STACK lines and then "+N more" (they drew over each other: a player's screenshot, 2026-11-05) */
+#define MP_STACK        4
+#define MP_STACK_M      20.f
+#define MP_LINE_H       17.f          /* a line of the stack, in HUD units at scale 1 (the names' TAG_H and a gap) */
 static void mp_labels(CPU *c){
     uint32_t pl = rd32(G_PLAYER1), hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0;
     uint32_t pkg = hud && ok(hud, 0x14) ? rd32(hud + 0x10u) : 0;
     if (!hud || hud != g_tag.hud || !ok(pkg, 0x20) || !g_gmem) return;
     uint32_t cam = rd32(G_VIEW1 + 0x40u), me = player_car();
     int on = g_in_roam && ok(cam, 0x60) && me && hud_on_top(pkg) && !rd32(0x00838974u /* a dialog up */);
-    struct { float x, y, z, d2, sx, sy, sz; char t[48]; uint32_t rgb; } L[MP_SEEN + 8]; int n = 0;
+    /* each lobby or spot a line (t, its colour), of the start a (the index of its first line), np its players (the
+     * stack's order) */
+    struct { float x, y, z, d2, sx, sy, sz; char t[48]; uint32_t rgb; int a, np; } L[MP_SEEN + 8]; int n = 0;
     float mx = on ? MRF32(me + 0x60u) : 0, my = on ? MRF32(me + 0x64u) : 0;
     /* the lobbies: ours (or the one we are in) and the others heard of */
     for (int i = -1; on && i < g_mp.nseen && n < MP_SEEN + 8; i++){
@@ -7005,7 +7130,9 @@ static void mp_labels(CPU *c){
         if (!l->race || (i < 0 && g_mp.st == MP_IDLE) || (i >= 0 && g_mp.st != MP_IDLE && l->id == g_mp.l.id)) continue;
         float dx = l->x - mx, dy = l->y - my, d2 = dx * dx + dy * dy;
         if (d2 > MP_SEE_LOBBY_M * MP_SEE_LOBBY_M) continue;
-        L[n].x = l->x; L[n].y = l->y; L[n].z = race_z(l->race); L[n].d2 = d2; L[n].rgb = MP_RGB_LOBBY;
+        L[n].x = l->x; L[n].y = l->y; L[n].z = race_z(l->race); L[n].d2 = d2; L[n].rgb = MP_RGB_LOBBY; L[n].np = l->n; L[n].a = n;
+        for (int j = 0; j < n; j++)
+            if ((L[j].x - l->x) * (L[j].x - l->x) + (L[j].y - l->y) * (L[j].y - l->y) < MP_STACK_M * MP_STACK_M){ L[n].a = L[j].a; break; }
         const char *cr = mp_counts(l->race) ? MP_COUNTS_TAG : "";
         if (l->host == g_s.conf.self_id) snprintf(L[n].t, sizeof L[n].t, "Your %s (%d/%d)%s", race_kind(l->race), l->n, l->max, cr);
         else snprintf(L[n].t, sizeof L[n].t, "%s's %s (%d/%d)%s", mp_name(l->host), race_kind(l->race), l->n, l->max, cr);
@@ -7020,16 +7147,17 @@ static void mp_labels(CPU *c){
         int taken = 0;
         for (int j = 0; j < n; j++) if ((L[j].x - x) * (L[j].x - x) + (L[j].y - y) * (L[j].y - y) < 20.f * 20.f) taken = 1;
         if (taken) continue;
-        L[n].x = x; L[n].y = y; L[n].z = race_z(sp->race); L[n].d2 = d2; L[n].rgb = MP_RGB_ONLY;
+        L[n].x = x; L[n].y = y; L[n].z = race_z(sp->race); L[n].d2 = d2; L[n].rgb = MP_RGB_ONLY; L[n].np = 0; L[n].a = n;
         char k[16]; snprintf(k, sizeof k, "%s", race_kind(sp->race)); k[0] = (char)(k[0] >= 'a' && k[0] <= 'z' ? k[0] - 32 : k[0]);
         snprintf(L[n].t, sizeof L[n].t, "%s (multiplayer)%s", k, mp_counts(sp->race) ? MP_COUNTS_TAG : "");
         n++;
     }
-    /* on the screen, nearest first */
-    int m = 0;
+    /* the starts on the screen (each one's first line placed), nearest first */
+    int A[MP_SEEN + 8], m = 0;
     float E[3] = { 0 }, F[3] = { 0 };
     if (on) view_eye(cam, E, F);
     for (int i = 0; i < n; i++){
+        if (L[i].a != i) continue;
         float d[3] = { L[i].x - E[0], L[i].y - E[1], L[i].z + 3.f - E[2] };
         float ahead = d[0] * F[0] + d[1] * F[1] + d[2] * F[2];
         if (ahead < 1.f) continue;
@@ -7042,32 +7170,50 @@ static void mp_labels(CPU *c){
 #if COOP
         if (coop_player()) L[i].sy *= 0.5f;          /* co-op: player 1's view is the screen's upper half */
 #endif
-        __typeof__(L[0]) e = L[i];                  /* (m <= i: the ones before m are on the screen, sorted) */
         int j = m++;
-        for (; j > 0 && L[j - 1].d2 > e.d2; j--) L[j] = L[j - 1];
-        L[j] = e;
+        for (; j > 0 && L[A[j - 1]].d2 > L[i].d2; j--) A[j] = A[j - 1];
+        A[j] = i;
     }
-    for (int k = 0; k < TAG_MPN; k++){
-        int tk = TAG_MP0 + k;
-        if (k >= m){ tag_hide(c, tk); continue; }
-        uint32_t obj = tag_obj(c, tk, pkg);
-        if (!obj) continue;
-        float hx = L[k].sx, hy = L[k].sy;
-        rh_hud_marker(&hx, &hy);
-        tag_text_rgb(c, tk, obj, L[k].t, L[k].rgb);
-        uint32_t ap[2] = { gvec(g_gmem + TAG_SCR + 0x20u, hx - 320.f, hy - 240.f, L[k].sz), 0 };
-        rh_call(c, FN_FE_POS, obj, 0, 2, ap);
-        float sc = 60.f / rc_sqrtf(L[k].d2 + 1.f);
+    /* each start's lines, the fuller lobbies first, from the top down to its place, while tags are left */
+    int t = 0;
+    for (int q = 0; q < m && t < TAG_MPN; q++){
+        int s0 = A[q], idx[MP_SEEN + 8], cnt = 0;
+        for (int i = 0; i < n; i++){
+            if (L[i].a != s0) continue;
+            int k = cnt++;
+            for (; k > 0 && L[idx[k - 1]].np < L[i].np; k--) idx[k] = idx[k - 1];
+            idx[k] = i;
+        }
+        int room = TAG_MPN - t, shown = cnt < MP_STACK ? cnt : MP_STACK;
+        if (shown < cnt && shown + 1 > room) shown = room - 1;          /* (with its "+N more" line) */
+        else if (shown > room) shown = room;
+        int lines = shown + (shown < cnt ? 1 : 0);
+        if (lines < 1) break;
+        float sc = 60.f / rc_sqrtf(L[s0].d2 + 1.f);
         if (sc < 0.55f) sc = 0.55f;
         if (sc > 1.f) sc = 1.f;
 #if COOP
         if (coop_player()) sc *= 0.7f;               /* as the HUD in a half (splitscreen.c) */
 #endif
-        uint32_t as[2] = { gvec(g_gmem + TAG_SCR + 0x30u, sc, sc, 1.f), 0 };
-        rh_call(c, FN_FE_SCALE, obj, 0, 2, as);
-        gcall1(c, FN_FE_SHOW, 0, obj);
-        g_tag.shown[tk] = 1;
+        float hx0 = L[s0].sx, hy0 = L[s0].sy;
+        rh_hud_marker(&hx0, &hy0);
+        for (int li = 0; li < lines && t < TAG_MPN; li++, t++){
+            int tk = TAG_MP0 + t;
+            uint32_t obj = tag_obj(c, tk, pkg);
+            if (!obj) continue;
+            char more[24];
+            const char *txt = li < shown ? L[idx[li]].t : (snprintf(more, sizeof more, "+%d more", cnt - shown), more);
+            tag_text_rgb(c, tk, obj, txt, li < shown ? L[idx[li]].rgb : MP_RGB_LOBBY);
+            float hy = hy0 - (float)(lines - 1 - li) * MP_LINE_H * sc;
+            uint32_t ap[2] = { gvec(g_gmem + TAG_SCR + 0x20u, hx0 - 320.f, hy - 240.f, L[s0].sz), 0 };
+            rh_call(c, FN_FE_POS, obj, 0, 2, ap);
+            uint32_t as[2] = { gvec(g_gmem + TAG_SCR + 0x30u, sc, sc, 1.f), 0 };
+            rh_call(c, FN_FE_SCALE, obj, 0, 2, as);
+            gcall1(c, FN_FE_SHOW, 0, obj);
+            g_tag.shown[tk] = 1;
+        }
     }
+    for (; t < TAG_MPN; t++) tag_hide(c, TAG_MP0 + t);
 }
 #endif
 
@@ -9994,7 +10140,12 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++) if (g_mp.l.ids[i] != g_s.conf.self_id && mp_mate(g_mp.l.ids[i])){
             rlog(" %s%s", mp_name(g_mp.l.ids[i]), mp_friend(g_mp.l.ids[i]) ? "" : " (crew)"); nf++;
         }
-        rlog("%s\n", nf ? "" : " none");
+        rlog("%s; Friends & crew only %d, from afar %d (players from afar %02x)\n", nf ? "" : " none", g_mp.l.priv, g_mp.far, g_mp.far_mask);
+        {
+            MpLobby *h[MP_SEEN]; int nh = mp_here(h), spot = mp_new_page(mp_spot_here(), nh), k = mp_pick_at(h, nh, spot);
+            rlog("[roam]   the card here: %d lobbies%s, page %d of %d (%s)\n", nh, spot ? " and a new one's" : "", k + 1, nh + spot,
+                 k < 0 ? "none" : k < nh ? mp_name(h[k]->host) : "a new lobby");
+        }
         for (int i = 0; i < g_mp.nseen; i++){
             const MpLobby *l = &g_mp.seen[i];
             race_name(l->race, nm, sizeof nm);
@@ -10023,6 +10174,22 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         MpLobby *l = mp_joinable();
         int ok_ = l && g_mp.st == MP_IDLE && mp_join(roam_plat_now_us(), l);
         rlog("[roam] f=%ld mp join: %s%s\n", f, ok_ ? "asked to join " : "nothing to join here", ok_ ? mp_name(l->host) : "");
+        return 1;
+    }
+    if (!strcasecmp(sub, "next") || !strcasecmp(sub, "private") || !strcasecmp(sub, "leave")){
+        /* the lobby card's keys on the page (E, V, Z): its next page, Friends & crew only, leave a lobby joined from afar */
+        int act = !strcasecmp(sub, "next") ? ROAM_LB_NEXT : !strcasecmp(sub, "private") ? ROAM_LB_PRIVATE : ROAM_LB_LEAVE;
+        mp_act(roam_plat_now_us(), g_in_roam, act, 0, 0, 0);
+        rlog("[roam] f=%ld mp %s: %s\n", f, sub, mp_st[g_mp.st]);
+        return 1;
+    }
+    if (!strcasecmp(sub, "farjoin")){
+        /* "mp farjoin NAME": an invite's Join of NAME's lobby, as the page's would be (from its host's id, its id and
+         * its race's hash, here the ones heard of: a test pair's room links everyone) */
+        const MpLobby *l = 0;
+        for (int i = 0; i < g_mp.nseen && !l; i++) if (!strcasecmp(mp_name(g_mp.seen[i].host), a1)) l = &g_mp.seen[i];
+        if (l) mp_act(roam_plat_now_us(), g_in_roam, ROAM_LB_JOIN, l->host, l->id, MR32(l->race + 8u));
+        rlog("[roam] f=%ld mp farjoin %s: %s\n", f, a1, !l ? "no lobby of that player heard of" : mp_st[g_mp.st]);
         return 1;
     }
     if (!strcasecmp(sub, "pull")){

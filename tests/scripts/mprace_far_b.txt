@@ -1,0 +1,24 @@
+# A friend joins from afar (with mprace_far_a.txt): B stays where its career put it, hears of A's Friends & crew only
+# lobby (A's friend: NFSU2_MPRACE_TEST_FRIENDS=Ann here), takes its "invite" (mp farjoin Ann: the Join the page's
+# invite line sends), is in it however far from its start, races, and comes back where it was.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++120  roam mp lobby                           # Ann's lobby, Friends & crew only, how far away
++0    log LOBBY join from afar
++0    roam mp farjoin Ann
++60   roam mp lobby
++0    roam mp waitlobby 2 6000
++300  roam mp lobby                           # still in it, from afar
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

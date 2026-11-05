@@ -124,6 +124,20 @@ pub(crate) const OUT_PONG: usize = 10;
 pub(crate) const OUT_WRITES: usize = 11;
 pub const MSGS: usize = 12;
 
+/// The count's line of messages by kind of player (`LanSwitch::messages_by_kind`): for each kind with players, how many,
+/// their messages each way a second, and each one's
+pub fn kinds_line(kinds: &[crate::KindMsgs], secs: f64) -> Option<String> {
+    let parts: Vec<String> = kinds
+        .iter()
+        .filter(|k| k.players > 0 && secs > 0.0)
+        .map(|k| {
+            let (i, o, n) = (k.msgs_in as f64 / secs, k.msgs_out as f64 / secs, k.players as f64);
+            format!("{} {}: {i:.0} in, {o:.0} out a second ({:.1} and {:.1} each)", k.kind, k.players, i / n, o / n)
+        })
+        .collect();
+    (!parts.is_empty()).then(|| parts.join("; "))
+}
+
 /// The count's line of messages: each way a second, by type, and the writes
 pub fn msg_line(now: &[u64], was: &[u64], secs: f64) -> Option<String> {
     let d = |i: usize| now[i].saturating_sub(was.get(i).copied().unwrap_or(0)) as f64 / secs.max(1.0);
@@ -200,6 +214,17 @@ pub fn line(now: &[u64], was: &[u64], secs: f64) -> Option<String> {
 mod tests {
     use super::*;
     use crate::BASE;
+
+    #[test]
+    fn kinds_line_says_each_kind_with_players_a_second_and_each_ones() {
+        let k = |kind, players, msgs_in, msgs_out| crate::KindMsgs { kind, players, msgs_in, msgs_out };
+        let kinds = [k("racing or in a race lobby", 10, 30_000, 45_000), k("in Online mode", 0, 0, 0), k("driving in free roam", 4, 24_000, 24_600)];
+        assert_eq!(
+            kinds_line(&kinds, 300.0).unwrap(),
+            "racing or in a race lobby 10: 100 in, 150 out a second (10.0 and 15.0 each); driving in free roam 4: 80 in, 82 out a second (20.0 and 20.5 each)"
+        );
+        assert_eq!(kinds_line(&[k("in Online mode", 0, 5, 5)], 300.0), None);
+    }
 
     fn frame(kind: u8, b1: u8, src: u32, dport: u16, data: &[u8]) -> Vec<u8> {
         let mut f = vec![kind, b1, 0, 0];

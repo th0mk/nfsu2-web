@@ -575,6 +575,39 @@ const cases = {
       await c.close();
     } finally { link.close(); }
   },
+
+  // a page driving in free roam: the switch times its round trip by stamping its compact bundles (probe_ms 100 here),
+  // which the page echoes in its next bundle or alone (ECHO_WAIT_MS), not by pinging it; every car state still comes
+  async echo([port]) {
+    const { attachNet } = await pageNet(port);
+    const memory = new WebAssembly.Memory({ initial: 10, maximum: 10, shared: true }), roam = mailbox(memory, 0);
+    want(roam, 1); Atomics.store(roam.w, P.W_MODE, P.NET_MODE_VLAN);
+    const link = attachNet(fakeGame(memory, { 4: roam }), { url: `ws://127.0.0.1:${port}/lan`, name: 'P', pingMs: 60_000 });
+    try {
+      const me = P.ipNum(await link.online);
+      const c = new Client(port, 'C', '', null, { bundle: true });
+      await c.welcome(); await sleep(100);
+      // the page's game drives: a car state of its own to C now and then (the switch reads that it drives from it)
+      let k = 0;
+      const mine = () => { txPush(memory, roam, { dst: c.vip, data: snapDatagram({ sender: 0x1111, seq: k, t: 1_000_000 + 50_000 * k, p: [1, 2, 3], v: [0, 0, 0], k: k++ }) }); txBell(roam); };
+      mine();
+      let got = 0;
+      for (let i = 0; i < 40; i++) {
+        c.sendBundle([{ f: frameOf(me, snapDatagram({ seq: i, t: 2_000_000 + 50_000 * i, p: [10 + i, 2, 3], v: [1, 0, 0], k: i }), 1, 47210, 47210) }]);
+        if (i % 4 === 0) mine();
+        await sleep(50);
+        got += rxTakeRaw(memory, roam).length;
+      }
+      await sleep(200);
+      got += rxTakeRaw(memory, roam).length;
+      assert.equal(got, 40, 'every car state, through stamped bundles too');
+      const st = await state(port);
+      const p = st.peers.find(x => x.vip >>> 0 === me);
+      assert.ok(st.info.echoes >= 5, `stamps echoed: ${st.info.echoes}`);
+      assert.ok(p.rtt !== null && p.rtt >= 0 && p.rtt < 100, `the page's round trip: ${p.rtt} ms`);
+      await c.close();
+    } finally { link.close(); }
+  },
 };
 
 const [name, ...ports] = process.argv.slice(2);

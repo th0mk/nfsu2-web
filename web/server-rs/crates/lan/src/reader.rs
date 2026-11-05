@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::time::Instant;
 
-use crate::compact::KIND_COMPACT;
+use crate::compact::{F_STAMPED, KIND_COMPACT};
 use crate::conn::{Conn, Out};
 use crate::text::parse_json;
 use crate::{AttachCtx, Cut, KIND_BUNDLE, LanSwitch, Peer, mix};
@@ -92,6 +92,7 @@ where
             }
             Ok(Message::Ping(d)) => {
                 sw.stats.msg(mix::IN_PING);
+                conn.msgs_in.fetch_add(1, Relaxed);
                 // answered here, under the rate and while the queue has room (nfsu2-ws answers none itself): an answer
                 // to every ping queues pongs without a limit for a client that never reads (the phase-2 deploy
                 // review's finding 1, of the ws library's own answer: gigabytes in seconds); a copy, not the block the
@@ -102,6 +103,7 @@ where
             }
             Ok(Message::Pong(d)) => {
                 sw.stats.msg(mix::IN_PONG);
+                conn.msgs_in.fetch_add(1, Relaxed);
                 // only a pong carrying the payload of one of the switch's pings counts: its round trip is timed, and
                 // for a ping queued since the keepalive's last tick it says the client is there (lag.rs)
                 if let Some(p) = &peer {
@@ -167,6 +169,7 @@ impl LanSwitch {
     /// a frame (`max_frame`)
     fn on_message(&self, peer: &Arc<Peer>, text: bool, data: Bytes) {
         peer.alive.store(true, Relaxed);
+        peer.conn.msgs_in.fetch_add(1, Relaxed);
         peer.last_in.store(now_ms(), Relaxed);
         let n = data.len();
         let o = &self.o;
@@ -206,8 +209,27 @@ impl LanSwitch {
             self.stats.bundles_in.inc();
             self.stats.msg(mix::IN_BUNDLE);
             self.stats.entry_in(mix::FRAMING, 4);
-            // each entry as a frame of its own; a broken entry, or one over the budgets, ends the bundle
             let mut at = 4;
+            // a stamp of the switch's echoed (LanSwitch::probe): its 8 bytes, then how long the page held it (µs, at
+            // most 10 s); its round trip timed as a pong's, less that wait
+            if data[1] & F_STAMPED != 0 {
+                if n < 16 {
+                    self.stats.limited.inc();
+                    return;
+                }
+                self.stats.entry_in(mix::FRAMING, 12);
+                let held = (be32(&data, 12) as f64 / 1000.0).min(10_000.0);
+                match peer.probe.lock().pong(&data[4..12], mono_ms() - held, &peer.share) {
+                    Some(true) => peer.alive.store(true, Relaxed),
+                    Some(false) => {}
+                    None => {
+                        self.flood(peer);
+                    }
+                }
+                self.stats.echoes.inc();
+                at = 16;
+            }
+            // each entry as a frame of its own; a broken entry, or one over the budgets, ends the bundle
             while at + 4 <= n {
                 let k = data[at] as usize;
                 let len = u16::from_be_bytes([data[at + 2], data[at + 3]]) as usize;

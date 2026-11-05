@@ -298,6 +298,30 @@ int roam_plat_lobby(const char *json){
     if (n <= 0 || n > (int)NET_MAX_PAYLOAD) return 1;
     return tx_push(NET_KIND_LOBBY, 0, 0, (const uint8_t *)json, n) ? 1 : -1;
 }
+/* the race lobby's actions from the page (input_web.c IEV_LOBBY, on the input thread): a few kept for the game thread
+ * (roam_plat_lobby_act), the oldest dropped when they come faster than it takes them */
+#define LB_RING 8
+static struct { int act; uint32_t host, lobby, race; } g_lb[LB_RING];
+static unsigned g_lb_w, g_lb_r;
+static pthread_mutex_t g_lb_mu = PTHREAD_MUTEX_INITIALIZER;
+void roam_plat_lobby_input(int act, uint32_t host, uint32_t lobby, uint32_t race){
+    if (act <= ROAM_LB_NONE || act > ROAM_LB_JOIN) return;
+    pthread_mutex_lock(&g_lb_mu);
+    if (g_lb_w - g_lb_r >= LB_RING) g_lb_r++;
+    g_lb[g_lb_w % LB_RING].act = act; g_lb[g_lb_w % LB_RING].host = host; g_lb[g_lb_w % LB_RING].lobby = lobby; g_lb[g_lb_w % LB_RING].race = race;
+    g_lb_w++;
+    pthread_mutex_unlock(&g_lb_mu);
+}
+int roam_plat_lobby_act(uint32_t *host, uint32_t *lobby, uint32_t *race){
+    int act = ROAM_LB_NONE;
+    pthread_mutex_lock(&g_lb_mu);
+    if (g_lb_r != g_lb_w){
+        act = g_lb[g_lb_r % LB_RING].act; *host = g_lb[g_lb_r % LB_RING].host; *lobby = g_lb[g_lb_r % LB_RING].lobby; *race = g_lb[g_lb_r % LB_RING].race;
+        g_lb_r++;
+    }
+    pthread_mutex_unlock(&g_lb_mu);
+    return act;
+}
 /* solid cars as the page's menu switched them (net_proto.h solid) */
 int roam_plat_solid(void){
     uint32_t v = MB ? ld(&MB->solid) : 0;

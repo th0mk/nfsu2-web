@@ -103,7 +103,8 @@ impl Probe {
         let i = self.out.iter().position(|(p, _)| p[..] == *d)?;
         let sent = self.out[i].1;
         self.out.drain(..=i);
-        let rtt = now - sent;
+        // (an echo's `now` is less the page's own wait, which the page says: never under 0)
+        let rtt = (now - sent).max(0.0);
         self.rtt = rtt;
         if now - self.window_at >= BASE_WINDOW_MS {
             self.base_prev = self.base_now;
@@ -142,6 +143,11 @@ impl Probe {
 
     /// the path's round trip without queues (ms): its lowest of the last 30-60 s, as the base above (not capped at
     /// `floor`); None before its first pong (paths.rs, the server's counts)
+    /// the last round trip (ms), None before the first
+    pub(crate) fn rtt(&self) -> Option<f64> {
+        (!self.rtt.is_nan()).then_some(self.rtt)
+    }
+
     pub(crate) fn base(&self) -> Option<f64> {
         let b = self.base_now.min(self.base_prev);
         b.is_finite().then_some(b)
