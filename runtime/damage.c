@@ -29,13 +29,15 @@
  * neon and the sounds; nor the .asi's ProStreet textures (broken glass, cracked lenses: EA's),
  * so the windows crack as the game cracks them and a broken lamp only goes dark.  The game's own repair (SetDamageToZero: a race's start, the
  * garage) takes the damage away.
- * In free roam friends see the player's damage (RC_EXT_DAMAGE in the car record, roam_game.c): the player's dents
- * are published (damage_net_*), and a friend's car gets the dents its player's record has, within limits that keep
- * any other player's records from slowing this game down or filling its memory (damagecore.cpp's free roam part).
+ * In free roam friends see the player's damage (roam_core's RC_MSG_DENTS, to friends who show it, near, roam_game.c):
+ * the player's dents are published (damage_net_*), and a friend's car gets the dents its player sent, within limits
+ * that keep any other player's messages from slowing this game down or filling its memory (damagecore.cpp's free roam
+ * part).  The car-look record never carries them: its bytes say when a friend's car is to be loaded again.
  *   Off unless NFSU2_DAMAGE=1 (the start page's Crash damage, off by default); NFSU2_DAMAGE_LOG=1 logs every
  *   impact. */
 #include "cpu.h"
 #include "widescreen.h"           /* HOOK_SITE */
+#include "guest_span.h"           /* g_gwin_hi: the guest heap's window */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -112,6 +114,8 @@ uint32_t dmg_alloc(uint32_t n){ return gheap_alloc(1, n, 1); }
 void dmg_free(uint32_t p){ gheap_free(1, p); }
 int dmg_committed(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
 uint32_t dmg_va_free(void){ return gheap_va_free(); }
+/* the guest heap has its window above the runtime (guest_span.h: a computer's browser; not phones, tablets, Safari) */
+int dmg_big_memory(void){ return g_gwin_hi != 0; }
 
 /* ---- overrides ------------------------------------------------------------ */
 /* CarRenderInfo::Render (0x620AE0), before the game's: showoff.c overrides it and calls this first */
@@ -158,7 +162,9 @@ int damage_hook(CPU *c, uint32_t ip){
 }
 
 /* ---- free roam (roam_game.c through roam_host.h): friends see the damage ------- */
-/* the player's car's damage as published (+1 for each change), and its dents (RC_EXT_DAMAGE's) */
+/* the damage is on: friends' damage is shown (the HELLO asks for it, RC_HF_DENTS) */
+int damage_net_on(void){ return on(); }
+/* the player's car's damage as published (+1 for each change), and its dents (RC_MSG_DENTS's) */
 uint32_t damage_net_rev(void){ return on() ? dmg_net_rev() : 0u; }
 int damage_net_mine(uint8_t *epoch, uint16_t *first, uint8_t *dents, int max){
     return on() ? dmg_net_mine(epoch, first, dents, max) : 0;
@@ -169,6 +175,11 @@ void damage_net_car(CPU *c, int k, uint32_t car, uint32_t peer, uint8_t epoch, u
     g_c = c;
     dmg_net_car(k, car, peer, epoch, first, n, dents);
 }
+
+/* showoff.c: the show-off opens no part the damage has lost (part: 0 the hood, 1 the trunk lid, 2 the left door, 3 the
+ * right door) */
+int dmg_part_lost(uint32_t cri, int part);
+int damage_part_lost(uint32_t ri, int part){ return on() && dmg_part_lost(ri, part); }
 
 /* roam.c's main-loop hook, once a frame */
 void damage_frame(CPU *c){

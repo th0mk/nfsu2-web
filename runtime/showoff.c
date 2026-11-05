@@ -443,12 +443,15 @@ static Car *drawn(uint32_t ri, uint32_t *bank){
     }
     return 0;
 }
+/* damage.c: the crash damage has lost the part (it lies on the road, or is gone): the show-off leaves it as it is (the
+ * game's animation would move what is left of it); none where the damage is not built in */
+__attribute__((weak)) int damage_part_lost(uint32_t ri, int part);
 static void put_on(Car *k, uint32_t b, uint32_t *keep){
     uint32_t head = b + 0xcu, prev = head;
     keep[0] = MR32(head); keep[1] = MR32(head + 4u);
     for (int p = 0; p < 4; p++){
         uint32_t n = k->node[p];
-        if (!n) continue;
+        if (!n || (damage_part_lost && damage_part_lost(k->ri, p))) continue;
         MR32(prev) = n; MR32(n + 4u) = prev; prev = n;
     }
     MR32(prev) = head; MR32(head + 4u) = prev;

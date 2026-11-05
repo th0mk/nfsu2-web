@@ -25,8 +25,10 @@
 #include <string.h>
 #include <time.h>
 
+#include <algorithm>
 #include <deque>
 #include <initializer_list>
+#include <iterator>
 #include <unordered_map>
 #include <vector>
 
@@ -46,6 +48,7 @@ uint32_t dmg_alloc(uint32_t n);
 void dmg_free(uint32_t p);
 int dmg_committed(uint32_t a, uint32_t n);
 uint32_t dmg_va_free(void);                    // the guest address space still free, bytes
+int dmg_big_memory(void);                      // the guest heap has its window above the runtime (a computer's browser)
 extern const unsigned char dmg_scratches[];   // damage.c: runtime/damage/scratches.tpk
 extern const unsigned dmg_scratches_len;
 }
@@ -213,7 +216,8 @@ void GFree(void* p) {
     if (p) dmg_free(A(p));
 }
 
-// The car still exists and still draws through this render info.
+// The car draws through this render info, as its memory says: only a hint, as a car of a world that is gone (a race's
+// end, the front end) says so too, from freed memory. CarLive (below) is what lets the car's memory be touched.
 bool CarHas(uint8_t* car, void* renderInfo) {
     return car && dmg_committed(A(car) + kCarRenderInfo, 4) && At<void*>(car, kCarRenderInfo) == renderInfo;
 }
@@ -372,6 +376,21 @@ bool InCarBox(const uint8_t* rigid, Vec3 lo, Vec3 hi, Vec3 w, float margin, Vec3
 
 }  // namespace world
 
+// The car is one of the world's now (its car list has it: World::~World, 0x5FF6F0, takes every car off the list and
+// clears [0x890080]) and draws through this render info: only then are its memory and its render info's (the flares)
+// the car's. A car of a world that was unloaded still reads +0x554 == its render info from freed memory.
+bool CarLive(uint8_t* car, void* renderInfo) {
+    if (!car) return false;
+    uint8_t* head = G(R32(world::kWorldCarList));
+    if (!head || !dmg_committed(A(head), 4)) return false;
+    int guard = 0;
+    for (uint8_t* c = At<uint8_t*>(head, 0); c && c != head && guard < 256; c = At<uint8_t*>(c, 0), ++guard) {
+        if (c == car) return CarHas(car, renderInfo);
+        if (!dmg_committed(A(c), 4)) break;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Loose parts
 
@@ -397,7 +416,11 @@ struct HangSpec {
     int parent = -1;  // index of the spec it is mounted on: it also follows that part's swing and fall
 };
 
-constexpr int kSpecTrunk = 5, kSpecLeftDoor = 6, kSpecRightDoor = 7;
+constexpr int kSpecHood = 4, kSpecTrunk = 5, kSpecLeftDoor = 6, kSpecRightDoor = 7;
+// CarState::gameOpen: the hood, the trunk lid, the left and the right door (Render's open flags, dmg_open_flags)
+uint8_t OpenBit(int spec) {
+    return spec == kSpecHood ? 1 : spec == kSpecTrunk ? 2 : spec == kSpecLeftDoor ? 4 : spec == kSpecRightDoor ? 8 : 0;
+}
 const HangSpec kHangSpecs[] = {
     {"front bumper", {1, -1}, -1, HangKind::Droop, Push::Any, 0, 60, 0, 0},
     {"rear bumper", {2, -1}, -1, HangKind::Droop, Push::Any, 0, 60, 0, 0},
@@ -440,10 +463,14 @@ struct Debris {
     Vec3 p{0, 0, 0}, v{0, 0, 0}, w{0, 0, 0};   // world: centre, velocity, angular velocity
     float r[9] = {};        // world rotation, columns the body's axes (the car's when it came off)
     float drag = 0;
+    float owed = 0;         // a friend's car's part: the time its steps waited for the frame's world queries (s)
 };
 
 struct CarState {
     uint8_t* car = nullptr;
+    bool live = false;          // the car is the world's (CarLive), as of this frame: its memory may be touched
+    bool remote = false;        // a friend's car (free roam): its upkeep within the frame's limits
+    uint8_t gameOpen = 0;       // the parts the game opens itself (the show-off, a cover shoot): kOpenBits
     uint8_t* rigid = nullptr;   // the car's RigidBody, from the impulse that created this state
     CrushLimits crush;          // from the car type's wheels
     struct BrokenLight {
@@ -531,6 +558,7 @@ struct Clone {
     int stripCount = 0;
     bool dirty = false;
     uint32_t retiredAt = 0;
+    uint32_t drawnAt = 0;           // the frame Render last drew it (0: never seen drawn: uploaded whenever it changes)
 
     // Overlay: a second copy of the vertices, lifted off the surface and mapped onto the scratch (or
     // cracked lens) texture, drawn by extra transparent strips over the scratched (cracked) triangles.
@@ -560,7 +588,10 @@ uint64_t CloneKey(const uint8_t* model, int instance) {
 }
 
 std::unordered_map<uint64_t, Clone*> g_clones;     // by CloneKey(eModel, instance)
+std::unordered_map<void*, int> g_cloneCount;       // g_clones' clones by CarRenderInfo
 std::unordered_map<void*, CarState*> g_cars;       // by CarRenderInfo
+
+bool HasClones(void* renderInfo) { return g_cloneCount.count(renderInfo) != 0; }
 
 // Where the game draws each exhaust tip and plate (RY(90) * marker, car space), learnt from every draw of
 // every car (before any damage), by CarRenderInfo.
@@ -569,7 +600,12 @@ struct MarkerDrawn {
     int index, slot, row;
     Placement place;
 };
-std::unordered_map<void*, std::vector<MarkerDrawn>> g_markerDraws;
+struct MarkerDraws {
+    uint32_t frame = 0;   // the car's last render
+    std::vector<MarkerDrawn> draws;
+};
+std::unordered_map<void*, MarkerDraws> g_markerDraws;   // (a car not drawn for kMarkerKeepFrames goes)
+constexpr uint32_t kMarkerKeepFrames = 120;
 std::vector<Clone*> g_retired;
 int g_cloneFails = 0;   // clones that found no memory or buffers (a friend's car's damage is given up at one)
 uint32_t g_lastFrame = 0xFFFFFFFF;
@@ -677,6 +713,8 @@ bool Upload(Clone* c) {
             const HangPart* h = chain[k];
             const bool moved = h->offset.x != 0.0f || h->offset.y != 0.0f || h->offset.z != 0.0f;
             if (!h->loose || (h->angle == 0.0f && sway[k] == 0.0f && !h->flying && !moved)) continue;
+            // the game opens it (the show-off, a cover shoot): its own animation turns the part, ours would add to it
+            if (st->gameOpen & OpenBit((int)(chain[k] - st->parts))) continue;
             Vec3 rel = Rotate(pos - h->hinge, h->axis, h->angle);
             nrm = Rotate(nrm, h->axis, h->angle);
             if (sway[k] != 0.0f) {
@@ -775,7 +813,12 @@ bool Live(const Clone* c) {
 // Takes the clone out of use. `restore` puts the original solid back on the model (repair).
 void Retire(Clone* c, bool restore) {
     if (restore && c->instance < 0 && Live(c)) At<uint8_t*>(c->model, kModelSolid) = c->original;
-    g_clones.erase(c->key);
+    auto it = g_clones.find(c->key);
+    if (it != g_clones.end() && it->second == c) {
+        g_clones.erase(it);
+        auto n = g_cloneCount.find(c->renderInfo);
+        if (n != g_cloneCount.end() && --n->second <= 0) g_cloneCount.erase(n);
+    }
     c->retiredAt = Frame();
     g_retired.push_back(c);
 }
@@ -805,7 +848,7 @@ void ForEachPartModel(void* renderInfo, F f) {
 // is keyed by the content of its source mesh, so it never goes to another part that came to sit at the same
 // address. A part not reached yet is refined on the spot.
 
-constexpr size_t kTessCacheBytes = 64u << 20;   // results kept (least recently used dropped beyond)
+size_t g_tessCacheBytes = 64u << 20;           // results kept (least recently used dropped beyond): dmg_init's
 constexpr int kPrewarmPerFrame = 6;              // source meshes copied per frame
 constexpr double kRefineMsPerFrame = 3.0;        // refinement per frame ahead of the impacts
 
@@ -954,7 +997,7 @@ void TrimTessCache() {
     static uint32_t last = 0;
     if (Frame() - last < 60) return;
     last = Frame();
-    while (g_tessBytes > kTessCacheBytes) {
+    while (g_tessBytes > g_tessCacheBytes) {
         auto oldest = g_tessCache.end();
         for (auto it = g_tessCache.begin(); it != g_tessCache.end(); ++it)
             if (it->second.done && (oldest == g_tessCache.end() || it->second.lastUse < oldest->second.lastUse))
@@ -965,8 +1008,21 @@ void TrimTessCache() {
     }
 }
 
+// The cache's refinement of `t`, when it is there (a friend's car: its clones never pay for a refinement at the
+// impact); false, and `t` as it was, when not
+int g_unrefined = 0;   // parts of friends' cars cloned without their refinement (it was not ready)
+bool RefineCached(TessMesh& t) {
+    auto it = g_tessCache.find(SourceKey(t));
+    if (it == g_tessCache.end() || !it->second.done) return false;
+    it->second.lastUse = Frame();
+    t = it->second.mesh;
+    g_refinedAhead++;
+    return true;
+}
+
+// mayRefine: false for a friend's car, whose parts are refined ahead or not at all (RefineCached)
 Clone* MakeClone(uint8_t* model, void* renderInfo, int slot, int row, int lod, int instance = -1,
-                 const Placement* instancePlace = nullptr) {
+                 const Placement* instancePlace = nullptr, bool mayRefine = true) {
     uint8_t* original = At<uint8_t*>(model, kModelSolid);
     const uint32_t device = Device();
     TessMesh t;
@@ -974,7 +1030,10 @@ Clone* MakeClone(uint8_t* model, void* renderInfo, int slot, int row, int lod, i
     uint8_t* mesh = At<uint8_t*>(original, 0);
     const int stripCount = (int)t.strips.size();
     const uint8_t* srcStrips = At<uint8_t*>(mesh, kMeshStrips);
-    if (lod < g_settings.tessellateLods) Refine(t);
+    if (lod < g_settings.tessellateLods) {
+        if (mayRefine) Refine(t);
+        else if (!RefineCached(t)) g_unrefined++;
+    }
 
     Clone* c = new Clone;
     c->model = model;
@@ -1102,11 +1161,13 @@ Clone* MakeClone(uint8_t* model, void* renderInfo, int slot, int row, int lod, i
     // (paint, per-car skins), which works the same on the copies.
     memcpy(c->texTable, At<uint8_t*>(original, kSolidTexTable), texCount * 8);
     memcpy(c->lmTable, At<uint8_t*>(original, kSolidLmTable), lmCount * 8);
-    static const char* kOverlayNames[kOverlayStrips] = {"DAMAGE_SCRATCH1", "DAMAGE_SCRATCH2", "DAMAGE_SCRATCH3",
-                                                        "DAMAGE_SCRATCH4", "DAMAGE_LENS_CRACK"};
+    // (a lamp's lens crack is the .asi's DAMAGE_LENS_CRACK, one of EA's ProStreet textures: not here, so a broken
+    // lamp only goes dark, and lamps get no overlay texture)
+    static const char* kOverlayNames[kScratchLevels] = {"DAMAGE_SCRATCH1", "DAMAGE_SCRATCH2", "DAMAGE_SCRATCH3",
+                                                        "DAMAGE_SCRATCH4"};
     int texTotal = texCount;
-    for (int k = 0; k < kOverlayStrips; k++) {
-        if (c->light != (k == kScratchLevels)) continue;   // lamps crack, the rest scratches
+    for (int k = 0; k < kScratchLevels; k++) {
+        if (c->light) break;   // lamps would crack, the rest scratches
         const uint32_t hash = HashName(kOverlayNames[k]);
         const uint32_t args[3] = {hash, 0, 0};
         const uint32_t info = dmg_call(kGetTextureInfo, 3, args);
@@ -1148,19 +1209,22 @@ Clone* MakeClone(uint8_t* model, void* renderInfo, int slot, int row, int lod, i
 
     Upload(c);
     if (instance < 0) At<uint8_t*>(model, kModelSolid) = c->solid;   // stays in the original's list on purpose
+    Clone*& slotOf = g_clones[c->key];
+    if (slotOf && slotOf != c) Retire(slotOf, false);   // (callers retire it first: never two under one key)
     g_clones[c->key] = c;
+    g_cloneCount[renderInfo]++;
     return c;
 }
 
 // Clone of this model for this car, made on demand.
-Clone* CloneFor(uint8_t* model, void* renderInfo, int slot, int row, int lod) {
+Clone* CloneFor(uint8_t* model, void* renderInfo, int slot, int row, int lod, bool mayRefine = true) {
     auto it = g_clones.find(CloneKey(model, -1));
     if (it != g_clones.end()) {
         Clone* c = it->second;
         if (Live(c) && c->renderInfo == renderInfo) return c;
         Retire(c, false);
     }
-    return MakeClone(model, renderInfo, slot, row, lod);
+    return MakeClone(model, renderInfo, slot, row, lod, -1, nullptr, mayRefine);
 }
 
 // The contact comes from the collision hull, which does not follow the bodywork. Slides the point along
@@ -1320,21 +1384,22 @@ void DamageParts(void* renderInfo, CarState& car, const Dent& dent) {
 
 // Makes sure every body part of the car has its clone (scratches can come before any dent), and every
 // exhaust tip and plate drawn so far its own.
-void EnsureClones(void* renderInfo) {
+void EnsureClones(void* renderInfo, bool mayRefine = true) {
     ForEachPartModel(renderInfo, [&](uint8_t* model, int slot, int row, int lod) {
-        CloneFor(model, renderInfo, slot, row, lod);
+        CloneFor(model, renderInfo, slot, row, lod, mayRefine);
     });
     auto drawn = g_markerDraws.find(renderInfo);
     if (drawn == g_markerDraws.end()) return;
     uint8_t** table = (uint8_t**)((uint8_t*)renderInfo + kCriModels);
-    for (const MarkerDrawn& d : drawn->second) {
+    for (const MarkerDrawn& d : drawn->second.draws) {
         if (table[d.slot * 8 + d.row * 4] != d.model) continue;   // learnt before the parts were rebuilt
         auto it = g_clones.find(CloneKey(d.model, d.index));
         if (it != g_clones.end()) {
             if (Live(it->second) && it->second->renderInfo == renderInfo) continue;
             Retire(it->second, false);
         }
-        if (At<uint8_t*>(d.model, kModelSolid)) MakeClone(d.model, renderInfo, d.slot, d.row, 0, d.index, &d.place);
+        if (At<uint8_t*>(d.model, kModelSolid))
+            MakeClone(d.model, renderInfo, d.slot, d.row, 0, d.index, &d.place, mayRefine);
     }
 }
 
@@ -1357,7 +1422,7 @@ bool CloneSome(void* renderInfo, int& at, More more) {
                 stop = true;
                 return;
             }
-            CloneFor(model, renderInfo, slot, row, lod);
+            CloneFor(model, renderInfo, slot, row, lod, false);
         }
         at = me + 1;
     });
@@ -1365,14 +1430,15 @@ bool CloneSome(void* renderInfo, int& at, More more) {
     auto drawn = g_markerDraws.find(renderInfo);
     if (drawn == g_markerDraws.end()) return true;
     uint8_t** table = (uint8_t**)((uint8_t*)renderInfo + kCriModels);
-    for (const MarkerDrawn& d : drawn->second) {
+    for (const MarkerDrawn& d : drawn->second.draws) {
         const int me = i++;
         if (me < at) continue;
         if (table[d.slot * 8 + d.row * 4] == d.model && !cloned(d.model, d.index)) {
             if (!more()) return false;
             auto it = g_clones.find(CloneKey(d.model, d.index));
             if (it != g_clones.end()) Retire(it->second, false);
-            if (At<uint8_t*>(d.model, kModelSolid)) MakeClone(d.model, renderInfo, d.slot, d.row, 0, d.index, &d.place);
+            if (At<uint8_t*>(d.model, kModelSolid))
+                MakeClone(d.model, renderInfo, d.slot, d.row, 0, d.index, &d.place, false);
         }
         at = me + 1;
     }
@@ -1384,6 +1450,8 @@ bool PrewarmDone(void* renderInfo) {
     bool done = true;
     ForEachPartModel(renderInfo, [&](uint8_t* model, int, int, int lod) {
         if (!done || lod >= g_settings.tessellateLods) return;
+        auto own = g_clones.find(CloneKey(model, -1));   // cloned already (the model draws our solid: never prewarmed)
+        if (own != g_clones.end() && Live(own->second) && own->second->renderInfo == renderInfo) return;
         auto known = g_prewarmed.find(At<uint8_t*>(model, kModelSolid));
         auto job = known == g_prewarmed.end() ? g_tessCache.end() : g_tessCache.find(known->second.key);
         done = job != g_tessCache.end() && job->second.done;
@@ -1392,7 +1460,7 @@ bool PrewarmDone(void* renderInfo) {
 }
 
 int DentCar(void* renderInfo, const CarState& car, const Dent& dent) {
-    EnsureClones(renderInfo);
+    EnsureClones(renderInfo, !car.remote);
     int moved = 0;
     for (auto& kv : g_clones) {
         Clone* c = kv.second;
@@ -1515,35 +1583,71 @@ void BreakLights(void* renderInfo, CarState& car, const Dent& dent) {
     }
 }
 
-void RestoreLights(CarState& car) {
-    for (const auto& b : car.brokenLights) At<float>(b.flare, kFlarePos + 8) = b.z;
+// The broken lights back on, the car being live (CarLive): each flare still on the render info's list and still
+// sunk where BreakLights sank it.
+int g_lightsKept = 0;   // flares not put back (not on the list, or moved since): logged with the world's changes
+void RestoreLights(void* renderInfo, CarState& car) {
+    uint8_t* head = (uint8_t*)renderInfo + kCriFlares;
+    for (const auto& b : car.brokenLights) {
+        bool listed = false;
+        int guard = 0;
+        for (uint8_t* f = At<uint8_t*>(head, 0); f && f != head && guard < 256 && !listed; f = At<uint8_t*>(f, 0), ++guard)
+            listed = f == b.flare;
+        if (listed && At<float>(b.flare, kFlarePos + 8) == -1000.0f)
+            At<float>(b.flare, kFlarePos + 8) = b.z;
+        else
+            g_lightsKept++;
+    }
     car.brokenLights.clear();
 }
 
-// `alive`: the car's render info still exists, so its flares can be put back.
+// `alive`: the car is live (CarLive), so its flares can be put back.
 void Forget(void* renderInfo, bool alive) {
     auto it = g_cars.find(renderInfo);
     if (it == g_cars.end()) return;
     CarState* car = it->second;
-    if (alive) RestoreLights(*car);
+    if (alive) RestoreLights(renderInfo, *car);
     delete car;
     g_cars.erase(it);
 }
 
+// The car's damage taken off (the game's repair, or a friend's car's let go): its clones out, the original solids back
+// on its models and its lights back on, only while the car is live; otherwise nothing of the car's is touched.
 void RepairRenderInfo(void* renderInfo) {
+    auto st = g_cars.find(renderInfo);
+    uint8_t* car = st != g_cars.end() ? st->second->car : At<uint8_t*>(renderInfo, kCriCar);
+    if (!CarLive(car, renderInfo)) {   // (its clones go once its models no longer draw them: OnFrame)
+        Forget(renderInfo, false);
+        return;
+    }
     std::vector<Clone*> mine;
     for (auto& kv : g_clones)
-        if (!renderInfo || kv.second->renderInfo == renderInfo) mine.push_back(kv.second);
+        if (kv.second->renderInfo == renderInfo) mine.push_back(kv.second);
     for (Clone* c : mine) Retire(c, true);
-    if (renderInfo) {
-        Forget(renderInfo, true);
-    } else {
-        for (auto& kv : g_cars) {
-            RestoreLights(*kv.second);
-            delete kv.second;
-        }
-        g_cars.clear();
-    }
+    Forget(renderInfo, true);
+}
+
+// The world changed (a race's end, the front end, a new world): every car of the old one is gone with it, and none of
+// its memory is touched again. Its clones go (freed with the next frames), its cars' states, the marker draws learnt,
+// the friends' cars' slots and the refinement's notes of its solids.
+struct NetSlot;
+void NetForgetAll();
+uint32_t g_world = 0;
+void WorldWatch() {
+    const uint32_t w = R32(world::kWorldCarList);
+    if (w == g_world) return;
+    const int cars = (int)g_cars.size(), clones = (int)g_clones.size();
+    g_world = w;
+    std::vector<Clone*> all;
+    for (auto& kv : g_clones) all.push_back(kv.second);
+    for (Clone* c : all) Retire(c, false);
+    g_cloneCount.clear();
+    for (auto& kv : g_cars) delete kv.second;
+    g_cars.clear();
+    g_markerDraws.clear();
+    g_prewarmed.clear();
+    NetForgetAll();
+    if (cars || clones) Log("the world changed: %d cars' damage let go (%d clones), none of their memory touched", cars, clones);
 }
 
 void SetCar(CarState& state, uint8_t* car) {
@@ -1579,6 +1683,32 @@ CarState* StateFor(void* renderInfo, uint8_t* car, bool hit) {
 
 constexpr float kDebrisStep = 1.0f / 120.0f;
 
+// Friends' cars' parts that came off, and their open doors, ask the world (the ground, the walls: four guest calls a
+// question) at most this often a frame, all cars; past that a part's step waits (its time owed, kDebrisOwedMax at most)
+// and a door's test is left out. And at most this many of their parts are awake on the road at once: past that a part
+// that comes off is just gone.
+constexpr int kNetWorldQueries = 6;
+constexpr float kDebrisOwedMax = 0.25f;
+constexpr int kNetDebrisAwake = 6;
+int g_netQueriesLeft = 0;
+int g_netQueriesWaited = 0, g_netDebrisGone = 0;   // (the 30-s line's)
+bool MayQuery(const CarState& car, int n) {
+    if (!car.remote) return true;
+    if (g_netQueriesLeft < n) {
+        g_netQueriesWaited++;
+        return false;
+    }
+    g_netQueriesLeft -= n;
+    return true;
+}
+int NetDebrisAwake() {
+    int n = 0;
+    for (auto& kv : g_cars)
+        if (kv.second->remote)
+            for (const Debris& d : kv.second->debris) n += d.active && !d.asleep;
+    return n;
+}
+
 Vec3 MatVec(const float m[9], Vec3 v) {
     return {m[0] * v.x + m[1] * v.y + m[2] * v.z, m[3] * v.x + m[4] * v.y + m[5] * v.z,
             m[6] * v.x + m[7] * v.y + m[8] * v.z};
@@ -1609,8 +1739,10 @@ void Orthonormalize(float m[9]) {   // the columns
 
 // The rigid body the car's pose comes from.
 uint8_t* RigidFor(const CarState& car, void* renderInfo) {
+    (void)renderInfo;
+    if (!car.live) return nullptr;
     if (car.rigid) return car.rigid;
-    return CarHas(car.car, renderInfo) ? world::RigidOf(car.car) : nullptr;
+    return world::RigidOf(car.car);
 }
 
 // The car-space transform of spec i's chain as it is drawn now (the part's own swing, then the part it is
@@ -1646,6 +1778,10 @@ bool StartDebris(CarState& car, void* renderInfo, int i, Vec3 kick, Vec3 spin) {
     uint8_t* rigid = RigidFor(car, renderInfo);
     world::Frame f;
     Vec3 mn, mx;
+    if (car.remote && NetDebrisAwake() >= kNetDebrisAwake) {   // a friend's car: enough of theirs on the road now
+        g_netDebrisGone++;
+        return false;
+    }
     if (!g_settings.hang.debris || !world::CarFrame(rigid, f) ||
         !PartBox(renderInfo, spec.slots[0], spec.row < 0 ? 0 : spec.row, mn, mx))
         return false;
@@ -1669,7 +1805,7 @@ bool StartDebris(CarState& car, void* renderInfo, int i, Vec3 kick, Vec3 spin) {
     d.w = spin;
     // A lid or a door is a plate: the air slows it more than a mirror.
     d.drag = spec.kind == HangKind::Droop ? 0.01f : 0.025f;
-    d.age = d.still = 0;
+    d.age = d.still = d.owed = 0;
     d.asleep = false;
     d.leftCar = false;
     d.active = true;
@@ -1761,6 +1897,12 @@ void StepDebris(CarState& car, Debris& d, float dt, const world::Frame& own) {
         }
     });
     if (d.asleep) return;
+    if (!MayQuery(car, 2)) {   // (a friend's car's part: its step when the frame has room, with the time it waited)
+        d.owed = fminf(d.owed + dt, kDebrisOwedMax);
+        return;
+    }
+    dt += d.owed;
+    d.owed = 0;
     float gz = 0;
     Vec3 gn{0, 0, 1};
     const bool grounded = world::Ground(d.p, gz, gn);
@@ -1796,7 +1938,7 @@ void CollideDoor(CarState& car, void* renderInfo, int i, const world::Frame& now
         car.doorCooldown[i] -= dt;
         return;
     }
-    if (h.angle < 0.08f || h.lever < 0.3f) return;
+    if (h.angle < 0.08f || h.lever < 0.3f || !MayQuery(car, 1)) return;
     const Vec3 edge{-h.lever, 0, 0};   // hinge to the free edge, closed (the hinge is at the door's front)
     const Vec3 tip = h.hinge + Rotate(edge, h.axis, h.angle), mid = h.hinge + Rotate(edge * 0.5f, h.axis, h.angle);
     const Vec3 tipW = now.ToWorld(tip), midW = now.ToWorld(mid);
@@ -1837,7 +1979,7 @@ void CollideDoor(CarState& car, void* renderInfo, int i, const world::Frame& now
 // swing out under braking and in turns and slam against the body when the airflow shuts them; a dangling
 // mirror is thrown out and back against the door by the turns.
 void SwingParts(CarState& car, void* renderInfo, float dt) {
-    if (!CarHas(car.car, renderInfo) || dt <= 0) return;
+    if (!car.live || dt <= 0) return;
     const HangSettings& hs = g_settings.hang;
     const float* m = car.rigid ? &At<float>(car.rigid, kRigidOrientation) : &At<float>(car.car, kCarMatrix);
     const Vec3 ax{m[0], m[1], m[2]}, ay{m[4], m[5], m[6]}, az{m[8], m[9], m[10]};
@@ -2012,8 +2154,11 @@ void RotZ(float r[9], float a) {
     memcpy(r, m, sizeof(m));
 }
 
-uint32_t g_wheelMats = 0;   // guest: 4 sets x 3 kinds x 4 wheels x 16 floats
-int g_wheelMatSet = 0;
+// Render puts the wheels' matrices on the view's lists by address (0x5C5930), drawn at the frame's end: each Render of
+// the frame with bent wheels gets a set of its own, kWheelSets at most (past that the wheels are drawn straight).
+constexpr int kWheelSets = 64;
+uint32_t g_wheelMats = 0;   // guest: kWheelSets sets x 3 kinds x 4 wheels x 16 floats
+int g_wheelMatSet = 0;      // sets used this frame (OnFrame starts again)
 
 void BendWheels(void* renderInfo, uint32_t args) {
     const WheelSettings& ws = g_settings.wheels;
@@ -2023,7 +2168,7 @@ void BendWheels(void* renderInfo, uint32_t args) {
     const CarState& state = *it->second;
     // Damage per render wheel, from the physics wheels' positions (order FL, FR, RR, RL when there is no car).
     float hurt[4] = {state.wheel[0], state.wheel[1], state.wheel[2], state.wheel[3]};
-    if (uint8_t* mover = CarHas(state.car, renderInfo) ? MoverOf(state.car) : nullptr)
+    if (uint8_t* mover = state.live ? MoverOf(state.car) : nullptr)
         for (int j = 0; j < 4; j++) {
             const Vec3 p = WheelPosition(mover, j);
             if (p.x == 0.0f && p.y == 0.0f) continue;
@@ -2031,10 +2176,10 @@ void BendWheels(void* renderInfo, uint32_t args) {
             hurt[r] = state.wheel[j];
         }
     if (hurt[0] <= 0 && hurt[1] <= 0 && hurt[2] <= 0 && hurt[3] <= 0) return;
-    if (!g_wheelMats) g_wheelMats = dmg_alloc(4 * 3 * 4 * 64);
-    if (!g_wheelMats) return;
+    if (!g_wheelMats) g_wheelMats = dmg_alloc(kWheelSets * 3 * 4 * 64);
+    if (!g_wheelMats || g_wheelMatSet >= kWheelSets) return;
     float (*set)[4][16] = (float (*)[4][16])G(g_wheelMats + (uint32_t)g_wheelMatSet * 3 * 4 * 64);
-    g_wheelMatSet = (g_wheelMatSet + 1) & 3;
+    g_wheelMatSet++;
     const float deg = kPi / 180.0f;
     for (int kind = 0; kind < 3; kind++) {   // tyres, brakes, spinners
         const uint32_t srcAddr = R32(args + 4u * (kRenderTireArg + kind));
@@ -2061,13 +2206,16 @@ void BendWheels(void* renderInfo, uint32_t args) {
 // ---------------------------------------------------------------------------------------------------------
 // Once a frame (the first car render of the frame)
 
-constexpr int kNetSlots = 64;   // roam_game.c's slots of friends' cars
+constexpr int kNetSlots = 64;   // roam_game.c's slots of friends' cars (its NSLOT: it asserts that they are as many)
 int NetHeld(void* held[kNetSlots]);   // free roam (below): friends' cars whose dents are being made
 
 void OnFrame() {
+    WorldWatch();
     const uint32_t frame = Frame();
     if (frame == g_lastFrame) return;
     g_lastFrame = frame;
+    g_wheelMatSet = 0;
+    g_netQueriesLeft = kNetWorldQueries;
 
     // Game time: loose parts stop while the game is paused.
     const uint32_t now = WorldTime();
@@ -2088,26 +2236,35 @@ void OnFrame() {
             i++;
         }
 
+    // A car no longer the world's (deleted with the world still there) is not touched again: its clones go once its
+    // models no longer draw them (a model that still might keeps its clone).
+    for (auto& kv : g_cars) kv.second->live = CarLive(kv.second->car, kv.first);
     std::vector<Clone*> stale;
     for (auto& kv : g_clones)
         if (!Live(kv.second)) stale.push_back(kv.second);
     for (Clone* c : stale) Retire(c, false);
 
     // A car whose clones are all gone was repaired, rebuilt or destroyed: its state goes too, and its
-    // lights come back if the car still has this render info.
+    // lights come back if the car is still live with this render info.
     std::vector<void*> gone;
-    for (auto& kv : g_cars) {
-        bool any = false;
-        for (auto& c : g_clones) any = any || c.second->renderInfo == kv.first;
-        if (!any) gone.push_back(kv.first);
-    }
-    for (void* r : gone) Forget(r, CarHas(g_cars[r]->car, r));
+    for (auto& kv : g_cars)
+        if (!HasClones(kv.first)) gone.push_back(kv.first);
+    for (void* r : gone) Forget(r, g_cars[r]->live);
 
-    for (auto& kv : g_cars) {
+    // The marker draws of the cars no longer drawn go (every car the game ever drew had its entry).
+    if (frame % kMarkerKeepFrames == 0)
+        for (auto it = g_markerDraws.begin(); it != g_markerDraws.end();)
+            it = frame - it->second.frame > kMarkerKeepFrames ? g_markerDraws.erase(it) : std::next(it);
+
+    // Friends' cars' turn at the world queries goes round: a different one first each frame.
+    std::vector<std::pair<void*, CarState*>> order(g_cars.begin(), g_cars.end());
+    static uint32_t round = 0;
+    if (!order.empty()) std::rotate(order.begin(), order.begin() + (round++ % order.size()), order.end());
+    for (auto& kv : order) {
         CarState& car = *kv.second;
         SwingParts(car, kv.first, dt);
         // The game's own part damage hides an aftermarket mirror past 0.25; the loose parts are ours.
-        if (CarHas(car.car, kv.first))
+        if (car.live)
             if (uint8_t* carDamage = At<uint8_t*>(car.car, kCarDamage))
                 memset(carDamage + kCarPartDamageValues, 0, kCarPartDamageCount * sizeof(float));
         for (int i = 0; i < kHangCount; i++) {
@@ -2128,7 +2285,8 @@ void OnFrame() {
         }
     }
 
-    // A friend's car whose dents are being made (a few a frame) is drawn as it was until they are all made.
+    // A friend's car whose dents are being made (a few a frame) is drawn as it was until they are all made. A clone
+    // not drawn last frame (another LOD of the part is) waits until it is: drawn once as it was, then uploaded.
     void* held[kNetSlots];
     const int nheld = NetHeld(held);
     for (auto& kv : g_clones) {
@@ -2136,6 +2294,7 @@ void OnFrame() {
         bool hold = false;
         for (int k = 0; k < nheld && !hold; k++) hold = c->renderInfo == held[k];
         if (hold) continue;
+        if (c->drawnAt && frame - c->drawnAt > 1) continue;
         if (c->overlayDirty) RebuildOverlay(c);
         if (c->dirty) Upload(c);
     }
@@ -2170,7 +2329,7 @@ int NextDrawIndex(void* model) {
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------------------
-// Free roam: friends see the damage (RC_EXT_DAMAGE in the car record, roam_game.c).
+// Free roam: friends see the damage (roam_core's RC_MSG_DENTS, roam_game.c).
 //
 // The player's car is the only one whose damage its game decides: each dent (after its snap to the surface) goes in
 // a log, quantized as it goes on the wire, so the dents made here are bit for bit the ones a friend's game makes. The
@@ -2214,16 +2373,22 @@ struct NetMine {
 constexpr double kNetMsPerFrame = 2.0;          // friends' dents made per frame, all cars (one dent at least)
 constexpr double kNetEveryMs = 1500.0;          // a car's damage made anew at most this often
 constexpr double kNetRepairMs = 4000.0;         // a car's repair (a new epoch) taken at most this often
-constexpr int kNetCars = 8;                     // friends' cars that show their damage, the nearest,
-constexpr int kNetKeep = 4;                     // and this many more that have it already (the cars move about)
+int g_netCars = 8;                              // friends' cars that show their damage, the nearest,
+int g_netKeep = 4;                              // and this many more that have it already (the cars move about);
+                                                // dmg_init's: fewer where the guest heap has no window (a phone)
+constexpr int kNetPrewarmCars = 2;              // friends' cars whose parts are refined ahead at once (the others
+                                                // wait their turn: the cache keeps theirs)
 constexpr uint32_t kNetVaReserve = 128u << 20;  // guest address space left to the game: no new clones below it,
 constexpr uint32_t kNetVaLow = 64u << 20;       // and below this the farthest friend's car's damage goes (a second)
 constexpr double kNetFailMs = 30000.0;          // a car whose clones found no memory: undamaged for this long
 constexpr double kNetPrewarmMs = 5000.0;        // its parts refined ahead first, for at most this long
 constexpr double kNetFarMs = 3000.0;            // a car no longer among the nearest (or not shown) keeps its damage this long
-// The box a car's body is within, in its space (the game's largest car, with room): a dent's point outside it, or a
-// push of no direction, is no crash's.
+// The box a car's body is within, in its space: the car's own collision box grown by kNetBoxGrow (or, without one,
+// the game's largest car, with room), no more than the largest box below; a dent's point outside it, or a push of no
+// direction, is no crash's.
 constexpr float kNetReachX = 3.5f, kNetReachY = 1.6f, kNetLowZ = -0.5f, kNetHighZ = 2.8f;
+constexpr float kNetBoxGrow = 0.6f;
+constexpr float kNetMostX = 9.0f, kNetMostY = 2.5f, kNetMostZ = 5.0f;
 
 struct NetSlot {
     uint32_t car = 0, peer = 0;
@@ -2244,14 +2409,18 @@ struct NetSlot {
     double batchAt = -1e9, repairAt = -1e9, waitAt = 0, failUntil = 0, farSince = 0;
     bool noteWait = false, noteRoom = false, noteBad = false;   // logged once a car
     int waitedEpoch = -1;               // the last repair that waited (counted once)
+    Vec3 boxLo{-kNetReachX, -kNetReachY, kNetLowZ}, boxHi{kNetReachX, kNetReachY, kNetHighZ};   // where its dents may be
 };
 NetSlot g_netSlots[kNetSlots];
+void NetForgetAll() {   // the world changed (WorldWatch): the slots' cars and render infos are gone, nothing to take off
+    for (NetSlot& s : g_netSlots) s = NetSlot{};
+}
 uint32_t g_netFrame = 0xFFFFFFFF;   // the frame g_netSpent is of
 double g_netSpent = 0;              // ms of the frame's budget used
 int g_netSteps = 0;                 // steps (a dent, a clone) made this frame
 int g_netBest = -1;                 // the slot whose batch goes first this frame (-1: whichever comes)
 struct NetStats {                   // logged every 30 s when there was any
-    int batches = 0, stopped = 0, dents = 0, dropped = 0, repairs = 0, waited = 0;
+    int batches = 0, stopped = 0, dents = 0, dropped = 0, repairs = 0, waited = 0, prewarmWaits = 0;
     double ms = 0, worst = 0;       // the work, and the most of it in one frame
 } g_netStats;
 double g_netStatsAt = 0;
@@ -2271,12 +2440,13 @@ bool IsRemote(uint32_t car) {
     return false;
 }
 
-// A friend's car that is to show damage: its parts are refined ahead (only those: the others never need it).
+// A friend's car whose batch waits for its parts' refinement (kNetPrewarmCars at most): they are refined ahead (only
+// those: the others wait their turn, and their parts are not kept in the cache meanwhile).
 bool NetWants(uint32_t car) {
     const NetSlot* now = nullptr;   // the slot that had the car last
     for (const NetSlot& s : g_netSlots)
         if (s.car == car && Frame() - s.seen < 120 && (!now || s.seen > now->seen)) now = &s;
-    return now && now->near && now->dents > 0 && NowMs() >= now->failUntil;
+    return now && now->busy && !now->ready && now->near && NowMs() >= now->failUntil;
 }
 
 // The friends' cars whose batch is under way: drawn as they were until it is done (OnFrame).
@@ -2306,13 +2476,14 @@ void DecodeDent(const uint8_t* b, Dent& d, float& magnitude) {
     d.depth = b[9] * RC_DMG_DEPTH / 255.0f;
     magnitude = b[10];
 }
-// A dent of a friend's record, as a crash here would make it; false for one no crash makes (not made).
-bool NetDecode(const uint8_t* b, Dent& d, float& magnitude) {
+// A dent a friend's game sent, as a crash here would make it; false for one no crash makes (not made). lo, hi: where
+// on the car it may be (NetBox).
+bool NetDecode(const uint8_t* b, Dent& d, float& magnitude, Vec3 lo, Vec3 hi) {
     const int px = (int8_t)b[6], py = (int8_t)b[7], pz = (int8_t)b[8];
     if (px * px + py * py + pz * pz < 64 * 64) return false;   // a push is a unit vector (x 127)
     DecodeDent(b, d, magnitude);
-    if (!(fabsf(d.point.x) <= kNetReachX && fabsf(d.point.y) <= kNetReachY && d.point.z >= kNetLowZ &&
-          d.point.z <= kNetHighZ))
+    if (!(d.point.x >= lo.x && d.point.x <= hi.x && d.point.y >= lo.y && d.point.y <= hi.y && d.point.z >= lo.z &&
+          d.point.z <= hi.z))
         return false;
     const Settings& st = g_settings;
     if (d.depth > st.maxDepthPerHit) d.depth = st.maxDepthPerHit;
@@ -2370,13 +2541,15 @@ void NetFrame() {
 void ApplyNetDent(void* renderInfo, uint8_t* car, const Dent& dent, float magnitude) {
     CarState* state = StateFor(renderInfo, car, true);
     SetCar(*state, car);
+    state->remote = true;
+    state->live = true;   // (dmg_net_car has the car from roam_game.c's slot, shown in this world)
     uint8_t* carDamage = dmg_committed(A(car) + kCarDamage, 4) ? At<uint8_t*>(car, kCarDamage) : nullptr;
     if (g_settings.wear.nativeGlass && carDamage && dmg_committed(A(carDamage) + kCarDamageVisible, 1) &&
         !At<uint8_t>(carDamage, kCarDamageVisible)) {
         const uint32_t one = 1;
         dmg_thiscall(kSetVisibleDamageEnabled, A(carDamage), 1, &one);
     }
-    EnsureClones(renderInfo);
+    EnsureClones(renderInfo, false);
     if (dent.depth > 0) {
         DentCar(renderInfo, *state, dent);
         if (g_settings.hang.enabled) DamageParts(renderInfo, *state, dent);
@@ -2391,10 +2564,33 @@ void ApplyNetDent(void* renderInfo, uint8_t* car, const Dent& dent, float magnit
     }
 }
 
+// Where a car's dents may be, in its space (the dents'): its collision body's box (relative to its rigid body; the
+// space is the rigid body's less its centre of gravity) grown by kNetBoxGrow, within the largest box; false without one
+// (the fixed box stays).
+bool NetBox(uint8_t* car, Vec3& lo, Vec3& hi) {
+    if (!car || !dmg_committed(A(car) + world::kCarBody, 4)) return false;
+    uint8_t* body = At<uint8_t*>(car, world::kCarBody);
+    if (!body || !dmg_committed(A(body), world::kBodyBoxMax + 12) || !dmg_committed(A(body) + world::kBodyRigid, 4))
+        return false;
+    uint8_t* rigid = At<uint8_t*>(body, world::kBodyRigid);
+    if (!rigid || !dmg_committed(A(rigid), world::kRigidCg + 12)) return false;
+    const Vec3 a = At<Vec3>(body, world::kBodyBoxMin), b = At<Vec3>(body, world::kBodyBoxMax), cg = At<Vec3>(rigid, world::kRigidCg);
+    if (!(b.x - a.x > 0.5f && b.y - a.y > 0.5f && b.z - a.z > 0.2f && b.x - a.x < 30.0f && b.y - a.y < 10.0f &&
+          b.z - a.z < 10.0f && fabsf(cg.x) < 5.0f && fabsf(cg.y) < 5.0f && fabsf(cg.z) < 5.0f))
+        return false;
+    const auto clamp = [](float v, float most) { return v < -most ? -most : v > most ? most : v; };
+    lo = {clamp(a.x + cg.x - kNetBoxGrow, kNetMostX), clamp(a.y + cg.y - kNetBoxGrow, kNetMostY),
+          clamp(a.z + cg.z - kNetBoxGrow, kNetMostZ)};
+    hi = {clamp(b.x + cg.x + kNetBoxGrow, kNetMostX), clamp(b.y + cg.y + kNetBoxGrow, kNetMostY),
+          clamp(b.z + cg.z + kNetBoxGrow, kNetMostZ)};
+    return true;
+}
+
 // The slot's damage taken off its car (made again from its first dent when it may be). A car that went has nothing
-// to put back: its clones are no longer live, and OnFrame lets them go.
+// to put back (RepairRenderInfo touches nothing of a car that is not live): its clones are no longer live, and
+// OnFrame lets them go.
 void NetDrop(NetSlot& s) {
-    if (s.renderInfo && CarHas(G(s.car), s.renderInfo)) RepairRenderInfo(s.renderInfo);
+    if (s.renderInfo && (HasClones(s.renderInfo) || g_cars.count(s.renderInfo))) RepairRenderInfo(s.renderInfo);
     s.any = s.busy = false;
     s.next = 0;
 }
@@ -2407,12 +2603,16 @@ void NetBeginFrame(double now) {
     NetStats& st = g_netStats;
     if (g_netSpent > st.worst) st.worst = g_netSpent;
     if (now - g_netStatsAt >= 30000.0) {
-        if (st.batches || st.stopped || st.dents || st.dropped || st.repairs || st.waited)
+        if (st.batches || st.stopped || st.dents || st.dropped || st.repairs || st.waited || g_netQueriesWaited ||
+            g_netDebrisGone || g_unrefined)
             Log("free roam: friends' damage in %.0f s: %d batches made, %d stopped (a repair, or the car went), %d dents "
-                "made, %d no crash makes left out, %d repairs, %d changes waited; %.0f ms of work, at most %.2f ms in a "
-                "frame", (now - g_netStatsAt) / 1000.0, st.batches, st.stopped, st.dents, st.dropped, st.repairs,
-                st.waited, st.ms, st.worst);
+                "made, %d no crash makes left out, %d repairs, %d changes waited, %d waits for a turn at the refinement; "
+                "%.0f ms of work, at most %.2f ms in a frame; %d world queries waited, %d parts gone (enough on the "
+                "road), %d parts cloned unrefined", (now - g_netStatsAt) / 1000.0, st.batches, st.stopped, st.dents,
+                st.dropped, st.repairs, st.waited, st.prewarmWaits, st.ms, st.worst, g_netQueriesWaited,
+                g_netDebrisGone, g_unrefined);
         st = NetStats{};
+        g_netQueriesWaited = g_netDebrisGone = g_unrefined = 0;
         g_netStatsAt = now;
     }
     g_netSpent = 0;
@@ -2430,7 +2630,7 @@ void NetBeginFrame(double now) {
         }
     for (int i = 0; i < n; i++) {
         NetSlot& s = g_netSlots[order[i]];
-        s.near = i < kNetCars || (i < kNetCars + kNetKeep && (s.any || s.busy));   // a car made stays further out
+        s.near = i < g_netCars || (i < g_netCars + g_netKeep && (s.any || s.busy));   // a car made stays further out
     }
     for (NetSlot& s : g_netSlots) {   // a car no longer among the nearest, or not shown: its damage off after a while
         if (s.near || !(s.any || s.busy)) {
@@ -2484,8 +2684,15 @@ extern "C" int dmg_init(void) {
     const char* e = getenv("NFSU2_DAMAGE_LOG");
     g_settings.logHits = e && *e && *e != '0';
     g_out = dmg_alloc(16);
-    Log("crash damage on (Crashing Foreign Cars by FRS Mods, the visual damage)%s",
-        g_settings.logHits ? ", every impact logged" : "");
+    // Without the guest heap's window (phones, tablets, Safari: guest_span.h) the game has 640 MB in all: fewer
+    // friends' cars with damage, and fewer refinements kept.
+    const bool big = dmg_big_memory() != 0;
+    g_netCars = big ? 8 : 4;
+    g_netKeep = big ? 4 : 2;
+    g_tessCacheBytes = big ? 64u << 20 : 24u << 20;
+    Log("crash damage on (Crashing Foreign Cars by FRS Mods, the visual damage)%s; friends' cars with damage: %d (+%d), "
+        "refinements kept: %u MB", g_settings.logHits ? ", every impact logged" : "", g_netCars, g_netKeep,
+        (unsigned)(g_tessCacheBytes >> 20));
     return g_out != 0;
 }
 
@@ -2503,11 +2710,14 @@ extern "C" void dmg_render_entry(uint32_t cri, uint32_t args) {
     g_drawCar = renderInfo;
     g_bodyKnown = false;
     g_drawCountUsed = 0;
-    g_markerDraws[renderInfo].clear();   // learnt again by this render's draws
+    MarkerDraws& md = g_markerDraws[renderInfo];   // learnt again by this render's draws
+    md.draws.clear();
+    md.frame = Frame();
 }
 
 // CarCollisionBody::ApplyImpulse, after the game's
 extern "C" void dmg_impulse(uint32_t bodyAddr, uint32_t impulseAddr, uint32_t pointAddr) {
+    WorldWatch();
     uint8_t* body = G(bodyAddr);
     if (!dmg_committed(bodyAddr, kBodyCar + 4) || !dmg_committed(impulseAddr, 12) || !dmg_committed(pointAddr, 12))
         return;
@@ -2554,6 +2764,7 @@ extern "C" void dmg_impulse(uint32_t bodyAddr, uint32_t impulseAddr, uint32_t po
     }
     SetCar(*state, car);
     state->rigid = rigid;
+    state->live = true;   // (the game's impulse on it, now)
 
     const double t0 = NowMs();
     const size_t clonesBefore = g_clones.size();
@@ -2602,6 +2813,7 @@ extern "C" void dmg_impulse(uint32_t bodyAddr, uint32_t impulseAddr, uint32_t po
 // removes the dents; the other caller, the return from the crash camera, is ignored.
 extern "C" void dmg_zero(uint32_t carDamage, uint32_t caller) {
     if (caller == kClearZoneReturn || !dmg_committed(carDamage, 4)) return;
+    WorldWatch();
     uint8_t* car = At<uint8_t*>(G(carDamage), 0);
     if (!car || !dmg_committed(A(car), kCarRenderInfo + 4)) return;
     void* renderInfo = At<void*>(car, kCarRenderInfo);
@@ -2622,21 +2834,45 @@ extern "C" void dmg_open_flags(uint32_t cri, uint32_t frame) {
         size_t flag, amount;   // amount: 0 for none
     } kOpen[] = {{"hood", kOpenHood, kOpenHoodAmount}, {"trunk", kOpenTrunk, kOpenTrunkAmount},
                  {"left door", kOpenLeftDoor, 0}, {"right door", kOpenRightDoor, 0}};
+    CarState& car = *it->second;
+    const uint8_t was = car.gameOpen;
+    car.gameOpen = 0;
     for (int i = 0; i < kHangCount; i++) {
-        const HangPart& h = it->second->parts[i];
-        if (!h.loose && !h.fallen) continue;
+        const HangPart& h = car.parts[i];
         for (const auto& o : kOpen)
             if (strcmp(o.name, kHangSpecs[i].name) == 0) {
+                // the game opens it itself (the show-off, a cover shoot): its animation turns it (Upload leaves ours)
+                if (At<int>(G(frame), o.flag)) car.gameOpen |= OpenBit(i);
+                if (!h.loose && !h.fallen) continue;
                 if (!At<int>(G(frame), o.flag) && o.amount) At<float>(G(frame), o.amount) = 1.0f;   // fully open
                 At<int>(G(frame), o.flag) = 1;
             }
     }
+    if (car.gameOpen != was)   // its clones as the swing (or the game's animation) has them now: the next frame
+        for (auto& kv : g_clones)
+            if (kv.second->renderInfo == G(cri)) {
+                const int spec = SpecOf(kv.second);
+                if (spec >= 0 && ((car.gameOpen ^ was) & (OpenBit(spec) | (kHangSpecs[spec].parent >= 0 ? OpenBit(kHangSpecs[spec].parent) : 0))))
+                    kv.second->dirty = true;
+            }
+}
+
+// showoff.c: the show-off opens no part the damage has lost (it lies on the road, or is gone: the game's animation would
+// move what is left of it); part 0 the hood, 1 the trunk lid, 2 the left door, 3 the right door
+extern "C" int dmg_part_lost(uint32_t cri, int part) {
+    static const int kSpec[4] = {kSpecHood, kSpecTrunk, kSpecLeftDoor, kSpecRightDoor};
+    auto it = g_cars.find(G(cri));
+    return part >= 0 && part < 4 && it != g_cars.end() && it->second->parts[kSpec[part]].fallen;
 }
 
 // Render's draw of a part: Body's matrix, from the draw of the car's base
 extern "C" void dmg_body_draw(uint32_t modelAddr, uint32_t l2w) {
     if (!g_drawCar || !modelAddr || !l2w) return;
     uint8_t* model = G(modelAddr);
+    if (!g_clones.empty()) {   // the LOD drawn of a part: its clone's uploads (OnFrame)
+        auto it = g_clones.find(CloneKey(model, -1));
+        if (it != g_clones.end() && it->second->renderInfo == g_drawCar) it->second->drawnAt = Frame();
+    }
     uint8_t** table = (uint8_t**)((uint8_t*)g_drawCar + kCriModels);
     for (int lod = 0; lod < 4 && !g_bodyKnown; lod++)
         if (model == table[0 * 8 + lod] || model == table[5 * 8 + lod]) {   // BASE, BODY: drawn with Body
@@ -2667,7 +2903,7 @@ extern "C" void dmg_marker_pre(int slot, uint32_t modelAddr, uint32_t l2wAddr) {
     const Vec3 t = Placement::Mul(body.inv, Vec3{l2w[12], l2w[13], l2w[14]} - body.t);
     memcpy(&m16[12], &t, 12);
     m16[15] = 1.0f;
-    std::vector<MarkerDrawn>& drawn = g_markerDraws[g_drawCar];
+    std::vector<MarkerDrawn>& drawn = g_markerDraws[g_drawCar].draws;
     MarkerDrawn* known = nullptr;
     for (auto& d : drawn)
         if (d.model == model && d.index == index) known = &d;
@@ -2680,6 +2916,7 @@ extern "C" void dmg_marker_pre(int slot, uint32_t modelAddr, uint32_t l2wAddr) {
     auto it = g_clones.find(CloneKey(model, index));
     Clone* c = it == g_clones.end() ? nullptr : it->second;
     if (!c || !Live(c) || c->renderInfo != g_drawCar) return;
+    c->drawnAt = Frame();
     // The game has just set this draw's light materials (the exhaust tip colour) on the original's table.
     memcpy(c->lmTable, At<uint8_t*>(c->original, kSolidLmTable), At<int8_t>(c->original, kSolidLmCount) * 8);
     At<uint8_t*>(model, kModelSolid) = c->solid;
@@ -2717,6 +2954,7 @@ extern "C" void dmg_car_textures(uint32_t used, uint32_t nameAddr) {
 // the guest heap, 128-aligned as the pack's textures are; it is permanent (the game keeps pointers into it).
 extern "C" void dmg_main_loop(void) {
     static bool tried = false;
+    WorldWatch();
     NetFrame();
     if (tried) return;
     tried = true;
@@ -2753,6 +2991,7 @@ extern "C" int dmg_net_mine(uint8_t* epoch, uint16_t* first, uint8_t* dents, int
 
 extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t first, int n, const uint8_t* dents) {
     if (k < 0 || k >= kNetSlots) return;
+    WorldWatch();
     const double now = NowMs();
     NetBeginFrame(now);
     NetSlot& s = g_netSlots[k];
@@ -2775,6 +3014,7 @@ extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, u
     }
     n = n < 0 ? 0 : n > RC_DMG_MAX ? RC_DMG_MAX : n;
     s.dents = n;
+    if (!s.busy) NetBox(G(car), s.boxLo, s.boxHi);   // (the box a batch began with stays for it)
     uint8_t* rigid = world::RigidOf(G(car));
     uint8_t* mine = world::RigidOf(PlayerCar());
     s.dist = rigid && mine && dmg_committed(A(rigid) + world::kRigidPosition, 12) &&
@@ -2792,7 +3032,7 @@ extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, u
     };
     if (epoch != s.epoch) {   // the friend's car was repaired: the car as it is till the repair may be taken
         if (now - s.repairAt < kNetRepairMs) {
-            if (s.busy) s.busy = false, s.any = s.any || s.next > s.from, g_netStats.stopped++;
+            if (s.busy) s.busy = false, s.any = s.any || s.next > s.from || HasClones(renderInfo), g_netStats.stopped++;
             wait();
             return;
         }
@@ -2801,9 +3041,10 @@ extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, u
         s.epoch = epoch;
         g_netStats.repairs++;
     }
-    if (s.any && !s.busy && !g_cars.count(renderInfo)) s.next = 0, s.any = false;   // rebuilt or repaired here: again from the first
-    if (!s.near) {   // not among the nearest: none made (NetBeginFrame takes what it has off after a while)
-        if (s.busy) s.busy = false, s.any = s.any || s.next > s.from, g_netStats.stopped++;
+    // rebuilt or repaired here (no state, no clones): again from the first
+    if (s.any && !s.busy && !g_cars.count(renderInfo) && !HasClones(renderInfo)) s.next = 0, s.any = false;
+    if (!s.near) {   // not among the nearest: none made (NetBeginFrame takes what it has off after a while, clones too)
+        if (s.busy) s.busy = false, s.any = s.any || s.next > s.from || HasClones(renderInfo), g_netStats.stopped++;
         return;
     }
     const uint32_t last = (uint32_t)first + (uint32_t)n;
@@ -2815,7 +3056,7 @@ extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, u
         for (uint32_t i = s.next; i < last; i++) {
             Dent d;
             float m;
-            made += NetDecode(dents + (i - first) * RC_DMG_BYTES, d, m);
+            made += NetDecode(dents + (i - first) * RC_DMG_BYTES, d, m, s.boxLo, s.boxHi);
         }
         if (!made) {
             g_netStats.dropped += (int)(last - s.next);
@@ -2826,10 +3067,17 @@ extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, u
             s.next = last;
             return;
         }
-        if (!s.any && !g_cars.count(renderInfo)) {   // a car to clone: kNetCars + kNetKeep at most
-            int have = 0;
-            for (const NetSlot& o : g_netSlots) have += &o != &s && (o.any || o.busy);
-            if (have >= kNetCars + kNetKeep) return;   // till the farthest one's damage goes (kNetFarMs)
+        if (!s.any && !g_cars.count(renderInfo)) {   // a car to clone: g_netCars + g_netKeep at most
+            int have = 0, refining = 0;
+            for (const NetSlot& o : g_netSlots) {
+                have += &o != &s && (o.any || o.busy);
+                refining += &o != &s && o.busy && !o.ready;
+            }
+            if (have >= g_netCars + g_netKeep) return;   // till the farthest one's damage goes (kNetFarMs)
+            if (refining >= kNetPrewarmCars) {   // its turn at the refinement ahead: when one of these is ready
+                g_netStats.prewarmWaits++;
+                return;
+            }
         }
         if (!s.any && !g_cars.count(renderInfo) && dmg_va_free() < kNetVaReserve) {   // the game's own memory first
             if (!s.noteRoom)
@@ -2851,10 +3099,11 @@ extern "C" void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, u
     const double t0 = NowMs();
     const int fails = g_cloneFails;
     const bool cloned = CloneSome(renderInfo, s.cloneAt, [&] { return NetMore(t0, 0.2); });
+    if (HasClones(renderInfo)) s.any = true;   // (its clones count against the limits from the first: NetBeginFrame)
     while (cloned && s.next < s.end && g_cloneFails == fails) {
         Dent d;
         float magnitude;
-        if (!NetDecode(dents + (s.next - first) * RC_DMG_BYTES, d, magnitude)) {
+        if (!NetDecode(dents + (s.next - first) * RC_DMG_BYTES, d, magnitude, s.boxLo, s.boxHi)) {
             s.next++, s.dropped++, g_netStats.dropped++;
             continue;
         }
