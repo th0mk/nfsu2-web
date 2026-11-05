@@ -181,6 +181,16 @@ pub struct RoamOptions {
     /// game sends a car state once whatever the receivers (the page's bundles name them, web/src/net TxBundle): a
     /// phone's upload grows by 4 bytes a receiver, the server makes the copies.  Under the busy cap, its links.
     pub sends: usize,
+    /// one-way links among players this near (m, where they are now): by that distance, before any farther (the
+    /// distances on and from the view point move with every turn and donut of a car at a meet, and changed which of
+    /// the cars round a player it got every few seconds), and one younger than near_hold_ms first, as one younger than
+    /// hold_ms is: a car that comes near stays that long while it is
+    pub near_m: f64,
+    pub near_hold_ms: f64,
+    /// ...for a player slower than this (m/s: parked, about to park, a donut, cruising round a meet): a driver at
+    /// speed gets its cars as before, the ones it heads for first (with near ones first, a crowd's drivers had fewer
+    /// of the cars ahead of them, tests/popin.rs "crowd")
+    pub near_fast: f64,
     /// a gap in height between two players that no road explains (a highway over a street, a tunnel under a hill):
     /// up to level_slack_m (m) plus level_grade of the way across (a hill, a ramp, a jump) it counts as it is, and
     /// each metre past that counts level_k metres more.  Two cars on one road weigh as before, one on a road above or
@@ -228,6 +238,9 @@ impl Default for RoamOptions {
             away_m: 100.0,
             view_m: 150.0,
             sends: 64,
+            near_m: 60.0,
+            near_hold_ms: 30_000.0,
+            near_fast: 15.0,
             level_slack_m: 5.0,
             level_grade: 0.2,
             level_k: 25.0,

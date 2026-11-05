@@ -572,8 +572,9 @@ struct Player {
     resulted: Option<(u32, f64, u8)>,
     /// its links after the last tick (a HELLO of another start of the game empties them)
     links: Vec<Link>,
-    /// its core takes one-way links (its HELLO's core: wire::CORE_ONEWAY and up)
+    /// its core takes one-way links (its HELLO's core: wire::CORE_ONEWAY and up), and its lists' hints (CORE_HINTS)
     oneway: bool,
+    hints: bool,
     /// how its car moves (watch.rs)
     watch: Watch,
     /// its place in `order`
@@ -709,6 +710,9 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         away_m: f(o.away_m, d.away_m),
         view_m: f(o.view_m, d.view_m),
         sends: n(o.sends, d.sends).min(wire::LIST_MAX),
+        near_m: f(o.near_m, d.near_m),
+        near_hold_ms: f(o.near_hold_ms, d.near_hold_ms),
+        near_fast: f(o.near_fast, d.near_fast),
         level_slack_m: f(o.level_slack_m, d.level_slack_m),
         level_grade: f(o.level_grade, d.level_grade),
         level_k: f(o.level_k, d.level_k),
@@ -742,6 +746,9 @@ struct Stats {
     crew_skips: u64,
     /// the links that went one way only at the last tick (`one_way`)
     oneway_links: u64,
+    /// ...the ones of them to players who only get the other's car, by how far they are (near, past FAR_M, past
+    /// VERYFAR_M: every one, every 4th and every 10th of the other's snapshots with the hints), at the last tick
+    tx_only: [u64; 3],
     /// players' race reports logged
     race_reports: u64,
     /// `[cheat]` lines logged
@@ -770,6 +777,9 @@ struct Scratch {
     // by the place in the room's list: where each one is, and where the links weigh it (`prepare`): soon_ms on,
     // look_ms on, and its view point
     pos: Vec<[f64; 3]>,
+    /// ...where it is now (its SNAP moved on by its age), for the near ones (RoamOptions near_m), and its speed
+    now: Vec<Place>,
+    speed: Vec<f64>,
     soon: Vec<Place>,
     ahead: Vec<Place>,
     view: Vec<Place>,
@@ -823,8 +833,9 @@ struct Scratch {
     ccount: Vec<u32>,
     /// each place's links made first, the lobbies' and the crews' (the first of its new links: `link_every_pair`)
     npre: Vec<u32>,
-    /// a list's crew marks, one a link (`lists`)
+    /// a list's crew marks, one a link, and its hints (`lists`)
     marks: Vec<u8>,
+    hints: Vec<u8>,
     /// a large room's links of the last tick, sorted (`link_many`)
     olds: Vec<Cand>,
     /// each place's links of the last tick as places in the room: `olinks[ostart[i]..ostart[i + 1]]`, and since when
@@ -856,6 +867,10 @@ struct Weigh {
     now: f64,
     hold_ms: f64,
     keep: f64,
+    /// RoamOptions near_m, near_hold_ms, near_fast (`one_way`)
+    near_m: f64,
+    near_hold_ms: f64,
+    near_fast: f64,
     threads: usize,
     /// what a gap in height between two roads weighs (RoamOptions level_*)
     level: Level,
@@ -927,6 +942,9 @@ pub struct Hub {
     /// each browser's lobbies in `joined`, oldest first; when `joined` was last pruned
     joined_by_vip: HashMap<u32, Vec<u32>>,
     joined_pruned: f64,
+    /// the near links gone (`OneWay::gone`) as of the last `[roam] cars within ... that went` line, and when it was
+    near_said: [u64; GONE_N],
+    near_said_at: f64,
     /// when each virtual address's next world map is answered at the soonest (map_gap_ms), kept past its players: a BYE and a HELLO (or
     /// another port) make a new player, and when a player's own time was the limit, a new player's first answer came
     /// at once (the second security audit, 2026-10-22: a map walks every player on the hub's one thread, and a few
@@ -1005,6 +1023,8 @@ impl Hub {
             joined: HashMap::new(),
             joined_by_vip: HashMap::new(),
             joined_pruned: 0.0,
+            near_said: [0; GONE_N],
+            near_said_at: 0.0,
             map_at: HashMap::new(),
             maps: HashMap::new(),
             lobbies_at: HashMap::new(),
@@ -1263,6 +1283,7 @@ impl Hub {
                     resulted: None,
                     links: Vec::new(),
                     oneway: false,
+                    hints: false,
                     watch: Watch::new((self.now)()),
                     at: 0,
                     owner: owner.cloned(),
@@ -1322,6 +1343,7 @@ impl Hub {
                 p.lobbies = lobbies;
                 p.marks = marks;
                 p.oneway = core >= wire::CORE_ONEWAY;
+                p.hints = core >= wire::CORE_HINTS;
                 p.duel = duel;
                 let was = p.crews[0] != 0;
                 p.crews = distinct(crews);
@@ -2167,13 +2189,23 @@ impl Hub {
             });
             s.rooms[r].push(slot);
         }
+        s.ow.gone_out.clear();
         // (empty already, unless a tick before broke off)
         s.fresh.iter_mut().for_each(Vec::clear);
         s.fresh.resize_with(self.slots.len(), Vec::new);
         s.local.clear();
         s.local.resize(self.slots.len(), NONE);
         let level = Level::new(self.o.level_slack_m, self.o.level_grade, self.o.level_k);
-        let w = Weigh { now, hold_ms: self.o.hold_ms, keep: self.o.keep, threads: self.o.link_threads, level };
+        let w = Weigh {
+            now,
+            hold_ms: self.o.hold_ms,
+            keep: self.o.keep,
+            near_m: self.o.near_m,
+            near_hold_ms: self.o.near_hold_ms,
+            near_fast: self.o.near_fast,
+            threads: self.o.link_threads,
+            level,
+        };
         let (mut duel_links, mut lobby_links, mut crew_links, mut crew_skips, mut oneway_links) = (0, 0, 0, 0, 0);
         for r in 0..rooms {
             let list = std::mem::take(&mut s.rooms[r]);
@@ -2217,6 +2249,7 @@ impl Hub {
         self.st.crew_links = crew_links;
         self.st.crew_skips = crew_skips;
         self.st.oneway_links = oneway_links;
+        self.near_line(now);
         self.lists();
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
         self.st.ticks += 1;
@@ -2225,12 +2258,55 @@ impl Hub {
         }
     }
 
+    /// every NEAR_SAY_MS: how many of the cars players got from within NEAR_GONE_M went, and why (`near_gone`), when
+    /// any did
+    fn near_line(&mut self, now: f64) {
+        if self.near_said_at == 0.0 {
+            self.near_said_at = now;
+        }
+        if now - self.near_said_at < NEAR_SAY_MS {
+            return;
+        }
+        let g = self.s.ow.gone;
+        let d: Vec<u64> = g.iter().zip(self.near_said.iter()).map(|(a, b)| a - b).collect();
+        let all: u64 = d.iter().sum();
+        let mins = (now - self.near_said_at) / 60_000.0;
+        self.near_said = g;
+        self.near_said_at = now;
+        // (the lists of the last tick: the players who only get another's car, by how far: `lists`)
+        let [a, b, c] = self.st.tx_only;
+        if a + b + c > 0 {
+            (self.log)(&format!(
+                "[roam] one-way links at the last tick: {} (a player gets the other's car, the other none of its): {a} near, \
+                 {b} past {} m, {c} past {} m (a core of 16 and up sends those every 4th and 10th car state)",
+                a + b + c,
+                wire::FAR_M,
+                wire::VERYFAR_M
+            ));
+        }
+        if all == 0 {
+            return;
+        }
+        let names = ["the player's links full", "its player's sends full", "a list full", "off free roam", "left the room", "other"];
+        let why: Vec<String> = d.iter().zip(names).filter(|(n, _)| **n > 0).map(|(n, w)| format!("{w} {n}")).collect();
+        (self.log)(&format!(
+            "[roam] cars within {NEAR_GONE_M} m of a player that went in the last {} min: {all} ({:.1} a minute): {}",
+            js::number_to_string(js_round(mins)),
+            all as f64 / mins.max(1e-9),
+            why.join(", ")
+        ));
+    }
+
     /// every player's new links in place, and its PEERS list sent.  The lists are cut from blocks of LIST_BLOCK
     /// bytes, about 11 lists each: the switch queues a list as it is until the player's writer takes it, and one
     /// buffer for all of them (700 KB for 2000 players) was kept whole for as long as any list of its tick waited in
     /// a slow player's queue, one such buffer a second; a list of its own each was 2000 allocations a tick.
     fn lists(&mut self) {
+        let now = (self.now)();
+        let look_s = self.o.look_ms / 1000.0;
         let s = &mut self.s;
+        s.ow.gone_out.sort_unstable();
+        self.st.tx_only = [0; 3];
         for &slot in &self.order {
             let Some(Some(p)) = self.slots.get(slot as usize) else { continue };
             let links = &s.fresh[slot as usize];
@@ -2242,7 +2318,47 @@ impl Hub {
             let befriended = p.marks && !p.friend_ids.is_empty();
             // (one-way links: to a core that takes them, `one_way`)
             let oneway = p.oneway && links.iter().any(|l| l.dir != DIR_BOTH);
-            let with = !mine.is_empty() || befriended || oneway;
+            // the hints, to a core of version 16 (wire::CORE_HINTS): the ones far off of the players who only get its
+            // car (it knows nothing of where they are), and why the cars near it went that this list leaves out
+            s.hints.clear();
+            if oneway {
+                let mut far = 0u8;
+                for (k, l) in links.iter().enumerate().filter(|(_, l)| l.dir == DIR_SEND) {
+                    let code = match slots.get(l.slot as usize) {
+                        Some(Some(q)) => far_code(p, q, now, look_s),
+                        _ => 1,
+                    };
+                    self.st.tx_only[match code { 1 => 0, 4 => 1, _ => 2 }] += 1;
+                    if p.hints && code > 1 && k < wire::LIST_MAX {
+                        if far == 0 {
+                            s.hints.push(0);
+                        }
+                        far += 1;
+                        s.hints.push(k as u8 | if code > 4 { wire::HINT_VERYFAR } else { 0 });
+                    }
+                }
+                if far > 0 {
+                    s.hints[0] = far;
+                }
+            }
+            let gone = if p.hints {
+                let g = &s.ow.gone_out;
+                &g[g.partition_point(|e| e.0 < slot)..g.partition_point(|e| e.0 <= slot)]
+            } else {
+                &[][..]
+            };
+            if !s.hints.is_empty() || !gone.is_empty() {
+                if s.hints.is_empty() {
+                    s.hints.push(0);
+                }
+                let g = &gone[..gone.len().min(wire::GONE_MAX)];
+                s.hints.push(g.len() as u8);
+                for &(_, id, why) in g {
+                    s.hints.extend_from_slice(&id.to_le_bytes());
+                    s.hints.push(why + 1);
+                }
+            }
+            let with = !mine.is_empty() || befriended || oneway || !s.hints.is_empty();
             s.marks.clear();
             if with {
                 let way = |l: &Link| match l.dir {
@@ -2269,7 +2385,8 @@ impl Hub {
                         }
                 }));
             }
-            let n = F_DATA + if with { wire::peers_crew_len(links.len(), mine.len()) } else { wire::peers_len(links.len()) };
+            let n =
+                F_DATA + if with { wire::peers_crew_len(links.len(), mine.len()) + s.hints.len() } else { wire::peers_len(links.len()) };
             if s.buf.capacity() < n {
                 s.buf = BytesMut::with_capacity(LIST_BLOCK.max(n));
             }
@@ -2284,7 +2401,7 @@ impl Hub {
                 Some(Some(q)) => PeerEntry { vip: q.vip, port: q.port, id: q.id },
                 _ => PeerEntry { vip: 0, port: 0, id: 0 },
             });
-            wire::write_peers(&mut buf[F_DATA..], self.id, self.seq, list, mine, &s.marks);
+            wire::write_peers(&mut buf[F_DATA..], self.id, self.seq, list, mine, &s.marks, &s.hints);
             self.seq = self.seq.wrapping_add(1);
             if (self.send)(p.vip, buf.split().freeze()) {
                 self.st.lists += 1;
@@ -2422,6 +2539,8 @@ impl Hub {
             "crewLinks": st.crew_links,
             "crewSkips": st.crew_skips,
             "onewayLinks": st.oneway_links,
+            "txOnly": st.tx_only.to_vec(),
+            "nearGone": self.s.ow.gone.to_vec(),
             "raceReports": st.race_reports,
             "cheatLines": st.cheat_lines,
             "nears": st.nears,
@@ -2472,6 +2591,8 @@ const AGE_MAX_S: f64 = 1.0;
 fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, now: f64, s: &mut Scratch) {
     s.newcore.clear();
     s.pos.clear();
+    s.now.clear();
+    s.speed.clear();
     s.soon.clear();
     s.ahead.clear();
     s.view.clear();
@@ -2493,6 +2614,8 @@ fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, 
         let ts = age + o.soon_ms / 1000.0;
         let soon = [at[0] + v[0] * ts, at[1] + v[1] * ts, at[2], up];
         s.pos.push(at);
+        s.now.push([at[0] + v[0] * age, at[1] + v[1] * age, at[2], up]);
+        s.speed.push(v[0].hypot(v[1]));
         s.soon.push(soon);
         s.ahead.push(on(age + o.look_ms / 1000.0));
         s.view.push([soon[0] + fx * view, soon[1] + fy * view, at[2] + s1 * (along * ts + view), up]);
@@ -2957,6 +3080,8 @@ struct Gather<'a> {
     pahead: &'a [Place],
     grid: &'a Grid,
     grid_a: &'a Grid,
+    now: &'a [Place],
+    speed: &'a [f64],
     soon: &'a [Place],
     ahead: &'a [Place],
     view: &'a [Place],
@@ -2986,6 +3111,12 @@ impl GatherBufs {
         GatherBufs { cand: Vec::new(), stamp: vec![0; n], ostamp: vec![0; m], osince: vec![0.0; m], odir: vec![0; m], found }
     }
 }
+
+/// a link's place in `one_way`'s order: a held one's (`Gather::key`), and a near one's, plus its distance: before every
+/// other (which are 0 and up)
+const KEY_HELD: f64 = -3.0e6;
+const KEY_NEAR: f64 = -2.0e6;
+const KEY_FAR_HELD: f64 = -1.0e6;
 
 /// a receiver's candidates past its links, as far as its walks read: its links and ONEWAY_MORE more (the ones whose
 /// senders are full are passed by, and the next ones take their place)
@@ -3027,6 +3158,25 @@ impl Gather<'_> {
         });
         for d in done {
             out.extend(d.into_inner().unwrap_or_else(|e| e.into_inner()));
+        }
+    }
+
+    /// where receiver i's link with sender j goes in the order (`read`; d: the nearest of its walks' distances, `had`:
+    /// since when it is linked, None new).  For a receiver slower than near_fast, the near ones (RoamOptions near_m,
+    /// by where the two are now) first: the ones younger than near_hold_ms (KEY_HELD), then the others (KEY_NEAR),
+    /// each by that distance (at `keep` of it for a link of the last tick); then the ones farther off, younger than
+    /// hold_ms first (KEY_FAR_HELD), the rest by d (at `keep` of it)
+    fn key(&self, i: usize, j: usize, d: f64, had: Option<f64>) -> f64 {
+        let w = self.w;
+        let dn = weigh(&self.now[i], &self.now[j], &w.level);
+        let near = dn < w.near_m && self.speed[i] < w.near_fast;
+        match had {
+            Some(since) if near && w.now - since < w.near_hold_ms.max(w.hold_ms) => KEY_HELD + dn,
+            Some(_) if near => KEY_NEAR + dn * w.keep,
+            None if near => KEY_NEAR + dn,
+            Some(since) if w.now - since < w.hold_ms => KEY_FAR_HELD + d,
+            Some(_) => d * w.keep,
+            None => d,
         }
     }
 
@@ -3093,11 +3243,8 @@ impl Gather<'_> {
                     continue;
                 }
                 let was = (b.ostamp[j] == stamp).then(|| (b.odir[j], b.osince[j]));
-                let key = match was {
-                    Some((dir, since)) if dir & DIR_RECV != 0 && w.now - since < w.hold_ms => -1.0,
-                    Some((dir, _)) if dir & DIR_RECV != 0 => d * w.keep,
-                    _ => d,
-                };
+                let had = was.filter(|e| e.0 & DIR_RECV != 0).map(|e| e.1);
+                let key = self.key(i, j, d, had);
                 out.push((order_key(key), i as u32, j as u32, was.map_or(0, |e| e.1.to_bits())));
             }
             // the ones it got at the last tick and did not walk to this far (farther now, or the walks' ties); not in a
@@ -3113,7 +3260,7 @@ impl Gather<'_> {
                 }
                 let d =
                     weigh(&soon[i], &soon[j], &w.level).min(weigh(&ahead[i], &ahead[j], &w.level)).min(weigh(&view[i], &soon[j], &w.level));
-                let key = if w.now - l.since < w.hold_ms { -1.0 } else { d * w.keep };
+                let key = self.key(i, j, d, Some(l.since));
                 out.push((order_key(key), i as u32, j as u32, l.since.to_bits()));
             }
         }
@@ -3145,7 +3292,29 @@ struct OneWay {
     /// the receivers read (as indices into `news`), and the (receiver, sender) pairs of the first round
     ks: Vec<u32>,
     got: Vec<(u32, u32)>,
+    /// the links of the last tick passed by in a round (receiver, sender, why: GONE_*), and the near ones of them that
+    /// went for good, by why (`near_gone`)
+    skips: Vec<(u32, u32, u8)>,
+    gone: [u64; GONE_N],
+    /// this tick's near links gone, for the receivers' lists' hints: (the receiver's slot, the sender's id, why: GONE_*)
+    gone_out: Vec<(u32, u32, u8)>,
 }
+
+/// why a link of the last tick went (`one_way`): the receiver had its links already, the sender sent to as many as it
+/// may, a list was full (LIST_MAX), the sender went off free roam (a shop, a race, the menus), it left the room (gone,
+/// its position old), none of these (a link made first, a block)
+const GONE_RX_FULL: u8 = 0;
+const GONE_TX_FULL: u8 = 1;
+const GONE_LIST_FULL: u8 = 2;
+const GONE_AWAY: u8 = 3;
+const GONE_LEFT: u8 = 4;
+const GONE_OTHER: u8 = 5;
+const GONE_N: usize = 6;
+/// a link counted as near when it went (`OneWay::gone`): a car this near (m, as the players stood) that vanishes
+/// vanishes in front of the player
+const NEAR_GONE_M: f64 = 60.0;
+/// how often the hub says how many near cars went (`Hub::near_line`)
+const NEAR_SAY_MS: f64 = 300_000.0;
 
 /// One-way links (a core of version 15 and up, `wire::CORE_ONEWAY`), after the links of either function above.  A
 /// link goes both ways, so a player shows another's car only while that player has room for it too: a player who
@@ -3164,7 +3333,7 @@ struct OneWay {
 #[inline(never)]
 fn one_way(slots: &[Option<Player>], list: &[u32], full: bool, o: &RoamOptions, w: &Weigh, s: &mut Scratch) -> u64 {
     let m = list.len();
-    let Scratch { soon, ahead, view, deg, newcore, local: at, fresh, dpairs, lpairs, cpairs, bstart, bnext, ow, .. } = s;
+    let Scratch { pos, now, speed, soon, ahead, view, deg, newcore, local: at, fresh, dpairs, lpairs, cpairs, bstart, bnext, ow, .. } = s;
     ow.news.clear();
     ow.news.extend((0..m as u32).filter(|&i| newcore[i as usize]));
     if ow.news.len() < 2 {
@@ -3209,6 +3378,8 @@ fn one_way(slots: &[Option<Player>], list: &[u32], full: bool, o: &RoamOptions, 
         pahead: &ow.pahead,
         grid: &ow.grid,
         grid_a: &ow.grid_a,
+        now,
+        speed,
         soon,
         ahead,
         view,
@@ -3251,6 +3422,7 @@ fn one_way(slots: &[Option<Player>], list: &[u32], full: bool, o: &RoamOptions, 
     ow.base.clear();
     ow.base.extend(list.iter().map(|&slot| fresh[slot as usize].len() as u16));
     ow.got.clear();
+    ow.skips.clear();
     // the edges in order, while the receiver has room and the sender does: twice, the second time for the receivers
     // still short of their links (their nearest senders full), walked further (ONEWAY_FAR past their links) over
     // the senders' room left
@@ -3271,11 +3443,17 @@ fn one_way(slots: &[Option<Player>], list: &[u32], full: bool, o: &RoamOptions, 
         for &(_, i, j, since) in &ow.edges {
             let (i, j) = (i as usize, j as usize);
             if ow.inn[i] as usize >= deg[i] || ow.out[j] as usize >= sends(j) {
+                if since != 0 {
+                    ow.skips.push((i as u32, j as u32, if ow.inn[i] as usize >= deg[i] { GONE_RX_FULL } else { GONE_TX_FULL }));
+                }
                 continue;
             }
             let (h, key, known) = find(&ow.pairs, i, j);
             if !known {
                 if ow.listed[i] as usize >= wire::LIST_MAX || ow.listed[j] as usize >= wire::LIST_MAX {
+                    if since != 0 {
+                        ow.skips.push((i as u32, j as u32, GONE_LIST_FULL));
+                    }
                     continue;
                 }
                 ow.pairs[h] = key;
@@ -3292,6 +3470,7 @@ fn one_way(slots: &[Option<Player>], list: &[u32], full: bool, o: &RoamOptions, 
             }
         }
     }
+    near_gone(slots, list, pos, at, fresh, ow);
     let mut oneway = 0;
     for &i in &ow.news {
         let l = &mut fresh[list[i as usize] as usize];
@@ -3314,6 +3493,45 @@ fn one_way(slots: &[Option<Player>], list: &[u32], full: bool, o: &RoamOptions, 
         oneway += l[from..].iter().filter(|x| x.dir == DIR_RECV).count() as u64;
     }
     oneway
+}
+
+/// The links of the last tick to a car within NEAR_GONE_M that no round made again (`one_way`), counted by why into
+/// `ow.gone`: the receivers' cars that vanish in front of them
+#[inline(never)]
+fn near_gone(slots: &[Option<Player>], list: &[u32], pos: &[[f64; 3]], at: &[u32], fresh: &[Vec<Link>], ow: &mut OneWay) {
+    ow.skips.sort_unstable();
+    for &i in &ow.news {
+        // (not a receiver off free roam: its game shows no cars there)
+        let Some(p) = player(slots, list[i as usize]).filter(|p| matches!(p.status, 2 | 5)) else { continue };
+        let a = pos[i as usize];
+        for l in p.links.iter().filter(|l| l.dir & DIR_RECV != 0) {
+            let Some(q) = player(slots, l.slot) else { continue };
+            let Some(b) = q.p else { continue };
+            if (a[0] - b[0]).hypot(a[1] - b[1]) >= NEAR_GONE_M {
+                continue;
+            }
+            let Some(j) = local(at, l.slot) else {
+                ow.gone[GONE_LEFT as usize] += 1;
+                ow.gone_out.push((list[i as usize], q.id, GONE_LEFT));
+                continue;
+            };
+            if fresh[list[i as usize] as usize].iter().any(|x| x.slot == l.slot && x.dir & DIR_RECV != 0) {
+                continue;
+            }
+            let why = if !matches!(q.status, 2 | 5) {
+                GONE_AWAY
+            } else {
+                // (the last round's why: a pair passed by in both rounds went at the second)
+                let k = ow.skips.partition_point(|&(x, y, _)| (x, y) <= (i, j as u32));
+                match k.checked_sub(1).map(|k| ow.skips[k]) {
+                    Some((x, y, why)) if (x, y) == (i, j as u32) => why,
+                    _ => GONE_OTHER,
+                }
+            };
+            ow.gone[why as usize] += 1;
+            ow.gone_out.push((list[i as usize], q.id, why));
+        }
+    }
 }
 
 /// whether `places` has `j` (every one compared, without a branch: there are at most a degree of them, and this
@@ -3759,6 +3977,31 @@ fn ahead(o: &Player, now: f64) -> [f64; 2] {
 }
 
 /// `ahead` of a player at `pos` at `pos_at`, going at `v`
+/// how far player q is from p, who sends it its car and gets none of q's (`lists`' hints): every one of p's snapshots
+/// (1), every 4th past FAR_M, every 10th past VERYFAR_M, as a core counts for a peer it gets states from
+/// (roam_core.c snap_every); by the nearer of where the two are now and where they are look_s on, so that two cars
+/// that drive at each other count as near before they are
+fn far_code(p: &Player, q: &Player, now: f64, look_s: f64) -> u8 {
+    let (Some(a), Some(b)) = (p.p, q.p) else { return 1 };
+    let at = |o: &Player, x: [f64; 3], t: f64| {
+        let age = ((now - o.pos_at) / 1000.0).clamp(0.0, AGE_MAX_S);
+        let v = if o.status == 2 { o.v } else { [0.0; 3] };
+        [x[0] + v[0] * (age + t), x[1] + v[1] * (age + t)]
+    };
+    let apart = |t: f64| {
+        let (u, w) = (at(p, a, t), at(q, b, t));
+        (u[0] - w[0]).hypot(u[1] - w[1])
+    };
+    let d = apart(0.0).min(apart(look_s));
+    if d > wire::VERYFAR_M {
+        10
+    } else if d > wire::FAR_M {
+        4
+    } else {
+        1
+    }
+}
+
 fn ahead_of(pos: [f64; 3], v: [f64; 2], pos_at: f64, now: f64) -> [f64; 2] {
     let dt = (now - pos_at).clamp(0.0, MAP_AHEAD_MS) / 1000.0;
     [pos[0] + v[0] * dt, pos[1] + v[1] * dt]

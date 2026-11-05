@@ -52,6 +52,16 @@ pub(crate) const MARK_TXONLY: u8 = 0x40;
 /// the core version from which a player takes one-way links (roam_core.h RC_CORE_VER 15), and the most players its
 /// list then names: the ones it gets cars from (its links) and the ones it sends its own to (roam_core.h RC_LIST_MAX)
 pub(crate) const CORE_ONEWAY: u16 = 15;
+/// ...and from which its lists end in hints (roam_core.h RC_CORE_VER 16: `write_peers`): which of the players who only
+/// get its car are far off (an entry's index, plus HINT_VERYFAR), and why the hub let the cars near it go that it no
+/// longer lists (the player's id and RC_GONE_*), GONE_MAX at most
+pub(crate) const CORE_HINTS: u16 = 16;
+pub(crate) const HINT_VERYFAR: u8 = 0x80;
+pub(crate) const GONE_MAX: usize = 32;
+/// where a player who only gets our car gets every 4th of our snapshots (5 a second), and every 10th (roam_core.h
+/// RC_FAR_M, RC_VERYFAR_M: as a core finds it for a peer it gets states from)
+pub(crate) const FAR_M: f64 = 300.0;
+pub(crate) const VERYFAR_M: f64 = 1000.0;
 pub(crate) const LIST_MAX: usize = 96;
 /// the most crews a player is in (roam_core.h RC_CREW_MAX: the start page's four words)
 pub(crate) const CREWS: usize = 4;
@@ -531,7 +541,15 @@ pub(crate) fn peers_crew_len(n: usize, k: usize) -> usize {
 /// list ends in the receiver's crew marks (HF_CREW on it): `mine` (its crews, at most CREWS, none 0; maybe none), then
 /// a byte per entry, `marks[i]` bit c: entry i is in crew `mine[c]` too; MARK_FRIEND: entry i is its friend.  So a
 /// player learns which of its peers are in its crews, and its friends, without anyone's crews but its own going out.
-pub(crate) fn write_peers(b: &mut [u8], sender: u32, seq: u16, list: impl ExactSizeIterator<Item = PeerEntry>, mine: &[u32], marks: &[u8]) {
+pub(crate) fn write_peers(
+    b: &mut [u8],
+    sender: u32,
+    seq: u16,
+    list: impl ExactSizeIterator<Item = PeerEntry>,
+    mine: &[u32],
+    marks: &[u8],
+    hints: &[u8],
+) {
     let len = b.len();
     let n = list.len();
     let with = len > peers_len(n);
@@ -559,6 +577,8 @@ pub(crate) fn write_peers(b: &mut [u8], sender: u32, seq: u16, list: impl ExactS
             o += 4;
         }
         b[o..o + n].copy_from_slice(&marks[..n]);
+        // (the hints after them, to a core of version 16: `hints` as `Hub::lists` wrote them)
+        b[o + n..o + n + hints.len()].copy_from_slice(hints);
     }
     let crc = crc32fast::hash(&b[..len - CRC]);
     b[len - CRC..].copy_from_slice(&crc.to_le_bytes());
@@ -573,7 +593,7 @@ pub fn encode_peers(sender: u32, seq: u16, list: &[PeerEntry]) -> Vec<u8> {
 pub fn encode_peers_crews(sender: u32, seq: u16, list: &[PeerEntry], mine: &[u32], marks: &[u8]) -> Vec<u8> {
     let with = !mine.is_empty() || !marks.is_empty();
     let mut b = vec![0u8; if with { peers_crew_len(list.len(), mine.len()) } else { peers_len(list.len()) }];
-    write_peers(&mut b, sender, seq, list.iter().copied(), mine, marks);
+    write_peers(&mut b, sender, seq, list.iter().copied(), mine, marks, &[]);
     b
 }
 
