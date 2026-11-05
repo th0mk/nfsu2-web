@@ -129,7 +129,7 @@ fn bench_with(
     };
     println!(
         "{what}: a tick {:.2} ms (median of {}; {:.2} to {:.2}; CPU {:.2} ms, the hub's thread {:.2} ms, least {:.2}), {} links{crewed}; \
-         {:.0} ns a frame (HELLO or SNAP)",
+         {:.0} ns a frame (HELLO or SNAP){}",
         times[times.len() / 2],
         times.len(),
         times[0],
@@ -138,8 +138,53 @@ fn bench_with(
         own[own.len() / 2],
         own[0],
         k.info("links"),
-        frames_ms * 1e6 / (23.0 * 2.0 * players as f64)
+        frames_ms * 1e6 / (23.0 * 2.0 * players as f64),
+        copies(&k, &pos, vip(0)),
     );
+}
+
+/// The car states the players send each other a second by the last tick's lists (each list's entries not marked RX:
+/// the ones a player sends its car to), as roam_core's rc_push_state sends them: by distance (every one within 300 m, every
+/// 4th past it, every 10th past 1 km), to a player who only gets ours (marked TX) by the hub's hints (core 16, `lists`)
+/// or every one (core 15: it knows nothing of where that player is)
+fn copies(k: &Kit, pos: &[[f64; 3]], vip0: u32) -> String {
+    let rate = |d: f64| if d > 1000.0 { 2.0 } else if d > 300.0 { 5.0 } else { 20.0 };
+    let (mut both, mut tx_before, mut tx_after, mut n_tx) = (0.0, 0.0, 0.0, 0u64);
+    let (mut list_bytes, mut lists) = (0usize, 0usize);
+    for (vip, f) in k.sent.lock().iter() {
+        list_bytes += f.len();
+        lists += 1;
+        let e = peers_of(f);
+        let marks = crew_marks(f).map(|m| m.1).unwrap_or_else(|| vec![0; e.len()]);
+        let a = pos[(vip - vip0) as usize];
+        for (q, m) in e.iter().zip(marks) {
+            if m & 0x20 != 0 {
+                continue;
+            }
+            let b = pos[(q.vip - vip0) as usize];
+            let r = rate((a[0] - b[0]).hypot(a[1] - b[1]));
+            if m & 0x40 != 0 {
+                tx_before += 20.0;
+                tx_after += r;
+                n_tx += 1;
+            } else {
+                both += r;
+            }
+        }
+    }
+    // (the lists: two a second, each to its player)
+    let lists = format!("; lists {:.0} B each, {:.1} Mbit/s", list_bytes as f64 / lists.max(1) as f64, list_bytes as f64 * 2.0 * 8.0 / 1e6);
+    if n_tx == 0 {
+        return format!("; car states {:.0}/s{lists}", both);
+    }
+    format!(
+        "; car states {:.0}/s, {:.0} of them to the {n_tx} who only get ours (hub: {}), with the hints {:.0}/s ({:+.1} %){lists}",
+        both + tx_before,
+        tx_before,
+        k.hub.info()["txOnly"],
+        both + tx_after,
+        100.0 * (tx_after - tx_before) / (both + tx_before)
+    )
 }
 
 /// crews of 2 to 6 players of one room, one after another (sizes 2, 3, 4, 5, 6 again and again: 500 crews of 2000
