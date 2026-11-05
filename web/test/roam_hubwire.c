@@ -32,7 +32,7 @@ static void unhex(const char *h, uint8_t *b, int *n){
 }
 static void sent(void *user, uint32_t ip, uint16_t port, const uint8_t *buf, int len){
     (void)user;
-    if (ip != 0x0A4D00FDu || port != 47210 || len < 6 || (buf[5] != RC_MSG_MAPREQ && buf[5] != RC_MSG_NEARREQ)) return;
+    if (ip != 0x0A4D00FDu || port != 47210 || len < 6 || (memcmp(buf, "MTQ3", 4) && buf[5] != RC_MSG_MAPREQ && buf[5] != RC_MSG_NEARREQ)) return;
     printf("ask ");
     for (int i = 0; i < len; i++) printf("%02x", buf[i]);
     printf("\n");
@@ -109,6 +109,22 @@ int main(int argc, char **argv){
             printf(" %u.%u.%u.%u:%u:%d%s", ip >> 24, (ip >> 16) & 255u, (ip >> 8) & 255u, ip & 255u, m.u.peers.e[k].port, crew, friend ? "f" : "");
         }
         printf("\n");
+        return 0;
+    }
+    if (!strcmp(argv[1], "meets")){
+        rc_config c = {0}; c.self_id = 100; c.port = 47210; c.max_players = 8;
+        c.hub_ip = 0x0A4D00FDu; c.hub_port = 47210;
+        rc_io io = {0}; io.send = sent;
+        rc_session_init(&S, &c, &io); rc_set_status(&S, RC_ST_ROAM);
+        S.hub_heard_us = 1000000; rc_tick(&S, 1000000);
+        for (int i = 2; i < argc; i++){ unhex(argv[i], b, &n); rc_receive(&S,c.hub_ip,c.hub_port,b,n,1000001); }
+        printf("meets %d", S.meet_n);
+        for (int i = 0; i < S.meet_n; i++) printf(" %d,%d,%d,%u", S.meet[i].x,S.meet[i].y,S.meet[i].z,S.meet[i].cars);
+        printf("\n");
+        for (int i=0; i<S.meet_n; i++) for (int j=0; j<S.meet[i].n_spectators; j++) {
+            rc_spectator *p=&S.meet[i].spectators[j];
+            printf("npc %u %d %d,%d,%d %u %u\n",S.meet[i].id,j,p->p[0],p->p[1],p->p[2],p->heading,p->variant);
+        }
         return 0;
     }
     if (!strcmp(argv[1], "near")){

@@ -7255,21 +7255,10 @@ static int mp_map_icons(CPU *c, uint32_t map, uint32_t pkg, uint32_t room, int h
 }
 
 /* ---- car meets on the world map ------------------------------------------------------------------- */
-/* Players park together at car meets (the airport where new careers start,
- * car parks, the highway's loop), and others ask where one is.  The world
- * map marks a spot where MEET_MIN players or more are parked (meet_parked:
- * each has stayed at one spot for a minute, and goes slower than
- * MEET_SLOW_MPS) within MEET_R of it: a cover shoot's star in MEET_RGB with
- * "Meet: <n> cars" beside it, the legend's Car meets row (WMF_MEETS) hiding
- * them.  Every MEET_EVERY_US while the map is open, from what it knows: the
- * player's car, the friends' cars and the hub's other players (where their
- * markers are, wm_where; parked as the hub says, RC_MAPD_PARKED).  The densest
- * parked player first: the meet's spot is the middle of those within
- * MEET_R of it, its cars those within MEET_R of that spot, and they count
- * for no other meet; a meet found again keeps its marker (the nearest within
- * MEET_R of where one was).  A meet's marker is a car marker of ours (WM_CAR:
- * the map's filter leaves it alone; a kind of place's icon would go with
- * that kind's row).
+/* The hub detects parked groups every ten seconds. roam_core polls its cached
+ * list during normal free roam, without the map open. This UI only renders
+ * that shared list; no per-client player clustering or extra map requests.
+ * Old hubs that do not implement MTP1 show no meet markers.
  *
  * The GPS takes the player there.  The map's items (WorldMap +0xC: the
  * places the keys pick, each with its marker and its GPS target, made with
@@ -7283,13 +7272,9 @@ static int mp_map_icons(CPU *c, uint32_t map, uint32_t pkg, uint32_t room, int h
  * game stops the GPS when the player engages a place's event (0x541120); at a
  * meet nothing would, so meet_gps stops it within MEET_ARRIVE_M of the spot.
  * Not in the Windows plugin (as the lobbies). */
-#define MEET_MIN        20            /* players standing near one spot: a meet (fewer: a busy spot) */
 #define MEET_R          50.f          /* ...within this of it (m) */
-#define MEET_SLOW_MPS   4.f           /* (14 km/h) standing, for a meet */
-#define MEET_EVERY_US   1000000       /* the meets found again this often while the map is open */
+#define MEET_EVERY_US   1000000       /* refresh the map from the cached server list this often */
 #define MEET_ARRIVE_M   40.f          /* the GPS to a meet stops this near its spot */
-#define MEET_PTS        (NSLOT + 1 + RC_MAP_MAX)
-#define MEET_NB         1024          /* the grid's buckets (squares of MEET_R) */
 #define MEET_ICON       "SHOWCASEINDICATOR_"   /* a cover shoot's star (the map's icons, 0x7F4348: <name><n>) */
 #define WM_ITEMS        0xcu          /* WorldMap: the places the keys pick (+0 first, +4 last; 0x24 bytes: +8 the marker, +0xC its GPS target, 6 words) */
 #define WM_ITEM_SZ      0x24u
@@ -7307,92 +7292,9 @@ static int mp_map_icons(CPU *c, uint32_t map, uint32_t pkg, uint32_t room, int h
                                          the career's a point of the road by the place) */
 static uint32_t g_meet_t[MEET_MAX];   /* the meets' stand-in triggers (made once and kept: the GPS reads one as it starts) */
 static struct { int on; float x, y; } g_meet_gps;   /* the GPS goes to a meet's spot */
-static struct { uint32_t map; int n, made, said, hub, sel, picked; int64_t at;
+static struct { uint32_t map; int n, made, said, sel, picked; int64_t at;
                 uint32_t m[MEET_MAX], lbl[MEET_MAX], item[MEET_MAX]; int w[MEET_MAX], cars[MEET_MAX];
                 uint8_t on[MEET_MAX], star[MEET_MAX], len[MEET_MAX]; float x[MEET_MAX], y[MEET_MAX]; } g_meet;
-static struct { float x[MEET_PTS], y[MEET_PTS], z[MEET_PTS]; int16_t cx[MEET_PTS], cy[MEET_PTS], next[MEET_PTS], cnt[MEET_PTS];
-                uint8_t used[MEET_PTS]; int16_t head[MEET_NB]; } g_mpt;
-static int meet_cell(float v){ return (int)__builtin_floorf(v / MEET_R); }
-static unsigned meet_bucket(int cx, int cy){ return ((unsigned)cx * 73856093u ^ (unsigned)cy * 19349663u) & (MEET_NB - 1u); }
-/* the points not counted yet within MEET_R of x, y: how many, their middle (mx, my); each counted now for meet take
- * (from 1) */
-static int meet_near(float x, float y, float *mx, float *my, int take){
-    int k = 0, cx = meet_cell(x), cy = meet_cell(y); float ax = 0.f, ay = 0.f;
-    for (int dx = -1; dx <= 1; dx++) for (int dy = -1; dy <= 1; dy++)
-        for (int i = g_mpt.head[meet_bucket(cx + dx, cy + dy)]; i >= 0; i = g_mpt.next[i]){
-            if (g_mpt.used[i] || g_mpt.cx[i] != cx + dx || g_mpt.cy[i] != cy + dy) continue;   /* (another square in the bucket) */
-            float ex = g_mpt.x[i] - x, ey = g_mpt.y[i] - y;
-            if (ex * ex + ey * ey > MEET_R * MEET_R) continue;
-            if (take) g_mpt.used[i] = (uint8_t)take;
-            ax += g_mpt.x[i]; ay += g_mpt.y[i]; k++;
-        }
-    if (mx && k){ *mx = ax / (float)k; *my = ay / (float)k; }
-    return k;
-}
-/* a player standing at x, y, z (NaN: not known, a hub's answer without RC_HF_MAPZ) */
-static void meet_add(int *n, float x, float y, float z, float vx, float vy){
-    if (*n >= MEET_PTS || vx * vx + vy * vy >= MEET_SLOW_MPS * MEET_SLOW_MPS || !(x == x) || !(y == y)) return;
-    int i = (*n)++;
-    g_mpt.x[i] = x; g_mpt.y[i] = y; g_mpt.z[i] = z; g_mpt.cx[i] = (int16_t)meet_cell(x); g_mpt.cy[i] = (int16_t)meet_cell(y);
-}
-/* Parked: a car that has stayed within MEET_STAY_M of one spot for MEET_PARKED_US (as the hub's PARKED_MS tells of its
- * players, RC_MAPD_PARKED): only those count for a meet, so players passing a busy spot, or just come there, do not;
- * nor a car at the new career's start (MEET_SPAWN_M), where every new player appears.  The player's car and the
- * friends' cars are watched here, every frame in the world (meet_stay, by slot; NSLOT the player's). */
-#define MEET_STAY_M     25.f
-#define MEET_PARKED_US  60000000
-#define MEET_SPAWN_M    5.f
-static struct { uint32_t id; float x, y; int64_t since; } g_stay[NSLOT + 1];
-static void meet_stay(uint32_t w, int64_t host){
-    for (int k = 0; k <= NSLOT; k++){
-        const Slot *q = k < NSLOT ? &g_sl[k] : 0;
-        uint32_t car = q ? (wm_shown(q, w) ? q->car : 0) : player_car(), id = q ? q->peer_id | 1u : 1u;
-        if (!ok(car, 0x70)){ g_stay[k].id = 0; continue; }
-        float x = MRF32(car + 0x60u), y = MRF32(car + 0x64u), dx = x - g_stay[k].x, dy = y - g_stay[k].y;
-        if (g_stay[k].id != id || dx * dx + dy * dy > MEET_STAY_M * MEET_STAY_M){ g_stay[k].id = id; g_stay[k].x = x; g_stay[k].y = y; g_stay[k].since = host; }
-    }
-}
-static int meet_parked(int k, int64_t host){ return g_stay[k].id && host - g_stay[k].since >= MEET_PARKED_US; }
-static int meet_spawn(float x, float y){ float dx = x - SPAWN_X, dy = y - SPAWN_Y; return dx * dx + dy * dy < MEET_SPAWN_M * MEET_SPAWN_M; }
-/* the meets now, out[] (x, y, z, cars; z its cars' middle, where the GPS looks for the road: else the player's): how
- * many */
-static int meet_find(uint32_t w, int64_t host, float (*out)[4]){
-    int n = 0;
-    uint32_t me = player_car();
-    float nz = __builtin_nanf(""), mz = ok(me, 0x80) ? MRF32(me + 0x68u) : 0.f;
-    if (ok(me, 0x80) && meet_parked(NSLOT, host) && !meet_spawn(MRF32(me + 0x60u), MRF32(me + 0x64u)))
-        meet_add(&n, MRF32(me + 0x60u), MRF32(me + 0x64u), mz, MRF32(me + 0x70u), MRF32(me + 0x74u));
-    for (int k = 0; k < NSLOT; k++){
-        const Slot *q = &g_sl[k];
-        if (wm_shown(q, w) && meet_parked(k, host) && !meet_spawn(MRF32(q->car + 0x60u), MRF32(q->car + 0x64u)))
-            meet_add(&n, MRF32(q->car + 0x60u), MRF32(q->car + 0x64u), MRF32(q->car + 0x68u), q->drawn_v[0], q->drawn_v[1]);
-    }
-    for (int i = 0; i < g_wm_n && !g_map_plain; i++){
-        if (!g_wm_e[i].parked) continue;
-        float x, y; wm_where(i, host, &x, &y);
-        if (!meet_spawn(x, y)) meet_add(&n, x, y, g_wm_e[i].z != RC_MAP_NO_Z ? (float)g_wm_e[i].z : nz, (float)g_wm_e[i].vx, (float)g_wm_e[i].vy);
-    }
-    for (int b = 0; b < MEET_NB; b++) g_mpt.head[b] = -1;
-    for (int i = 0; i < n; i++){
-        unsigned b = meet_bucket(g_mpt.cx[i], g_mpt.cy[i]);
-        g_mpt.next[i] = g_mpt.head[b]; g_mpt.head[b] = (int16_t)i; g_mpt.used[i] = 0;
-    }
-    for (int i = 0; i < n; i++){ int k = meet_near(g_mpt.x[i], g_mpt.y[i], 0, 0, 0); g_mpt.cnt[i] = (int16_t)(k < 32767 ? k : 32767); }
-    int nm = 0;
-    while (nm < MEET_MAX){
-        int best = -1;
-        for (int i = 0; i < n; i++) if (!g_mpt.used[i] && g_mpt.cnt[i] >= MEET_MIN && (best < 0 || g_mpt.cnt[i] > g_mpt.cnt[best])) best = i;
-        if (best < 0) break;
-        float mx = g_mpt.x[best], my = g_mpt.y[best];
-        meet_near(mx, my, &mx, &my, 0);
-        if (meet_near(mx, my, 0, 0, 0) < MEET_MIN){ g_mpt.cnt[best] = 0; continue; }   /* (fewer round its middle: the next) */
-        float cx = mx, cy = my, az = 0.f;
-        int k = meet_near(mx, my, &cx, &cy, nm + 1), kz = 0;
-        for (int i = 0; i < n; i++) if (g_mpt.used[i] == nm + 1 && g_mpt.z[i] == g_mpt.z[i]){ az += g_mpt.z[i]; kz++; }
-        out[nm][0] = cx; out[nm][1] = cy; out[nm][2] = kz ? az / (float)kz : mz; out[nm][3] = (float)k; nm++;
-    }
-    return nm;
-}
 /* the star a meet shows: the package's object, 0 for none */
 static uint32_t meet_icon(CPU *c, uint32_t pkg){
     char nm[32]; uint32_t o = 0;
@@ -7457,17 +7359,24 @@ static int meet_make(CPU *c, uint32_t map, uint32_t pkg, uint32_t pk){
     g_meet.made++;
     return 1;
 }
-/* while the map is open: the meets found again each MEET_EVERY_US, their markers moved there (the rest off the map),
+/* while the map is open: read the server cache each MEET_EVERY_US and move markers (the rest off the map),
  * their labels' counts and their triggers; 1 when the map is to be placed again */
 static int meet_update(CPU *c, uint32_t map, uint32_t pkg, uint32_t pk, uint32_t w, int64_t host){
     if (g_meet.map != map){
         memset(&g_meet, 0, sizeof g_meet); g_meet.map = map; g_meet.sel = -1;
-        g_meet.at = host - MEET_EVERY_US + 500000;                    /* (the first: once the hub has answered, or half a second on) */
+        g_meet.at = host - MEET_EVERY_US;
     }
-    if (host - g_meet.at < MEET_EVERY_US && !(g_wm.got && !g_meet.hub)) return 0;
-    g_meet.at = host; g_meet.hub |= g_wm.got != 0;
+    if (host - g_meet.at < MEET_EVERY_US) return 0;
+    g_meet.at = host;
     float f[MEET_MAX][4];
-    int nf = meet_find(w, host, f), was = g_meet.n, slot[MEET_MAX];
+    roam_plat_lock();
+    int nf = g_s.meet_n;
+    for (int i = 0; i < nf; i++) {
+        f[i][0] = g_s.meet[i].x; f[i][1] = g_s.meet[i].y;
+        f[i][2] = g_s.meet[i].z; f[i][3] = g_s.meet[i].cars;
+    }
+    roam_plat_unlock();
+    int was = g_meet.n, slot[MEET_MAX];
     uint8_t keep[MEET_MAX] = { 0 };
     for (int i = 0; i < nf; i++) slot[i] = -1;
     /* a meet found again keeps its marker (and the item picked): the nearest within MEET_R of where one was */
@@ -8565,6 +8474,18 @@ static void counts_log(int64_t host){
          parked, g_npv, listed, waiting, near, near_shown, mid, mid_shown, o60, o150);
 }
 
+#if MPRACES
+#include "meet_spectators.inc"
+#endif
+
+void roam_game_world_leaving(CPU *c){
+#if MPRACES
+    if(g_spec.allocation) spec_leave(c);
+#else
+    (void)c;
+#endif
+}
+
 /* a different world: every slot of the old one is gone */
 static void world_changed(CPU *c, uint32_t w){
     if (g_world_seen){
@@ -9026,6 +8947,9 @@ void roam_game_frame(CPU *c){
     if (g_pw.on) partswatch("pre");
     if (g_packs_ok) packs_wake(c);                  /* after the game's hibernation (into the world) */
     if (g_pw.on) partswatch("post");
+#if MPRACES
+    spectators_frame(c, in_roam);
+#endif
     /* sync clock */
     float wdt = rd32(G_FLOW) == 6u ? MRF32(G_WORLDDT) : 0.f;
     if (!__builtin_isfinite(wdt) || wdt < 0 || wdt > 1.f) wdt = 0;
@@ -9340,7 +9264,6 @@ void roam_game_frame(CPU *c){
         near_update(c, w, host, 1);
         map_update(c, w, host);
 #if MPRACES
-        meet_stay(w, host);
         meet_gps(c);
 #endif
         /* a screen over the HUD: the HUD's update, which places the names
@@ -9525,6 +9448,13 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
     sscanf(args, "%31s %n", sub, &used);
     sscanf(args + used, "%199s %63s", a1, a2);
     long f = rh_frame();
+#if MPRACES
+    if (!strcasecmp(sub, "spectators")){
+        int n=0; for(int i=0;i<SPEC_N;i++) n+=g_spec.actor[i]!=0;
+        rlog("[spectators] meet %u: %d of %u characters, %d assets loaded\n",g_spec.layout.id,n,g_spec.layout.n_spectators,g_spec.loaded);
+        return 1;
+    }
+#endif
     if (!strcasecmp(sub, "traffic")){
         /* "mp traffic [racer] [jump [racer] M [TURN [LEFT]] | go V | outrun]" (free roam with others on or off): the game's cars
          * out (traffic, AI racers: ghost_pair's), the nearest, the contacts Ghost mode Everything let through and their

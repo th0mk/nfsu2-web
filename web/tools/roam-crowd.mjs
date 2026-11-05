@@ -6,7 +6,7 @@
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
 //        [--race 1-3:60:120] [--paused 1-3] [--prefix Bot] [--links 64] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
-//        [--flags nl,br,gb-eng] [--meet x,y,z] [--city side[,x,y]] [--seed n]
+//        [--flags nl,br,gb-eng] [--meet x,y,z | --parked x,y,z] [--city side[,x,y]] [--seed n]
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
 //          one tick or one received message made them send goes as one message, a snapshot to several friends once
@@ -40,6 +40,7 @@
 // --track  a pose log (NFSU2_ROAM_POSELOG): the first player's L rows, a real drive; every simulated player
 //          follows it from its own point along it, so they spread over the route.  Without one: circles of 20 to
 //          120 m around the new career's start (1695, -884, 24), or --spread m apart (6 circles, the first at --spread).
+// --parked x,y,z: a stationary grid of distinct cars for a reliable car-meet test.
 // --meet   a car meet round this place: each player now parked at a spot of it (8 to 60 m from it, pointing any way)
 //          for 1.5 to 6 minutes, now driving by on straight lines through and past it (up to 200 m off, 600 m either side,
 //          15 to 35 m/s), now driving in to a spot (from 500 m) or off from one; about 55 % stand at a time, so --n 90
@@ -80,6 +81,7 @@ const ALL_CARS = ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUG
 const CARS = opt('cars', '') === 'all' ? ALL_CARS : opt('cars', '') ? opt('cars', '').split(',') : [CAR];
 const LOBBIES = (opt('lobbies', '').match(/^(\d+):(.+)$/) ?? []).slice(1);
 const MEET = opt('meet', '') ? opt('meet', '').split(',').map(Number) : null, SEED = +opt('seed', String(Date.now() % 1e9 | 0));
+const PARKED = opt('parked', '') ? opt('parked', '').split(',').map(Number) : null;
 const CITY = opt('city', '') ? opt('city', '').split(',').map(Number) : null, MEET_N = +opt('meet-n', 90), FIDGET = argv.includes('--fidget');
 const HUB = 0x0A4D00FD, PORT = 47210;
 
@@ -126,6 +128,18 @@ if (TRACK) {
     const r = SPREAD + (i % 6) * SPREAD, w = SPEED / r, a = w * t + i;
     return { p: [1695 + r * Math.cos(a), -884 + r * Math.sin(a), 24.1], v: [-r * w * Math.sin(a), r * w * Math.cos(a), 0] };
   };
+}
+
+if (PARKED) {
+  if (PARKED.length !== 3 || !PARKED.every(Number.isFinite) || MEET || CITY || TRACK)
+    throw Error('--parked requires x,y,z and cannot be combined with --meet, --city or --track');
+  const [x,y,z] = PARKED, columns = Math.ceil(Math.sqrt(N)), rows = Math.ceil(N / columns);
+  track = (_t,i) => {
+    const slot = i - FIRST; // --first changes identities, not the grid centre.
+    return {p:[x+(slot%columns-(columns-1)/2)*3.5,y+(Math.floor(slot/columns)-(rows-1)/2)*6,z],v:[0,0,0],h:Math.PI/2};
+  };
+  track.standing = () => N;
+  console.log(`roam-crowd: ${N} permanently parked cars in ${columns} columns at ${PARKED}`);
 }
 
 if (MEET) {

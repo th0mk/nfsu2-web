@@ -1982,6 +1982,54 @@ static void t_say(void){
           "say inbox: %d kept, %u dropped, %d taken", kept, g_n[1].say_dropped, taken);
 }
 
+static void t_meets(void){
+    mesh(1, 8);
+    rc_session *s = &g_n[0];
+    s->conf.hub_ip = HUB_IP; s->conf.hub_port = HUB_PORT;
+    s->hub_heard_us = g_now; s->status = RC_ST_ROAM;
+    rc_tick(s, g_now);
+    uint32_t req = s->meet_req;
+    CHECK(req != 0, "meets: polling starts without a map");
+    g_now += 9000000; s->hub_heard_us = g_now; rc_tick(s, g_now);
+    CHECK(s->meet_req == req, "meets: polling at most every ten seconds");
+    uint8_t b[21]; rc_w w; rc_w_init(&w,b,sizeof b);
+    rc_putb(&w,"MTP1",4); rc_put32(&w,s->conf.room); rc_put32(&w,req); rc_put8(&w,1);
+    rc_put16(&w,100); rc_put16(&w,(uint16_t)-200); rc_put16(&w,12); rc_put16(&w,20);
+    rc_receive(s,node_ip(1),HUB_PORT,b,sizeof b,g_now);
+    CHECK(!s->meet_n, "meets: a peer cannot publish meets");
+    rc_receive(s,HUB_IP,HUB_PORT,b,sizeof b-1,g_now);
+    CHECK(!s->meet_n, "meets: truncated response rejected");
+    rc_receive(s,HUB_IP,HUB_PORT,b,sizeof b,g_now);
+    CHECK(s->meet_n == 1 && s->meet[0].y == -200 && s->meet[0].cars == 20, "meets: cached coordinates and count");
+    b[19] = 19; rc_receive(s,HUB_IP,HUB_PORT,b,sizeof b,g_now+1);
+    CHECK(s->meet[0].cars == 20, "meets: invalid count does not partially replace cache"); b[19] = 20;
+    uint8_t crowd[41]; rc_w_init(&w,crowd,sizeof crowd);
+    rc_putb(&w,"MTP2",4); rc_put32(&w,s->conf.room); rc_put32(&w,req); rc_put8(&w,1);
+    rc_put16(&w,100); rc_put16(&w,(uint16_t)-200); rc_put16(&w,12); rc_put16(&w,20);
+    rc_put32(&w,7); rc_put8(&w,1);
+    rc_put32(&w,12345); rc_put32(&w,(uint32_t)-20050); rc_put32(&w,1200);
+    rc_put16(&w,32000); rc_put8(&w,3);
+    rc_receive(s,HUB_IP,HUB_PORT,crowd,sizeof crowd,g_now+1);
+    CHECK(s->meet[0].id==7 && s->meet[0].n_spectators==1 && s->meet[0].spectators[0].p[1]==-20050 &&
+          s->meet[0].spectators[0].heading==32000 && s->meet[0].spectators[0].variant==3,"meets: exact server spectator layout decoded");
+    uint32_t gen=s->meet_gen;
+    for(int len=13;len<(int)sizeof crowd;len++) rc_receive(s,HUB_IP,HUB_PORT,crowd,len,g_now+2);
+    crowd[40]=4; rc_receive(s,HUB_IP,HUB_PORT,crowd,sizeof crowd,g_now+2);
+    crowd[40]=3; crowd[25]=9; rc_receive(s,HUB_IP,HUB_PORT,crowd,sizeof crowd,g_now+2);
+    crowd[3]='3'; crowd[25]=33; rc_receive(s,HUB_IP,HUB_PORT,crowd,sizeof crowd,g_now+2);
+    CHECK(s->meet_gen==gen && s->meet[0].id==7,"meets: invalid/truncated crowd preserves previous complete layout");
+    rc_set_room(s,s->conf.room+1);
+    rc_receive(s,HUB_IP,HUB_PORT,b,sizeof b,g_now+2);
+    CHECK(!s->meet_n, "meets: room change clears cache and rejects old response");
+    s->meet_n = 1; s->meet_received_us = g_now; s->hub_heard_us = g_now+31000000;
+    rc_tick(s,g_now+31000000);
+    CHECK(!s->meet_n, "meets: stale cache expires");
+    s->meet_n = 1; s->status = RC_ST_EVENT; rc_tick(s,g_now+31000001);
+    CHECK(!s->meet_n, "meets: races clear the cache");
+    s->meet_n = 1; rc_shutdown(s, 0);
+    CHECK(!s->meet_n, "meets: disconnect clears the cache");
+}
+
 int main(int argc, char **argv){
     long fuzz = argc > 1 ? atol(argv[1]) : 200000;
     printf("roam_unit: core %d, protocol %d\n", RC_CORE_VER, RC_PROTO_VER);
@@ -1991,6 +2039,7 @@ int main(int argc, char **argv){
     t_session();
     t_review();
     t_hub();
+    t_meets();
     t_oneway();
     t_hints();
     t_far();

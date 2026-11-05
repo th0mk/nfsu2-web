@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use crate::links::{
     Cand, Found, Grid, Heap, Level, Near, Place, WALK_AHEAD, WALK_SOON, WALK_VIEW, before, distance, order_key, sort_stable, square, weigh,
 };
+use crate::meets;
 use crate::results::{self, Results};
 use crate::watch::{self, Seen, Watch};
 use crate::wire::{self, F_DATA, KIND_UDP, Msg};
@@ -1013,6 +1014,10 @@ pub struct Hub {
     /// the near links gone (`OneWay::gone`) as of the last `[roam] cars within ... that went` line, and when it was
     near_said: [u64; GONE_N],
     near_said_at: f64,
+    meets: HashMap<u32, Vec<meets::Meet>>,
+    next_meet_id: u32,
+    meets_next: f64,
+    meet_at: HashMap<u32, f64>,
     /// when each virtual address's next world map is answered at the soonest (map_gap_ms), kept past its players: a BYE and a HELLO (or
     /// another port) make a new player, and when a player's own time was the limit, a new player's first answer came
     /// at once (the second security audit, 2026-10-22: a map walks every player on the hub's one thread, and a few
@@ -1093,6 +1098,10 @@ impl Hub {
             joined_pruned: 0.0,
             near_said: [0; GONE_N],
             near_said_at: 0.0,
+            meets: HashMap::new(),
+            next_meet_id: 0,
+            meets_next: 0.0,
+            meet_at: HashMap::new(),
             map_at: HashMap::new(),
             maps: HashMap::new(),
             lobbies_at: HashMap::new(),
@@ -1308,6 +1317,10 @@ impl Hub {
     /// of its own.  A race's results count the clients that report its winner (results.rs, its clean wins).
     pub fn frame_of(&mut self, from: u32, data: &[u8], owner: Option<&Arc<str>>, client: Option<&Arc<str>>) {
         self.st.frames += 1;
+        if data.len() == F_DATA + 12 && data[0] == KIND_UDP && matches!(&data[F_DATA..F_DATA + 4], b"MTQ1" | b"MTQ2" | b"MTQ3") {
+            self.meet_reply(from, u16::from_be_bytes([data[12], data[13]]), &data[F_DATA + 4..], data[F_DATA + 3]);
+            return;
+        }
         if data.len() < F_DATA + wire::HDR + wire::CRC || data[0] != KIND_UDP {
             self.st.bad += 1;
             return;
@@ -2030,8 +2043,98 @@ impl Hub {
         (self.send)(vip, Bytes::from(f));
     }
 
+    // Called by the timer, never by requests. One scan of the hub, then one grid per room.
+    fn update_meets(&mut self, now: f64) {
+        if now < self.meets_next {
+            return;
+        }
+        self.meets_next = now + meets::EVERY_MS;
+        let mut rooms: HashMap<u32, Vec<[f64; 3]>> = HashMap::new();
+        for &slot in &self.order {
+            let Some(p) = self.player(slot) else { continue };
+            if !self.map_shown(slot, p, now) || now - p.stay_at < PARKED_MS || p.v[0] * p.v[0] + p.v[1] * p.v[1] >= 16.0 {
+                continue;
+            }
+            let Some(at) = p.p else { continue };
+            if (at[0] - 1695.3).powi(2) + (at[1] + 883.6).powi(2) < 25.0 {
+                continue;
+            }
+            rooms.entry(p.room).or_default().push(at);
+        }
+        self.meets = rooms
+            .into_iter()
+            .filter_map(|(room, p)| {
+                let m = meets::update(&p, self.meets.get(&room).map(Vec::as_slice).unwrap_or(&[]), &mut self.next_meet_id);
+                (!m.is_empty()).then_some((room, m))
+            })
+            .collect();
+    }
+    // Room and nonce are echoed; the room is checked against the authenticated endpoint.
+    // No player scan or clustering in the request path. At most 1077 payload bytes, including server-owned spectator placements.
+    fn meet_reply(&mut self, vip: u32, port: u16, request: &[u8], version: u8) {
+        let now = (self.now)();
+        let Some(&slot) = self.by_key.get(&key(vip, port)) else { return };
+        let Some(p) = self.player(slot) else { return };
+        if p.impostor
+            || !matches!(p.status, 2 | 5)
+            || request[..4] != p.room.to_le_bytes()
+            || self.meet_at.get(&vip).is_some_and(|&at| now < at)
+        {
+            return;
+        }
+        let mut f = vec![0u8; F_DATA];
+        f[0] = KIND_UDP;
+        f[4..8].copy_from_slice(&ROAM_HUB_VIP.to_be_bytes());
+        f[8..12].copy_from_slice(&vip.to_be_bytes());
+        f[12..14].copy_from_slice(&p.hub_port.to_be_bytes());
+        f[14..16].copy_from_slice(&port.to_be_bytes());
+        f.extend_from_slice(match version {
+            b'3' => b"MTP3",
+            b'2' => b"MTP2",
+            _ => b"MTP1",
+        });
+        f.extend_from_slice(request);
+        let list = self.meets.get(&p.room).map(Vec::as_slice).unwrap_or(&[]);
+        f.push(list.len() as u8);
+        // Keep every map marker, but send full crowds only for the nearest
+        // two meets. 8 headers + 64 NPCs still fit the 1200-byte datagram.
+        let mut nearest: Vec<_> = list.iter().collect();
+        let pos = p.p.unwrap_or([0.0; 3]);
+        let distance = |m: &meets::Meet| (m.p[0] - pos[0]).powi(2) + (m.p[1] - pos[1]).powi(2) + (m.p[2] - pos[2]).powi(2);
+        nearest.sort_by(|a, b| distance(a).total_cmp(&distance(b)).then(a.id.cmp(&b.id)));
+        nearest.truncate(2);
+        for m in list {
+            for x in m.p {
+                f.extend_from_slice(&(x.round().clamp(-32767.0, 32767.0) as i16).to_le_bytes());
+            }
+            f.extend_from_slice(&(m.cars.min(u16::MAX as usize) as u16).to_le_bytes());
+            if version != b'1' {
+                let limit = if version == b'2' {
+                    8
+                } else if nearest.iter().any(|n| n.id == m.id) {
+                    meets::SPECTATORS
+                } else {
+                    0
+                };
+                let crowd: Vec<_> = m.spectators.iter().filter(|npc| version != b'2' || npc.variant < 4).take(limit).collect();
+                f.extend_from_slice(&m.id.to_le_bytes());
+                f.push(crowd.len() as u8);
+                for npc in crowd {
+                    for x in npc.p {
+                        f.extend_from_slice(&x.to_le_bytes());
+                    }
+                    f.extend_from_slice(&npc.heading.to_le_bytes());
+                    f.push(npc.variant);
+                }
+            }
+        }
+        self.meet_at.insert(vip, now + meets::EVERY_MS);
+        (self.send)(vip, Bytes::from(f));
+    }
+
     /// browser `vip` left the switch
     pub fn peer_gone(&mut self, vip: u32) {
+        self.meet_at.remove(&vip);
         self.blocks.remove(&vip);
         self.pages.remove(&vip);
         self.friends.remove(&vip);
@@ -2244,6 +2347,8 @@ impl Hub {
         self.lobbies_at.retain(|_, t| now < *t);
         self.maps.retain(|_, m| now - m.at < MAP_KEEP_MS);
         self.map_cands.clear();
+        self.meet_at.retain(|_, t| now < *t);
+        self.update_meets(now);
         self.near_at.retain(|_, t| now < *t);
         self.nears.retain(|_, m| now - m.at < MAP_KEEP_MS);
         self.near_grid = None;
