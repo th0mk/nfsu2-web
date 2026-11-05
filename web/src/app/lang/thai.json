@@ -1492,5 +1492,18 @@
   "Finish races on {n} different tracks (each direction counts).": "แข่งจนจบใน {n} สนามที่ต่างกัน (แต่ละทิศทางนับแยกกัน)",
   "Win with {n} different cars.": "ชนะด้วยรถ {n} คันที่ต่างกัน",
   "Win {n} races with the same car.": "ชนะการแข่ง {n} ครั้งด้วยรถคันเดียวกัน",
-  "Win {n} races against other players.": "ชนะการแข่งกับผู้เล่นคนอื่น {n} ครั้ง"
+  "Win {n} races against other players.": "ชนะการแข่งกับผู้เล่นคนอื่น {n} ครั้ง",
+  "Treasure hunter": "นักล่าสมบัติ",
+  "Find all of a day's diamonds in free roam on {n} days.": "เก็บเพชรของวันให้ครบทุกเม็ดในการขับอิสระ {n} วัน",
+  "Daily driver": "ขาประจำรายวัน",
+  "Find all of the diamonds {n} days in a row.": "เก็บเพชรให้ครบทุกเม็ด {n} วันติดต่อกัน",
+  "Diamond {n} of {total}": "เพชร {n} จาก {total}",
+  "Treasure hunt": "ล่าสมบัติ",
+  "Hunt complete": "ล่าสมบัติสำเร็จ",
+  "${n} into your career's bank.": "${n} เข้ากระเป๋าเงินในโหมดอาชีพ",
+  "All of today's diamonds found.": "เก็บเพชรของวันนี้ครบแล้ว",
+  "Today's treasure hunt: {n} of {total} diamonds.": "ล่าสมบัติวันนี้: เพชร {n} จาก {total} เม็ด",
+  "{n} km": "{n} กม.",
+  "{n} m": "{n} ม.",
+  "The rest open as your career goes on.": "ที่เหลือจะเปิดเมื่อโหมดอาชีพของคุณก้าวหน้าขึ้น"
 }

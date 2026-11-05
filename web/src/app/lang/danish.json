@@ -1600,5 +1600,24 @@
   "Win {n} races against other players.": {
     "one": "Vind et løb mod andre spillere.",
     "other": "Vind {n} løb mod andre spillere."
-  }
+  },
+  "Treasure hunter": "Skattejæger",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Find alle dagens diamanter i udforsknings-mode.",
+    "other": "Find alle dagens diamanter i udforsknings-mode på {n} dage."
+  },
+  "Daily driver": "Stamgæst",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Find alle diamanter på en dag.",
+    "other": "Find alle diamanter {n} dage i træk."
+  },
+  "Diamond {n} of {total}": "Diamant {n} af {total}",
+  "Treasure hunt": "Skattejagt",
+  "Hunt complete": "Jagten fuldført",
+  "${n} into your career's bank.": "${n} sat ind i din karrieres bank.",
+  "All of today's diamonds found.": "Alle dagens diamanter fundet.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Dagens skattejagt: {n} af {total} diamanter.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "Resten åbner, efterhånden som din karriere skrider frem."
 }

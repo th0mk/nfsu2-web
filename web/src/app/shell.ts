@@ -38,6 +38,7 @@ import { TitleMark } from './titlemark';
 import { DriftPanel } from './drift';
 import { PhotoMode, photoMark } from './photo';
 import { Achievements, FILE as ACHIEVEMENTS_FILE } from './achievements';
+import { TreasureHunt } from './treasure';
 import type { PadPage } from '../input/gamepad';
 import type { NetBanCase, NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
 import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, uiPack, type Resolved } from './settings';
@@ -794,6 +795,7 @@ async function startGame() {
   driftPanel.start(session);
   photo.start(session);
   achievements.start(session);
+  treasure.start(session);
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
   friendMessages.start(session, net && r.env.NFSU2_ROAM === '1');
   // (the races' between players free roam on or not; free roam's only with it on: the career's free roam alone keeps
@@ -984,6 +986,7 @@ let titleMark: TitleMark;               // the site's address under the title sc
 let driftPanel: DriftPanel;             // free roam's drift mode: its score under the game's Bank panel, a note at F2 (drift.ts)
 let photo: PhotoMode;                   // photo mode: F12 in the world, its panel and its keys (photo.ts)
 let achievements: Achievements;         // the races' achievements, in the Achievements tab (achievements.ts)
+let treasure: TreasureHunt;             // the daily treasure hunt in free roam: the way to the next diamond (treasure.ts)
 
 function endStage() {
   touch.stop();
@@ -993,6 +996,7 @@ function endStage() {
   driftPanel.stop();
   photo.stop();
   achievements.stop();
+  treasure.stop();
   quickChat.stop();
   friendPrompt.stop();
   friendMessages.stop();
@@ -2358,6 +2362,7 @@ export async function boot() {
     pop: $('#ach-pop'), log: logLine,
   });
   void achievements.load();
+  treasure = new TreasureHunt($('#th-hud'), achievements, logLine);
   // (again when the tab opens: a restore or the cloud saves may have brought another device's)
   $('#settings').querySelector('[role=tab][data-tab=achievements]')?.addEventListener('click', () => void achievements.load());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { void checkNewer(); vault.shown(); } });

@@ -1457,3 +1457,39 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .ach-pop.in, .ach-pop.out, .ach-pop.in > svg, .ach-pop.in .ach-levels li.new { animation-duration: 1ms; animation-delay: 0ms; }
   .ach-pop.in::after { animation: none; }
 }
+
+/* the treasure hunt in free roam (treasure.ts): a diamond, how many are found, the arrow to the next and how far */
+.th-hud {
+  position: absolute; z-index: 5; top: 2.5%; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+  padding: 6px 14px; border: 1px solid rgba(200, 240, 136, 0.55); border-radius: 999px; background: rgba(0, 0, 0, 0.72);
+  color: var(--text); pointer-events: none; font: italic 700 16px/22px var(--font); font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 16px rgba(200, 240, 136, 0.18);
+}
+.th-hud svg { width: 22px; height: 22px; fill: none; stroke: var(--lime); stroke-width: 1.7; stroke-linejoin: round; }
+.th-hud .th-arrow { fill: var(--lime); stroke: none; transition: transform 200ms linear; }
+.th-dist { min-width: 56px; color: var(--lime); }
+@media (prefers-reduced-motion: reduce) { .th-hud .th-arrow { transition: none; } }
+.th-hud .th-lock { stroke: var(--muted); }
+.th-locked { color: var(--muted); }
+.th-later { color: var(--muted); font-style: normal; font-weight: 400; font-size: 14px; }
+/* a diamond found: one small line under the hunt's pill (.th-hud), no glow pulse or light */
+.ach-pop.small { top: calc(2.5% + 44px); min-width: 0; gap: 10px; padding: 6px 14px; border-radius: 999px;
+  border-color: rgba(200, 240, 136, 0.55); box-shadow: 0 0 12px rgba(200, 240, 136, 0.2); }
+.ach-pop.small > svg { width: 22px; height: 22px; filter: none; }
+.ach-pop.small .ach-pop-body { display: flex; align-items: baseline; gap: 10px; }
+.ach-pop.small .ach-pop-name { font-size: 16px; line-height: 22px; }
+.ach-pop.small .ach-pop-what { color: var(--lime); font-style: italic; font-weight: 700; font-size: 16px; line-height: 22px; }
+.ach-pop.small.in { animation: ach-in 360ms cubic-bezier(0.2, 0.9, 0.25, 1.15) both; }
+.ach-pop.small.in::after { animation: none; }
+/* the treasure hunt's marker over the street (treasure.ts): a glowing diamond where the nearest open one is, bigger
+ * as it comes near, its distance under it */
+.th-mark { position: absolute; z-index: 4; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  pointer-events: none; will-change: transform; }
+.th-mark svg { width: var(--size, 32px); height: var(--size, 32px); fill: rgba(200, 240, 136, 0.28); stroke: var(--lime);
+  stroke-width: 1.4; stroke-linejoin: round; filter: drop-shadow(0 0 6px var(--lime-glow)) drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+  animation: th-bob 1.6s ease-in-out infinite; }
+.th-mark span { padding: 1px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); color: var(--lime);
+  font: italic 700 13px/18px var(--font); font-variant-numeric: tabular-nums; }
+@keyframes th-bob { 50% { transform: translateY(-12%); } }
+@media (prefers-reduced-motion: reduce) { .th-mark svg { animation: none; } }
+.stage.photo :is(.th-hud, .th-mark, .ach-pop) { display: none; }

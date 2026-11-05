@@ -35,11 +35,24 @@ export interface Totals {
   closeWin: boolean; playersWins: number;
   typesWon: number[]; tracks: string[]; wonOn: string[]; bothWays: boolean; carsWon: number[];
   winsByCar: Record<string, number>;
+  /** the treasure hunts finished, the days in a row up to the last one, the most days in a row, the last one's day */
+  hunts: number; huntStreak: number; bestHuntStreak: number; lastHuntDay: number;
 }
 export const emptyTotals = (): Totals => ({
   races: 0, wins: 0, streak: 0, bestStreak: 0, meters: 0, topKmh: 0, bestDrift: 0, closeWin: false, playersWins: 0,
   typesWon: [], tracks: [], wonOn: [], bothWays: false, carsWon: [], winsByCar: {},
+  hunts: 0, huntStreak: 0, bestHuntStreak: 0, lastHuntDay: -1,
 });
+/** a treasure hunt finished on day (the UTC day's number) into the totals (a new object; a day once only) */
+export function addHunt(t0: Totals, day: number): Totals {
+  if (t0.lastHuntDay === day) return t0;
+  const s = structuredClone(t0);
+  s.hunts++;
+  s.huntStreak = s.lastHuntDay === day - 1 ? s.huntStreak + 1 : 1;
+  s.bestHuntStreak = Math.max(s.bestHuntStreak, s.huntStreak);
+  s.lastHuntDay = day;
+  return s;
+}
 
 /** a result into the totals (a new object) */
 export function add(t0: Totals, r: RaceResult): Totals {
@@ -97,6 +110,10 @@ export const ACHIEVEMENTS: Achievement[] = [
     what: x => tn(x, 'Win {n} race with the same car.', 'Win {n} races with the same car.', n(x)) },
   { id: 'players', name: N('Bragging rights'), levels: [1, 10, 50], have: t => t.playersWins,
     what: x => tn(x, 'Win a race against other players.', 'Win {n} races against other players.', n(x)) },
+  { id: 'hunts', name: N('Treasure hunter'), levels: [1, 10, 50], have: t => t.hunts,
+    what: x => tn(x, 'Find all of a day\'s diamonds in free roam.', 'Find all of a day\'s diamonds in free roam on {n} days.', n(x)) },
+  { id: 'hunt_streak', name: N('Daily driver'), levels: [3, 7, 30], have: t => t.bestHuntStreak,
+    what: x => tn(x, 'Find all of the diamonds {n} day in a row.', 'Find all of the diamonds {n} days in a row.', n(x)) },
 ];
 /** a level's key in achievements.json's "got" ("wins:2": Winner's second level) */
 export const levelKey = (a: Achievement, level: number) => `${a.id}:${level}`;
@@ -108,15 +125,19 @@ export const levelName = (a: Achievement, level: number) => a.levels.length > 1 
 /** a level's need, short, in the page's language (50K, 1,5 Tsd.) */
 const compact = (x: number) =>
   new Intl.NumberFormat(language() === 'english' ? 'en-GB' : LOCALE[language()], { notation: 'compact' }).format(x);
+/** the UTC day's number (days since 1970-01-01): the treasure hunt's day */
+export const utcDay = (ms = Date.now()) => Math.floor(ms / 86_400_000);
+export const bitCount = (x: number) => { let n = 0; for (; x; x &= x - 1) n++; return n; };
 /** every level of every achievement */
 export const LEVELS = ACHIEVEMENTS.reduce((s, a) => s + a.levels.length, 0);
 
 /** achievements.json */
-export interface Kept { v: 1; totals: Totals; got: Record<string, number> }
+export interface Kept { v: 1; totals: Totals; got: Record<string, number>; hunt?: { day: number; found: number } }
 export function parse(text: string | null): Kept {
   try {
     const k = JSON.parse(text ?? '') as Partial<Kept>;
-    if (k && k.v === 1 && k.totals && k.got) return { v: 1, totals: { ...emptyTotals(), ...k.totals }, got: { ...k.got } };
+    if (k && k.v === 1 && k.totals && k.got)
+      return { v: 1, totals: { ...emptyTotals(), ...k.totals }, got: { ...k.got }, ...(k.hunt ? { hunt: { ...k.hunt } } : {}) };
   } catch { /* none, or not ours: start again */ }
   return { v: 1, totals: emptyTotals(), got: {} };
 }
@@ -130,9 +151,9 @@ export function settle(k: Kept, when: number): Kept {
   }
   return got ? { ...k, got } : k;
 }
-/** the result in: the new totals, and the levels it reached (at `when`), each achievement's in order */
-export function earn(k: Kept, r: RaceResult, when: number): { kept: Kept; got: { a: Achievement; level: number }[] } {
-  const totals = add(k.totals, r), got = { ...k.got }, now: { a: Achievement; level: number }[] = [];
+/** the levels the totals reach that got does not have, at `when`: got with them, and them in order */
+function reach(totals: Totals, got0: Record<string, number>, when: number) {
+  const got = { ...got0 }, now: { a: Achievement; level: number }[] = [];
   for (const a of ACHIEVEMENTS) {
     const have = a.have(totals);
     a.levels.forEach((need, i) => {
@@ -140,7 +161,17 @@ export function earn(k: Kept, r: RaceResult, when: number): { kept: Kept; got: {
       if (!got[key] && have >= need) { got[key] = when; now.push({ a, level: i + 1 }); }
     });
   }
-  return { kept: { v: 1, totals, got }, got: now };
+  return { got, now };
+}
+/** the result in: the new totals, and the levels it reached (at `when`), each achievement's in order */
+export function earn(k: Kept, r: RaceResult, when: number): { kept: Kept; got: { a: Achievement; level: number }[] } {
+  const totals = add(k.totals, r), { got, now } = reach(totals, k.got, when);
+  return { kept: { ...k, totals, got }, got: now };
+}
+/** a day's treasure hunt finished: the new totals (once a day), and the levels it reached */
+export function earnHunt(k: Kept, day: number, when: number): { kept: Kept; got: { a: Achievement; level: number }[] } {
+  const totals = addHunt(k.totals, day), { got, now } = reach(totals, k.got, when);
+  return { kept: { ...k, totals, got }, got: now };
 }
 
 export interface AchievementsDeps {
@@ -151,9 +182,22 @@ export interface AchievementsDeps {
   log: (line: string) => void;
 }
 
-const POP_MS = 4800, POP_GAP_MS = 350;
-const TROPHY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/>' +
-  '<path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v3M8.5 20h7M10 17h4"/></svg>';
+/** a card over the game: a level reached, a diamond found, a hunt finished */
+interface Card {
+  icon: 'trophy' | 'diamond'; label: string; name: string; what: string; chips?: { texts: string[]; reached: number };
+  /** a small one: one line under the hunt's pill, a short while (a diamond found) */
+  small?: boolean;
+}
+const POP_MS = 4800, POP_SMALL_MS = 2500, POP_GAP_MS = 350;
+const ICONS = {
+  trophy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/>' +
+    '<path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v3M8.5 20h7M10 17h4"/></svg>',
+  diamond: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10l4 5-9 11L3 9z"/><path d="M3 9h18M9.5 4 8 9l4 11 4-11-1.5-5"/></svg>',
+};
+const levelCard = (a: Achievement, level: number): Card => ({
+  icon: 'trophy', label: t('Achievement unlocked'), name: levelName(a, level), what: a.what(a.levels[level - 1]),
+  ...(a.levels.length > 1 ? { chips: { texts: a.levels.map(compact), reached: level } } : {}),
+});
 
 export class Achievements {
   private kept: Kept = parse(null);
@@ -161,7 +205,7 @@ export class Achievements {
   private timer: ReturnType<typeof setInterval> | undefined;
   private seen = 0;
   private last = '';
-  private queue: { a: Achievement; level: number }[] = [];
+  private queue: Card[] = [];
   private popping = false;
   private busy: Promise<void> = Promise.resolve();
 
@@ -199,46 +243,72 @@ export class Achievements {
     if (raw === this.last) return;
     this.last = raw;
     const r = unpack(st.get('rr_race') ?? 0, st.get('rr_score') ?? 0, st.get('rr_more') ?? 0);
-    this.busy = this.busy.then(() => this.take(r));
+    this.take(r);
   }
 
-  private async take(r: RaceResult) {
-    // the file as it is now: another device's (the cloud saves) may have come since
-    this.kept = parse(await this.deps.read().catch(() => JSON.stringify(this.kept)));
-    const { kept, got } = earn(this.kept, r, Date.now());
-    this.kept = kept;
-    for (const { a, level } of got) {
-      this.queue.push({ a, level });
-      this.deps.log(`[app] achievement: ${levelKey(a, level)}`);
-    }
-    this.next();
-    await this.deps.write(JSON.stringify(kept)).catch(e => this.deps.log(`[app] achievements: not written (${e})`));
-    this.render();
+  /** the file again, f's change to it, the cards for the levels it reached, the file written */
+  private change(f: (k: Kept) => { kept: Kept; got: { a: Achievement; level: number }[] }, before: Card[] = []) {
+    this.busy = this.busy.then(async () => {
+      // the file as it is now: another device's (the cloud saves) may have come since
+      this.kept = parse(await this.deps.read().catch(() => JSON.stringify(this.kept)));
+      const { kept, got } = f(this.kept);
+      this.kept = kept;
+      this.queue.push(...before);
+      for (const { a, level } of got) { this.queue.push(levelCard(a, level)); this.deps.log(`[app] achievement: ${levelKey(a, level)}`); }
+      this.next();
+      await this.deps.write(JSON.stringify(kept)).catch(e => this.deps.log(`[app] achievements: not written (${e})`));
+      this.render();
+    });
+  }
+  private take(r: RaceResult) { this.change(k => earn(k, r, Date.now())); }
+
+  /** the treasure hunt (treasure.ts): day's diamonds found so far, as the file has them (0: none, or another day) */
+  huntFound(day: number): number { return this.kept.hunt?.day === day ? this.kept.hunt.found : 0; }
+  /** ...the day's diamonds found forgotten (?hunt=reset, to play the day's hunt again; the achievements stay) */
+  huntReset(day: number) { this.change(k => ({ kept: { ...k, hunt: { day, found: 0 } }, got: [] })); }
+  /** ...a diamond found: its card and the day's progress kept */
+  diamond(day: number, found: number, total: number, paid: number) {
+    const n = bitCount(found);
+    this.change(k => ({ kept: { ...k, hunt: { day, found } }, got: [] }),
+      [{ icon: 'diamond', label: '', name: t('Diamond {n} of {total}', { n: count(n), total: count(total) }),
+         what: paid > 0 ? `+$${count(paid)}` : '', small: true }]);
+  }
+  /** ...all of them found: the card (with the prize the game paid into the career's bank, $), the hunt in the totals */
+  huntDone(day: number, found: number, prize: number) {
+    this.change(k => earnHunt({ ...k, hunt: { day, found } }, day, Date.now()),
+      [{ icon: 'diamond', label: t('Treasure hunt'), name: t('Hunt complete'),
+         what: prize > 0 ? t('${n} into your career\'s bank.', { n: count(prize) }) : t('All of today\'s diamonds found.') }]);
+  }
+  /** ...today's progress for the tab */
+  private huntLine(): string {
+    return t('Today\'s treasure hunt: {n} of {total} diamonds.', { n: count(bitCount(this.huntFound(utcDay()))), total: count(15) });
   }
 
-  /** the next level reached onto the card over the game: its name and level, what it took, its levels (the new one
-   *  popping in); one after another, each POP_MS */
+  /** the next card over the game: its icon, label, name and line, the levels (the new one popping in); one after
+   *  another, each POP_MS */
   private next() {
     if (this.popping) return;
-    const n = this.queue.shift(), el = this.deps.pop;
-    if (!n) return;
+    const c = this.queue.shift(), el = this.deps.pop;
+    if (!c) return;
     this.popping = true;
-    const { a, level } = n, need = a.levels[level - 1];
     el.replaceChildren();
-    el.insertAdjacentHTML('beforeend', TROPHY);
+    el.insertAdjacentHTML('beforeend', ICONS[c.icon]);
     const body = document.createElement('div'), label = document.createElement('span'), name = document.createElement('strong'),
       what = document.createElement('span');
     body.className = 'ach-pop-body'; label.className = 'ach-pop-label'; name.className = 'ach-pop-name'; what.className = 'ach-pop-what';
-    label.textContent = t('Achievement unlocked'); name.textContent = levelName(a, level); what.textContent = a.what(need);
-    body.append(label, name, what);
-    if (a.levels.length > 1) {
+    label.textContent = c.label; name.textContent = c.name; what.textContent = c.what;
+    if (c.label) body.append(label);
+    body.append(name);
+    if (c.what) body.append(what);
+    el.classList.toggle('small', !!c.small);
+    if (c.chips) {
       const chips = document.createElement('ol');
       chips.className = 'ach-levels';
-      a.levels.forEach((x, i) => {
-        const c = document.createElement('li');
-        c.className = i < level - 1 ? 'reached' : i === level - 1 ? 'reached new' : '';
-        c.textContent = compact(x);
-        chips.append(c);
+      c.chips.texts.forEach((x, i) => {
+        const li = document.createElement('li');
+        li.className = i < c.chips!.reached - 1 ? 'reached' : i === c.chips!.reached - 1 ? 'reached new' : '';
+        li.textContent = x;
+        chips.append(li);
       });
       body.append(chips);
     }
@@ -248,7 +318,7 @@ export class Achievements {
     setTimeout(() => {
       el.classList.replace('in', 'out');
       setTimeout(() => { el.hidden = true; el.classList.remove('out'); this.popping = false; this.next(); }, POP_GAP_MS);
-    }, POP_MS);
+    }, c.small ? POP_SMALL_MS : POP_MS);
   }
 
   /** the tab: how many levels, then each achievement with the level reached, what the next asks and how far (the
@@ -256,6 +326,8 @@ export class Achievements {
   render() {
     const { got, totals } = this.kept;
     const all = ACHIEVEMENTS.reduce((s, a) => s + reached(a, got), 0);
+    const hunt = this.root.querySelector('[data-ach-hunt]');
+    if (hunt) live(hunt, () => this.huntLine());
     const head = this.root.querySelector('[data-ach-count]');
     if (head) live(head, (() => t('{n} of {total} achievements', { n: count(all), total: count(LEVELS) })) as Msg);
     const list = this.root.querySelector('[data-ach-list]');

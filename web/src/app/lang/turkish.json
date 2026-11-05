@@ -1525,5 +1525,24 @@
   "Win {n} races against other players.": {
     "one": "Diğer oyunculara karşı bir yarış kazan.",
     "other": "Diğer oyunculara karşı {n} yarış kazan."
-  }
+  },
+  "Treasure hunter": "Hazine avcısı",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Serbest sürüşte bir günün tüm elmaslarını bul.",
+    "other": "Serbest sürüşte {n} farklı günde o günün tüm elmaslarını bul."
+  },
+  "Daily driver": "Gün be gün",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Üst üste {n} gün tüm elmasları bul.",
+    "other": "Üst üste {n} gün tüm elmasları bul."
+  },
+  "Diamond {n} of {total}": "Elmas {n}/{total}",
+  "Treasure hunt": "Hazine avı",
+  "Hunt complete": "Av tamamlandı",
+  "${n} into your career's bank.": "${n} kariyerinin banka hesabına yatırıldı.",
+  "All of today's diamonds found.": "Bugünün tüm elmasları bulundu.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Bugünün hazine avı: {total} elmastan {n} tanesi.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "Kalanlar kariyerin ilerledikçe açılır."
 }

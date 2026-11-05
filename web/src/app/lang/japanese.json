@@ -1492,5 +1492,18 @@
   "Finish races on {n} different tracks (each direction counts).": "{n}種類のコースでレースを完走する（向きが違えば別々に数える）。",
   "Win with {n} different cars.": "{n}種類の車で勝利する。",
   "Win {n} races with the same car.": "同じ車でレースに{n}回勝利する。",
-  "Win {n} races against other players.": "他のプレイヤーとのレースで{n}回勝利する。"
+  "Win {n} races against other players.": "他のプレイヤーとのレースで{n}回勝利する。",
+  "Treasure hunter": "トレジャーハンター",
+  "Find all of a day's diamonds in free roam on {n} days.": "フリーロームでその日のダイヤをすべて見つける（{n}日分）。",
+  "Daily driver": "皆勤ドライバー",
+  "Find all of the diamonds {n} days in a row.": "{n}日連続でダイヤをすべて見つける。",
+  "Diamond {n} of {total}": "ダイヤ {n}/{total}",
+  "Treasure hunt": "宝探し",
+  "Hunt complete": "宝探し完了",
+  "${n} into your career's bank.": "キャリアの所持金に${n}を追加。",
+  "All of today's diamonds found.": "今日のダイヤをすべて見つけました。",
+  "Today's treasure hunt: {n} of {total} diamonds.": "今日の宝探し：ダイヤ {n}/{total}",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "残りはキャリアを進めると解放されます。"
 }

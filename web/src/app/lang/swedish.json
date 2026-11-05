@@ -1600,5 +1600,24 @@
   "Win {n} races against other players.": {
     "one": "Vinn ett race mot andra spelare.",
     "other": "Vinn {n} race mot andra spelare."
-  }
+  },
+  "Treasure hunter": "Skattjägare",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Hitta alla dagens diamanter i Utforska.",
+    "other": "Hitta alla dagens diamanter i Utforska under {n} dagar."
+  },
+  "Daily driver": "Stamgäst",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Hitta alla diamanter under en dag.",
+    "other": "Hitta alla diamanter {n} dagar i rad."
+  },
+  "Diamond {n} of {total}": "Diamant {n} av {total}",
+  "Treasure hunt": "Skattjakt",
+  "Hunt complete": "Jakten klar",
+  "${n} into your career's bank.": "${n} till din karriärs bank.",
+  "All of today's diamonds found.": "Alla dagens diamanter hittade.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Dagens skattjakt: {n} av {total} diamanter.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "Resten öppnas allteftersom din karriär går framåt."
 }

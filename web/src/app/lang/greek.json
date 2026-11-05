@@ -1540,5 +1540,24 @@
   "Win {n} races against other players.": {
     "one": "Κέρδισε έναν αγώνα απέναντι σε άλλους παίκτες.",
     "other": "Κέρδισε {n} αγώνες απέναντι σε άλλους παίκτες."
-  }
+  },
+  "Treasure hunter": "Κυνηγός θησαυρών",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Βρες όλα τα διαμάντια μιας μέρας στην ελεύθερη οδήγηση.",
+    "other": "Βρες όλα τα διαμάντια μιας μέρας στην ελεύθερη οδήγηση σε {n} μέρες."
+  },
+  "Daily driver": "Μέρα με τη μέρα",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Βρες όλα τα διαμάντια {n} μέρα στη σειρά.",
+    "other": "Βρες όλα τα διαμάντια {n} μέρες στη σειρά."
+  },
+  "Diamond {n} of {total}": "Διαμάντι {n} από {total}",
+  "Treasure hunt": "Κυνήγι θησαυρού",
+  "Hunt complete": "Το κυνήγι ολοκληρώθηκε",
+  "${n} into your career's bank.": "${n} στην τράπεζα της καριέρας σου.",
+  "All of today's diamonds found.": "Βρέθηκαν όλα τα σημερινά διαμάντια.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Σημερινό κυνήγι θησαυρού: {n} από {total} διαμάντια.",
+  "{n} km": "{n} χλμ.",
+  "{n} m": "{n} μ.",
+  "The rest open as your career goes on.": "Τα υπόλοιπα ανοίγουν όσο προχωρά η καριέρα σου."
 }

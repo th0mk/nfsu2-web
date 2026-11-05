@@ -1519,5 +1519,24 @@
   "Win {n} races against other players.": {
     "one": "Nyerj meg egy versenyt más játékosok ellen.",
     "other": "Nyerj meg {n} versenyt más játékosok ellen."
-  }
+  },
+  "Treasure hunter": "Kincsvadász",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Találd meg egy nap összes gyémántját Felfedező módban.",
+    "other": "Találd meg egy nap összes gyémántját Felfedező módban {n} különböző napon."
+  },
+  "Daily driver": "Napról napra",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Találd meg az összes gyémántot {n} egymást követő napon.",
+    "other": "Találd meg az összes gyémántot {n} egymást követő napon."
+  },
+  "Diamond {n} of {total}": "Gyémánt: {n}/{total}",
+  "Treasure hunt": "Kincsvadászat",
+  "Hunt complete": "Kincsvadászat teljesítve",
+  "${n} into your career's bank.": "${n} került a karriered bankszámlájára.",
+  "All of today's diamonds found.": "Megvan a mai összes gyémánt.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Mai kincsvadászat: {n}/{total} gyémánt.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "A többi a karriered előrehaladtával nyílik meg."
 }

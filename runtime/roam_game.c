@@ -4263,6 +4263,79 @@ static int nr_put(CPU *c, uint32_t icons, int *k, float x, float y, uint16_t hea
     (*k)++;
     return 1;
 }
+/* A place of our own on the minimap (treasure.c: the day's nearest diamond within 500 m): an icon of the player's
+ * type (as the players' above) with a stand-in of its own, its FE object a copy of the HUD's cover-shoot star
+ * (SHOWCASEINDICATOR_, else an AI racer's arrow) in BEACON_RGB, drawn on the minimap's edge pointing to it while it
+ * is past the edge.  Made again with a new HUD or new icons, as the players' arrows */
+#define BEACON_RGB_R    90
+#define BEACON_RGB_G    225
+#define BEACON_RGB_B    255
+static struct {
+    int on, said, failed; float x, y;
+    uint32_t hud, icons, blk, copy, hash, vis, icon; const char *from;
+} g_beacon;
+void roam_minimap_beacon(int on, float x, float y){ g_beacon.on = on; g_beacon.x = x; g_beacon.y = y; }
+/* its copy is still the HUD package's and its icon still in the icons' list */
+static int bc_live(CPU *c, uint32_t icons){
+    if (!g_beacon.icon) return 0;
+    uint32_t pk = gcall1(c, FN_FE_PACKAGE, 0, rd32(icons + 0x18u));
+    if (!ok(pk, 0x54) || !fe_list_of(pk + 0x4cu, g_beacon.copy, 0) || rd32(g_beacon.copy + 0x10u) != g_beacon.hash) return 0;
+    for (uint32_t n = rd32(icons), m = 0; n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n), m++)
+        if (n == g_beacon.icon) return rd32(n + 0x1cu) == g_beacon.vis && ok(g_beacon.vis, 8) && MR32(g_beacon.vis) == g_beacon.copy;
+    return 0;
+}
+static int bc_make(CPU *c, uint32_t icons){
+    uint32_t pkg = rd32(icons + 0x18u), m = 0;
+    for (uint32_t n = rd32(icons); n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n)) m++;
+    if (m + NSLOT + NEAR_SLOTS + 16u >= MM_POOL) return 0;           /* (room kept for the friends' and the players' arrows) */
+    static const char *const FROM[] = { "SHOWCASEINDICATOR_0", "SHOWCASEINDICATOR_1", "AIRACERINDICATOR_0", 0 };
+    uint32_t o0 = 0, sa = g_gmem + TAG_SCR + 0x48u;
+    for (int i = 0; FROM[i] && !o0; i++){
+        gstr(sa, FROM[i], 24);
+        uint32_t a[2] = { pkg, gcall1(c, FN_FE_HASH, 0, sa) }, o = ok(pkg, 0x10) ? rh_call(c, FN_FE_FINDOBJ, 0, 0, 2, a) : 0;
+        if (ok(o, 0x5c)){ o0 = o; g_beacon.from = FROM[i]; }
+    }
+    uint32_t pk = o0 ? gcall1(c, FN_FE_PACKAGE, 0, pkg) : 0;
+    if (!ok(pk, 0x54) || wm_room(pk) <= TAG_ALL) return 0;
+    uint32_t cl = fe_clone(c, pkg, o0, "ROAM_TREASURE");
+    if (!cl) return 0;
+    static const int32_t bc[3] = { BEACON_RGB_B, BEACON_RGB_G, BEACON_RGB_R };
+    fe_colour_to(c, cl, bc);
+    if (!g_beacon.blk){ uint32_t sz = NEAR_BLK; g_beacon.blk = rh_call(c, FN_MALLOC, 0, 0, 1, &sz); }
+    if (!ok(g_beacon.blk, NEAR_BLK)){ g_beacon.blk = 0; return 0; }
+    uint32_t vp = rd32(G_MM_VISPOOL), ip = rd32(G_MM_ICONPOOL);
+    uint32_t v = vp ? rh_call(c, FN_POOL_ALLOC, 0, 0, 1, &vp) : 0, ic = ok(v, 8) && ip ? rh_call(c, FN_POOL_ALLOC, 0, 0, 1, &ip) : 0;
+    if (!ok(ic, 0x20)){
+        if (ok(v, 8)){ uint32_t a[2] = { vp, v }; rh_call(c, FN_POOL_FREE, 0, 0, 2, a); }
+        return 0;
+    }
+    uint32_t d = g_beacon.blk;
+    MR32(d) = d; MR32(d + 4u) = d; MRF32(d + 0x50u) = 1e5f; MRF32(d + 0x54u) = 1e5f; MR16(d + 0x40cu) = 0;
+    MR32(v) = cl; MR32(v + 4u) = MM_PLAYER;
+    MR32(ic + 8u) = (d - G_PLAYER1) >> 2; MR32(ic + 0xcu) = 0; MR32(ic + 0x10u) = 0; MR32(ic + 0x14u) = 0;
+    MR32(ic + 0x18u) = MM_HIDE; MR32(ic + 0x1cu) = v;
+    uint32_t tail = rd32(icons + 4u);
+    MR32(tail) = ic; MR32(icons + 4u) = ic; MR32(ic) = icons; MR32(ic + 4u) = tail;
+    g_beacon.copy = cl; g_beacon.hash = MR32(cl + 0x10u); g_beacon.vis = v; g_beacon.icon = ic;
+    return 1;
+}
+static void bc_update(CPU *c, uint32_t icons, uint32_t hud){
+    if (hud != g_beacon.hud || icons != g_beacon.icons || (g_beacon.icon && !bc_live(c, icons))){
+        g_beacon.hud = hud; g_beacon.icons = icons; g_beacon.icon = 0; g_beacon.failed = 0;
+    }
+    if (g_beacon.on && !g_beacon.icon && !g_beacon.failed){
+        g_beacon.failed = !bc_make(c, icons);
+        rlog("[roam] f=%ld minimap: the treasure hunt's mark %s%s\n", rh_frame(), g_beacon.failed ? "not made (no room, or no icon to copy)" : "made from ",
+             g_beacon.failed ? "" : g_beacon.from);
+    }
+    if (!g_beacon.icon) return;
+    uint32_t fl = MR32(g_beacon.icon + 0x18u), want = g_beacon.on ? 0u : MM_HIDE;
+    if (fl != want) MR32(g_beacon.icon + 0x18u) = want;
+    if (!g_beacon.on) return;
+    MRF32(g_beacon.blk + 0x50u) = g_beacon.x; MRF32(g_beacon.blk + 0x54u) = g_beacon.y;
+    if (ok(g_beacon.copy, 0x20) && (MR32(g_beacon.copy + 0x1cu) & 1u)) gcall1(c, FN_FE_SHOW, 0, g_beacon.copy);
+}
+static void bc_hide(void){ if (g_beacon.icon && ok(g_beacon.icon, 0x20)) MR32(g_beacon.icon + 0x18u) |= MM_HIDE; }
 static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
     g_auto.wait = 0;
     uint32_t pl = rd32(G_PLAYER1), hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0, icons = rd32(G_MM_ICONS);
@@ -4272,7 +4345,12 @@ static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
         memset(&g_nr, 0, sizeof g_nr); g_nr_n = 0;
         g_nr.blk = blk; g_nr.hud = hud; g_nr.gen = gen; g_nr.answers = answers; g_nr.ever = ever;
     }
-    if (O.near_max <= 0 || !hud || !ok(icons, 0x1c) || !g_gmem) return;
+    if (O.near_max <= 0 || !hud || !ok(icons, 0x1c) || !g_gmem){
+        static int said;
+        if (g_beacon.on && !said++) rlog("[roam] f=%ld minimap: no mark for the treasure hunt (arrows %d, HUD %s, icons %s)\n", rh_frame(),
+                                         O.near_max, hud ? "up" : "none", ok(icons, 0x1c) ? "there" : "none");
+        return;
+    }
     if (!g_nr.blk){
         uint32_t sz = NEAR_BLK * NEAR_SLOTS;
         g_nr.blk = rh_call(c, FN_MALLOC, 0, 0, 1, &sz);
@@ -4287,6 +4365,7 @@ static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
     }
     if (!in_roam){                                                      /* (a shop, a race, the menus: none, and no questions) */
         for (int j = 0; j < g_nr.n; j++) MR32(g_nr.icon[j] + 0x18u) |= MM_HIDE;
+        bc_hide();
         g_nr.hub = g_nr.peers = g_nr.used = 0;
         return;
     }
@@ -4331,6 +4410,7 @@ static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
         if (s->st == SL_ACTIVE && !s->hidden && s->world == w && ok(s->car, 0x9e0)){ cx[nc] = MRF32(s->car + 0x50u); cy[nc] = MRF32(s->car + 0x54u); nc++; }
     }
     int k = 0, peers = 0, hub = 0;
+    bc_update(c, icons, hud);
     for (int i = 0; i < g_npv; i++){
         const PeerView *v = &g_pv[i];
         if (!v->have_pose || !v->visible) continue;

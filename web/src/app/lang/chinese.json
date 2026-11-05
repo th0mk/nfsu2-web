@@ -1492,5 +1492,18 @@
   "Finish races on {n} different tracks (each direction counts).": "在 {n} 條不同的賽道上完成比賽（正反方向分開計算）。",
   "Win with {n} different cars.": "用 {n} 輛不同的車獲勝。",
   "Win {n} races with the same car.": "用同一輛車贏得 {n} 場比賽。",
-  "Win {n} races against other players.": "在與其他玩家的比賽中獲勝 {n} 次。"
+  "Win {n} races against other players.": "在與其他玩家的比賽中獲勝 {n} 次。",
+  "Treasure hunter": "尋寶獵人",
+  "Find all of a day's diamonds in free roam on {n} days.": "在自由漫遊中找齊當天所有鑽石，累計 {n} 天。",
+  "Daily driver": "每日車手",
+  "Find all of the diamonds {n} days in a row.": "連續 {n} 天找齊所有鑽石。",
+  "Diamond {n} of {total}": "鑽石 {n}/{total}",
+  "Treasure hunt": "尋寶",
+  "Hunt complete": "尋寶完成",
+  "${n} into your career's bank.": "${n} 已存入生涯資金。",
+  "All of today's diamonds found.": "今天的鑽石已全部找到。",
+  "Today's treasure hunt: {n} of {total} diamonds.": "今日尋寶：已找到 {n}/{total} 顆鑽石。",
+  "{n} km": "{n} 公里",
+  "{n} m": "{n} 公尺",
+  "The rest open as your career goes on.": "其餘的會隨生涯進度開放。"
 }

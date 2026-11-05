@@ -1636,5 +1636,26 @@
     "one": "Vença uma corrida contra outros jogadores.",
     "many": "Vença {n} corridas contra outros jogadores.",
     "other": "Vença {n} corridas contra outros jogadores."
-  }
+  },
+  "Treasure hunter": "Caçador de tesouros",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Encontre todos os diamantes do dia no Modo Livre em {n} dia.",
+    "many": "Encontre todos os diamantes do dia no Modo Livre em {n} dias.",
+    "other": "Encontre todos os diamantes do dia no Modo Livre em {n} dias."
+  },
+  "Daily driver": "Piloto de todo dia",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Encontre todos os diamantes {n} dia seguido.",
+    "many": "Encontre todos os diamantes {n} dias seguidos.",
+    "other": "Encontre todos os diamantes {n} dias seguidos."
+  },
+  "Diamond {n} of {total}": "Diamante {n} de {total}",
+  "Treasure hunt": "Caça ao tesouro",
+  "Hunt complete": "Caça concluída",
+  "${n} into your career's bank.": "${n} no caixa da sua carreira.",
+  "All of today's diamonds found.": "Todos os diamantes de hoje encontrados.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Caça ao tesouro de hoje: {n} de {total} diamantes.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "Os outros se abrem conforme sua carreira avança."
 }

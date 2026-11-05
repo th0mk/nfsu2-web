@@ -1672,5 +1672,28 @@
     "few": "Vyhraj {n} závody proti jiným hráčům.",
     "many": "Vyhraj {n} závodu proti jiným hráčům.",
     "other": "Vyhraj {n} závodů proti jiným hráčům."
-  }
+  },
+  "Treasure hunter": "Lovec pokladů",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Najdi ve volné jízdě všechny diamanty jednoho dne.",
+    "few": "Najdi ve volné jízdě všechny diamanty dne v {n} různých dnech.",
+    "many": "Najdi ve volné jízdě všechny diamanty dne v {n} různých dnech.",
+    "other": "Najdi ve volné jízdě všechny diamanty dne v {n} různých dnech."
+  },
+  "Daily driver": "Den co den",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Najdi všechny diamanty {n} den po sobě.",
+    "few": "Najdi všechny diamanty {n} dny po sobě.",
+    "many": "Najdi všechny diamanty {n} dne po sobě.",
+    "other": "Najdi všechny diamanty {n} dní po sobě."
+  },
+  "Diamond {n} of {total}": "Diamant {n} z {total}",
+  "Treasure hunt": "Hon na poklad",
+  "Hunt complete": "Hon dokončen",
+  "${n} into your career's bank.": "${n} do banky tvé kariéry.",
+  "All of today's diamonds found.": "Všechny dnešní diamanty nalezeny.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Dnešní hon na poklad: {n} z {total} diamantů.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "Zbytek se odemkne s postupem kariéry."
 }

@@ -1600,5 +1600,24 @@
   "Win {n} races against other players.": {
     "one": "Win een race tegen andere spelers.",
     "other": "Win {n} races tegen andere spelers."
-  }
+  },
+  "Treasure hunter": "Schatzoeker",
+  "Find all of a day's diamonds in free roam on {n} days.": {
+    "one": "Vind in Verkennen alle diamanten van een dag.",
+    "other": "Vind op {n} dagen in Verkennen alle diamanten van de dag."
+  },
+  "Daily driver": "Vaste klant",
+  "Find all of the diamonds {n} days in a row.": {
+    "one": "Vind op een dag alle diamanten.",
+    "other": "Vind {n} dagen op rij alle diamanten."
+  },
+  "Diamond {n} of {total}": "Diamant {n} van {total}",
+  "Treasure hunt": "Schattenjacht",
+  "Hunt complete": "Jacht voltooid",
+  "${n} into your career's bank.": "${n} naar de bank van je carrière.",
+  "All of today's diamonds found.": "Alle diamanten van vandaag gevonden.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "Schattenjacht van vandaag: {n} van {total} diamanten.",
+  "{n} km": "{n} km",
+  "{n} m": "{n} m",
+  "The rest open as your career goes on.": "De rest gaat open naarmate je carrière vordert."
 }

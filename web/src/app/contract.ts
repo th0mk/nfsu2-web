@@ -139,6 +139,8 @@ export interface InputSubsystem extends Subsystem {
   sms?(id: number): boolean;
   /** photo mode (runtime/photo.c, photo.ts): what (its PH_* number) and its values; false: it cannot reach the game */
   photo?(what: number, a?: number, b?: number): boolean;
+  /** the daily treasure hunt (runtime/treasure.c, treasure.ts): the UTC day's number and its diamonds found; false: it cannot reach the game */
+  treasure?(day: number, found: number): boolean;
   /** a new name for free roam and Online mode, now (the operator took the old one away), or (seat2) for co-op's player 2
    *  in free roam; false: it cannot reach the game */
   name?(name: string, seat2?: boolean): boolean;

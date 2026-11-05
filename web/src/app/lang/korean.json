@@ -1492,5 +1492,18 @@
   "Finish races on {n} different tracks (each direction counts).": "서로 다른 트랙 {n}곳에서 레이스를 완주하세요(방향마다 따로 세요).",
   "Win with {n} different cars.": "서로 다른 차 {n}대로 우승하세요.",
   "Win {n} races with the same car.": "같은 차로 레이스에서 {n}번 우승하세요.",
-  "Win {n} races against other players.": "다른 플레이어와의 레이스에서 {n}번 우승하세요."
+  "Win {n} races against other players.": "다른 플레이어와의 레이스에서 {n}번 우승하세요.",
+  "Treasure hunter": "보물 사냥꾼",
+  "Find all of a day's diamonds in free roam on {n} days.": "자유 주행에서 하루의 다이아몬드를 모두 찾은 날을 {n}일 만드세요.",
+  "Daily driver": "개근 드라이버",
+  "Find all of the diamonds {n} days in a row.": "{n}일 연속으로 다이아몬드를 모두 찾으세요.",
+  "Diamond {n} of {total}": "다이아몬드 {n}/{total}",
+  "Treasure hunt": "보물찾기",
+  "Hunt complete": "보물찾기 완료",
+  "${n} into your career's bank.": "커리어 자금에 ${n} 입금",
+  "All of today's diamonds found.": "오늘의 다이아몬드를 모두 찾았어요.",
+  "Today's treasure hunt: {n} of {total} diamonds.": "오늘의 보물찾기: 다이아몬드 {total}개 중 {n}개",
+  "{n} km": "{n}km",
+  "{n} m": "{n}m",
+  "The rest open as your career goes on.": "나머지는 커리어가 진행되면 열려요."
 }
