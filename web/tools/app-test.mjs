@@ -241,12 +241,12 @@ try {
     await tab(page, 'game');
     await page.click('#settings summary:has-text("More display")');
     n0 = await saved(page);
-    await page.click('.set[data-key="hud"] .text-btn'); await settle(page, n0);
+    await page.click('.set[data-key="hud"] .reset-btn'); await settle(page, n0);
     const file2 = (await readOpfs(page, SAVE, 'settings.ini')).text;
     // Reset on a line without a row (roam_rate): its template line back
     n0 = await saved(page);
     await tab(page, 'other');
-    await page.click('#settings-other li:has-text("roam_rate") .text-btn'); await settle(page, n0);
+    await page.click('#settings-other li:has-text("roam_rate") .reset-btn'); await settle(page, n0);
     const file3 = (await readOpfs(page, SAVE, 'settings.ini')).text;
     // Reset all settings: asks, then the template with the name (roam_port, the Mac app's line, goes too)
     await page.click('#settings-reset-all');

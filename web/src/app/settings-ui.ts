@@ -151,6 +151,8 @@ export function iconButton(cls: string, name: string, path: string): HTMLButtonE
 }
 /** a bin (friends' Remove, a profile's Delete) and a pencil (a profile's Rename) */
 export const TRASH = 'M4 7h16M10 11v6M14 11v6M9 7V4h6v3M6 7l1 13h10l1-13', PENCIL = 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4';
+/** a setting's Reset: the arrow going back round (the touch controls' reset, touch.ts) */
+const RESET = 'M6 13a6 6 0 1 0 2-5.2M5 4v4h4';
 const PLUS = 'M12 5v14M5 12h14', CROSS = 'M6 6l12 12M18 6L6 18', PERSON = 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7';
 const LINK = 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1';
 
@@ -580,8 +582,7 @@ export class SettingsPanel {
       const line = t('line {line}: {key} = {value}', { line: o.phys, key: o.key, value: o.value.length > 80 ? o.value.slice(0, 80) + '…' : o.value });
       li.textContent = o.refused ? t('{line} (ignored: {why})', { line, why: o.why ? tvars(o.why.t, o.why.v) : o.refused })
         : o.env !== o.key ? t('{line} (sets {env})', { line, env: o.env }) : line;
-      const r = document.createElement('button'); r.type = 'button'; r.className = 'text-btn'; r.textContent = t('Reset');
-      r.setAttribute('aria-label', t('Reset {label}', { label: o.key }));
+      const r = iconButton('reset-btn', t('Reset {label}', { label: o.key }), RESET);
       const def = DEFAULTS.get(keyDef(o.key)?.key ?? '');
       if (def !== undefined) r.title = t('Back to the default ({value})', { value: def === '' ? t('empty') : def });
       r.disabled = this.ro();
@@ -800,8 +801,7 @@ export class SettingsPanel {
     }
     if (setInFile && c.t !== 'crews' && c.t !== 'phrases') {   // (the Crews row has none: each crew's x leaves it; Your
                                                                // phrases has its own, beside Choose phrases)
-      const r = document.createElement('button'); r.type = 'button'; r.className = 'text-btn'; r.textContent = t('Reset');
-      r.setAttribute('aria-label', t('Reset {label}', { label: t(it.label) }));
+      const r = iconButton('reset-btn', t('Reset {label}', { label: t(it.label) }), RESET);
       r.title = t('Back to the default ({value})', { value: shown(it, DEFAULTS.get(it.key) ?? '') });
       r.onclick = () => void this.put(it.key, null, comp ? [[comp, null]] : []);
       ctl.prepend(r);                                // first: the control keeps its place at the right edge
@@ -875,8 +875,7 @@ export class SettingsPanel {
     }
     det.append(sum, grid);
     if (reset) {
-      const r = document.createElement('button'); r.type = 'button'; r.className = 'text-btn'; r.textContent = t('Reset');
-      r.setAttribute('aria-label', t('Reset {label}', { label }));
+      const r = iconButton('reset-btn', t('Reset {label}', { label }), RESET);
       r.title = t('Back to the default ({value})', { value: DEFAULT_PHRASES.slice(0, SLOTS).map(p => t(PHRASES[p].text)).join(', ') });
       r.onclick = reset;
       det.append(r);
@@ -930,10 +929,10 @@ export class SettingsPanel {
   /** a line of "Other settings in this file" back to its default; a keyboard's focus goes on to the next one */
   private async resetLine(phys: number, key: string, btn: HTMLButtonElement) {
     if (this.ro()) { this.deps.say?.(this.roText()); return; }
-    const at = [...this.root.querySelectorAll('#settings-other .text-btn')].indexOf(btn), focused = document.activeElement === btn;
+    const at = [...this.root.querySelectorAll('#settings-other .reset-btn')].indexOf(btn), focused = document.activeElement === btn;
     await this.write(resetLine(this.text ?? TEMPLATE, phys));
     if (focused) {
-      const rest = this.root.querySelectorAll<HTMLElement>('#settings-other .text-btn');
+      const rest = this.root.querySelectorAll<HTMLElement>('#settings-other .reset-btn');
       (rest[Math.min(at, rest.length - 1)] ?? this.root.querySelector<HTMLElement>('#settings-raw > summary'))?.focus();
     }
     this.deps.say?.(() => t('Saved: {key} is back to its default. Applies the next time you press Play.', { key }));
