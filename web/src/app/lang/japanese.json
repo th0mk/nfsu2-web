@@ -1307,6 +1307,7 @@
   "{key} can't be used here.": "{key}はここでは使えません。",
   "{key} is quick chat's.": "{key}はクイックチャット用です。",
   "{key} is one of the game's keys.": "{key}はゲーム自体が使うキーです。",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key}はゲーム自体が使うキーです。先にゲームのオプション、コントロールで、その操作を別のキーに移してください。",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "メニューでも使えるキーです。F6～F12など、文字を入力しないキーを選んでください。",
   "{key} is already {what}.": "{key}はすでに「{what}」に使われています。",
   "{button} is already {what}.": "{button}はすでに「{what}」に使われています。",

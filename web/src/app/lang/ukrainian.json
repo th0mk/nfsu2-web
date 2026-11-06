@@ -1437,6 +1437,7 @@
   "{key} can't be used here.": "{key} тут використати не можна.",
   "{key} is quick chat's.": "{key} — клавіша швидкого чату.",
   "{key} is one of the game's keys.": "{key} — одна з клавіш гри.",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key} — одна з клавіш гри: спершу призначте цю дію на іншу клавішу в налаштуваннях керування гри.",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "Ця дія працює й у меню: виберіть клавішу, яка нічого не друкує, наприклад від F6 до F12.",
   "{key} is already {what}.": "{key} вже використовується: {what}.",
   "{button} is already {what}.": "{button} вже використовується: {what}.",

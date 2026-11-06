@@ -1325,6 +1325,7 @@
   "{key} can't be used here.": "Το {key} δεν μπορεί να χρησιμοποιηθεί εδώ.",
   "{key} is quick chat's.": "Το {key} χρησιμοποιείται για γρήγορη συνομιλία.",
   "{key} is one of the game's keys.": "Το {key} είναι ένα από τα πλήκτρα του παιχνιδιού.",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "Το {key} είναι ένα από τα πλήκτρα του παιχνιδιού: όρισε πρώτα άλλο πλήκτρο για αυτή τη λειτουργία στο παιχνίδι («Επιλογές → Χειρισμός»).",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "Αυτό λειτουργεί και στα μενού: διάλεξε πλήκτρο που δεν πληκτρολογεί χαρακτήρες, όπως F6 έως F12.",
   "{key} is already {what}.": "Το {key} χρησιμοποιείται ήδη για: {what}.",
   "{button} is already {what}.": "Το {button} χρησιμοποιείται ήδη για: {what}.",

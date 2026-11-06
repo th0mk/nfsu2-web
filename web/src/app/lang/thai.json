@@ -1307,6 +1307,7 @@
   "{key} can't be used here.": "ใช้ {key} ที่นี่ไม่ได้",
   "{key} is quick chat's.": "{key} เป็นคีย์ของแชตด่วน",
   "{key} is one of the game's keys.": "{key} เป็นคีย์ที่เกมใช้",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key} เป็นคีย์ที่เกมใช้ ย้ายการควบคุมนั้นไปที่คีย์อื่นในเกมก่อน (ตัวเลือก, การควบคุม)",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "คีย์นี้ใช้ในเมนูได้ด้วย: เลือกคีย์ที่ไม่พิมพ์ตัวอักษร เช่น F6 ถึง F12",
   "{key} is already {what}.": "{key} ใช้สำหรับ “{what}” อยู่แล้ว",
   "{button} is already {what}.": "{button} ใช้สำหรับ “{what}” อยู่แล้ว",

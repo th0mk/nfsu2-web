@@ -1316,6 +1316,7 @@
   "{key} can't be used here.": "{key} burada kullanılamaz.",
   "{key} is quick chat's.": "{key} hızlı sohbete ait.",
   "{key} is one of the game's keys.": "{key} oyunun tuşlarından biri.",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key} oyunun tuşlarından biri: önce oyunun kontrol ayarlarında o kontrolü başka bir tuşa ata.",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "Bu, menülerde de çalışır: hiçbir şey yazmayan bir tuş seç, örneğin F6 ile F12 arası.",
   "{key} is already {what}.": "{key} zaten kullanımda: {what}.",
   "{button} is already {what}.": "{button} zaten kullanımda: {what}.",

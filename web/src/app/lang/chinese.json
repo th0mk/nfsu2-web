@@ -1307,6 +1307,7 @@
   "{key} can't be used here.": "{key} 無法在此使用。",
   "{key} is quick chat's.": "{key} 是快速聊天的按鍵。",
   "{key} is one of the game's keys.": "{key} 是遊戲本身的按鍵。",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key} 是遊戲本身的按鍵：請先在遊戲內的選項、控制把該操作改到別的按鍵。",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "此項在選單中也有效：請選擇不會輸入文字的按鍵，例如 F6 至 F12。",
   "{key} is already {what}.": "{key} 已用於「{what}」。",
   "{button} is already {what}.": "{button} 已用於「{what}」。",

@@ -1385,6 +1385,7 @@
   "{key} can't be used here.": "{key} kan ikke bruges her.",
   "{key} is quick chat's.": "{key} hører til Hurtigchat.",
   "{key} is one of the game's keys.": "{key} er en af spillets taster.",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key} er en af spillets taster: flyt først kommandoen til en anden tast i spillet (Indstillinger, Kommandoer).",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "Denne virker også i menuer: vælg en tast, der ikke skriver noget, f.eks. F6 til F12.",
   "{key} is already {what}.": "{key} bruges allerede til {what}.",
   "{button} is already {what}.": "{button} bruges allerede til {what}.",

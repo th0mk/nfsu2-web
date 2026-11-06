@@ -562,6 +562,7 @@
   "{key} can't be used here.": "Klávesu {key} tu nejde použít.",
   "{key} is quick chat's.": "Klávesu {key} má rychlý chat.",
   "{key} is one of the game's keys.": "Klávesu {key} používá hra.",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "Klávesu {key} používá hra: nejdřív ve hře (Volby, Ovládání) dej jejímu ovládání jinou klávesu.",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "Tohle funguje i v menu: vyber klávesu, která nic nepíše, například F6 až F12.",
   "{key} is already {what}.": "Klávesa {key} už je obsazená: {what}.",
   "{button} is already {what}.": "Tlačítko {button} už je obsazené: {what}.",

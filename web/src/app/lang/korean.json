@@ -1307,6 +1307,7 @@
   "{key} can't be used here.": "{key} 키는 여기서 쓸 수 없어요.",
   "{key} is quick chat's.": "{key} 키는 빠른 채팅용이에요.",
   "{key} is one of the game's keys.": "{key} 키는 게임에서 쓰는 키예요.",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key} 키는 게임에서 쓰는 키예요. 먼저 게임의 옵션, 컨트롤에서 그 조작을 다른 키로 옮기세요.",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "이 키는 메뉴에서도 작동해요. F6~F12처럼 아무것도 입력되지 않는 키를 고르세요.",
   "{key} is already {what}.": "{key} 키는 이미 '{what}'에 쓰여요.",
   "{button} is already {what}.": "{button}은(는) 이미 '{what}'에 쓰여요.",

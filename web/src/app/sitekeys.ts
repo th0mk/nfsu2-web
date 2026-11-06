@@ -8,9 +8,9 @@
 // (applySiteKeys with the game's environment) and on the start page as they change.  (The headlights' controller has
 // no button to set: the look's stick pushed straight up, runtime/lightkey.c; the free look has no key, only its
 // switch: Auto or Off, a click on its cap, runtime/dinput_pad.c pad_look_stick, which the headlights' stick goes with.)
-//   offered   a key the game has one of its controls on by default (its driving map's keys, its menus' for the ones
-//             that work in the menus too), the browser's F5 and F11, quick chat's 1 to 4 and another of ours are
-//             refused; the ones that work in the menus too (the page's menu, photo mode, the next song, the counter)
+//   offered   a key the game has one of its controls on by default (its driving map's keys, unless the player gave
+//             that control another key in its Options, Controls; its menus' for the ones that work in the menus too),
+//             the browser's F5 and F11, quick chat's 1 to 4 and another of ours are refused; the ones that work in the menus too (the page's menu, photo mode, the next song, the counter)
 //             take only keys that type nothing (F6 to F12, Page Up, Page Down, Pause, Scroll Lock, Delete), and the
 //             page's menu is never off.  A controller's: a D-pad direction held a second (drift mode, the hood,
 //             trunk and doors: a short press stays the game's) or a stick's click (the horn, quick chat), and the free
@@ -165,12 +165,15 @@ function offCap(): HTMLElement { const k = kbd(t('Off')); k.classList.add('off')
 const PAD_INDEX: Record<string, number> = { ls: 10, rs: 11, dup: 12, ddown: 13, dleft: 14, dright: 15 };
 
 // ---- what may be picked ------------------------------------------------------------------------------------------
-/** the keys the game has its controls on by default: its driving map's (0x7fcac0, every action but none: its debug
- *  camera's too), and for ours that work in the menus too its menus' (0x7fd7e0) */
-const GAME_DRIVING = ['ArrowUp', 'KeyW', 'ArrowDown', 'KeyS', 'ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD', 'ShiftLeft', 'Semicolon',
+/** the game's driving map (0x7fcac0, 53 actions): each row's default key, in the map's order (a row's number is its
+ *  index in registry.txt's "DIMap.{map}.53.<row>"): Throttle, Brake, Left, Right, Shift Up, Shift Down, Handbrake,
+ *  Nitrous, HUD, Camera, Look Back, Pause, Respot, Engage, WorldMap, SMS, Legend, Hydraulic Bounce, Hydraulic Pressurize
+ *  (two keys each), Drop.  Rows 39 to 52 are its debug camera's (Numpad 1-4 and 6-9, L, [, ], G ...), which the game
+ *  never reads (runtime/dinput_kbd.c ACT_DEBUG): their keys are free. */
+const DRIVING_ROWS = ['ArrowUp', 'KeyW', 'ArrowDown', 'KeyS', 'ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD', 'ShiftLeft', 'Semicolon',
   'ControlLeft', 'Period', 'Space', 'End', 'AltLeft', 'AltRight', 'KeyQ', 'Equal', 'KeyC', 'Insert', 'KeyB', 'KeyK', 'Escape', 'KeyP',
-  'KeyR', 'Home', 'Enter', 'F1', 'KeyM', 'F2', 'Tab', 'F3', 'KeyT', 'F4', 'KeyJ', 'KeyU', 'KeyH', 'KeyY', 'Digit5', 'Numpad8',
-  'Numpad2', 'Numpad4', 'Numpad6', 'Numpad7', 'Numpad9', 'KeyL', 'Numpad1', 'Numpad3', 'BracketLeft', 'BracketRight', 'KeyG'];
+  'KeyR', 'Home', 'Enter', 'F1', 'KeyM', 'F2', 'Tab', 'F3', 'KeyT', 'F4', 'KeyJ', 'KeyU', 'KeyH', 'KeyY', 'Digit5'];
+/** and for ours that work in the menus too, its menus' (0x7fd7e0) */
 const GAME_MENUS = ['NumpadEnter', 'Comma'];
 /** ours that work in the menus too take only these: they type nothing in the game's text fields */
 const NO_TEXT = ['F6', 'F7', 'F8', 'F9', 'F10', 'F12', 'F13', 'F14', 'F15', 'PageUp', 'PageDown', 'Pause', 'ScrollLock', 'Delete'];
@@ -180,13 +183,16 @@ const NEVER = ['F5', 'F11', 'ShiftRight', 'ControlRight', 'MetaLeft', 'MetaRight
 /** quick chat's, fixed */
 const CHAT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'];
 
-/** why our control cannot have this key ('' it can); others: the keys the other rows have now */
-export function refusal(id: OurId, code: string, others: (id: OurId) => string | null = siteKey): string {
+/** why our control cannot have this key ('' it can); others: the keys the other rows have now; game: the driving keys
+ *  the game keeps (gameDrivingKeys) */
+export function refusal(id: OurId, code: string, others: (id: OurId) => string | null = siteKey,
+                        game: ReadonlySet<string> = gameDrivingKeys(null)): string {
   // (its own default always may: the headlights' G is one of the game's debug camera's)
   const o = OUR[id], k = keyName(code), own = code === o.def;
   if (!CODES[code] || NEVER.includes(code)) return t('{key} can\'t be used here.', { key: k });
   if (CHAT_KEYS.includes(code)) return t('{key} is quick chat\'s.', { key: k });
-  if (!own && (GAME_DRIVING.includes(code) || (o.menus && GAME_MENUS.includes(code)))) return t('{key} is one of the game\'s keys.', { key: k });
+  if (!own && game.has(code)) return t('{key} is one of the game\'s keys: move its control to another key in the game\'s Options, Controls first.', { key: k });
+  if (!own && o.menus && GAME_MENUS.includes(code)) return t('{key} is one of the game\'s keys.', { key: k });
   if (o.menus && !NO_TEXT.includes(code)) return t('This one works in menus too: pick a key that types nothing, such as F6 to F12.');
   for (const p of OURS) if (p.id !== id && others(p.id) === code) return t('{key} is already {what}.', { key: k, what: t(p.name) });
   return '';
@@ -197,6 +203,18 @@ export function buttonRefusal(k: ButtonKey, v: string, others: (k: ButtonKey) =>
   if (other && v !== 'off' && others(other) === v)
     return t('{button} is already {what}.', { button: buttonName(v), what: t(other === 'button_horn' ? 'Horn' : 'Quick chat') });
   return '';
+}
+
+/** the driving map's default keys the game keeps: all but those whose row the player gave another key, or none, in
+ *  the game's Options, Controls (registry.txt's user map for that row: gameBoundKeys); the runtime then has no action
+ *  on such a key (dinput_kbd.c rebound), so ours may have it */
+export function gameDrivingKeys(registry: string | null): Set<string> {
+  const moved = new Set<number>();
+  for (const m of (registry ?? '').matchAll(/^s DIMap\.[^=\n]*\.53\.(\d+)=\s*[0-9a-f]{8} [0-9a-f]{8} ([0-9a-f]{8})\s*$/gim)) {
+    const row = Number(m[1]), dik = (parseInt(m[2], 16) >>> 8) & 0xff;
+    if (row < DRIVING_ROWS.length && CODE_OF_DIK[dik] !== DRIVING_ROWS[row]) moved.add(row);
+  }
+  return new Set(DRIVING_ROWS.filter((_, row) => !moved.has(row)));
 }
 
 /** the keys the player put one of the game's controls on (registry.txt's user maps, runtime/dinput_kbd.c:
@@ -233,6 +251,7 @@ export class SiteKeysView {
   private box: HTMLElement | null = null;
   private editable = false;
   private bound = new Set<string>();
+  private game = gameDrivingKeys(null);
   private waiting: { id: OurId; button: boolean } | null = null;
   private note: { id: OurId; text: string; cls: string } | null = null;
   private stopWait: (() => void) | null = null;
@@ -243,7 +262,10 @@ export class SiteKeysView {
   render(box?: HTMLElement, editable?: boolean) {
     if (box) { this.box = box; this.editable = !!editable; }
     if (!this.box) return;
-    if (this.editable) void this.deps.registry().then(r => { const b = gameBoundKeys(r); if ([...b].join() !== [...this.bound].join()) { this.bound = b; this.draw(); } });
+    if (this.editable) void this.deps.registry().then(r => {
+      const b = gameBoundKeys(r), g = gameDrivingKeys(r);
+      if ([...b].join() !== [...this.bound].join() || [...g].join() !== [...this.game].join()) { this.bound = b; this.game = g; this.draw(); }
+    });
     this.draw();
   }
 
@@ -323,7 +345,7 @@ export class SiteKeysView {
       cls = 'free';
     } else {
       const k = this.keyNow(o);
-      if (k && this.bound.has(k)) { text = t('One of the game\'s controls is on {key} (its Options, Controls): the game gets it.', { key: keyName(k) }); cls = 'env'; }
+      if (k && (this.bound.has(k) || this.game.has(k))) { text = t('One of the game\'s controls is on {key} (its Options, Controls): the game gets it.', { key: keyName(k) }); cls = 'env'; }
     }
     if (!text && !(this.waiting?.id === o.id)) return;
     const p = document.createElement('p'); p.className = `set-state ${cls}`; p.textContent = text;
@@ -380,7 +402,7 @@ export class SiteKeysView {
       this.note = null;
       await this.deps.set(o.button!, v === BUTTONS[o.button!][0] ? null : v);
     } else {
-      const why = v === 'off' ? '' : refusal(o.id, v, id => this.keyNow(OUR[id]));
+      const why = v === 'off' ? '' : refusal(o.id, v, id => this.keyNow(OUR[id]), this.game);
       if (why) { this.note = { id: o.id, text: why, cls: 'bad' }; this.draw(); return; }
       this.note = null;
       await this.deps.set(o.key!, v === o.def ? null : v);

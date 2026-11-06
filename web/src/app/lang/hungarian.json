@@ -1310,6 +1310,7 @@
   "{key} can't be used here.": "{key} itt nem használható.",
   "{key} is quick chat's.": "{key}: a Gyorschat használja.",
   "{key} is one of the game's keys.": "{key}: a játék egyik billentyűje.",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key}: a játék egyik billentyűje. Előbb tedd át a vezérlését egy másik billentyűre a játékban (Beállítások > Irányítás).",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "Ez menükben is működik: válassz olyan billentyűt, ami nem ír semmit, pl. F6–F12.",
   "{key} is already {what}.": "{key} már foglalt: {what}.",
   "{button} is already {what}.": "{button} már foglalt: {what}.",

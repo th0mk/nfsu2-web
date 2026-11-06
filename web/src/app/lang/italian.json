@@ -1411,6 +1411,7 @@
   "{key} can't be used here.": "{key} non si può usare qui.",
   "{key} is quick chat's.": "{key} è della chat rapida.",
   "{key} is one of the game's keys.": "{key} è un tasto del gioco.",
+  "{key} is one of the game's keys: move its control to another key in the game's Options, Controls first.": "{key} è un tasto del gioco: prima sposta il suo comando su un altro tasto nel gioco (Opzioni, Controlli).",
   "This one works in menus too: pick a key that types nothing, such as F6 to F12.": "Questo funziona anche nei menu: scegli un tasto che non scriva nulla, come da F6 a F12.",
   "{key} is already {what}.": "{key} è già usato per {what}.",
   "{button} is already {what}.": "{button} è già usato per {what}.",
