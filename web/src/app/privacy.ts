@@ -13,7 +13,10 @@
 // message, a profile saved): a name stays known after its line left the log.  scrub() learns from the text it is given too (a copy kept
 // by an earlier page).  A name that is also a word of the log's own (a player called "driver", or "500") is replaced
 // only where it stands as a name, between the words that frame names in these lines (PRE, POST); any other name
-// wherever it stands, so a line nobody thought of does not give it away.
+// wherever it stands, so a line nobody thought of does not give it away.  The names are found in one pass over the
+// text, each place looked up by the word it starts with (byStart), not by a pattern of every name: the copy kept every
+// 10 s (lastgame.ts) runs on the page's thread, and a pattern of a thousand names and more took Safari's engine 0.4 to
+// 1.2 s a copy, the picture standing still meanwhile (iPhones in a busy free roam, 2026-11).
 import { crewList } from './crews';
 
 export type NameKind = 'you' | 'profile' | 'crew' | 'room' | 'player';
@@ -32,6 +35,15 @@ const WORD = '[\\p{L}\\p{N}_]';
 const PRE = String.raw`(?:^|f=\d+ |JOIN: |LEAVE: |with |behind |for |as |profile |name |\[notice\] |\[chat\] |\[carsfx\] |\[horn\] |\[roam\] {1,3}|autosave: |quick chat: |lobby [0-9a-f]{8}: |slot \d+:? |loading |car [0-9a-f]{4}(?: \(ours\))?, |NAME=|ROOM=|CREW=|"|'|NFS Underground 2/(?:[^/"\n]+/)?|place\. |winner )`;
 const POST = String.raw`(?:'s |'s$|'| joined| left| quit| said| lost the connection| is | turned free roam off| called off| challenges| won it| quits the race|: | \(|, |"|/|$)`;
 const IPV4 = /(?<![\w./:-])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![\w/]|\.\d)/g;
+/** what a name may start with, as the text is read: a word (letters, digits and _ as long as they go), or another
+ *  character */
+const TOKEN = /[\p{L}\p{N}_]+|[^\p{L}\p{N}_]/gu;
+/** a word character at the place (lastIndex) */
+const WORD_AT = new RegExp(WORD, 'uy');
+const WORD_ONE = new RegExp(`^${WORD}$`, 'u');
+/** PRE ending where the text given ends; POST at the place (lastIndex) */
+const PRE_END = new RegExp(`${PRE}$`, 'u');
+const POST_AT = new RegExp(POST, 'muy');
 
 /** 4 characters of a 32-bit FNV-1a hash of the salt and the name */
 function hash4(salt: string, s: string): string {
@@ -39,7 +51,61 @@ function hash4(salt: string, s: string): string {
   for (const ch of `${salt}\0${s}`) { h ^= ch.codePointAt(0)!; h = Math.imul(h, 0x01000193) >>> 0; }
   return (h % 1679616).toString(36).padStart(4, '0');   // 36^4
 }
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wordAt = (s: string, i: number) => { WORD_AT.lastIndex = i; return WORD_AT.test(s); };
+const byLength = (a: string, b: string) => b.length - a.length;
+
+/** the text with each name in it replaced where no word character stands right before it or right after it, as
+ *  /(?<!WORD)(?:name|...)(?!WORD)/gu with the longest names first would: from the left, the longest name at a place */
+function replaceAnywhere(text: string, names: string[], label: (n: string) => string): string {
+  // a name's first word, or its first character, to the names starting so (longest first)
+  const byStart = new Map<string, string[]>();
+  const tok = new RegExp(TOKEN.source, 'gu');
+  for (const n of names.sort(byLength)) {
+    tok.lastIndex = 0;
+    const first = tok.exec(n)?.[0];
+    if (!first) continue;
+    const list = byStart.get(first);
+    if (list) list.push(n); else byStart.set(first, [n]);
+  }
+  let out = '', last = 0, afterWord = false, m: RegExpExecArray | null;
+  tok.lastIndex = 0;
+  while ((m = tok.exec(text))) {
+    const p = m.index;
+    let hit: string | undefined;
+    if (!afterWord) for (const n of byStart.get(m[0]) ?? []) if (text.startsWith(n, p) && !wordAt(text, p + n.length)) { hit = n; break; }
+    if (hit) {
+      out += text.slice(last, p) + label(hit);
+      last = tok.lastIndex = p + hit.length;
+      afterWord = WORD_ONE.test([...hit.slice(-2)].pop()!);  // its last character (a pair of halves is one)
+    } else afterWord = wordAt(m[0], 0);
+  }
+  return last ? out + text.slice(last) : text;
+}
+
+/** the text with each name in it replaced where PRE stands right before it and POST right after it, as
+ *  /(?<=PRE)(?:name|...)(?=POST)/gmu with the longest names first would */
+function replaceFramed(text: string, names: string[], label: (n: string) => string): string {
+  const at = new Map<number, string>();        // a place -> the longest name that stands there framed
+  for (const n of names.sort(byLength)) {
+    for (let i = text.indexOf(n); i >= 0; i = text.indexOf(n, i + 1)) {
+      if (at.has(i)) continue;
+      POST_AT.lastIndex = i + n.length;
+      if (!POST_AT.test(text)) continue;
+      const c = i ? text.charCodeAt(i - 1) : 10;
+      // PRE's ^: at a line's start; its other words never reach past one
+      if (c === 10 || c === 13 || c === 0x2028 || c === 0x2029 || PRE_END.test(text.slice(text.lastIndexOf('\n', i - 1) + 1, i))) at.set(i, n);
+    }
+  }
+  if (!at.size) return text;
+  let out = '', last = 0;
+  for (const p of [...at.keys()].sort((a, b) => a - b)) {
+    if (p < last) continue;
+    const n = at.get(p)!;
+    out += text.slice(last, p) + label(n);
+    last = p + n.length;
+  }
+  return out + text.slice(last);
+}
 
 function browserSalt(): string {
   const fresh = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
@@ -143,16 +209,10 @@ export class Privacy {
       const plain = new RegExp(`^${WORD}+$`, 'u').test(n);
       ((/^\d+$/.test(n) || [...n].length < 3 || (plain && words.has(n))) ? framed : anywhere).push(n);
     }
-    const byLength = (a: string, b: string) => b.length - a.length;
+    const named = (n: string) => label(n, this.names.get(n)!);
     let out = text;
-    if (anywhere.length) {
-      const re = new RegExp(`(?<!${WORD})(?:${anywhere.sort(byLength).map(escape).join('|')})(?!${WORD})`, 'gu');
-      out = out.replace(re, n => label(n, this.names.get(n)!));
-    }
-    if (framed.length) {
-      const re = new RegExp(`(?<=${PRE})(?:${framed.sort(byLength).map(escape).join('|')})(?=${POST})`, 'gmu');
-      out = out.replace(re, n => label(n, this.names.get(n)!));
-    }
+    if (anywhere.length) out = replaceAnywhere(out, anywhere, named);
+    if (framed.length) out = replaceFramed(out, framed, named);
     // a race's friends, a list of LAN names (one word each): every known one, a log word too
     out = out.replace(/(friends in the race: )(.+)$/gm, (_, pre: string, list: string) =>
       pre + list.split(' ').map(n => this.names.has(n) ? label(n, this.names.get(n)!) : n).join(' '));
