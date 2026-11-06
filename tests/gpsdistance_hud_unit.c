@@ -1,6 +1,6 @@
 /* Exercise the real HUD hook with two players and stand-ins for the native FE
  * calls. Browser scripts separately cover real package ownership/rendering.
- * cc -Wall -Wextra -Iruntime tests/gpsdistance_hud_unit.c -o out/gpsdistance_hud_unit
+ * cc -Wall -Wextra -Iruntime tests/gpsdistance_hud_unit.c -o out/gpsdistance_hud_unit -lm
  * Run without arguments for enabled HUD checks; unset/0/off/false/invalid check disabled.
  */
 #include <assert.h>

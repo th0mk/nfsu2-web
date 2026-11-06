@@ -178,7 +178,8 @@ test('the credits: authors, links and licences of their own kinds', () => {
     if (m.links.page) assert.match(m.links.page, /^https:\/\/nfsmods\.xyz\/mod\/\d+$/, m.id);
     if (m.links.source) assert.match(m.links.source, /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/, m.id);
     for (const a of m.authors) if (a.url) assert.match(a.url, /^https:\/\//, `${m.id}: ${a.name}`);
-    assert.ok(m.links.page || m.links.source, `${m.id}: a link`);
+    // a link, but for a mod made for this port (its source is this repo's)
+    assert.ok((m.links.page || m.links.source) ? m.uses !== 'original' : m.uses === 'original', `${m.id}: a link`);
     if (m.licence) assert.ok(Object.hasOwn(LICENCES, m.licence), m.id);
     if (m.sizeMB !== undefined) assert.ok(m.sizeMB > 0 && m.sizeMB < 1000, m.id);
   }

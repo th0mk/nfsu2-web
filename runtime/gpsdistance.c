@@ -1,11 +1,14 @@
-/* Distance to the GPS destination under the direction arrow. A single native
- * FE string belongs to the HUD package and is freed with it. Look it up in the
- * current package, rather than retaining pointers across shops/races. This is
- * straight-line horizontal distance, in world metres, not road-route length. */
+/* The distance to the GPS destination under its arrow (settings.ini gps_distance, the Mods tab's GPS Distance; off at
+ * first): in a straight line, not by road, in m/km or ft/mi as Speedometer Units has it, under the arrow of each
+ * player on this computer whose HUD has one, from their own car (co-op's player 2's HUD has none: the GPS is player
+ * 1's in the game; tests/scripts/gps_distance_coop.txt).  The text is a copy of the HUD's ONLINE_PLAYER_1 named
+ * GPS_DISTANCE (roam_game_clone_hud_text), the HUD package's own: freed with it, and looked up by its name every
+ * frame, so no pointer outlives a HUD (shops, races, pause).  "[gps]" log line when one is made. */
 #include "cpu.h"
 #include "splitscreen_mem.h"
 #include "gpsdistance_format.h"
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -37,10 +40,9 @@ void gpsdistance_hud(CPU *c){
     /* The destination is shared; distance and arrow visibility belong to
      * the Player whose HUD has just updated. Some HUDs have no GPS part. */
     uint32_t pl = c->esi;
-    int local = 0;
-    for (unsigned i = 0; pl && i < SPLIT_PORT_CAPACITY; ++i)
-        if (MR32(SPLIT_PLAYERS_INDEX + i * 4u) == pl) { local = 1; break; }
-    if (!local) return;
+    unsigned seat = 0;
+    while (pl && seat < SPLIT_PORT_CAPACITY && MR32(SPLIT_PLAYERS_INDEX + seat * 4u) != pl) ++seat;
+    if (!pl || seat == SPLIT_PORT_CAPACITY) return;
     uint32_t hud = MR32(pl + 0x9a4u), car = MR32(pl + 4u);
     if (!hud) return;
     uint32_t pkg = MR32(hud + 0x10u), part = MR32(hud + 0x5cu);
@@ -72,6 +74,7 @@ void gpsdistance_hud(CPU *c){
         if (obj) one(c, 0x50ca00u, 0, obj);
         return;
     }
+    int made = !obj;
     if (!obj){
         strcpy((char *)g_mem + scratch, "ONLINE_PLAYER_1");
         args[1] = one(c, 0x505450u, 0, scratch);
@@ -108,4 +111,5 @@ void gpsdistance_hud(CPU *c){
         MR32(obj + 0x1cu) |= 2u;
     }
     one(c, 0x50ca50u, 0, obj);
+    if (made) fprintf(stderr, "[gps] distance under the arrow for player %u: %s\n", seat + 1, text);
 }

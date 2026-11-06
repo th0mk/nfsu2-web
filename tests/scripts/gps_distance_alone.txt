@@ -1,7 +1,8 @@
-# Requires --env NFSU2_GPS_DISTANCE=1 (Mods: GPS Distance).
-# GPS HUD lifecycle: alone. Run with roam-pair --solo --page app --env NFSU2_ROAM=0.
-# The local race choices differ from the online Solo/Multiplayer lobby dialog.
-# A saved career with its first car is required; let the bot finish the prologue.
+# GPS Distance (runtime/gpsdistance.c) through a co-op career race alone (player 1's HUD only),
+# then back in free roam the label made again in the new HUD.  A saved career with a car of its own (the bot does
+# not buy the first car after the prologue), free roam offline:
+#   node web/tools/roam-pair.mjs --solo --seed <a saved career> --a Gps:gps_distance_alone.txt
+#        --env NFSU2_GPS_DISTANCE=1 --env NFSU2_ROAM=0 [--page app]
 0     bot on
 +0    waitexpr i:0x862838 >= 1 24000
 +0    waitroam 6000

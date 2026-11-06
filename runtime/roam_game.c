@@ -2430,7 +2430,9 @@ static uint32_t fe_copy(CPU *c, uint32_t o, const char *name, int depth){
     uint32_t dn = rd32(o + 0x30u), d0 = rd32(o + 0x2cu), d1 = rd32(cl + 0x2cu), ty = MR32(o + 0x18u);
     if ((ty == 1u || ty == 2u || ty == 5u) && rd32(cl + 0x30u) == dn && dn && dn <= 0x100u && ok(d0, dn) && ok(d1, dn) && d0 != d1)
         memcpy(GPTR(d1), GPTR(d0), dn);
-    uint32_t sa = g_gmem + TAG_SCR + 0x48u;
+    /* the name for its hash: in g_gmem's scratch, or without it (roam_game_clone_hud_text) just below the stack, above
+     * the frames of rh_call's callees */
+    uint32_t sa = g_gmem ? g_gmem + TAG_SCR + 0x48u : (c->esp - 0x40u) & ~15u;
     gstr(sa, name, 24);
     MR32(cl + 0x10u) = gcall1(c, FN_FE_HASH, 0, sa);
     if (ty == 5u && depth < 4 && rd32(cl + 0x64u) && rd32(cl + 0x64u) != rd32(o + 0x64u)){
@@ -2473,12 +2475,12 @@ static uint32_t fe_clone(CPU *c, uint32_t pkg, uint32_t o, const char *name){
     if (g_fcl.on){ g_fcl.l = l; g_fcl.n = rd32(l - 4u); g_fcl.last = rd32(l + 4u); }
     return cl;
 }
-/* A package-owned HUD string for other native HUD extensions. Keep list and
- * render-object ownership in the same clone path as the multiplayer labels. */
+/* gpsdistance.c: a copy of string object `source` in package pkg (a HUD's), named `name`, made as the names over
+ * friends' cars are (fe_clone): the package's own, freed with it.  Without free roam's memory (g_gmem, half a
+ * megabyte), which a game without free roam never needs.  0 when not made */
 uint32_t roam_game_clone_hud_text(CPU *c, uint32_t pkg, uint32_t source, const char *name){
     if (!ok(source, 0x70) || rd32(source + 0x18u) != 2u) return 0;
-    gmem_init(c);
-    return g_gmem ? fe_clone(c, pkg, source, name) : 0;
+    return fe_clone(c, pkg, source, name);
 }
 /* an image's or a string's colour: its drawing data's first four ints
  * (blue, green, red, alpha, as FN_FE_COLOR takes them) */

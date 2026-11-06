@@ -17,7 +17,8 @@ export type Place = 'display' | 'mainMenu';
 /** what changes for other players: mine, on your screen; you, sounds and menus only you get */
 export type Online = 'mine' | 'you' | 'seen' | 'career' | 'offline';
 /** what this port takes from the mod: its files, packed for the browser (data); its code, ported (code); or what it
- *  found out about the game (addresses, values), written anew (findings) */
+ *  found out about the game (addresses, values), written anew (findings); or nothing, a mod made for this port in its
+ *  own source (original: no link) */
 export type Uses = 'original' | 'data' | 'code' | 'findings';
 
 /** setting: a settings.ini key (settings.ts KEYS) and the values that turn the mod on (none: a switch, on); always: no
@@ -172,16 +173,13 @@ export const MODS: readonly Mod[] = [
     details: 'The game updates its sounds at most every 15 ms, and then by one frame\'s time only: above 60 fps the engine\'s pitch and the gear shifts ran slow, at 120 fps at half speed. Here an update also gets the time of the frames it skipped. At 60 fps and below nothing changes.',
     online: 'you', files: ['runtime/framerate.c'],
   },
-
   {
-    id: 'gps-distance', name: 'GPS Distance', authors: [{ name: 'roman01la' }],
-    links: { source: 'https://github.com/roman01la/nfsu2-web' },
+    id: 'gps-distance', name: 'GPS Distance', authors: [{ name: 'roman01la', url: 'https://github.com/roman01la' }], links: {},
     kind: 'screen', uses: 'original', control: { setting: 'gps_distance' },
     line: N('Distance to your destination beneath the GPS arrow.'),
-    details: 'Shows straight-line distance while the GPS arrow is visible, using metres and kilometres or feet and miles to match Speedometer Units. Each split-screen player sees the distance from their own car. Disabled by default; changes apply the next time you launch the game.',
+    details: 'While the GPS arrow shows the way, the distance to its destination in a straight line, not by road, in metres or feet as Speedometer Units has it. None in races, or while the GPS finds no route.',
     online: 'mine', files: ['runtime/gpsdistance.c', 'runtime/gpsdistance_format.h'],
   },
-
 
   // ---- Seen by others
   {
