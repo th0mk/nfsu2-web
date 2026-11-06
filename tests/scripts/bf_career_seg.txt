@@ -1,0 +1,6 @@
+# One segment of a career played by the test-only career bot (runtime/career.c, NFSU2_CAREER_BOT=1): it loads the
+# seeded save from the title screen and plays NFSU2_CAREER_BOT_RACES events, then quits ("segment done").  Used to
+# make a finished-career save for Bayview Forever's Stage 6 parts (runtime/bf_*.c):
+#   NFSU2_SAVE_SEED=<prev> node web/tools/run-suite.mjs --script bf_career_seg.txt --marker "segment done"
+#     --env NFSU2_CAREER_BOT=1 --env NFSU2_CAREER_BOT_RACES=8 --env NFSU2_CAREER_BOT_VISUAL=10 --save-out <dir>
+0     log career segment

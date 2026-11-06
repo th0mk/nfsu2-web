@@ -31,6 +31,11 @@ typedef struct {
                                     the brake and gas pedals, the buttons as the page put them;
                                     dinput_pad.c then offers the game a driving device */
     char     name[64];           /* "Xbox Wireless Controller", ... */
+    /* a wheel's H-shifter and clutch, for bf_hshifter.c (the page sends them only
+     * while it is on): 0 = none known, so a zeroed PadState has neither */
+    int      lever;              /* 0 none, 1 neutral, 2..7 1st to 6th gear, 8 reverse */
+    int      has_clutch;         /* the clutch pedal is known: clutch is its travel */
+    float    clutch;             /* 0 up .. 1 pressed to the floor */
 } PadState;
 
 /* An on/off option: a number is on unless 0; off/no/false and on/yes/true

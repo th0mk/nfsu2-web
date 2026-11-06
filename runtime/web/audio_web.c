@@ -119,7 +119,10 @@ static void update_rate_ratio(void){
 }
 
 #define OUT_RATE   AUDIO_RATE
-#define OUT_CH     2
+#define MAX_CH     6         /* the most output channels: 5.1 (the surround of bf_surround.c) */
+/* the output's channels: 2 (L R), or 6 with bf_surround.c's surround on (Web Audio's 5.1 order, L R C LFE SL SR, the
+ * game's WAVEFORMATEXTENSIBLE mask 0x3F) */
+static int OUT_CH = 2;
 #define FRAMES     2048          /* largest slice mix_into takes */
 #define SLICE      512           /* frames per mix_into call: the Mac's AudioUnit slice */
 #define STALL_MS   60.0          /* no consumption for this long (or 2 rhythms): wall-clock pacing */
@@ -179,7 +182,7 @@ int audio_register(uint32_t data, uint32_t bytes, uint32_t rate,
                    uint32_t chans, uint32_t bits){
     if (!data || !bytes) return 0;
     if (rate < 4000u || rate > 192000u) rate = 44100u;
-    if (chans < 1u || chans > 2u) chans = 1u;
+    if (chans != 1u && chans != 2u && chans != 4u && chans != 6u) chans = 1u;   /* 4 and 6: surround (bf_surround.c) */
     if (bits != 8u && bits != 16u) bits = 16u;
     pthread_mutex_lock(&g_slock);
     int id = snd_new_id();
@@ -321,8 +324,21 @@ void audio_set_muted(int on){
 }
 
 /* ---- the mixer: audio.m's mix_into, float output ------------------------ */
+/* the channel of a source of chans channels that output channel c plays (-1: none) */
+static int src_chan(uint32_t chans, int c){
+    if (OUT_CH == 2) return chans == 1u ? 0 : c;               /* (a 4 or 6 buffer only with 6 out: its front pair) */
+    switch (chans){
+    case 1u: return c < 2 ? 0 : -1;
+    case 2u: return c < 2 ? c : -1;
+    case 4u: return c < 2 ? c : c >= 4 ? c - 2 : -1;            /* FL FR BL BR -> L R . . SL SR */
+    default: return c;                                          /* 5.1 */
+    }
+}
+/* bf_surround.c: the most channels a sound buffer may have now (2, or 6 with the surround output) */
+int audio_max_channels(void){ return OUT_CH; }
+
 static void mix_into(float *out, unsigned frames){
-    static float acc[FRAMES * OUT_CH];
+    static float acc[FRAMES * MAX_CH];
     if (frames > FRAMES) frames = FRAMES;
     memset(acc, 0, sizeof(float) * frames * OUT_CH);
     uint64_t active = 0;
@@ -418,7 +434,11 @@ static void mix_into(float *out, unsigned frames){
             }
             uint32_t si = (uint32_t)sp;
             for (int c = 0; c < OUT_CH; c++){
-                uint32_t sc = (b->chans == 2u) ? (uint32_t)c : 0u;
+                /* a source's channel for output c: mono to the front pair, stereo L R, quad (FL FR BL BR) to the
+                 * front and the surround pair, 5.1 as it is; nothing for the others */
+                int sci = src_chan(b->chans, c);
+                if (sci < 0) continue;
+                uint32_t sc = (uint32_t)sci;
                 uint32_t off = b->data + si*bpf + sc*bps;
                 float s;
                 if (b->bits == 16u){
@@ -480,8 +500,13 @@ static void mix_into(float *out, unsigned frames){
                 fprintf(stderr, "  [gap] t=%.2f s\n", (double)g_mixed_frames / (double)OUT_RATE); }
         }
     }
-    horn_mix(acc, frames, OUT_RATE);              /* free-roam horns over the game's sound */
-    carsfx_mix(acc, frames, OUT_RATE);            /* ...and friends' nitrous and hydraulics */
+    /* our own sounds are stereo: with a 5.1 output they go to its front pair */
+    static float st[FRAMES * 2];
+    float *two = OUT_CH == 2 ? acc : st;
+    if (OUT_CH != 2) memset(st, 0, sizeof(float) * frames * 2);
+    horn_mix(two, frames, OUT_RATE);              /* free-roam horns over the game's sound */
+    carsfx_mix(two, frames, OUT_RATE);            /* ...and friends' nitrous and hydraulics */
+    if (OUT_CH != 2) for (unsigned f = 0; f < frames; f++){ acc[f*OUT_CH] += st[2*f]; acc[f*OUT_CH + 1] += st[2*f + 1]; }
     int muted = atomic_load(&g_out_muted);
     for (unsigned k = 0; k < frames * OUT_CH; k++){
         float v = muted ? 0.f : acc[k];
@@ -491,7 +516,7 @@ static void mix_into(float *out, unsigned frames){
     }
     g_cb_no++;
     if (g_dump){
-        int16_t s16[FRAMES * OUT_CH];
+        int16_t s16[FRAMES * MAX_CH];
         for (unsigned k = 0; k < frames * OUT_CH; k++) s16[k] = (int16_t)(out[k] * 32767.f);
         fwrite(s16, sizeof(int16_t), (size_t)frames * OUT_CH, g_dump);
     }
@@ -636,7 +661,7 @@ static void wait_word(_Atomic uint32_t *addr, uint32_t expect, double max_s){
 
 static void *pump_main(void *unused){
     (void)unused;
-    static float scratch[SLICE * OUT_CH];
+    static float scratch[SLICE * MAX_CH];
     int mode = AR_MODE_IDLE;
     double now = mono_s();
     g_pump_t0 = now;
@@ -824,8 +849,15 @@ void audio_init(void){
     { const char *d = getenv("SNDCSV");
       if (d && *d){ g_csv = fopen(d, "w");
           if (g_csv) fprintf(g_csv, "cb,t,id,rate,bytes,pbyte,wpos,avail,frac,target,trim,ratio,zero\n"); } }
+    { /* the surround (bf_surround.c): a 5.1 output, which the page downmixes for fewer speakers.  EXPERIMENTAL
+       * (NFSU2_BF_SURROUND_EXPERIMENTAL=1): the game's 5.1 mode starts its sound system again without its memory in
+       * the port (bf_surround.c), so the surround plays stereo until that is fixed */
+      const char *e = getenv("NFSU2_BF_FEATURES_SURROUND"), *k = getenv("NFSU2_BF_SURROUND_AUDIO_SPEAKERS"),
+                 *x = getenv("NFSU2_BF_SURROUND_EXPERIMENTAL");
+      if (e && *e && *e != '0' && x && *x && *x != '0' && (!k || !*k || atoi(k) > 2)) OUT_CH = 6;
+      if (OUT_CH != 2) fprintf(stderr, "sound: %d output channels (surround)\n", OUT_CH); }
     RH(AR_MAGIC) = AUDIO_MAGIC; RH(AR_VERSION) = AUDIO_VERSION;
-    RH(AR_FRAMES) = AUDIO_RING_FRAMES; RH(AR_RATE) = OUT_RATE;
+    RH(AR_FRAMES) = AUDIO_RING_FRAMES; RH(AR_RATE) = OUT_RATE; RH(AR_CHANNELS) = (uint32_t)OUT_CH;
     RH(AR_TARGET) = g_target; RH(AR_NOSOUND) = g_audio_on ? 0u : 1u;
     nfsu2_register(HOST_KIND_AUDIO, &g_ring, (uint32_t)sizeof g_ring);
     pthread_attr_t at; pthread_attr_init(&at);

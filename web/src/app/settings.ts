@@ -14,6 +14,7 @@
 // noted and ignored, so a typo never silently selects something else.
 //
 // This module is pure (no DOM, no OPFS) so it can be checked under node.
+import { BF_KEYS, BF_TEMPLATE } from './bf';
 import { blockedName } from './names.mjs';
 import { onlineName } from './claim';
 import { crewsOk, rgbsOk } from './crews';
@@ -216,6 +217,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'button_horn', env: 'NFSU2_BUTTON_HORN', kind: 'enum', vals: 'ls|rs|off', scope: 'web', device: true },
   { key: 'button_chat', env: 'NFSU2_BUTTON_CHAT', kind: 'enum', vals: 'rs|ls|off', scope: 'web', device: true },
   { key: 'button_look', env: 'NFSU2_BUTTON_LOOK', kind: 'enum', vals: 'auto|off', scope: 'web', device: true },
+  // Bayview Forever's parts and options (bf.ts; runtime/bf_*.c)
+  ...BF_KEYS,
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -596,7 +599,7 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #roam_rate = 20
 #roam_delay = 100
 #roam_extrap = 250
-`;
+` + BF_TEMPLATE;
 
 /** The template's default for a key ("#key = value"), '' if the template leaves it empty or does not list it. */
 export const DEFAULTS: ReadonlyMap<string, string> = (() => {

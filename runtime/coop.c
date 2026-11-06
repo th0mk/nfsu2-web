@@ -1081,7 +1081,9 @@ void sub_00541320(CPU *c){
         fprintf(stderr, "[coop] f=%ld the outrun between the two players: no career result\n", autotest_frame());
         POP32(c->eip); c->esp += 4u; return;
     }
+    uint8_t won = (uint8_t)MR8(c->esp + 4u);
     sub_00541320_orig(c);
+    { void uparts_outrun_result(CPU *, int); uparts_outrun_result(c, won); }   /* bf_uparts.c: outrun wins per car after the career */
 }
 
 /* ---- Race together: player 2 in player 1's career race ---------------------------------------------------------------

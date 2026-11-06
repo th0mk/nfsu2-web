@@ -71,7 +71,7 @@ function fakeProc() {
 
 // ---- audio ------------------------------------------------------------------------
 // a ring as the module makes it: the page refuses one of another size (audio/index.ts)
-const RING = AP.AR_OFF_PCM + AP.AUDIO_RING_FRAMES * 8;
+const RING = AP.AR_OFF_PCM + AP.AUDIO_RING_FRAMES * 4 * AP.AR_MAX_CHANNELS;
 
 test('audio: detach ends the worklet (stop, then close after it stopped) and leaves nothing on the context', async (t) => {
   const made = [];

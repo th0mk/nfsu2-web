@@ -296,7 +296,7 @@ Room set, the Room row says how many are in that room.
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, music in drag and drift races, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
-| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
+| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover, Bayview Forever's parts (each with its options under it); and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -343,6 +343,36 @@ Room set, the Room row says how many are in that room.
   and 8 stars in stages 1 to 4, 10 from stage 5), so every cover shoot of the stage is offered the next time free roam
   loads, and pays by that rating. The shops show no Visual Rating box. Turned off again, the next free-roam load
   offers the shoots by your car's own rating; the ones shot and paid stay.
+- **Bayview Forever** (Mods): Broski280's mod for the PC game, as parts of their own, each off by default and each
+  with the options its BayviewForever.ini has (a part with many opens them under "<part>: <n> settings"):
+  - **Endless Career:** once Caleb is beaten, every district keeps races on the map (0 to 4 each): 183 track
+    variants, reverse layouts and tracks the career never used among them, none again until all of a district's are
+    won. Race lengths, opponents' cars and skill per difficulty and kind, prize money (and its growth) and the money
+    pickups that come back have settings; tracks not won yet show the X icon. Before Caleb nothing changes.
+  - **Virtual Garage:** after Caleb any number of cars behind your 10 slots: in the crib's car select, UP and DOWN on
+    a slot show your stored cars in it, Enter takes the one shown and Back puts everything back. With the 10 slots
+    full, the car lot stores the car it replaces and a new car costs its stage's price; the cars it replaced during
+    the career are stored too. Rachel lends you her 350Z, RX-8 and cut Evo, which no shop may touch.
+  - **Stage 6 Covers:** after Caleb, races won with a car earn it magazine and DVD covers (every 5 and 10 by
+    default), paid by its stars; every version of a cover's photo is kept, and UP and DOWN on a cover in Career,
+    Magazines or DVDs browse them.
+  - **Stage 6 Unique Parts:** after Caleb, outruns won with a car earn it unique parts, performance and visual in
+    turn (needs Endless Career). The shops' unique visual parts for every car after Caleb (Unique parts after Caleb,
+    above) stay.
+  - **Race AI Fixes:** the AI racers block and swerve into you far less; optionally no catch-up.
+  - **Respawn at Garage:** a profile load and Quit to Main Menu start free roam at your garage.
+  - **Real Drag Steering:** drag races keep the normal steering, not the lane changes.
+  - **H-Shifter and Clutch:** with a wheel whose shifter the page knows (Steering wheel, above), the game's cut
+    "manual with clutch" gearbox: pick Manual in the game's options, the lever is the gear and the clutch pedal the
+    clutch; a shift without it bogs the engine down. A controller's Manual stays the game's.
+  - **Turbo Sounds:** your turbo's spool and blow-off louder, from the mod's Surround Sound. Its 5.1 and quad mix
+    is not in the browser yet (in the game's 5.1 mode its sound system starts without its memory here), so the
+    sound stays stereo.
+  - **Wheel Steering:** a wheel read at full precision, a linear response and less narrowing of the lock with speed.
+  The parts' data (progress, stored cars, cover photos, the garage spot) is in the profile's folder, `BF`, which
+  backups, cloud saves and Rename carry. Left out: the mod's force feedback (no browser drives a wheel's motor), its
+  5.1 and quad sound (for now, above) and its Particle Fix (a stutter of Direct3D 9 drivers that WebGPU does not
+  have).
 - **Upscaled HUD and Detailed Map** (Mods): Original (the default) is the game's own. Upscaled shows LunicAura106's
   [Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the
   server has their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times

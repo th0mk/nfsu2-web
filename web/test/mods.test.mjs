@@ -178,7 +178,7 @@ test('the credits: authors, links and licences of their own kinds', () => {
     if (m.links.page) assert.match(m.links.page, /^https:\/\/nfsmods\.xyz\/mod\/\d+$/, m.id);
     if (m.links.source) assert.match(m.links.source, /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/, m.id);
     for (const a of m.authors) if (a.url) assert.match(a.url, /^https:\/\//, `${m.id}: ${a.name}`);
-    assert.ok(m.links.page || m.links.source, `${m.id}: a link`);
+    assert.ok(m.links.page || m.links.source || (m.unpublished && !m.links.page && !m.links.source), `${m.id}: a link`);
     if (m.licence) assert.ok(Object.hasOwn(LICENCES, m.licence), m.id);
     if (m.sizeMB !== undefined) assert.ok(m.sizeMB > 0 && m.sizeMB < 1000, m.id);
   }
@@ -282,7 +282,26 @@ test('the rows: each setting\'s row in the Mods tab only, once, with a control o
       assert.deepEqual(c.opts.map(([v]) => v).sort(), d.vals.split('|').sort(), `${key}: the values it takes`);
     }
   }
-  assert.deepEqual(Object.keys(UI.MOD_CONTROLS).sort(), [...settings].sort(), 'MOD_CONTROLS: the mods\' settings only');
+  // a mod's own settings (control more: its volume, say; Bayview Forever's options): a row each, under the mod's, in
+  // KEYS and TEMPLATE, a control of the key's kind: a whole number on a slider whose ends are the key's, a number that
+  // takes fractions in a number box, on/off a switch, a choice its values
+  const more = MODS.flatMap(m => 'setting' in m.control ? m.control.more ?? [] : []);
+  for (const key of more) {
+    assert.equal(UI.PANEL_KEYS.filter(k => k === key).length, 1, `${key}: one row`);
+    const c = UI.MOD_CONTROLS[key], d = S.keyDef(key);
+    assert.ok(c && d && S.DEFAULTS.has(key), `${key}: a control, a key in KEYS and TEMPLATE`);
+    if (d.kind === 'int') {
+      assert.equal(c.t, 'range', `${key}: a slider`);
+      const [lo, hi] = d.vals.split('..').map(Number);
+      assert.ok(c.min === lo && c.max === hi, `${key}: the slider's ends are the key's (${d.vals})`);
+    } else if (d.kind === 'num') assert.equal(c.t, 'num', `${key}: a number box`);
+    else if (d.kind === 'bool') assert.equal(c.t, 'switch', `${key}: a switch`);
+    else {
+      assert.ok(c.t === 'seg' || c.t === 'select', `${key}: a choice`);
+      assert.deepEqual(c.opts.map(([v]) => v).sort(), d.vals.split('|').sort(), `${key}: the values it takes`);
+    }
+  }
+  assert.deepEqual(Object.keys(UI.MOD_CONTROLS).sort(), [...settings, ...more].sort(), 'MOD_CONTROLS: the mods\' settings only');
   // the site's own settings keep their rows elsewhere: Music in drag and drift races in the Game tab
   assert.equal(UI.PANEL_KEYS.filter(k => k === 'race_music').length, 1, 'race_music: one row');
   assert.ok(!settings.includes('race_music'), 'race_music: not a mod\'s');

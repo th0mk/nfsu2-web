@@ -447,7 +447,13 @@ static int differ(const State *a, const State *b){
 /* thiscall profile (out, size): the payload, naming the stand-in for a car of
  * ours driven; what our slots are in it */
 void sub_0052a280_orig(CPU *c);
-void sub_0052a280(CPU *c){
+void vgarage_payload_begin(void);              /* bf_vgarage.c: a stored car shown in a slot is not the slot's own */
+void vgarage_payload_end(void);
+int vgarage_unsaved(void);
+uint32_t vgarage_select_msg(CPU *c, uint32_t scr, uint32_t msg);
+static void payload(CPU *c);
+void sub_0052a280(CPU *c){ vgarage_payload_begin(); payload(c); vgarage_payload_end(); }
+static void payload(CPU *c){
     uint32_t db = c->ecx + PR_CARS, out = MR32(c->esp + 4u), size = MR32(c->esp + 8u);
     int p = player_of(db);
     if (!g_blk || p < 0 || size < P_NAME + 32u){ sub_0052a280_orig(c); return; }
@@ -486,9 +492,12 @@ void sub_0052a450(CPU *c){ c->ecx += 0x10u; sub_0052a280(c); }
 void sub_0052a4c0_orig(CPU *c);
 void sub_0052a4c0(CPU *c){
     uint32_t kept = MR32(c->ecx + FEDB_KEPT);
+    vgarage_payload_begin();
     sub_0052a4c0_orig(c);
-    if ((c->eax & 0xffu) || !kept || !g_kept.on || !g_blk) return;
+    if (vgarage_unsaved()) c->eax = (c->eax & ~0xffu) | 1u;   /* stored cars changed: something to save */
+    if ((c->eax & 0xffu) || !kept || !g_kept.on || !g_blk){ vgarage_payload_end(); return; }
     state_of(c, CARS0 + (uint32_t)g_kept.p * CARS_SZ, &g_now);
+    vgarage_payload_end();
     if (differ(&g_now, &g_kept.st)){ c->eax = (c->eax & ~0xffu) | 1u; fprintf(stderr, "[garage] slots 6-10 changed: something to save\n"); }
 }
 
@@ -504,6 +513,8 @@ unsigned garage_profile_loads(void){ return g_p1_loads; }
  * waited for a save of it) */
 void mpcredit_profile_written(const char *path);
 void mpcredit_profile_deleted(const char *path);
+void bf_profile_written(const char *path);      /* bf.c: the bf_*.c parts' data beside the profile */
+void bf_profile_deleted(const char *path);
 void garage_profile_written(const char *path){
     static uint8_t f[PROFILE_SIZE];
     FILE *in = fopen(path, "rb");
@@ -511,6 +522,7 @@ void garage_profile_written(const char *path){
     size_t n = fread(f, 1, sizeof f, in); fclose(in);
     if (n != PROFILE_SIZE || memcmp(f, "20CM", 4)) return;
     mpcredit_profile_written(path);              /* (a whole profile on disk: a failed write leaves its wins waiting) */
+    bf_profile_written(path);
     const uint8_t *pl = f + PAYLOAD_AT;
     char name[33]; unsigned i = 0;
     for (; i < 32u && pl[P_NAME + i]; i++) name[i] = (char)pl[P_NAME + i];
@@ -543,6 +555,7 @@ void garage_profile_deleted(const char *path){
         if (remove(g) == 0) fprintf(stderr, "[garage] %s deleted with its profile\n", g);
     }
     mpcredit_profile_deleted(path);
+    bf_profile_deleted(path);
 }
 
 /* slots 6-10 of the profile named name whose car part has fingerprint fp, 1:
@@ -769,6 +782,7 @@ static void trade(CPU *c, uint32_t scr){
 /* UI_CareerCarSelect's messages (msg, a, b, c; ret 0x10): C or the help bar's Trade Car asks, Yes trades */
 void sub_004dfc50(CPU *c);
 static void select_msg(CPU *c){
+    MR32(c->esp + 4u) = vgarage_select_msg(c, c->ecx, MR32(c->esp + 4u));   /* bf_vgarage.c first: stored cars */
     uint32_t m = MR32(c->esp + 4u), scr = c->ecx;
     if (m == MSG_TRADE_YES || (m == MSG_BUTTON1 && trade_ask(c, scr))){
         if (m == MSG_TRADE_YES) trade(c, scr);

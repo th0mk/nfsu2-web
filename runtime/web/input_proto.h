@@ -60,7 +60,9 @@ enum {
     IM_TEXT_MAX = 34,     /* wasm: the game's text entry is up: the most characters it takes (0: none is up) */
     IM_TEXT_KIND = 35,    /* wasm: its kind, which characters it takes besides letters and digits */
     IM_TEXT_LEN = 36,     /* wasm: the characters in it now */
-    IM_PAD_WHEEL = 37,    /* page: 1 when the controller driving the pad is a steering wheel (under IM_PAD_SEQ) */
+    IM_PAD_WHEEL = 37,    /* page: bit 0 set when the controller driving the pad is a steering wheel (under IM_PAD_SEQ);
+                             bits 8-11 its H-shifter lever + 1 (0 none), bits 16-31 its clutch travel 0..65534 + 1 (0
+                             none), both only with the H-shifter of bf_hshifter.c on (gamepad.ts wheelWord) */
     IM_VIEW_ROLL = 38,    /* page: float bits, the phone's tilt the 3D view turns against (radians, + = the phone turned
                              clockwise; 0 = the game's view), the touch controls' level horizon */
     IM_MENU_SCALE = 39,   /* page: float bits, the menus' help bar buttons' and scroller arrows' size (1 = the game's

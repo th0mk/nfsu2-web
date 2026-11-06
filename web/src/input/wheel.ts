@@ -41,6 +41,7 @@ export interface WheelMap {
   gas: Pedal | null;
   brake: Pedal | null;
   handbrake?: Pedal;             // a handbrake lever on the wheel's base: pulled past HANDBRAKE_ON, the pad's X
+  clutch?: Pedal;                // the clutch pedal, where the model's descriptor has one (runtime/bf_hshifter.c reads it)
   buttons: number[];             // buttons[i]: the PAD_* button i is (-1: none)
   gears?: number[];              // the shifter's buttons: 1st to 6th gear, then reverse (-1: none); absent: no shifter
   dpad?: [number, number];       // a hat switch read as two axes, x and y (Linux), where known
@@ -296,8 +297,11 @@ export function guessMap(info: WheelInfo, axes0: readonly number[], nbuttons: nu
     if (!unread && (hatRest(axes0[steer]) || atEnd(axes0[steer]) || !atEnd(axes0[gas]) || !atEnd(axes0[brake]))) continue;
     // the handbrake's port only where it was seen let go, at an end (as a pedal)
     const hb = m!.handbrake !== undefined ? a.at[m!.handbrake] : undefined;
+    // the clutch's likewise (a G HUB's combined pedals report none of its own)
+    const cl = m!.clutch !== undefined ? a.at[m!.clutch] : undefined;
     return { ...base, steer, gas: pedal(gas), brake: pedal(brake),
       ...(hb !== undefined && atEnd(axes0[hb]) ? { handbrake: pedal(hb) } : {}),
+      ...(cl !== undefined && atEnd(axes0[cl]) ? { clutch: pedal(cl) } : {}),
       ...(p === 'kernel' && hat !== undefined ? { dpad: [hat, hat + 1] as [number, number] } : {}), placed: p };
   }
   const steer = Math.max(0, axes0.findIndex(v => !hatRest(v) && !atEnd(v)));
@@ -396,6 +400,11 @@ export function findHat(axes: readonly number[]): number {
 export function shifterOf(info: WheelInfo, nbuttons: number): number[] | null {
   const g = info.gears?.map(i => i < nbuttons ? i : -1);
   return g && g.some(i => i >= 0) ? g : null;
+}
+
+/** how far the clutch pedal is pressed (0 up .. 1 to the floor), or -1: no clutch known */
+export function clutchOf(axes: readonly number[], m: WheelMap): number {
+  return m.clutch ? pedalValue(m.clutch, axes) : -1;
 }
 
 /** the shifter's position: 1 to 6 a gear, 7 reverse, 0 neutral */

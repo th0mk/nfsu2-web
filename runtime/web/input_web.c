@@ -1025,7 +1025,11 @@ static void read_real(PadState *s){
         t.connected = (int)atomic_load_explicit(&MH(IM_PAD_CONNECTED), memory_order_relaxed);
         t.family = (int)atomic_load_explicit(&MH(IM_PAD_FAMILY), memory_order_relaxed);
         t.buttons = atomic_load_explicit(&MH(IM_PAD_BUTTONS), memory_order_relaxed);
-        t.wheel = atomic_load_explicit(&MH(IM_PAD_WHEEL), memory_order_relaxed) == 1u;
+        uint32_t w = atomic_load_explicit(&MH(IM_PAD_WHEEL), memory_order_relaxed);   /* gamepad.ts wheelWord */
+        t.wheel = (w & 1u) != 0;
+        t.lever = t.wheel ? (int)((w >> 8) & 15u) : 0;
+        t.has_clutch = t.wheel && (w >> 16) != 0u;
+        t.clutch = t.has_clutch ? (float)((w >> 16) - 1u) / 65534.f : 0.f;
         for (int i = 0; i < PAD_NAXES; i++){
             uint32_t v = atomic_load_explicit(&MH(IM_PAD_AXIS + i), memory_order_relaxed);
             memcpy(&t.axis[i], &v, 4);
@@ -1138,7 +1142,7 @@ int gamepad_read(PadState *s){
      * while a keyboard player still owns a split-screen seat. */
     void split_keyboard_device(PadState *);
     split_keyboard_device(s);
-    if (!syn && mprace_owns_input()){ int con = s->connected, wh = s->wheel; memset(s, 0, sizeof *s); s->connected = con; s->wheel = wh; }   /* (handle above) */
+    if (!syn && mprace_owns_input()){ int con = s->connected, wh = s->wheel; memset(s, 0, sizeof *s); s->connected = con; s->wheel = wh; }   /* (no lever or clutch either) */   /* (handle above) */
     /* a wheel's position is the steering, with no dead zone around the middle (its pedals keep the triggers') */
     if (!s->wheel) stick_dz(&s->axis[PAD_AXIS_LX], &s->axis[PAD_AXIS_LY], dz);
     stick_dz(&s->axis[PAD_AXIS_RX], &s->axis[PAD_AXIS_RY], dz);

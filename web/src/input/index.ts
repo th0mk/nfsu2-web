@@ -69,6 +69,9 @@ export interface InputOptions {
   passThrough?: string[];
   /** the page's own use of the controller: its menu and dialogs (gamepad.ts) */
   padPage?: PadPage;
+  /** Bayview Forever's H-shifter is on (settings.ini bf_features_hshifter): a wheel's shifter lever and clutch pedal go
+   *  to the game as they are (gamepad.ts mapWheel), not as shifts up and down */
+  hShifter?: boolean;
   log?: (s: string) => void;
 }
 export interface InputStats {
@@ -603,7 +606,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
       focus: (on) => { active = on; push(IEV_FOCUS, 0, 0, 0, [], on ? 1 : 0, IREASON_SCRIPT); },
     });
     if (opts.gamepads ?? true)
-      pads = new PadPoller(h, u8, base, () => dispatchEvent(new Event('nfsu2-gesture')), log, onUse, opts.padPage);
+      pads = new PadPoller(h, u8, base, () => dispatchEvent(new Event('nfsu2-gesture')), log, onUse, opts.padPage, opts.hShifter);
     void loadLayout();
     // the game starts active (CreateWindowEx posts the activation): tell it
     // if the page is not

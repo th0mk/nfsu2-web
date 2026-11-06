@@ -9,6 +9,7 @@
 // web/test/mods.test.mjs checks the entries against settings.ts, the repo's files and the runtime's mod credits.
 
 import { N } from './i18n';
+import { BF_PARTS } from './bf';
 
 /** the tab's sections, in this order */
 export type ModKind = 'screen' | 'shared' | 'rules' | 'car';
@@ -20,10 +21,11 @@ export type Online = 'mine' | 'you' | 'seen' | 'career' | 'offline';
  *  found out about the game (addresses, values), written anew (findings) */
 export type Uses = 'data' | 'code' | 'findings';
 
-/** setting: a settings.ini key (settings.ts KEYS) and the values that turn the mod on (none: a switch, on); always: no
+/** setting: a settings.ini key (settings.ts KEYS) and the values that turn the mod on (none: a switch, on), more: settings
+ *  of its own, each a row under the mod's (settings-ui.ts MOD_MORE: its volume, say); always: no
  *  setting on the page; elsewhere: settings of its own elsewhere on the page (keys); menu: in the game's own menus */
 export type ModControl =
-  | { setting: string; values?: readonly string[] }
+  | { setting: string; values?: readonly string[]; more?: readonly string[] }
   | { always: true }
   | { elsewhere: Place; keys: readonly string[] }
   | { menu: Place };
@@ -65,6 +67,8 @@ export interface Mod {
   files: readonly string[];
   /** not built yet: its files and its setting may not exist */
   pending?: true;
+  /** the mod has no public page or source of its own (its files came from its author): no links */
+  unpublished?: true;
 }
 
 export const KINDS: readonly { kind: ModKind; title: string }[] = [
@@ -218,6 +222,12 @@ export const MODS: readonly Mod[] = [
     details: 'In the original game a stage\'s DVD cover shoots come only once your car\'s parts rate enough stars, and pay more for more stars. On, the rating is the stage\'s: 0, 1, 3, 5.5 and 8 stars in stages 0 to 4, 10 from stage 5, so the stage\'s cover shoots come and pay by it. The shops show no Visual Rating box.',
     online: 'career', files: ['runtime/visualrep.c', 'licenses/novisualrep.txt'],
   },
+  // ---- Game rules, Cars: Bayview Forever's parts (bf.ts), a row each with its options under it
+  ...(['rules', 'car'] as const).flatMap(kind => BF_PARTS.filter(p => p.kind === kind).map((p): Mod => ({
+    id: p.id, name: p.name, mod: 'Bayview Forever', authors: [{ name: 'Broski280' }], links: {}, unpublished: true,
+    kind: p.kind, uses: 'findings', control: { setting: p.key, ...(p.opts.length ? { more: p.opts.map(o => o.key) } : {}) },
+    line: p.line, details: p.details, online: p.online, files: p.files,
+  }))),
 ];
 
 /** one of our changes: its name, its key ('': none) and what it does, in one short line */
