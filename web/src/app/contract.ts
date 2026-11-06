@@ -186,6 +186,7 @@ export interface NetSubsystem extends Subsystem {
   /** quick chat: the player says phrase p (quickchat.ts; race: in a race between players); false: the game has no free
    *  roam (race: no LAN play) */
   say?(p: number, race?: boolean): boolean;
+  meetRace?(seat: number, action: number): boolean;
   /** free roam's friends: a message to the server (friends.ts); false: not connected now */
   friend?(m: Record<string, unknown>): boolean;
   /** free roam's crews, changed while the game runs (the page menu): their hashes, in the player's order, and their

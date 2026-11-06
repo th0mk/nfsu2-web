@@ -275,3 +275,5 @@ int roam_plat_parse_peers(const char *list, int test_mode, uint16_t defport, uin
     }
     return n;
 }
+
+int roam_plat_meet_race_pick(int seat){(void)seat;return 0;}

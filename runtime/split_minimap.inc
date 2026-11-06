@@ -17,7 +17,10 @@ static const uint32_t mm_colors[6][4] = {
     {60,220,60,255}, {60,60,240,255}, {230,90,40,255},
     {40,210,230,255}, {255,0,160,255}, {220,220,0,255}
 };
+int roam_meet_race_marker_seat(uint32_t object);
+void roam_meet_race_pulse_draw(CPU *c,uint32_t object);
 static int mm_kind(uint32_t obj){
+    if(roam_meet_race_marker_seat(obj)>=0)return 2;
     uint32_t h = MR32(obj + 0x10);
     for (unsigned i = 0; i < 140; ++i) if (h == split_minimap_hashes[i]) return i < 4 ? 1 : 2;
     return 0;
@@ -150,11 +153,15 @@ static int mm_near(uint32_t obj){
 static void mm_render(CPU *c, const CPU *before, uint32_t obj){
     *c = *before; MR32(c->esp+4) = obj;
     MR32(obj+0x1c) |= 0x400000u;
+    roam_meet_race_pulse_draw(c,obj);
     sub_005370a0_orig(c);
 }
 void sub_005370a0(CPU *c){
     uint32_t obj = MR32(c->esp+4);
-    if (!split_racing() || !mm_players || mm_target >= 0 || !obj){ sub_005370a0_orig(c); return; }
+    roam_meet_race_pulse_draw(c,obj);
+    /* The full world map shares minimap object hashes, but is not a per-seat
+     * HUD. Let the native renderer draw it while a menu owns the screen. */
+    if (!split_racing() || !mm_players || mm_target >= 0 || !obj || (split_coop_hud() && !coop_driving())){ sub_005370a0_orig(c); return; }
     int at = -1, marker = -1;
     for (unsigned i = 0; i < mm_count; ++i) if (mm_obj[i].obj == obj) at = i;
     for (unsigned i = 0; i < mm_players; ++i) if (mm_marker[i] == obj) marker = i;
@@ -182,7 +189,8 @@ void sub_005370a0(CPU *c){
         int map = split_coop_hud() && MR32(obj + 0x10) == split_minimap_hashes[0];
         for (unsigned k = 0; k < mm_players; ++k){
             mm_apply(k); mm_target = k;
-            if (!mm_obj[at].marker || mm_near(obj)) mm_render(c, &before, obj);
+            int race_seat=roam_meet_race_marker_seat(obj);
+            if ((race_seat<0 || race_seat==(int)k) && (!mm_obj[at].marker || mm_near(obj))) mm_render(c, &before, obj);
             if (map) for (unsigned n = 1; n <= mm_players; ++n){     /* the other player's arrow, then this one's */
                 uint32_t m = mm_marker[(k + n) % mm_players];
                 if (m && !(MR32(m+0x1c) & 1u) && mm_near(m)) mm_render(c, &before, m);

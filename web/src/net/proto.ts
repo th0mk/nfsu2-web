@@ -349,3 +349,5 @@ function roamFrame(kind: number, body: Uint8Array, src: number, own: number, bca
   roamDatagram(f, len, kind, body);
   return f.buffer;
 }
+
+export const W_MEET_RACE = 126; // independent commands for two local seats

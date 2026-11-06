@@ -165,7 +165,7 @@ typedef struct {
                                                                   a 0 byte (none: no room), the words little-endian;
                                                                   room_gen +1 a change (0: not changed), written
                                                                   after the name (roam_plat_room) */
-    uint32_t pad[2];                                           /* 504 .. 511 */
+    uint32_t meet_race[2];                                     /* 504: independent seat commands: sequence<<8 | action */
 } net_mailbox;
 
 typedef struct {

@@ -1311,6 +1311,7 @@ int rc_set_room(rc_session *s, uint32_t room){
         n += s->peer[i].state == RC_PS_EST;
         drop_peer(s, i, "the room changed", RC_DGONE_SAID);
     }
+    memset(&s->race,0,sizeof s->race);s->race_action=0;s->race_waiting=0;s->race_req++;s->race_gen++;
     s->map_n = 0; s->map_total = 0; s->map_held = 0; s->map_gen++;
     s->near_n = 0; s->near_total = 0; s->near_held = 0; s->near_gen++;
     s->lobbies_n = 0; s->lobbies_gen++;
@@ -1506,6 +1507,7 @@ static int rate_ok(rc_peer *p, int len, int64_t now){
     p->rl_n++; p->rl_bytes += len;
     return p->rl_n <= RL_DGRAMS && p->rl_bytes <= RL_BYTES;
 }
+#include "meet_race_core.inc"
 void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, int len, int64_t now){
     s->rx++;
     if (!allowed(s, ip)){
@@ -1514,6 +1516,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         int k = find(s, ip, port);
         if (k < 0 || !s->peer[k].configured){ s->rx_policy++; return; }
     }
+    if(len>=4 && !memcmp(buf,"MRP1",4)){if(s->conf.hub_ip && ip==s->conf.hub_ip && port==s->conf.hub_port)race_answer(s,buf,len,now);return;}
     rc_msg m; int e = rc_decode(buf, len, &m);
     if (e == RC_E_VERSION){
         /* another protocol version: nothing is answered, but the log says
@@ -1759,6 +1762,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
 void rc_tick(rc_session *s, int64_t now){
     if (s->closed) return;
     int hub = hub_mode(s, now);
+    race_tick(s, hub, now);
     if (s->conf.hub_ip){
         if (!s->hub_since) s->hub_since = now ? now : 1;
         if (now - s->hub_hello_tx >= T_HUB_HELLO){ rc_msg m; fill_hello(s, &m, 0, 1); tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m); s->hub_hello_tx = now; }
@@ -1919,5 +1923,6 @@ void rc_shutdown(rc_session *s, uint8_t reason){
             rc_msg m; hdr(s, &m, RC_MSG_BYE); m.u.bye.reason = reason; tx(s, p, &m);
         }
     if (s->conf.hub_ip){ rc_msg m; hdr(s, &m, RC_MSG_BYE); m.u.bye.reason = reason; tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m); }
+    memset(&s->race,0,sizeof s->race);s->race_action=0;s->race_waiting=0;s->race_req++;s->race_gen++;
     s->closed = 1;
 }

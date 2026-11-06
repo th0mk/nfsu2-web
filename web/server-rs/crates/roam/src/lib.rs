@@ -124,6 +124,11 @@
 //!   snapshot too, so a slice near its limit gets fewer links before its players get them late.
 
 mod hub;
+pub mod meet_races;
+pub mod meet_rewards;
+pub mod meet_roads;
+mod meets;
+pub use hub::meet_race::Config as MeetRaceConfig;
 mod jumps;
 mod links;
 mod results;
@@ -157,6 +162,7 @@ pub const CREWS: usize = wire::CREWS;
 /// 0.5 s).  A value that is not a positive number keeps its default.
 #[derive(Clone, Debug)]
 pub struct RoamOptions {
+    pub meet_races: Option<MeetRaceConfig>,
     /// the most links a player has (what its HELLO asks for under it; 48 at most for a core of versions 10 to 13, 32 for
     /// one before)
     pub degree: usize,
@@ -238,6 +244,7 @@ pub struct RoamOptions {
 impl Default for RoamOptions {
     fn default() -> Self {
         RoamOptions {
+            meet_races: None,
             degree: 64,
             tick_ms: 500,
             stale_ms: 60_000.0,
@@ -694,3 +701,9 @@ mod tests {
         t.join().unwrap();
     }
 }
+
+#[cfg(test)]
+extern crate self as nfsu2_roam;
+#[cfg(test)]
+#[path = "../tests/kit/mod.rs"]
+mod race_test_kit;

@@ -71,6 +71,7 @@ const SPEED = +opt('speed', 15), CAR = opt('car', '350Z'), STAGGER = +opt('stagg
 const STATES = +opt('states', 1), SPREAD = +opt('spread', 20), BUNDLE = argv.includes('--bundle'), FIRST = +opt('first', 0);
 const LOOP_MS = +opt('loop-ms', 0), HOLD = +opt('hold', 0), LINKS = +opt('links', 0);
 const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim() : p)(opt('parts', ''));
+const MEET_RACERS = +opt('meet-racers', 0);
 const RACE = (opt('race', '').match(/^(\d+)-(\d+):(\d+):(\d+)$/) ?? []).slice(1).map(Number);
 const PAUSED = (opt('paused', '').match(/^(\d+)-(\d+)$/) ?? []).slice(1).map(Number), PREFIX = opt('prefix', 'Bot');
 const FLAGS = opt('flags', '').split(',').filter(Boolean).map(f => f === '-' ? '' : f.toLowerCase());
@@ -343,7 +344,18 @@ class Bot {
     }
     if (paused && !this.paused) { this.paused = true; this.x.crowd_status(5); }
     if (racing || !snap) { this.x.crowd_wait(nowUs()); this.flush(); return; }
-    const { p, v, h, status } = track(t, this.i);
+    let { p, v, h, status } = track(t, this.i);
+    if(this.i-FIRST<MEET_RACERS){
+      this.x.crowd_meet_race();
+      if(this.x.crowd_meet_phase()<3)this.meetPosition=null;
+      if(this.x.crowd_meet_phase()===3 || this.x.crowd_meet_phase()===4){
+        const target=[0,1,2].map(k=>this.x.crowd_meet_destination(k));
+        const old=this.meetPosition??p, delta=target.map((x,k)=>x-old[k]),distance=Math.hypot(...delta);
+        const step=Math.min(distance,Math.max(0,t-(this.meetT??t))*25);
+        p=old.map((x,k)=>x+(distance?delta[k]*step/distance:0));this.meetPosition=p;
+      }
+      this.meetT=t;
+    }
     // (a meet's --fidget: a shop or the pause menu a while; in a shop the game sends no car)
     const want = status ?? 2;
     if (want !== (this.tstatus ?? 2)) { this.tstatus = want; this.x.crowd_status(want); }

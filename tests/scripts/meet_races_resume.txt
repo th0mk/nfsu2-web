@@ -1,0 +1,5 @@
+0     roam fe2roam 14000
++0    roam smsauto on
++0    roam waitroam 3000
++180  teleport ${MEET_X} ${MEET_Y} ${MEET_Z} ${MEET_HEADING}
++0    log MEET_RACES_READY

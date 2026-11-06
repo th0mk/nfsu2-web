@@ -84,6 +84,7 @@ int      roam_plat_solid(void);
  * ring is full).  With the session lock held */
 int      roam_plat_quickchat(void);
 int      roam_plat_say_pick(void);
+int      roam_plat_meet_race_pick(int seat);
 int      roam_plat_said(const char *json);
 /* front bumpers (roam_game.c bump_*): the player's car and a friend's touched
  * nose to nose for 3 s, or parted after that, as a JSON object for the page,

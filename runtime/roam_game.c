@@ -880,7 +880,9 @@ static int8_t g_skin_ok[NSLOT + SKIN_GAME];   /* paint slot n: 1 its textures ar
 #if FLAGS
 static uint32_t flag_texinfo(uint32_t h);
 #endif
+static uint32_t g_mr_finish_ti,g_mr_finish_hash;
 uint32_t roam_game_texture(uint32_t h){
+    if(g_mr_finish_ti && h==g_mr_finish_hash)return g_mr_finish_ti;
     if (!(g_texbits[(h & 0x1fffu) >> 3] & (1u << (h & 7u)))) return 0;
     for (int i = 0; i < g_ntex; i++) if (g_tex[i].hash == h) return g_tex[i].ti;
 #if FLAGS
@@ -3400,6 +3402,7 @@ static void mp_map_labels(CPU *c, uint32_t map);
 static uint32_t meet_icon(CPU *c, uint32_t pkg);                                        /* car meets on the map */
 static int meet_update(CPU *c, uint32_t map, uint32_t pkg, uint32_t pk, uint32_t w, int64_t host);
 static void meet_map_labels(CPU *c, uint32_t map);
+static int mr_map(CPU *c,uint32_t map,uint32_t pkg,uint32_t pk);
 static void meet_select(CPU *c, uint32_t scr, uint32_t map);
 static void meet_gps(CPU *c);
 static int g_map_plain;                /* the hub answers no map question with flags (one before RC_MAPREQ_PARKED): none asked */
@@ -3976,6 +3979,7 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
     if (n >= 0) place |= wm_others(c, map, pkg, pk, n, total, host) | wm_step(host);
 #if MPRACES
     place |= meet_update(c, map, pkg, pk, w, host);
+    place |= mr_map(c,map,pkg,pk);
 #endif
     if (place) gcall0(c, FN_WM_PLACE, map);
 #if MPRACES
@@ -8869,6 +8873,13 @@ static void counts_log(int64_t host){
          parked, g_npv, listed, waiting, near, near_shown, mid, mid_shown, o60, o150);
 }
 
+#if MPRACES
+#include "meet_race_game.inc"
+#else
+int roam_meet_race_marker_seat(uint32_t object){(void)object;return -1;}
+void roam_meet_race_pulse_draw(CPU *c,uint32_t object){(void)c;(void)object;}
+#endif
+
 /* a different world: every slot of the old one is gone */
 static void world_changed(CPU *c, uint32_t w){
     if (g_world_seen){
@@ -9251,7 +9262,11 @@ void roam_game_event2(int ev, int peer, const char *text){
 }
 /* walls.c's jump (a car past the career's walls back on the roads it can reach): friends' cars are ghosts until
  * they are clear of it, as after car_rescue */
-void roam_game_jumped(void){ if (g_inited && O.on) ghost_all(); }
+void roam_game_jumped(void){ if (g_inited && O.on) ghost_all();
+#if MPRACES
+    g_mr_jump++;
+#endif
+}
 
 /* "mp partswatch on|off" (a test aid): every frame, the front end's and the
  * loading screens' too, the player's car's models from the shared packs as
@@ -9678,6 +9693,7 @@ void roam_game_frame(CPU *c){
 #if MPRACES
     mp_frame(c, host, in_roam, world_runs, mpfrom, mpin, nmpin);
     mp_panel(host, in_roam);
+    mr_frame(c,in_roam,host);
 #endif
     g_engage = in_roam && world_runs && engage_ours();
     sounds_update(have_ls ? &ls : 0, world_runs);
@@ -9829,6 +9845,15 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
     sscanf(args, "%31s %n", sub, &used);
     sscanf(args + used, "%199s %63s", a1, a2);
     long f = rh_frame();
+#if MPRACES
+    if (!strcasecmp(sub,"meetrace")){
+        int seat=atoi(a2)==2?1:0;roam_plat_lock();rc_session *s=seat?&g_c2.s:&g_s;
+        if(!strcasecmp(a1,"join"))rc_meet_race_command(s,1);
+        if(!strcasecmp(a1,"leave"))rc_meet_race_command(s,2);
+        rlog("[meet-race] seat %d event %llu phase %u mine %u racers %u target %.1f %.1f %.1f\n",seat+1,(unsigned long long)s->race.id,s->race.phase,s->race.mine,s->race.n,(double)s->race.destination[0],(double)s->race.destination[1],(double)s->race.destination[2]);
+        roam_plat_unlock();return 1;
+    }
+#endif
     if (!strcasecmp(sub, "traffic")){
         /* "mp traffic [racer] [jump [racer] M [TURN [LEFT]] | go V | outrun]" (free roam with others on or off): the game's cars
          * out (traffic, AI racers: ghost_pair's), the nearest, the contacts Ghost mode Everything let through and their

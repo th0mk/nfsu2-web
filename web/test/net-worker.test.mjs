@@ -105,6 +105,13 @@ test('the page\'s settings reach the mailbox through the worker, and its state c
   await tick(20);
   assert.equal(i32[P.W_SAY] & 0xff, 7);
   assert.equal(i32[P.W_SAY] >>> 8, 1, 'the first pick');
+  assert.equal(link.meetRace(0,1),true);
+  assert.equal(link.meetRace(1,2),true);
+  await tick(20);
+  assert.equal(i32[P.W_MEET_RACE],257,'first seat joins through the worker');
+  assert.equal(i32[P.W_MEET_RACE+1],258,'second seat leaves independently');
+  link.meetRace(0,2);await tick(20);
+  assert.equal(i32[P.W_MEET_RACE],514,'next command changes the sequence');
   // a room changed while it runs: its count moves on
   assert.equal(link.setRoom('Red'), true);
   await tick(20);

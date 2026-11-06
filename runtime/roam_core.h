@@ -674,7 +674,18 @@ typedef struct {
     rc_interp mo;                  /* motion: jitter buffer and smoothing */
 } rc_peer;
 
+typedef struct { uint64_t seat; char name[24]; uint8_t outcome,place; uint32_t elapsed_ms,award; } rc_meet_racer;
 typedef struct {
+    uint64_t epoch,id,server_ms,go_ms,close_ms,seat;
+    int64_t received_us;
+    uint8_t phase,error,n,mine,receipt[24]; uint32_t amount;
+    float start[3],destination[3]; rc_meet_racer racer[16];
+} rc_meet_race;
+typedef struct {
+    rc_meet_race race;
+    uint32_t race_req,race_gen,race_jump;
+    int64_t race_asked_us; uint64_t race_target;
+    uint8_t race_action,race_eligible,race_waiting,race_ack[24]; char race_profile[32];
     rc_config conf;
     rc_io     io;
     rc_peer   peer[RC_TABLE];
@@ -827,5 +838,7 @@ int  rc_send_say(rc_session *s, uint8_t phrase, uint8_t seq, uint8_t stay);
 /* the oldest SAY not taken yet; 1 when there was one */
 int  rc_take_say(rc_session *s, uint32_t *from, uint8_t *phrase, uint8_t *seq, uint8_t *stay);
 const char *rc_status_name(int st);
+void rc_meet_race_command(rc_session *,int action);
+void rc_meet_race_ack(rc_session *,const uint8_t receipt[24]);
 
 #endif

@@ -1,3 +1,4 @@
+import { MeetRaces } from "./meet-races";
 // The start page and everything around a game run: the checks (only a
 // problem is shown), loading the module with progress, the settings, saves
 // and controls on the page, Play -> the game (in the window, or full screen
@@ -974,7 +975,8 @@ const PAD_PAGE: PadPage = {
   click: () => quickChat.click(),
   // quick chat's stick click (sitekeys.ts: the right one unless the player picked the left or none)
   chatButton: () => { const b = siteButton('button_chat'); return b === 'ls' ? PAD_LS : b === 'rs' ? PAD_RS : -1; },
-  capture: (s, pressed) => photo.pad(s, pressed),
+  capture: (s, pressed) => photo.pad(s, pressed) || meetRaces.pad(s, pressed),
+  captureLocal: (s, pressed, device) => meetRaces.localPad(s, pressed, device),
 };
 
 let awake: (() => void) | null = null;   // the running game's Wake Lock (display.ts keepScreenOn)
@@ -1345,7 +1347,9 @@ function msgHint(ms: number | null, text = t('Write back')) {
   msgHintTimer = window.setTimeout(() => h.remove(), ms);
 }
 /** free roam: the race lobby's panel, or the cover over the trip to the race and back (lobby.ts) */
+const meetRaces = new MeetRaces(() => session, $("#stage"));
 function lobby(json: string) {
+  if(json.includes('"meetRace"')){meetRaces.show(json);return;}
   placeLobby();
   lobbyPanel.show(json);
 }

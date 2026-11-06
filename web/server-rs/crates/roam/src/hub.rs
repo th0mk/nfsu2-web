@@ -19,6 +19,9 @@ use std::sync::{Arc, Mutex};
 use crate::links::{
     Cand, Found, Grid, Heap, Level, Near, Place, WALK_AHEAD, WALK_SOON, WALK_VIEW, before, distance, order_key, sort_stable, square, weigh,
 };
+use crate::meets;
+#[path = "meet_race_hub.rs"]
+pub(crate) mod meet_race;
 use crate::results::{self, Results};
 use crate::watch::{self, Seen, Watch};
 use crate::wire::{self, F_DATA, KIND_UDP, Msg};
@@ -848,6 +851,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         near_gap_ms: f(o.near_gap_ms, d.near_gap_ms),
         link_threads: n(o.link_threads, d.link_threads).min(64),
         deny: o.deny,
+        meet_races: o.meet_races,
     }
 }
 
@@ -1073,6 +1077,10 @@ pub struct Hub {
     /// the near links gone (`OneWay::gone`) as of the last `[roam] cars within ... that went` line, and when it was
     near_said: [u64; GONE_N],
     near_said_at: f64,
+    meets: HashMap<u32, Vec<meets::Meet>>,
+    meet_race: Option<meet_race::Service>,
+    next_meet_id: u32,
+    meets_next: f64,
     /// when each virtual address's next world map is answered at the soonest (map_gap_ms), kept past its players: a BYE and a HELLO (or
     /// another port) make a new player, and when a player's own time was the limit, a new player's first answer came
     /// at once (the second security audit, 2026-10-22: a map walks every player on the hub's one thread, and a few
@@ -1118,6 +1126,13 @@ impl Hub {
         id: u32,
     ) -> Self {
         let o = sanitize(o);
+        let meet_race = o.meet_races.clone().and_then(|c| match meet_race::Service::new(c) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                log(&format!("[meet-race] disabled: {e}"));
+                None
+            }
+        });
         Hub {
             cap: o.degree,
             cap_at: f64::NEG_INFINITY,
@@ -1153,6 +1168,10 @@ impl Hub {
             joined_pruned: 0.0,
             near_said: [0; GONE_N],
             near_said_at: 0.0,
+            meets: HashMap::new(),
+            meet_race,
+            next_meet_id: 0,
+            meets_next: 0.0,
             map_at: IdMap::default(),
             maps: IdMap::default(),
             lobbies_at: IdMap::default(),
@@ -1321,6 +1340,9 @@ impl Hub {
     fn drop_slots(&mut self, slots: &[u32], keep: bool) {
         self.dead_at.resize(self.slots.len(), false);
         for &s in slots {
+            if let Some(p) = self.player(s) {
+                self.race_gone(p.key());
+            }
             if self.remove(s, keep) {
                 self.dead_at[s as usize] = true;
                 self.dead.push(s);
@@ -1368,6 +1390,10 @@ impl Hub {
     /// of its own.  A race's results count the clients that report its winner (results.rs, its clean wins).
     pub fn frame_of(&mut self, from: u32, data: &[u8], owner: Option<&Arc<str>>, client: Option<&Arc<str>>) {
         self.st.frames += 1;
+        if data.len() == F_DATA + 84 && data[0] == KIND_UDP && &data[F_DATA..F_DATA + 4] == b"MRQ1" {
+            self.race_request(from, u16::from_be_bytes([data[12], data[13]]), &data[F_DATA..], owner);
+            return;
+        }
         if data.len() < F_DATA + wire::HDR + wire::CRC || data[0] != KIND_UDP {
             self.st.bad += 1;
             return;
@@ -1551,6 +1577,9 @@ impl Hub {
                 res = Some((p.id, r));
             }
             _ => {}
+        }
+        if matches!(m, Msg::Snap { .. }) {
+            self.race_snapshot(slot);
         }
         if let Some((op, lobby, race)) = heard {
             self.lobby_heard(slot, op, lobby, race, now);
@@ -2108,6 +2137,32 @@ impl Hub {
         (self.send)(vip, Bytes::from(f));
     }
 
+    // Called by the timer, never by requests. One scan of the hub, then one grid per room.
+    fn update_meets(&mut self, now: f64) {
+        if self.meet_race.is_none() || now < self.meets_next {
+            return;
+        }
+        self.meets_next = now + meets::EVERY_MS;
+        let mut rooms: HashMap<u32, Vec<[f64; 3]>> = HashMap::new();
+        for &slot in &self.order {
+            let Some(p) = self.player(slot) else { continue };
+            if !self.map_shown(slot, p, now) || now - p.stay_at < PARKED_MS || p.v[0] * p.v[0] + p.v[1] * p.v[1] >= 16.0 {
+                continue;
+            }
+            let Some(at) = p.p else { continue };
+            if (at[0] - 1695.3).powi(2) + (at[1] + 883.6).powi(2) < 25.0 {
+                continue;
+            }
+            rooms.entry(p.room).or_default().push(at);
+        }
+        self.meets = rooms
+            .into_iter()
+            .filter_map(|(room, p)| {
+                let m = meets::update(&p, self.meets.get(&room).map(Vec::as_slice).unwrap_or(&[]), &mut self.next_meet_id);
+                (!m.is_empty()).then_some((room, m))
+            })
+            .collect();
+    }
     /// browser `vip` left the switch
     pub fn peer_gone(&mut self, vip: u32) {
         self.blocks.remove(&vip);
@@ -2126,6 +2181,7 @@ impl Hub {
         let mut b = Block::new(&names);
         b.owners_of(self.claims.as_deref(), (self.now)());
         self.blocks.insert(vip, b);
+        self.race_block_changed(vip);
     }
 
     /// Browser `vip`'s keyphrase (`me`) has these friends (their keyphrases: the server reads its friends list when its
@@ -2335,6 +2391,8 @@ impl Hub {
         self.lobbies_at.retain(|_, t| now < *t);
         self.maps.retain(|_, m| now - m.at < MAP_KEEP_MS);
         self.map_cands.clear();
+        self.update_meets(now);
+        self.race_tick();
         self.near_at.retain(|_, t| now < *t);
         self.nears.retain(|_, m| now - m.at < MAP_KEEP_MS);
         self.near_grid = None;
@@ -2558,7 +2616,11 @@ impl Hub {
                         Some(Some(q)) => far_code(p, q, now, look_s),
                         _ => 1,
                     };
-                    self.st.tx_only[match code { 1 => 0, 4 => 1, _ => 2 }] += 1;
+                    self.st.tx_only[match code {
+                        1 => 0,
+                        4 => 1,
+                        _ => 2,
+                    }] += 1;
                     if p.hints && code > 1 && k < wire::LIST_MAX {
                         if far == 0 {
                             s.hints.push(0);

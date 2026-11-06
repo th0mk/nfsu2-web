@@ -176,7 +176,40 @@ pub async fn run(o: Options, cores: usize) {
     let m = marker.clone();
     let roam_log = Arc::new(move |line: &str| log::line(m.tag(line).as_deref().unwrap_or(line)));
     // (a player under a name taken away plays alone, as under another's claimed name)
-    let roam_options = RoamOptions { deny: Some(bans.deny()), ..RoamOptions::default() };
+    // Meet races are available in every room whenever the free-roam hub runs.
+    let meet_races = o.roam_hub.then(|| {
+        let dir = Path::new(&o.data).join("TRACKS/ROUTESL4RA");
+        let routes = std::fs::read(dir.join("RoutesFreeRoam.bin")).unwrap_or_else(|e| die(&format!("meet roads: {e}")));
+        let paths = std::fs::read(dir.join("PathsFreeRoam.bin")).unwrap_or_else(|e| die(&format!("meet barriers: {e}")));
+        let roads = nfsu2_roam::meet_roads::Roads::parse(&routes, &paths).unwrap_or_else(|e| die(&format!("meet roads: {}", e.0)));
+        let test_period_ms = std::env::var("NFSU2_MEET_RACE_TEST_PERIOD_MS").ok().map(|v| {
+            if !o.dev {
+                die("NFSU2_MEET_RACE_TEST_PERIOD_MS requires --dev");
+            }
+            let n = v.parse::<u64>().unwrap_or_else(|_| die("invalid meet-race test period"));
+            if !(10_000..=300_000).contains(&n) {
+                die("meet-race test period must be 10000..300000 ms");
+            }
+            n
+        });
+        let test_finish_offset = std::env::var("NFSU2_MEET_RACE_TEST_FINISH_OFFSET").ok().map(|v| {
+            if !o.dev {
+                die("NFSU2_MEET_RACE_TEST_FINISH_OFFSET requires --dev");
+            }
+            let values: Vec<f64> = v.split(',').map(|s| s.parse().unwrap_or_else(|_| die("invalid test finish offset"))).collect();
+            if values.len() != 3 || values.iter().any(|v| !v.is_finite() || v.abs() > 1000.) || values[0].hypot(values[1]) < 100. {
+                die("test finish offset requires x,y,z, 100..1000m away");
+            }
+            [values[0], values[1], values[2]]
+        });
+        nfsu2_roam::MeetRaceConfig {
+            roads: Arc::new(roads),
+            state: Path::new(&o.state).join("meet-rewards"),
+            test_period_ms,
+            test_finish_offset,
+        }
+    });
+    let roam_options = RoamOptions { deny: Some(bans.deny()), meet_races, ..RoamOptions::default() };
     let roam = o.roam_hub.then(|| RoamHub::spawn_with(roam_options, roam_log, claims.clone()));
     // keyphrase saves: a folder in the state folder (none with --vault-gb 0)
     let vault = (o.vault_gb > 0.0).then(|| {

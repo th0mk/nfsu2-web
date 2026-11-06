@@ -72,3 +72,17 @@ test('all six states occupy independent records; disconnect and page dialogs cle
   writer.poll(pads, mapStandard, true);
   for (let seat = 0; seat < 6; seat++) assert.equal(words[offset(seat, P.IM_LOCAL_BUTTONS)], 0);
 });
+
+test('reserved co-op controller routes overlay commands by native slot, not browser index', () => {
+  const buffer=new SharedArrayBuffer(P.IM_BYTES),writer=new LocalPadWriter(buffer,0),words=new Int32Array(buffer);
+  const g=pad(7),offset=P.IM_OFF_LOCAL_PADS/4;
+  start(g,true);writer.poll([g],mapStandard);start(g,false);writer.poll([g],mapStandard);
+  words[offset+P.IM_LOCAL_COOP]=1;
+  g.buttons[0]={pressed:true,value:1};g.buttons[4]={pressed:true,value:1};g.buttons[5]={pressed:true,value:1};
+  const calls=[];
+  writer.poll([g],mapStandard,false,(s,pressed,seat)=>{calls.push({index:s.index,pressed,seat});return true;});
+  assert.deepEqual(calls,[{index:7,pressed:49,seat:0}]);
+  assert.equal(words[offset+P.IM_LOCAL_BUTTONS],0,'command does not also drive the car');
+  writer.poll([g],mapStandard,false,(_s,pressed)=>{assert.equal(pressed,0);return false;});
+  writer.poll([g],mapStandard,true,()=>{assert.fail('dialogs own input');});
+});
