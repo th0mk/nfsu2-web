@@ -197,6 +197,50 @@ test('input: with the event ring taken by the game (ns* input) a quit cannot rea
   i.detach();
 });
 
+// the mouse events a run of touches made: [type, button] of the downs and ups
+const mouseEvents = (proc, ptr, h) => {
+  const u8 = new Uint8Array(proc.memory.buffer), i32 = new Int32Array(proc.memory.buffer), out = [];
+  for (let i = 0; i < Atomics.load(h, IP.IM_EV_W); i++) {
+    const o = ptr + IP.IM_OFF_EV + i * 16, t = u8[o];
+    if (t === IP.IEV_MOUSE_DOWN || t === IP.IEV_MOUSE_UP) out.push([t === IP.IEV_MOUSE_DOWN ? 'down' : 'up', i32[(o + 8) >>> 2]]);
+  }
+  return out;
+};
+const touch = (type, pointerId, isPrimary, x = 50) => ({ type, pointerType: 'touch', pointerId, isPrimary, clientX: x, clientY: 50,
+  buttons: 0, altKey: false, ctrlKey: false, shiftKey: false, isTrusted: true, preventDefault() {} });
+
+test('input: two fingers turn the car (the middle button) whichever finger the browser says came first', async () => {
+  for (const order of [['primary first', true], ['the other first (an iPhone)', false]]) {
+    const proc = fakeProc(), ptr = 8192, h = mailbox(proc, ptr), logs = [], el = Object.assign(element(), { focus() {} });
+    const i = attachInput(proc, el, { log: s => logs.push(s), gamepads: false });
+    proc.register(3, ptr, 65536);
+    await tick();
+    const [a, b] = order[1] ? [[1, true], [2, false]] : [[2, false], [1, true]];
+    el.dispatchEvent(touch('pointerdown', a[0], a[1], 40));
+    el.dispatchEvent(touch('pointerdown', b[0], b[1], 60));
+    el.dispatchEvent(touch('pointermove', 2, false, 80));
+    el.dispatchEvent(touch('pointerup', 2, false, 80));
+    const m = mouseEvents(proc, ptr, h);
+    assert.ok(m.some(([t, btn]) => t === 'down' && btn === 2), `${order[0]}: the middle button went down: ${JSON.stringify(m)}`);
+    assert.ok(m.some(([t, btn]) => t === 'up' && btn === 2), `${order[0]}: and up`);
+    assert.ok(logs.some(l => /\[touch\] a two-finger turn: 1 moves, ended by a finger lifted/.test(l)), logs.join('\n'));
+    i.detach();
+  }
+});
+
+test('input: a browser that cancels a two-finger touch unseen leaves no button held for the next one', async () => {
+  const proc = fakeProc(), ptr = 8192, h = mailbox(proc, ptr), el = Object.assign(element(), { focus() {} });
+  const i = attachInput(proc, el, { log: () => {}, gamepads: false });
+  proc.register(3, ptr, 65536);
+  await tick();
+  el.dispatchEvent(touch('pointerdown', 1, true)); el.dispatchEvent(touch('pointerdown', 2, false));   // no up or cancel comes
+  await new Promise(r => setTimeout(r, 350));
+  el.dispatchEvent(touch('pointerdown', 7, true)); el.dispatchEvent(touch('pointerup', 7, true));       // a tap later
+  const m = mouseEvents(proc, ptr, h);
+  assert.deepEqual(m, [['down', 0], ['up', 0], ['down', 2], ['up', 2], ['down', 0], ['up', 0]]);
+  i.detach();
+});
+
 test('input: detach removes every listener and refuses later quits', async () => {
   const proc = fakeProc(), ptr = 8192; mailbox(proc, ptr);
   const before = win.count() + doc.count(), el = element();
