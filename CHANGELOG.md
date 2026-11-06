@@ -11,11 +11,12 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-06 (3c32f4b)
+## 2026-11-06 (0d7cf05)
 
 - **Friends:** in the page menu (F9) in free roam: requests, your friends and Add a player by name. Requests from afar show at the top (F accepts).
 - **Crews:** invite a friend in free roam to one of your crews from Friends; they press Z to join. The Crews box says how to start one.
 - **Page menu:** F9 is a short list showing each setting's state. Quit game warns when you haven't saved in 10 minutes.
+- **Page menu:** Crews and Friends open inside the F9 menu instead of a box over it; Esc or B goes back.
 - **Free roam:** the notes over the game share one look; invites and friend requests have a lime border.
 - **Free roam:** new players with Ghost mode off are told where to turn it on.
 - **Start page:** a lime dot on Friends & crews when requests or messages wait.
@@ -26,6 +27,7 @@ not guessed.
 - **Controllers:** Xbox Bluetooth triggers drive and brake in Firefox on a Mac.
 - **Phones:** POCO M7 Pro and other PowerVR B-Series phones start in the window, where they don't crash.
 - **Career:** no more error 134 after trading a car when the career car was missing.
+- **Races:** the lobby speedometer counts how the race evens out the engines, so an upgraded car no longer reads deep in the red.
 - **Races:** joining a race after using Options or Car Select in the Online menu no longer hangs for 3 minutes.
 - **Photo mode:** the camera no longer spins on its own; Reset stops Auto-turn.
 - **iPhone:** turning the car with two fingers in the garage works again.
