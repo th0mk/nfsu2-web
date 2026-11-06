@@ -11,9 +11,12 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-06 (0d7cf05)
+## 2026-11-06 (739d98c)
 
+- **Mods:** underground2.net Rims: Blitz, a new brand of 24 rims, in the rim shop (Mods tab, off by default). Friends see them on your car; your saves still work in the original game.
+- **Mods:** Mod parts on other cars: Original shows other players' cars with the game's own parts instead.
 - **Friends:** in the page menu (F9) in free roam: requests, your friends and Add a player by name. Requests from afar show at the top (F accepts).
+- **Friends:** a list holds 250 friends; the start page shows them in pages, with a filter.
 - **Crews:** invite a friend in free roam to one of your crews from Friends; they press Z to join. The Crews box says how to start one.
 - **Page menu:** F9 is a short list showing each setting's state. Quit game warns when you haven't saved in 10 minutes.
 - **Page menu:** Crews and Friends open inside the F9 menu instead of a box over it; Esc or B goes back.
@@ -33,6 +36,11 @@ not guessed.
 - **iPhone:** turning the car with two fingers in the garage works again.
 - **Free roam:** Enter at a shop, race or cover shoot no longer stops working until a reload.
 - **Keyboard:** Alt, Shift and Ctrl work in Firefox with privacy protection on.
+- **Keyboard:** AltGr on German, French, Turkish and other layouts no longer shifts down with the nitrous.
+- **Controls:** Site keys can use the debug camera's keys, and keys whose game control you moved.
+- **Controls:** picking Xbox or PlayStation button names no longer changes the Controller setting.
+- **Controllers:** the Zikway HID gamepad's buttons work right.
+- **Free roam:** other players' cars make tyre smoke again.
 
 ## 2026-11-05 (0e56c9b)
 
