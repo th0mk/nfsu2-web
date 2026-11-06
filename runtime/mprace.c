@@ -247,6 +247,7 @@ static struct {
     int      pre_ok, pre_used;                     /* ...it still ran when the host's name went in; its login's wait cut */
     int      quit_race, fee;                       /* the player quit the race (its pause menu); the fee the bank paid */
     int      paused, quit, lan, hosted, named, carset, created, settings, joined, started, left, career, resumed, crib_go, ndlg, host_gone;
+    int      ol_detours, ol_back;                  /* UI_OLMAIN's Enter took another icon than Lobby so often; just now */
     int      logged_place, perf_logged;
     CarPerf  rep_car;                              /* the race's report: our car as rated in the race, the race's cars, */
     int      rep_cars, rep_mode, rep_track, rep_laps;   /* the network race's type, track and laps, */
@@ -297,6 +298,18 @@ static int act_ok(const char *s, long f){
     return f - M.scr_at >= SETTLE && (!M.scr_tap || f - M.scr_tap >= RETAP);
 }
 static void acted(long f){ M.scr_tap = f; M.next = f + 4; }
+/* The screens UI_OLMAIN's other icons open (car select, options, rankings, messenger, ...), none of the trip's: its
+ * icon scroller opens on the icon picked last there, not on Lobby, so an Enter could take one of them (a 2026-11-05
+ * trip opened Options, sat out its 2 minutes and the way back's 4, the host's race long gone; 11-02 Car Select) */
+static const char *const OL_DETOURS[] = { "UI_OLCarSelect.fng", "UI_OLCarLot.fng", "UI_OptionsMain.fng", "UI_Options.fng",
+    "UI_Options_PC_Controller.fng", "UI_OLRankings.fng", "UI_OLRankings_Overall.fng", "UI_OLRankings_Monthly.fng",
+    "UI_OLRankings_Personal.fng", "UI_OLEAMessenger.fng", "UI_OL_ViewCar.fng", "UI_OLViewCareer.fng", "UI_OL_News.fng" };
+#define OL_DETOURS_N  (int)(sizeof OL_DETOURS / sizeof OL_DETOURS[0])
+#define OL_TRIES      6
+static const char *ol_detour(void){
+    for (int i = 0; i < OL_DETOURS_N; i++) if (on(OL_DETOURS[i])) return OL_DETOURS[i];
+    return 0;
+}
 static void keys(const char *k){ snprintf(M.keys, sizeof M.keys, "%s", k); M.nkeys = (int)strlen(M.keys); M.key_at = 0; }
 static int keys_run(long f){
     if (!M.nkeys) return 0;
@@ -1623,8 +1636,29 @@ static void step_race(CPU *c, long f){
             M.carset = 1;
             fprintf(stderr, "[mprace] f=%ld the career car 0x%08x\n", autotest_frame(), rd(G_CAREER_CAR));
         }
-        if (act_ok("UI_OLMAIN.fng", f)){ autotest_tap(K_RET, 6); acted(f); }    /* Lobby: the first item */
+        /* Lobby: the first icon.  To it (the scroller stays where it was last left), then Enter; back from a detour
+         * (below), one icon further left, should the scroller go round */
+        if (act_ok("UI_OLMAIN.fng", f)){
+            if (M.ol_detours >= OL_TRIES){ fail("the LAN menu's Lobby could not be picked"); return; }
+            const char *seq = M.ol_back ? "LR" : "LLLLLLLLR";
+            keys(seq); M.ol_back = 0; acted(f);
+            M.scr_tap = f + 20L * (long)(strlen(seq) - 1);   /* (a retap counts from its Enter, the last key: not a second
+                                                              * round while the Lobby opens, its Enter the lobby's Create) */
+        }
         return;
+    }
+    {
+        const char *d = ol_detour();
+        if (d){
+            if (act_ok(d, f)){
+                if (!M.ol_back){
+                    M.ol_back = 1; M.ol_detours++;
+                    fprintf(stderr, "[mprace] f=%ld UI_OLMAIN's Enter opened %s, not the Lobby: back (%d of %d)\n", autotest_frame(), d, M.ol_detours, OL_TRIES);
+                }
+                autotest_tap(K_ESC, 6); acted(f);
+            }
+            return;
+        }
     }
     if (cb == CB_LOBBY && okm(ctx, 0x110)){
         if (rd(G_LANSTATE) != 0x11u || rd(G_GAME_IDENT) != 0xffffffffu || rd(G_DLG)) return;
@@ -1865,6 +1899,7 @@ static void step_back(CPU *c, long f){
     }
     static const char *const lan_screens[] = { "UI_PC_LAN.fng", "UI_PC_LAN_ServerSelect.fng", "UI_QRModeSelect.fng", "UI_QRTrackSelect.fng", "UI_QRModeOptions.fng" };
     for (int i = 0; i < 5; i++) if (on(lan_screens[i])){ if (act_ok(lan_screens[i], f)){ autotest_tap(K_ESC, 6); acted(f); } return; }
+    { const char *d = ol_detour(); if (d){ if (act_ok(d, f)){ autotest_tap(K_ESC, 6); acted(f); } return; } }   /* (a detour of the way out) */
     if (on("UI_Main.fng")){
         if (!act_ok("UI_Main.fng", f)) return;
         /* the main menu again after the crib's Return to Explore (its save went there instead, unsaved: a 2026-10-27
