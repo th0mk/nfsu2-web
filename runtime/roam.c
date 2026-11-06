@@ -833,6 +833,7 @@ void walls_frame(void);                       /* walls.c: a car past the career'
 void savegame_frame(void);                    /* savegame.c: the pause menu's Save, once its save is over */
 void reads_frame(CPU *c);                     /* overrides.c: the streamer's reads and Loading screens, for the log */
 void intro_frame(CPU *c);                     /* intro.c: the title screen's line under the copyright */
+void gpsdistance_hud(CPU *c);
 void roam_game_hud(CPU *c);                 /* its names over friends' cars */
 int roam_game_cmd(CPU *c, const char *args, long *wait_start);
 int coop_cmd(CPU *c, const char *args, long *wait_start);
@@ -848,7 +849,7 @@ int roam_hook(CPU *c, uint32_t ip){
     case HOOK_SITE(0x00581475): reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); visualrep_frame(); carspot_frame(); walls_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); lightkey_frame(c); photo_frame(c); savegame_frame(); coop_frame(c); engage_frame(c); roam_frame(c); return 1;
     /* Player::Update's HUD step (0x600590), behind its call of the HUD
      * update (0x4EC5A0), where the game places its own LAN race labels */
-    case HOOK_SITE(0x006005e0): roam_game_hud(c); return 1;
+    case HOOK_SITE(0x006005e0): gpsdistance_hud(c); roam_game_hud(c); return 1;
     /* the main loop's call of World::DoTimestep (0x609CE0), its only one */
     case HOOK_SITE(0x00581407): racenet_prestep(c); return 1;
     /* the customization shops' push of the Visual Rating box (0x557EC0), at
