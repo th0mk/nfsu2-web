@@ -21,10 +21,15 @@
  *     SHINESTREET, CHINGY, CAPONE, DAVID CHOE, SNOOP DOGG, SNOOP DOGG2, THE
  *     DOORS; unlock levels 2 and 3, price 0) and DEBUG VINYL, a texture test
  *     grid ("RIGHT" on the car's sides).
+ *   The PC release draws a vinyl from the car's own CARS/<car>/VINYLS.BIN
+ *     ("<CAR>_<texture>" and its "_MASK"), and only D3, SHINESTREET, CHINGY
+ *     and CAPONE are in every player car's; the other six are made for a
+ *     few cars (ONLY below, from each car's VINYLS.BIN): picked on another
+ *     car, they draw nothing.
  * Here the category is added only when the shown car has vinyls of it, so
- * a car without them shows no empty, locked category, and DEBUG VINYL stays
- * out of it: for the call its category byte names none (0x1F), then it is
- * put back. */
+ * a car without them shows no empty, locked category, and DEBUG VINYL and
+ * the vinyls the car has no picture of stay out of it: for the call their
+ * category byte names none (0x1F), then it is put back. */
 #include "cpu.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
@@ -51,7 +56,19 @@ uint32_t language_text(uint32_t hash);
 #define P_CAT          5u
 #define CAT_NONE       0x1fu
 #define LEFT_OUT       "DEBUG VINYL"
-#define NOUT           8
+#define NOUT           16
+#define G_CARTYPES     0x008a1cccu   /* CarTypeInfo[] (0x890 each): +0 the type's name, as CARS/<name>/ has it */
+#define CARTYPES_N     46u
+
+/* the vinyls whose pictures only some cars' VINYLS.BIN have (by the type's name; the texture's name after the car's) */
+static const struct { const char *vinyl, *cars; } ONLY[] = {
+    { "STREET REAPER", " 3000GT CELICA ESCALADE G35 GTO MUSTANGGT RX8 TT " },   /* STREETREAPER */
+    { "JAPAN TUNING",  " G35 " },                                               /* AD_JAPANTUNNING */
+    { "DAVID CHOE",    " 350Z COROLLA " },                                      /* DAVIDCHOE */
+    { "SNOOP DOGG",    " MUSTANGGT " },                                         /* SNOOPDOGG */
+    { "SNOOP DOGG2",   " ESCALADE " },                                          /* SNOOPDOGG2 */
+    { "THE DOORS",     " GTO " },                                               /* THEDOORS */
+};
 
 static uint32_t g_label;
 
@@ -96,29 +113,58 @@ static uint32_t label(void){
     return g_label;
 }
 
+/* the car type's name ("CIVIC"), "" when it can't be read */
+static void type_name(uint32_t car, char *out, size_t n){
+    uint32_t tab = MR32(G_CARTYPES);
+    size_t o = 0;
+    out[0] = 0;
+    if (car >= CARTYPES_N || !ok(tab, CARTYPES_N * 0x890u)) return;
+    for (uint32_t i = 0; i < 0x20u && o + 1 < n; i++){
+        uint8_t ch = MR8(tab + car * 0x890u + i);
+        if (!ch) break;
+        if (ch <= ' ' || ch > '~'){ out[0] = 0; return; }
+        out[o++] = (char)ch;
+    }
+    out[o] = 0;
+}
+
+/* a vinyl the car has no picture of: one of ONLY's whose cars it isn't (a car whose name can't be read keeps them) */
+static int not_this_car(const char *vinyl, const char *car){
+    char pat[40];
+    if (!car[0]) return 0;
+    snprintf(pat, sizeof pat, " %s ", car);
+    for (unsigned i = 0; i < sizeof ONLY / sizeof ONLY[0]; i++)
+        if (!strcmp(vinyl, ONLY[i].vinyl)) return !strstr(ONLY[i].cars, pat);
+    return 0;
+}
+
 /* the car's vinyls of the hidden category (any unlock level), but the left-out ones, which go to out[] */
 static int hidden_vinyls(CPU *c, uint32_t car, uint32_t *out, int *nout){
     static uint32_t logged = 0xffffffffu;
+    char tn[40];
+    type_name(car, tn, sizeof tn);
     uint32_t kind = MR32(G_SLOT_KIND + 4u * SLOT_VINYL), a[5] = { car, SLOT_VINYL, 0, 0xffffffffu, 0 };
     uint32_t p = gcall(c, FN_PART_FIRST, G_PARTS, 4, a);
     int n = 0, guard = 0;
-    char list[512]; size_t o = 0; list[0] = 0;
+    char list[640]; size_t o = 0; list[0] = 0;
     while (p && ok(p, 14u) && guard++ < 4096){
         if ((int32_t)(int8_t)MR8(p + P_KIND) == (int32_t)kind && (MR8(p + P_CAT) & 0x1fu) == CAT_HIDDEN){
             char nm[32] = {0};
             uint32_t s = gcall(c, FN_PART_NAME, p, 0, 0);
             for (size_t i = 0; s && i + 1 < sizeof nm && ok(s + i, 1u) && MR8(s + i); i++) nm[i] = (char)MR8(s + i);
-            if (!strcmp(nm, LEFT_OUT)){ if (*nout < NOUT) out[(*nout)++] = p; }
-            else n++;
-            if (o + strlen(nm) + 16u < sizeof list)
-                o += (size_t)snprintf(list + o, sizeof list - o, " %s/%u%s", nm, MR8(p + P_CAT) >> 5, strcmp(nm, LEFT_OUT) ? "" : " (left out)");
+            int drop = !strcmp(nm, LEFT_OUT) || not_this_car(nm, tn);
+            if (drop){ if (*nout < NOUT) out[(*nout)++] = p; else drop = 0; }
+            if (!drop) n++;
+            if (o + strlen(nm) + 24u < sizeof list)
+                o += (size_t)snprintf(list + o, sizeof list - o, " %s/%u%s", nm, MR8(p + P_CAT) >> 5,
+                                      !drop ? "" : strcmp(nm, LEFT_OUT) ? " (not this car's)" : " (left out)");
         }
         uint32_t b[5] = { p, car, SLOT_VINYL, 0, 0xffffffffu };
         p = gcall(c, FN_PART_NEXT, G_PARTS, 5, b);
     }
     if (logged != car){
         logged = car;
-        fprintf(stderr, "[vinyls] car type %u: %d vinyls of the hidden category (name/level):%s\n", car, n, list);
+        fprintf(stderr, "[vinyls] car type %u (%s): %d vinyls of the hidden category (name/level):%s\n", car, tn[0] ? tn : "?", n, list);
     }
     return n;
 }
