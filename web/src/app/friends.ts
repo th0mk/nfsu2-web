@@ -27,7 +27,7 @@ import type { GameSession } from './game';
 import { touchFirst } from './device';
 import { gameHas, KEY_FRIEND, KEY_LOBBY_INVITE } from './gamekeys';
 import { raceKindText, type Hosted } from './lobby';
-import { t } from './i18n';
+import { t, tn } from './i18n';
 import { keyName, siteKey } from './sitekeys';
 import { pageDialog } from './padnav';
 import { onlineName } from './claim';
@@ -136,6 +136,10 @@ const CHECK = 'M5 12.5l4.5 4.5L19 7.5', CROSS = 'M6 6l12 12M18 6L6 18';
 const JOIN = 'M10 17l5-5-5-5M15 12H3M14 4h6v16h-6', ENVELOPE = 'M3 6h18v12H3zM3 7l9 6 9-6', PLUS = 'M12 5v14M5 12h14';
 /** a race's flag on its pole: Invite to the player's race lobby */
 const FLAG = 'M5 21V4M5 4h13l-3 4.5 3 4.5H5';
+/** a page back and on (the start page's Friends in pages), as the menu's ‹ */
+const PREV = 'M15 6l-6 6 6 6', NEXT = 'M9 6l6 6-6 6';
+/** a magnifier (Filter, while empty) */
+const FIND = 'M10.5 17.5a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4.5-4.5';
 /** two people, one behind the other: Invite to a crew */
 const GROUP = 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2 20c0-3.6 3.1-6 7-6s7 2.4 7 6M15.5 4.3a3.5 3.5 0 0 1 0 6.4M17.5 14.4c2.6.6 4.5 2.7 4.5 5.6';
 /** Discord's mark (as the start page's Discord button has it): a filled shape, the icon's class says so (style.css) */
@@ -274,7 +278,7 @@ function askNote(r: FriendLists | null, name: string, claim: string): { text: st
     case 'claim': return { text: r?.me ? t('{name} has no claimed name, so can\'t add friends yet', { name }) : claim, warn: true };
     case 'self': return { text: t('That\'s your own name'), warn: true };
     case 'name': return { text: t('Not a player\'s name'), warn: true };
-    case 'full': return { text: t('A friends list is full (50 at most)'), warn: true };
+    case 'full': return { text: t('A friends list is full (250 at most)'), warn: true };
     case 'rate': return { text: t('Wait a moment'), warn: true };
     default: return { text: t('Not sent: try again in a moment'), warn: true };
   }
@@ -303,7 +307,7 @@ class AskField {
 
   /** the field and its note, for a redraw (in the language now); keep(): after the redraw, the focus back in it */
   nodes(): [HTMLElement, HTMLElement] {
-    this.input.placeholder = t('Add a player by name'); this.input.setAttribute('aria-label', t('Add a player by name'));
+    this.input.placeholder = t('Add a player'); this.input.setAttribute('aria-label', t('Add a player'));
     this.box.querySelector('.fl-ask')?.setAttribute('aria-label', t('Send friend request'));
     return [this.box, this.note];
   }
@@ -326,6 +330,48 @@ class AskField {
     this.note.classList.toggle('warn', n.warn);
     if (r?.done === 'asked' || r?.done === 'friends') { inp.value = ''; inp.dispatchEvent(new Event('input')); }
     this.took(r);
+  }
+}
+
+/** the start page's Filter: the Add field's box over a long list (FriendsPanel), a magnifier in it while empty
+ *  (as the Add field's +, dimmed), then a ✕ that empties it; kept over renders as that one is (the player may be typing) */
+class FindField {
+  private readonly box = document.createElement('div');
+  private readonly input = document.createElement('input');
+  private readonly clear: HTMLButtonElement;
+
+  /** changed: the text is another now */
+  constructor(changed: () => void) {
+    const { box, input: inp } = this;
+    box.className = 'crew-add fl-find';
+    inp.type = 'text'; inp.autocomplete = 'off'; inp.spellcheck = false; inp.enterKeyHint = 'search'; inp.maxLength = 32;
+    this.clear = icon('fl-clear', t('Clear'), FIND, () => { inp.value = ''; inp.focus(); inp.dispatchEvent(new Event('input')); });
+    this.clear.disabled = true;
+    inp.oninput = () => { this.mark(); changed(); };
+    inp.onkeydown = e => { if (e.key === 'Escape' && inp.value) { e.preventDefault(); this.clear.click(); } };
+    box.append(inp, this.clear);
+  }
+
+  /** the box's icon: a magnifier while the field is empty, else its Clear */
+  private mark() {
+    const empty = !this.input.value;
+    this.clear.disabled = empty;
+    this.clear.querySelector('path')?.setAttribute('d', empty ? FIND : CROSS);
+  }
+
+  /** the text to find, in lower case ('' none) */
+  text(): string { return this.input.value.trim().toLowerCase(); }
+  /** the field, for a redraw (in the language now) */
+  node(): HTMLElement {
+    this.input.placeholder = t('Filter'); this.input.setAttribute('aria-label', t('Filter'));
+    this.clear.setAttribute('aria-label', t('Clear')); this.clear.title = t('Clear');
+    return this.box;
+  }
+  /** around a redraw that moves the field: its focus and caret kept */
+  keep(redraw: () => void) {
+    const inp = this.input, typing = document.activeElement === inp, at = [inp.selectionStart, inp.selectionEnd];
+    redraw();
+    if (typing) { inp.focus({ preventScroll: true }); inp.setSelectionRange(at[0], at[1]); }
   }
 }
 
@@ -377,6 +423,8 @@ const CREW_ASKS_MAX = 4;
 
 /** how long a friend shows "invited" in the menu's Friends, and an invite's line shows, after it was sent (ms) */
 const INVITED_MS = 60_000, INVITE_LINE_MS = 20_000;
+/** the page menu's Friends: the names it lists in the Online lobby and offline, at most (then "and 212 more") */
+const NAMES_MAX = 10;
 /** how long a request from afar shows on the line, once the player drives (ms): then it waits in the menu's Friends */
 const ASK_LINE_MS = 15_000;
 /** an invite from a friend that waits for the player's answer: who, its lobby (the host's id, the lobby's, its race's
@@ -573,7 +621,7 @@ export class FriendPrompt {
         // (the line says it while the cars touch; the note says it once they parted)
         if (m.done === 'friends') { this.was.set(name.toLowerCase(), 'roam'); this.answered(name); }
         if (m.done === 'friends' && !mine) this.deps.toast(t('You and {name} are friends now', { name }), { name });
-        else if (m.done === 'full') this.deps.toast(t('A friends list is full (50 at most)'));
+        else if (m.done === 'full') this.deps.toast(t('A friends list is full (250 at most)'));
         if (mine && this.who && ['asked', 'friends', 'claim', 'theirs'].includes(m.done)) this.who = { name, st: m.done };
         else if (mine && m.done === 'full') this.who = null;
         break;
@@ -728,7 +776,7 @@ export class FriendPrompt {
     const done = r?.done ?? '';
     this.deps.log(`[friends] ${yes ? 'accept' : 'decline'} ${name}: ${done || 'no answer'}`);
     if (done === 'friends') this.deps.toast(t('You and {name} are friends now', { name }), { name });
-    else if (done === 'full') this.deps.toast(t('A friends list is full (50 at most)'));
+    else if (done === 'full') this.deps.toast(t('A friends list is full (250 at most)'));
     else if (!r) {
       this.deps.toast(t('Not sent: try again in a moment'));
       if (!this.asks.some(n => sameName(n, name))) this.asks.push(name);   // (still waits: in the menu again)
@@ -797,7 +845,11 @@ export class FriendPrompt {
         });
       }
       if (!all.some(f => f.where === 'roam')) after.push(p(t('None of your friends is in free roam now.')));
-      const names = (w: Friend['where']) => all.filter(f => f.where === w).map(f => f.name).join(', ');
+      // (the first NAMES_MAX of each, then how many more: a list of 250 would fill the menu)
+      const names = (w: Friend['where']) => {
+        const l = all.filter(f => f.where === w).map(f => f.name), more = l.length - NAMES_MAX;
+        return more > 0 ? tn(more, '{names} and {n} more', '{names} and {n} more', { names: l.slice(0, NAMES_MAX).join(', ') }) : l.join(', ');
+      };
       const rest = [names('online') && t('In the Online lobby: {names}.', { names: names('online') }), names('') && t('Offline: {names}.', { names: names('') })];
       if (rest.some(Boolean)) after.push(p(rest.filter(Boolean).join(' ')));
     }
@@ -923,6 +975,8 @@ const POLL_MS = 60_000;
 
 /** the friends in the order the list shows them: in free roam, in the Online lobby, offline */
 const ORDER: Record<Friend['where'], number> = { roam: 0, online: 1, '': 2 };
+/** the start page's list in pages of this many lines (requests, friends, requests sent), Filter on the row past one page */
+const PAGE_LINES = 20;
 
 export class FriendsPanel {
   private lists: FriendLists | null = null;
@@ -933,6 +987,7 @@ export class FriendsPanel {
   constructor(private root: HTMLElement, private deps: FriendsPanelDeps) {
     this.crewInvites = new CrewInvites(deps.api, () => deps.crews?.() ?? null, () => this.render(), deps.log);
     this.askField = new AskField(deps.api, () => t('Claim your name (Online, Your name) to add friends.'), r => { this.took(r); this.render(); }, deps.log);
+    this.findField = new FindField(() => { this.page = 0; this.render(); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) void this.refresh(); });
     this.timer = window.setInterval(() => void this.refresh(), POLL_MS);
     deps.store.onChange(() => this.render());
@@ -977,6 +1032,9 @@ export class FriendsPanel {
 
   /** the field to ask a player by name (kept over renders: the player may be typing), with what the last ask did */
   private askField: AskField;
+  /** Filter over a list of more than a page, and the page shown (from 0) */
+  private findField: FindField;
+  private page = 0;
   /** the crew icons of the friends in free roam */
   private crewInvites: CrewInvites;
   /** the Your Discord row (kept over renders, as the field above), and what the last change of it did ('' fine) */
@@ -1041,18 +1099,19 @@ export class FriendsPanel {
   /** the Friends & crews tab's Friends (no lists: no passphrase, or a server without friends; no name: none claimed) */
   render() {
     const l = this.lists, root = this.root;
-    // a row as the Crews setting's above it: the name, a line of help, the list
-    const row = (help: string, ...ctl: HTMLElement[]) => {
-      const r = document.createElement('div'); r.className = 'set set-list';
+    // a row as the Crews setting's above it: the name, a line of help, the list; past a page Filter on its right
+    const row = (help: string, find: HTMLElement | null, ...ctl: HTMLElement[]) => {
+      const r = document.createElement('div'); r.className = find ? 'set set-list fl-paged' : 'set set-list';
       const label = document.createElement('div'); label.className = 'set-label'; label.textContent = t('Friends');
       const p = document.createElement('p'); p.className = 'set-help'; p.textContent = help;
       r.append(label, p);
+      if (find) r.append(find);
       if (ctl.length) { const c = document.createElement('div'); c.className = 'set-control'; c.append(...ctl); r.append(c); }
       return r;
     };
     this.deps.waiting?.(l?.me ? l.asks.length + l.friends.reduce((n, f) => n + this.deps.store.unread(f.name), 0) : 0);
     if (!l?.me) {
-      root.replaceChildren(row(t('Claim your name (Online, Your name) to add friends.')));
+      root.replaceChildren(row(t('Claim your name (Online, Your name) to add friends.'), null));
       return;
     }
     const lines: Line[] = [];
@@ -1077,14 +1136,44 @@ export class FriendsPanel {
     for (const name of l.sent) {
       lines.push({ name, state: t('request sent'), off: true, acts: [icon('fl-del', t('Take back'), CROSS, () => this.act('remove', name))] });
     }
-    const ctl = [...(lines.length ? [friendList(lines)] : []), ...this.askField.nodes()];
+    // (in pages past PAGE_LINES: Filter on the row's right, which looks in all of them, ‹ 1 of 13 › on Add's line)
+    const many = lines.length > PAGE_LINES, find = many ? this.findField.text() : '';
+    const found = find ? lines.filter(l => l.name.toLowerCase().includes(find)) : lines;
+    const pages = Math.max(1, Math.ceil(found.length / PAGE_LINES));
+    this.page = Math.min(this.page, pages - 1);
+    const shown = found.slice(this.page * PAGE_LINES, (this.page + 1) * PAGE_LINES);
+    const none = Object.assign(document.createElement('p'), { className: 'set-note', textContent: t('No friend has that name') });
+    const [add, addNote] = this.askField.nodes();
+    const foot = pages > 1 ? Object.assign(document.createElement('div'), { className: 'fl-foot' }) : null;
+    foot?.append(add, this.pager(pages));
+    const ctl = [...(shown.length ? [friendList(shown)] : find ? [none] : []), foot ?? add, addNote];
     // (the Your Discord field shows the server's name unless the player is changing it)
     const dIn = this.discordInput, dTyping = !!dIn && document.activeElement === dIn;
     const dRow = this.discordField();
     if (!dTyping && !this.discordState.text) this.discordInput!.value = l.contact ?? '';
     // the field stays the same element: a player typing in it keeps the keyboard and the caret
-    this.askField.keep(() => root.replaceChildren(row(t('Touch front bumpers in free roam for 3 s to add a player.'), ...ctl), dRow));
+    this.findField.keep(() => this.askField.keep(() => root.replaceChildren(row(t('Touch front bumpers in free roam for 3 s to add a player.'), many ? this.findField.node() : null, ...ctl), dRow)));
     if (dTyping) this.discordInput!.focus({ preventScroll: true });
+  }
+
+  /** ‹ 1 of 13 › on the Add field's line: a page back and on (the one pressed keeps the focus, the other one at an end) */
+  private pager(pages: number): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'fl-pager';
+    const go = (by: number, cls: string, other: string) => () => {
+      this.page += by;
+      this.render();
+      const b = this.root.querySelector<HTMLButtonElement>(`.fl-pager .${cls}:enabled`) ?? this.root.querySelector<HTMLButtonElement>(`.fl-pager .${other}`);
+      b?.focus({ preventScroll: true });
+    };
+    const prev = icon('fl-prev', t('Previous page'), PREV, go(-1, 'fl-prev', 'fl-next'));
+    const next = icon('fl-next', t('Next page'), NEXT, go(1, 'fl-next', 'fl-prev'));
+    prev.disabled = this.page === 0;
+    next.disabled = this.page >= pages - 1;
+    const at = Object.assign(document.createElement('span'), { className: 'fl-page', textContent: t('{n} of {total}', { n: this.page + 1, total: pages }) });
+    at.setAttribute('aria-live', 'polite');
+    box.append(prev, at, next);
+    return box;
   }
 
   dispose() { clearInterval(this.timer); }

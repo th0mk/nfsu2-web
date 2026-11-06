@@ -14,6 +14,8 @@
 //   name; no keyphrase; a friend's Message, lime while messages wait to be read (the ones that waited come with the
 //   list); a friend's Discord icon copies its username, a toast at it says so (or shows the name where the browser
 //   would not copy), there and in the page menu's Friends
+//   past 20 lines in pages (‹ 1 of 3 › under the list) with Filter on the row's right; the page menu's Friends
+//   names 10 a line in the Online lobby and offline, then how many more
 // - the start page's Your Discord: the server's username in it; one typed is sent as Discord allows one (discordName),
 //   else refused on the page; what the server refused; none takes it away
 // - race invites: an Invite in the page menu's Friends for each friend in free roam in the player's room while the
@@ -24,7 +26,7 @@
 //   what the server said in a toast at the icon.  A friend's invite: its card under a race invite's, Z (when no race
 //   invite shows) or a click joins its crew in its room; it waits in the page menu's Crews (Join, Decline) until the
 //   game ends; none for a crew the player is in, or names no Crews box would take
-// - the Crews control (settings-ui.ts) says how to get a crew while there is none
+// - the Crews control (settings-ui.ts) says why a name cannot join, nothing more
 // - /friends asked with the keyphrase's token, its answer read leniently
 // The module is bundled from web/src with esbuild into a blank page.
 import { test } from 'node:test';
@@ -288,7 +290,7 @@ test('why not, and what is no answer to the touch', async () => {
   await server(p, { op: 'can', name: 'Someone', st: 'new' });
   assert.equal(await line(p), null, 'an answer about another player');
   await server(p, { op: 'add', name: 'Bo_', done: 'full' });
-  assert.deepEqual(await toasts(p), ['A friends list is full (50 at most)']);
+  assert.deepEqual(await toasts(p), ['A friends list is full (250 at most)']);
   // friends off (no free roam with others): the game's word is not taken
   await p.evaluate(() => { const w = /** @type {any} */ (window); w.prompt.stop(); w.prompt.start({ viewRect: () => ({ x: 0, y: 0, w: 640, h: 480 }) }, false); });
   await sent(p);
@@ -632,7 +634,7 @@ test('the notes at the top in one look: a crew\'s invite as a race\'s, the frien
   await p.close();
 });
 
-test('the Crews control says how to get a crew while there is none', async () => {
+test('the Crews control says why a name cannot join, nothing else (the row\'s help says how)', async () => {
   const p = await page();
   await p.evaluate(() => {
     const w = /** @type {any} */ (window);
@@ -644,13 +646,12 @@ test('the Crews control says how to get a crew while there is none', async () =>
     };
   });
   const note = () => p.evaluate(() => { const n = document.getElementById('c-note'); return [n.textContent, n.classList.contains('warn')]; });
-  const HOW = 'No crew yet? Agree on a name with your friends and each type it here, or open a crew\'s invite link.';
   await p.evaluate(() => /** @type {any} */ (window).ctl([]));
-  assert.deepEqual(await note(), [HOW, false]);
+  assert.deepEqual(await note(), ['', false], 'no crew yet: nothing');
   await p.fill('#c', 'a, b');
   assert.deepEqual(await note(), ['No commas, # or ; in a crew name.', true], 'why a name cannot join, in the warning\'s colour');
   await p.fill('#c', 'Night Owls');
-  assert.deepEqual(await note(), [HOW, false], 'one that can: the how again');
+  assert.deepEqual(await note(), ['', false], 'one that can: nothing again');
   await p.evaluate(() => /** @type {any} */ (window).ctl([{ name: 'JDM', rgb: '3cd2ff' }]));
   assert.deepEqual(await note(), ['', false], 'in a crew: nothing');
   await p.close();
@@ -812,6 +813,74 @@ test('the start page\'s Friends: a request by name', async () => {
   await p.evaluate(() => /** @type {any} */ (window).panel.render());
   await p.keyboard.type('b');
   assert.equal(await p.$eval('#friends .fl-add input', i => i.value), 'Bob');
+  await p.close();
+});
+
+test('the start page\'s Friends in pages of 20: Filter on the row, ‹ 1 of 3 › under the list', async () => {
+  const p = await page();
+  await p.evaluate(() => { document.getElementById('friends').hidden = false; });   // (its tab open: tabs.ts)
+  const name = i => `P${String(i).padStart(2, '0')}`;
+  // a request to answer, 45 friends (P30 in free roam: first of them), a request sent: 47 lines
+  const friends = Array.from({ length: 45 }, (_, i) => ({ name: name(i), where: i === 30 ? 'roam' : '' }));
+  await panel(p, { me: 'Al_', asks: ['Ask'], sent: ['Snt'], friends });
+  const view = () => p.evaluate(() => {
+    const $ = s => document.querySelector(`#friends ${s}`);
+    return {
+      names: [...document.querySelectorAll('#friends .fl li .fl-who')].map(e => e.textContent),
+      page: $('.fl-page')?.textContent ?? null, prev: $('.fl-prev')?.disabled ?? null, next: $('.fl-next')?.disabled ?? null,
+      find: $('.set-list > .fl-find') ? $('.fl-find input').value : null, clear: $('.fl-clear')?.disabled ?? null,
+      none: $('.set-control > p.set-note:not(.fl-note)')?.textContent ?? '', focus: document.activeElement?.className ?? '',
+    };
+  });
+  const range = (a, b) => Array.from({ length: b - a }, (_, i) => name(a + i));
+  let v = await view();
+  assert.deepEqual(v.names, ['Ask', 'P30', ...range(0, 18)], 'page 1: the request, the friend in free roam, then the others');
+  assert.deepEqual([v.page, v.prev, v.next, v.find, v.clear], ['1 of 3', true, false, '', true], 'Filter empty: its magnifier, dimmed');
+  await p.click('#friends .fl-next');
+  v = await view();
+  assert.deepEqual([v.names, v.page, v.prev, v.next, v.focus], [[...range(18, 30), ...range(31, 39)], '2 of 3', false, false, 'icon-btn fl-next'], 'the focus stays on ›');
+  await p.click('#friends .fl-next');
+  v = await view();
+  assert.deepEqual([v.names, v.page, v.next, v.focus], [[...range(39, 45), 'Snt'], '3 of 3', true, 'icon-btn fl-prev'], 'the last page: › dimmed, ‹ takes the focus');
+  await p.evaluate(() => /** @type {any} */ (window).panel.render());
+  assert.equal((await view()).page, '3 of 3', 'a new list (the minute\'s poll) keeps the page');
+  // Filter looks in every line, from the first page; no pager for one page; none found says so
+  await p.fill('#friends .fl-find input', 'p4');
+  v = await view();
+  assert.deepEqual([v.names, v.page, v.clear], [range(40, 45), null, false], 'found: no pages, the ✕ to empty it');
+  await p.focus('#friends .fl-find input');
+  await p.evaluate(() => /** @type {any} */ (window).panel.render());
+  await p.keyboard.type('2');
+  assert.deepEqual((await view()).names, ['P42'], 'typing goes on over a new list');
+  await p.fill('#friends .fl-find input', 'zzz');
+  v = await view();
+  assert.deepEqual([v.names, v.none], [[], 'No friend has that name']);
+  await p.press('#friends .fl-find input', 'Escape');
+  v = await view();
+  assert.deepEqual([v.find, v.page, v.names.length, v.none], ['', '1 of 3', 20, ''], 'Esc empties it: page 1 again');
+  await p.fill('#friends .fl-find input', 'snt');
+  await p.click('#friends .fl-clear');
+  assert.deepEqual([(await view()).find, (await view()).focus], ['', ''], 'the ✕ empties it, the field keeps the focus');
+  assert.equal(await p.evaluate(() => document.activeElement === document.querySelector('#friends .fl-find input')), true);
+  // a page or less: neither
+  await panel(p, { me: 'Al_', asks: [], sent: [], friends: friends.slice(0, 20) });
+  v = await view();
+  assert.deepEqual([v.names.length, v.page, v.find], [20, null, null]);
+  await p.close();
+});
+
+test('the page menu\'s Friends: the first 10 names a line, then how many more', async () => {
+  const p = await page();
+  const on = Array.from({ length: 12 }, (_, i) => `On${i}`), off = Array.from({ length: 13 }, (_, i) => `Off${i}`);
+  await server(p, { op: 'list', me: 'Al_', friends: [...on, ...off], asks: [] });
+  await server(p, { op: 'where', friends: [...on.map(name => ({ name, where: 'online' })), ...off.map(name => ({ name, where: '' }))] });
+  const lines = await p.evaluate(() => {
+    const box = document.createElement('div');
+    /** @type {any} */ (window).prompt.drawPlaced(box, () => {});
+    return [...box.querySelectorAll(':scope > p.hint')].map(e => e.textContent);
+  });
+  assert.deepEqual(lines, ['None of your friends is in free roam now.',
+    `In the Online lobby: ${on.slice(0, 10).join(', ')} and 2 more. Offline: ${off.slice(0, 10).join(', ')} and 3 more.`]);
   await p.close();
 });
 

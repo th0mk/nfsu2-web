@@ -365,8 +365,8 @@ fn crew_cap(degree: usize) -> u32 {
 /// a crew of more players than this in one room gets no links first (its pairs grow as the square of its players:
 /// 64 are 2016), its players link by distance as everyone does, and it counts in `crewSkips`
 const CREW_GROUP_MAX: usize = 64;
-/// the friends a browser's list here holds at most (the server's lists hold 50, and others' friendships add to it)
-const FRIENDS_MAX: usize = 64;
+/// the friends a browser's list here holds at most (the server's lists hold 250, and others' friendships add to it)
+const FRIENDS_MAX: usize = 264;
 /// how near two players' cars are, at most, for one to ask the other to be friends (`linked_with`): their cars touched
 /// front bumpers, and a SNAP is a few hundred ms old at most (30 m: 100 km/h for a second)
 const FRIEND_NEAR_M: f64 = 30.0;

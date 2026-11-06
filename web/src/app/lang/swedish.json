@@ -326,7 +326,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Namn, åtskilda med kommatecken: ni ser aldrig varandra i läget Utforska. Serverns operatör ser vem som blockerar vem.",
   "nobody": "ingen",
   "Crews": "Crews",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Spelare med samma crewnamn ser alltid varandra i läget Utforska, med namn och kartpilar i crewens färg. Alla som skriver namnet är med. Upp till 4 crews.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Spelare med samma crewnamn ser alltid varandra i läget Utforska, i crewens färg. Skriv ett namn för att starta eller gå med i en crew (upp till 4).",
   "Crew name": "Crewnamn",
   "Join crew": "Gå med i crew",
   "Leave crew {name}": "Lämna crewen {name}",
@@ -1243,7 +1243,7 @@
   "Changelog": "Ändringar",
   "Couldn't load the changelog.": "Det gick inte att läsa in ändringarna.",
   "You and {name} are friends now": "Du och {name} är vänner nu",
-  "A friends list is full (50 at most)": "En vänlista är full (högst 50)",
+  "A friends list is full (250 at most)": "En vänlista är full (högst 250)",
   "Accept {name} as a friend": "Acceptera {name} som vän",
   "Add {name} as a friend": "Lägg till {name} som vän",
   "{name} wants to be friends: accept": "{name} vill bli vän: acceptera",
@@ -1302,7 +1302,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Inga meddelanden än. Meddelanden väntar upp till 7 dagar på en vän som är borta.",
   "Write back": "Svara",
   "Message a friend (in free roam)": "Skriv till en vän (i läget Utforska)",
-  "Add a player by name": "Lägg till en spelare med namn",
+  "Add a player": "Lägg till en spelare",
   "Send friend request": "Skicka vänförfrågan",
   "That's your own name": "Det är ditt eget namn",
   "Not a player's name": "Inte ett spelarnamn",
@@ -1576,5 +1576,7 @@
   "{name} isn't in free roam now": "{name} är inte i läget Utforska nu",
   "invites you to crew \"{crew}\"": "bjuder in dig till crewen ”{crew}”",
   "{name} invites you to crew \"{crew}\"": "{name} bjuder in dig till crewen ”{crew}”",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ingen crew än? Kom överens om ett namn med dina vänner och skriv in det här var och en, eller öppna en crews inbjudningslänk."
+  "Previous page": "Föregående sida",
+  "Next page": "Nästa sida",
+  "No friend has that name": "Ingen vän heter så"
 }

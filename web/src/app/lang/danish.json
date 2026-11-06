@@ -326,7 +326,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Navne, adskilt af kommaer: I ser aldrig hinanden i udforsknings-mode. Serverens operatør kan se, hvem der blokerer hvem.",
   "nobody": "ingen",
   "Crews": "Crews",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Spillere med samme crewnavn ser altid hinanden i udforsknings-mode, med navne og kortpile i crewets farve. Alle, der skriver navnet, er med. Op til 4 crews.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Spillere med samme crewnavn ser altid hinanden i udforsknings-mode, i crewets farve. Skriv et navn for at starte eller komme med i et crew (op til 4).",
   "Crew name": "Crewnavn",
   "Join crew": "Bliv medlem af crew",
   "Leave crew {name}": "Forlad crewet {name}",
@@ -1243,7 +1243,7 @@
   "Changelog": "Ændringer",
   "Couldn't load the changelog.": "Ændringerne kunne ikke indlæses.",
   "You and {name} are friends now": "Du og {name} er venner nu",
-  "A friends list is full (50 at most)": "En venneliste er fuld (højst 50)",
+  "A friends list is full (250 at most)": "En venneliste er fuld (højst 250)",
   "Accept {name} as a friend": "Accepter {name} som ven",
   "Add {name} as a friend": "Tilføj {name} som ven",
   "{name} wants to be friends: accept": "{name} vil være venner: accepter",
@@ -1302,7 +1302,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Ingen beskeder endnu. Beskeder venter op til 7 dage på en ven, der er væk.",
   "Write back": "Skriv tilbage",
   "Message a friend (in free roam)": "Send en besked til en ven (i udforsknings-mode)",
-  "Add a player by name": "Tilføj en spiller ved navn",
+  "Add a player": "Tilføj en spiller",
   "Send friend request": "Send venneanmodning",
   "That's your own name": "Det er dit eget navn",
   "Not a player's name": "Ikke et spillernavn",
@@ -1576,5 +1576,7 @@
   "{name} isn't in free roam now": "{name} er ikke i udforsknings-mode lige nu",
   "invites you to crew \"{crew}\"": "inviterer dig til crewet »{crew}«",
   "{name} invites you to crew \"{crew}\"": "{name} inviterer dig til crewet »{crew}«",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Intet crew endnu? Aftal et navn med dine venner, og skriv det her hver især, eller åbn et crews invitationslink."
+  "Previous page": "Forrige side",
+  "Next page": "Næste side",
+  "No friend has that name": "Ingen ven har det navn"
 }

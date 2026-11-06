@@ -142,7 +142,7 @@
   "Online lobby": "online loby",
   "offline": "offline",
   "You and {name} are friends now": "Ty a {name} ste teraz priatelia",
-  "A friends list is full (50 at most)": "Jeden zo zoznamov priateľov je plný (najviac 50)",
+  "A friends list is full (250 at most)": "Jeden zo zoznamov priateľov je plný (najviac 250)",
   "Your friend {name} is in free roam": "Tvoj priateľ {name} je vo voľnej jazde",
   "Your friend {name} is in free roam, room {room}: Join in {menu}": "Tvoj priateľ {name} je vo voľnej jazde, v miestnosti {room}: pridaj sa {menu}",
   "Your friend {name} is in free roam, in no room: Join in {menu}": "Tvoj priateľ {name} je vo voľnej jazde, mimo miestnosti: pridaj sa {menu}",
@@ -158,7 +158,7 @@
   "You and {name} are friends": "Ty a {name} ste priatelia",
   "Claim your name on the start page to add friends": "Ak chceš pridávať priateľov, zarezervuj si meno na úvodnej stránke",
   "{name} has no claimed name, so can't add friends yet": "{name} nemá zarezervované meno, takže zatiaľ nemôže pridávať priateľov",
-  "Add a player by name": "Pridať hráča podľa mena",
+  "Add a player": "Pridať hráča",
   "Send friend request": "Poslať žiadosť o priateľstvo",
   "That's your own name": "To je tvoje vlastné meno",
   "Not a player's name": "Toto nie je meno hráča",
@@ -786,7 +786,7 @@
   "Online mode": "Online režim",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Ponuka Hra cez internet v hre preskočí prihlásenie do EA: loby, chat a závody so všetkými na tomto serveri.",
   "Crews": "Partie",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Hráči s rovnakým názvom partie sa vo voľnej jazde vidia vždy, s menami a šípkami na mape vo farbe partie. Kto napíše názov, ten sa pridá. Najviac 4 partie.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Hráči s rovnakým názvom partie sa vo voľnej jazde vidia vždy, vo farbe partie. Napíš názov a založíš partiu, alebo sa k nej pridáš (najviac 4).",
   "Crew name": "Názov partie",
   "Game": "Hra",
   "More game settings": "Ďalšie nastavenia hry",
@@ -1634,5 +1634,7 @@
   "{name} isn't in free roam now": "{name} teraz nie je vo voľnej jazde",
   "invites you to crew \"{crew}\"": "ťa pozýva do partie „{crew}“",
   "{name} invites you to crew \"{crew}\"": "{name} ťa pozýva do partie „{crew}“",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ešte nemáš partiu? Dohodni sa s kamarátmi na názve, nech ho sem každý napíše, alebo otvor odkaz s pozvánkou do partie."
+  "Previous page": "Predchádzajúca stránka",
+  "Next page": "Ďalšia stránka",
+  "No friend has that name": "Žiadny priateľ s týmto menom"
 }

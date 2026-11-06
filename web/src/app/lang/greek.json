@@ -296,7 +296,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Ονόματα χωρισμένα με κόμματα: δεν βλέπετε ποτέ ο ένας τον άλλον στην ελεύθερη οδήγηση. Ο διαχειριστής του διακομιστή βλέπει ποιος αποκλείει ποιον.",
   "nobody": "κανείς",
   "Crews": "Ομάδες",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Οι παίκτες με το ίδιο όνομα ομάδας βλέπονται πάντα στην ελεύθερη οδήγηση, με ονόματα και βέλη χάρτη στο χρώμα της ομάδας. Όποιος πληκτρολογήσει το όνομα συμμετέχει. Έως 4 ομάδες.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Οι παίκτες με το ίδιο όνομα ομάδας βλέπονται πάντα στην ελεύθερη οδήγηση, στο χρώμα της ομάδας. Πληκτρολόγησε ένα όνομα για να φτιάξεις μια ομάδα ή να μπεις σε μία (έως 4).",
   "Crew name": "Όνομα ομάδας",
   "Join crew": "Συμμετοχή σε ομάδα",
   "Leave crew {name}": "Αποχώρηση από την ομάδα {name}",
@@ -1183,7 +1183,7 @@
   "Changelog": "Ιστορικό αλλαγών",
   "Couldn't load the changelog.": "Δεν ήταν δυνατή η φόρτωση του ιστορικού αλλαγών.",
   "You and {name} are friends now": "Εσύ και ο παίκτης {name} είστε πλέον φίλοι",
-  "A friends list is full (50 at most)": "Μία από τις λίστες φίλων είναι πλήρης (έως 50)",
+  "A friends list is full (250 at most)": "Μία από τις λίστες φίλων είναι πλήρης (έως 250)",
   "Accept {name} as a friend": "Αποδοχή του παίκτη {name} ως φίλου",
   "Add {name} as a friend": "Προσθήκη του παίκτη {name} ως φίλου",
   "{name} wants to be friends: accept": "Ο παίκτης {name} θέλει να γίνετε φίλοι: αποδοχή",
@@ -1242,7 +1242,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Δεν υπάρχουν ακόμα μηνύματα. Τα μηνύματα περιμένουν έως 7 ημέρες για φίλο που απουσιάζει.",
   "Write back": "Απάντηση",
   "Message a friend (in free roam)": "Μήνυμα σε φίλο στην ελεύθερη οδήγηση",
-  "Add a player by name": "Προσθήκη παίκτη με όνομα",
+  "Add a player": "Προσθήκη παίκτη",
   "Send friend request": "Αποστολή αιτήματος φιλίας",
   "That's your own name": "Αυτό είναι το δικό σου όνομα",
   "Not a player's name": "Δεν είναι όνομα παίκτη",
@@ -1516,5 +1516,7 @@
   "{name} isn't in free roam now": "Ο παίκτης {name} δεν είναι τώρα σε ελεύθερη οδήγηση",
   "invites you to crew \"{crew}\"": "σε προσκαλεί στην ομάδα «{crew}»",
   "{name} invites you to crew \"{crew}\"": "Ο παίκτης {name} σε προσκαλεί στην ομάδα «{crew}»",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Δεν έχεις ομάδα ακόμα; Συμφωνήστε ένα όνομα με τους φίλους σου και πληκτρολογήστε το όλοι εδώ, ή άνοιξε τον σύνδεσμο πρόσκλησης μιας ομάδας."
+  "Previous page": "Προηγούμενη σελίδα",
+  "Next page": "Επόμενη σελίδα",
+  "No friend has that name": "Κανένας φίλος με αυτό το όνομα"
 }

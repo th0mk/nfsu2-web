@@ -896,7 +896,17 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .fl .fl-crew[aria-expanded="true"] { color: var(--lime); }
 /* a request by name (friends.ts addField): the Crews row's box (its field's rules) under the list, a setting's 240 px
  * (the row's width on a phone), what the last one did under it */
-.fl-add { flex: none; width: 240px; }
+.fl-add, .fl-find { flex: none; width: 240px; }
+/* a list of more than a page (friends.ts FriendsPanel): Filter on the row's right, as a setting's value box (Your
+ * Discord's), the list under both; under the list Add a player and, on its line at the right, ‹ 1 of 13 › (.fl-foot):
+ * the rows' icons, the page between them as a row's state; an end's arrow dimmed */
+.fl-foot { display: flex; align-items: center; gap: 8px; }
+.fl-foot > .fl-pager { flex: none; margin-left: auto; }
+.set-list.fl-paged { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label find" "help find" "ctl ctl"; }
+.fl-paged > .fl-find { grid-area: find; }
+.fl-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 40px; }
+.fl-page { color: var(--muted); font-size: 14px; line-height: 24px; white-space: nowrap; }   /* (24: centred in the 40 px line on the 4 px grid) */
+.fl-pager .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 /* a copy button's toast (copy.ts copyToast): small, over the button (under it, .below, with no room above), in the top
  * layer as a popover (its own box and place, not the browser's), gone after a moment */
 .copy-toast {
@@ -1422,7 +1432,11 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   /* a value box fills the row, beside what stays at its own width (Listen) */
   .set-control > select, .set-control > input[type="text"], .set-control > input[type="number"], .set-control > .linkbox,
   .set-control .crew-add { flex: 1 1 160px; width: auto; min-width: 0; max-width: none; }
-  .set-control .fl-add { flex: none; width: 100%; }   /* (in the Friends row's column: no basis, which is its height) */
+  .set-control .fl-add { flex: none; width: 100%; }
+  .fl-foot > .fl-add { flex: 1 1 auto; width: auto; min-width: 0; }   /* (the rest of the line, beside the pages) */
+  /* (Filter under the help, the row's width, as a value box here) */
+  .set-list.fl-paged { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "help" "find" "ctl"; }
+  .fl-paged > .fl-find { width: 100%; margin-top: 8px; }   /* (in the Friends row's column: no basis, which is its height) */
   .opt { flex: 1; justify-content: center; padding: 4px 8px; text-align: center; }
   /* Reset all settings on a line of its own, under the text editor's line (and the editor, when open) */
   .raw { display: flex; flex-direction: column; }

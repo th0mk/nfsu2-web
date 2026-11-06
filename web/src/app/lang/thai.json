@@ -287,7 +287,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "ชื่อ คั่นด้วยจุลภาค: คุณกับพวกเขาจะไม่เห็นกันในการขับอิสระ ผู้ดูแลเซิร์ฟเวอร์เห็นว่าใครบล็อกใคร",
   "nobody": "ไม่มีใคร",
   "Crews": "ทีม",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "ผู้เล่นที่ใช้ชื่อทีมเดียวกันจะเห็นกันเสมอในการขับอิสระ โดยชื่อและลูกศรบนแผนที่จะเป็นสีของทีม ใครพิมพ์ชื่อนี้ก็เข้าร่วมได้ สูงสุด 4 ทีม",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "ผู้เล่นที่ใช้ชื่อทีมเดียวกันจะเห็นกันเสมอในการขับอิสระเป็นสีของทีม พิมพ์ชื่อเพื่อสร้างหรือเข้าร่วมทีม (สูงสุด 4 ทีม)",
   "Crew name": "ชื่อทีม",
   "Join crew": "เข้าร่วมทีม",
   "Leave crew {name}": "ออกจากทีม {name}",
@@ -1168,7 +1168,7 @@
   "Changelog": "อัปเดต",
   "Couldn't load the changelog.": "โหลดรายการอัปเดตไม่ได้",
   "You and {name} are friends now": "คุณกับ {name} เป็นเพื่อนกันแล้ว",
-  "A friends list is full (50 at most)": "รายชื่อเพื่อนของฝ่ายใดฝ่ายหนึ่งเต็มแล้ว (สูงสุด 50 คน)",
+  "A friends list is full (250 at most)": "รายชื่อเพื่อนของฝ่ายใดฝ่ายหนึ่งเต็มแล้ว (สูงสุด 250 คน)",
   "Accept {name} as a friend": "ยอมรับ {name} เป็นเพื่อน",
   "Add {name} as a friend": "เพิ่ม {name} เป็นเพื่อน",
   "{name} wants to be friends: accept": "{name} อยากเป็นเพื่อน: ยอมรับ",
@@ -1227,7 +1227,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "ยังไม่มีข้อความ ข้อความจะรอเพื่อนที่ไม่อยู่ได้นานสูงสุด 7 วัน",
   "Write back": "ตอบกลับ",
   "Message a friend (in free roam)": "ส่งข้อความถึงเพื่อน (ในการขับอิสระ)",
-  "Add a player by name": "เพิ่มผู้เล่นด้วยชื่อ",
+  "Add a player": "เพิ่มผู้เล่น",
   "Send friend request": "ส่งคำขอเป็นเพื่อน",
   "That's your own name": "นี่คือชื่อของคุณเอง",
   "Not a player's name": "ไม่ใช่ชื่อผู้เล่น",
@@ -1489,5 +1489,7 @@
   "{name} isn't in free roam now": "ตอนนี้ {name} ไม่ได้ขับอิสระอยู่",
   "invites you to crew \"{crew}\"": "เชิญคุณเข้าทีม \"{crew}\"",
   "{name} invites you to crew \"{crew}\"": "{name} เชิญคุณเข้าทีม \"{crew}\"",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "ยังไม่มีทีมใช่ไหม? ตกลงชื่อกับเพื่อนๆ แล้วให้ทุกคนพิมพ์ชื่อนั้นที่นี่ หรือเปิดลิงก์เชิญของทีม"
+  "Previous page": "หน้าก่อนหน้า",
+  "Next page": "หน้าถัดไป",
+  "No friend has that name": "ไม่มีเพื่อนชื่อนี้"
 }

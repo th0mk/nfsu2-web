@@ -287,7 +287,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "名前をカンマ区切りで: フリーロームでお互いに見えなくなります。サーバーの運営者には誰が誰をブロックしたかが見えます。",
   "nobody": "なし",
   "Crews": "クルー",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "同じクルー名のプレイヤー同士は、フリーロームで常にお互いが見え、名前とマップの矢印がクルーの色で表示されます。名前を入力すれば誰でも参加できます。クルーは最大4つ。",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "同じクルー名のプレイヤー同士は、フリーロームで常にクルーの色でお互いが見えます。名前を入力すると、クルーを作成または参加できます（最大4つ）。",
   "Crew name": "クルー名",
   "Join crew": "クルーに参加",
   "Leave crew {name}": "クルー「{name}」を抜ける",
@@ -1168,7 +1168,7 @@
   "Changelog": "更新履歴",
   "Couldn't load the changelog.": "更新履歴を読み込めませんでした。",
   "You and {name} are friends now": "{name}とフレンドになりました",
-  "A friends list is full (50 at most)": "どちらかのフレンドリストがいっぱいです（最大50人）",
+  "A friends list is full (250 at most)": "どちらかのフレンドリストがいっぱいです（最大250人）",
   "Accept {name} as a friend": "{name}のフレンド申請を承認",
   "Add {name} as a friend": "{name}をフレンドに追加",
   "{name} wants to be friends: accept": "{name}からフレンド申請: 承認",
@@ -1227,7 +1227,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "まだメッセージはありません。不在のフレンドへのメッセージは最大7日間保管されます。",
   "Write back": "返信する",
   "Message a friend (in free roam)": "フレンドにメッセージ（フリーロームで）",
-  "Add a player by name": "名前でプレイヤーを追加",
+  "Add a player": "プレイヤーを追加",
   "Send friend request": "フレンド申請を送る",
   "That's your own name": "自分の名前です",
   "Not a player's name": "プレイヤー名ではありません",
@@ -1489,5 +1489,7 @@
   "{name} isn't in free roam now": "{name}は今フリーローム中ではありません",
   "invites you to crew \"{crew}\"": "からクルー「{crew}」への招待",
   "{name} invites you to crew \"{crew}\"": "{name}からクルー「{crew}」への招待",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "まだクルーがありませんか？友だちと名前を決めて全員がここに入力するか、クルーの招待リンクを開いてください。"
+  "Previous page": "前のページ",
+  "Next page": "次のページ",
+  "No friend has that name": "その名前のフレンドはいません"
 }

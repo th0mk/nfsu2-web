@@ -287,7 +287,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "이름을 쉼표로 구분해서: 자유 주행에서 서로를 볼 수 없어요. 서버 운영자는 누가 누구를 차단했는지 볼 수 있어요.",
   "nobody": "없음",
   "Crews": "크루",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "같은 크루 이름을 쓴 플레이어끼리는 자유 주행에서 항상 서로가 보이고, 이름과 지도 화살표가 크루 색으로 표시돼요. 이름을 입력하면 누구나 들어올 수 있어요. 크루는 최대 4개.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "같은 크루 이름을 쓴 플레이어끼리는 자유 주행에서 항상 크루 색으로 서로가 보여요. 이름을 입력해 크루를 만들거나 들어가세요(최대 4개).",
   "Crew name": "크루 이름",
   "Join crew": "크루 가입",
   "Leave crew {name}": "{name} 크루 탈퇴",
@@ -1168,7 +1168,7 @@
   "Changelog": "변경 사항",
   "Couldn't load the changelog.": "변경 사항을 불러오지 못했습니다.",
   "You and {name} are friends now": "{name} 님과 이제 친구예요",
-  "A friends list is full (50 at most)": "한쪽 친구 목록이 가득 찼어요(최대 50명)",
+  "A friends list is full (250 at most)": "한쪽 친구 목록이 가득 찼어요(최대 250명)",
   "Accept {name} as a friend": "{name} 님을 친구로 수락",
   "Add {name} as a friend": "{name} 님을 친구로 추가",
   "{name} wants to be friends: accept": "{name} 님이 친구가 되고 싶어 해요: 수락",
@@ -1227,7 +1227,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "아직 메시지가 없어요. 자리에 없는 친구에게 보낸 메시지는 최대 7일 동안 기다려요.",
   "Write back": "답장하기",
   "Message a friend (in free roam)": "친구에게 메시지(자유 주행에서)",
-  "Add a player by name": "이름으로 플레이어 추가",
+  "Add a player": "플레이어 추가",
   "Send friend request": "친구 요청 보내기",
   "That's your own name": "내 이름이에요",
   "Not a player's name": "플레이어 이름이 아니에요",
@@ -1489,5 +1489,7 @@
   "{name} isn't in free roam now": "{name} 님은 지금 자유 주행 중이 아니에요",
   "invites you to crew \"{crew}\"": "님이 '{crew}' 크루에 초대했어요",
   "{name} invites you to crew \"{crew}\"": "{name} 님이 '{crew}' 크루에 초대했어요",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "아직 크루가 없나요? 친구들과 이름을 정해 각자 여기에 입력하거나, 크루 초대 링크를 여세요."
+  "Previous page": "이전 페이지",
+  "Next page": "다음 페이지",
+  "No friend has that name": "그 이름의 친구가 없어요"
 }

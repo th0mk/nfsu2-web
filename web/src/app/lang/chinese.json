@@ -287,7 +287,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "名稱，以逗號分隔：你們在自由漫遊中永遠看不到彼此。伺服器的管理者看得到誰封鎖了誰。",
   "nobody": "沒有人",
   "Crews": "車隊",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "車隊名稱相同的玩家在自由漫遊中總能看到彼此，名稱和地圖箭頭會以車隊的顏色顯示。任何人輸入此名稱即可加入。最多 4 個車隊。",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "車隊名稱相同的玩家在自由漫遊中總能看到彼此，並以車隊的顏色顯示。輸入名稱即可建立或加入車隊（最多 4 個）。",
   "Crew name": "車隊名稱",
   "Join crew": "加入車隊",
   "Leave crew {name}": "退出車隊「{name}」",
@@ -1168,7 +1168,7 @@
   "Changelog": "更新日誌",
   "Couldn't load the changelog.": "無法載入更新日誌。",
   "You and {name} are friends now": "你和 {name} 現在是好友了",
-  "A friends list is full (50 at most)": "有一方的好友名單已滿（最多 50 位）",
+  "A friends list is full (250 at most)": "有一方的好友名單已滿（最多 250 位）",
   "Accept {name} as a friend": "接受 {name} 成為好友",
   "Add {name} as a friend": "加 {name} 為好友",
   "{name} wants to be friends: accept": "{name} 想成為好友：接受",
@@ -1227,7 +1227,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "還沒有訊息。好友不在線時，訊息最多保留 7 天，等對方回來。",
   "Write back": "回覆",
   "Message a friend (in free roam)": "傳訊息給好友（自由漫遊中）",
-  "Add a player by name": "用名稱加玩家",
+  "Add a player": "新增玩家",
   "Send friend request": "送出好友邀請",
   "That's your own name": "這是你自己的名稱",
   "Not a player's name": "這不是玩家名稱",
@@ -1489,5 +1489,7 @@
   "{name} isn't in free roam now": "{name} 目前不在自由漫遊中",
   "invites you to crew \"{crew}\"": "邀請你加入車隊「{crew}」",
   "{name} invites you to crew \"{crew}\"": "{name} 邀請你加入車隊「{crew}」",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "還沒有車隊？和朋友們約好一個名稱，各自在這裡輸入，或打開車隊的邀請連結。"
+  "Previous page": "上一頁",
+  "Next page": "下一頁",
+  "No friend has that name": "沒有這個名字的好友"
 }

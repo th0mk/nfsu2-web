@@ -352,7 +352,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Nazwy oddzielone przecinkami: nigdy nie widzicie się nawzajem na przejażdżce. Operator serwera widzi, kto kogo blokuje.",
   "nobody": "nikt",
   "Crews": "Ekipy",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Gracze z tą samą nazwą ekipy zawsze widzą się na przejażdżce, a ich nazwy i strzałki na mapie mają kolor ekipy. Każdy, kto wpisze nazwę, dołącza. Maksymalnie 4 ekipy.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Gracze z tą samą nazwą ekipy zawsze widzą się na przejażdżce w kolorze ekipy. Wpisz nazwę, aby założyć ekipę lub do niej dołączyć (maksymalnie 4).",
   "Crew name": "Nazwa ekipy",
   "Join crew": "Dołącz do ekipy",
   "Leave crew {name}": "Opuść ekipę {name}",
@@ -1293,7 +1293,7 @@
   "Changelog": "Zmiany",
   "Couldn't load the changelog.": "Nie udało się wczytać listy zmian.",
   "You and {name} are friends now": "Ty i {name} jesteście już znajomymi",
-  "A friends list is full (50 at most)": "Jedna z list znajomych jest pełna (maksymalnie 50)",
+  "A friends list is full (250 at most)": "Jedna z list znajomych jest pełna (maksymalnie 250)",
   "Accept {name} as a friend": "Przyjmij gracza {name} do znajomych",
   "Add {name} as a friend": "Dodaj gracza {name} do znajomych",
   "{name} wants to be friends: accept": "Gracz {name} zaprasza do znajomych: przyjmij",
@@ -1352,7 +1352,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Brak wiadomości. Wiadomości czekają do 7 dni na znajomego, którego nie ma.",
   "Write back": "Odpisz",
   "Message a friend (in free roam)": "Napisz do znajomego (w przejażdżce)",
-  "Add a player by name": "Dodaj gracza po nazwie",
+  "Add a player": "Dodaj gracza",
   "Send friend request": "Wyślij zaproszenie do znajomych",
   "That's your own name": "To twoja własna nazwa",
   "Not a player's name": "To nie jest nazwa gracza",
@@ -1634,5 +1634,7 @@
   "{name} isn't in free roam now": "Gracza {name} nie ma teraz na przejażdżce",
   "invites you to crew \"{crew}\"": "zaprasza cię do ekipy „{crew}”",
   "{name} invites you to crew \"{crew}\"": "{name} zaprasza cię do ekipy „{crew}”",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Nie masz jeszcze ekipy? Ustalcie ze znajomymi nazwę i niech każdy wpisze ją tutaj albo otwórz link z zaproszeniem do ekipy."
+  "Previous page": "Poprzednia strona",
+  "Next page": "Następna strona",
+  "No friend has that name": "Brak znajomego o tej nazwie"
 }

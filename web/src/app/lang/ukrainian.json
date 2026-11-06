@@ -345,7 +345,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Імена через кому: ви ніколи не бачите одне одного у вільній їзді. Оператор сервера бачить, хто кого блокує.",
   "nobody": "ніхто",
   "Crews": "Команди",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Гравці з однаковою назвою команди завжди бачать одне одного у вільній їзді, а їхні імена та стрілки на мапі — у кольорі команди. Приєднатися може будь-хто, хто введе назву. До 4 команд.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Гравці з однаковою назвою команди завжди бачать одне одного у вільній їзді в кольорі команди. Введіть назву, щоб створити команду або приєднатися до неї (до 4).",
   "Crew name": "Назва команди",
   "Join crew": "Приєднатися до команди",
   "Leave crew {name}": "Вийти з команди «{name}»",
@@ -1293,7 +1293,7 @@
   "Changelog": "Зміни",
   "Couldn't load the changelog.": "Не вдалося завантажити список змін.",
   "You and {name} are friends now": "Ви та {name} тепер друзі",
-  "A friends list is full (50 at most)": "Один зі списків друзів заповнений (максимум 50)",
+  "A friends list is full (250 at most)": "Один зі списків друзів заповнений (максимум 250)",
   "Accept {name} as a friend": "Прийняти до друзів: {name}",
   "Add {name} as a friend": "Додати до друзів: {name}",
   "{name} wants to be friends: accept": "{name} хоче дружити: прийняти",
@@ -1352,7 +1352,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Повідомлень поки немає. Відсутнього друга повідомлення чекають до 7 днів.",
   "Write back": "Відповісти",
   "Message a friend (in free roam)": "Написати другові (у вільній їзді)",
-  "Add a player by name": "Додати гравця за ім'ям",
+  "Add a player": "Додати гравця",
   "Send friend request": "Надіслати запит на дружбу",
   "That's your own name": "Це ваше власне ім'я",
   "Not a player's name": "Це не ім'я гравця",
@@ -1634,5 +1634,7 @@
   "{name} isn't in free roam now": "{name} зараз немає у вільній їзді",
   "invites you to crew \"{crew}\"": "запрошує вас до команди «{crew}»",
   "{name} invites you to crew \"{crew}\"": "{name} запрошує вас до команди «{crew}»",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ще немає команди? Домовтеся з друзями про назву й введіть її тут кожен, або відкрийте посилання-запрошення команди."
+  "Previous page": "Попередня сторінка",
+  "Next page": "Наступна сторінка",
+  "No friend has that name": "Немає друга з таким ім'ям"
 }

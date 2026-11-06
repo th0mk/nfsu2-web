@@ -326,7 +326,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Namen, durch Kommas getrennt: Ihr seht einander in der freien Fahrt nie. Der Betreiber des Servers sieht, wer wen blockiert.",
   "nobody": "niemand",
   "Crews": "Crews",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Spieler mit demselben Crew-Namen sehen sich in der freien Fahrt immer, mit Namen und Kartenpfeilen in der Farbe der Crew. Wer den Namen eingibt, ist dabei. Bis zu 4 Crews.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Spieler mit demselben Crew-Namen sehen sich in der freien Fahrt immer, in der Farbe der Crew. Gib einen Namen ein, um eine Crew zu gründen oder ihr beizutreten (bis zu 4).",
   "Crew name": "Crew-Name",
   "Join crew": "Crew beitreten",
   "Leave crew {name}": "Crew {name} verlassen",
@@ -1243,7 +1243,7 @@
   "Changelog": "Änderungen",
   "Couldn't load the changelog.": "Die Änderungen konnten nicht geladen werden.",
   "You and {name} are friends now": "Du und {name} seid jetzt Freunde",
-  "A friends list is full (50 at most)": "Eine Freundesliste ist voll (höchstens 50)",
+  "A friends list is full (250 at most)": "Eine Freundesliste ist voll (höchstens 250)",
   "Accept {name} as a friend": "{name} als Freund annehmen",
   "Add {name} as a friend": "{name} als Freund hinzufügen",
   "{name} wants to be friends: accept": "{name} möchte mit dir befreundet sein: annehmen",
@@ -1302,7 +1302,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Noch keine Nachrichten. Nachrichten warten bis zu 7 Tage auf einen Freund, der weg ist.",
   "Write back": "Zurückschreiben",
   "Message a friend (in free roam)": "Einem Freund schreiben (in der freien Fahrt)",
-  "Add a player by name": "Spieler per Name hinzufügen",
+  "Add a player": "Spieler hinzufügen",
   "Send friend request": "Freundschaftsanfrage senden",
   "That's your own name": "Das ist dein eigener Name",
   "Not a player's name": "Kein Spielername",
@@ -1576,5 +1576,7 @@
   "{name} isn't in free roam now": "{name} ist gerade nicht in der freien Fahrt",
   "invites you to crew \"{crew}\"": "lädt dich in die Crew „{crew}“ ein",
   "{name} invites you to crew \"{crew}\"": "{name} lädt dich in die Crew „{crew}“ ein",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Noch keine Crew? Macht mit deinen Freunden einen Namen aus und gebt ihn alle hier ein, oder öffne den Einladungslink einer Crew."
+  "Previous page": "Vorherige Seite",
+  "Next page": "Nächste Seite",
+  "No friend has that name": "Kein Freund mit diesem Namen"
 }

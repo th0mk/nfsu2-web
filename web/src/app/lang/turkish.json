@@ -293,7 +293,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Virgülle ayrılmış adlar: serbest sürüşte birbirinizi hiç görmezsiniz. Sunucunun yöneticisi kimin kimi engellediğini görür.",
   "nobody": "kimse",
   "Crews": "Ekipler",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Aynı ekip adına sahip oyuncular serbest sürüşte birbirlerini her zaman görür; adları ve harita okları ekibin renginde olur. Adı yazan herkes katılır. En çok 4 ekip.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Aynı ekip adına sahip oyuncular serbest sürüşte birbirlerini her zaman ekibin renginde görür. Bir ekip kurmak ya da birine katılmak için bir ad yaz (en çok 4).",
   "Crew name": "Ekip adı",
   "Join crew": "Ekibe katıl",
   "Leave crew {name}": "{name} ekibinden ayrıl",
@@ -1177,7 +1177,7 @@
   "Changelog": "Yenilikler",
   "Couldn't load the changelog.": "Yenilikler yüklenemedi.",
   "You and {name} are friends now": "Artık {name} ile arkadaşsınız",
-  "A friends list is full (50 at most)": "Arkadaş listelerinden biri dolu (en fazla 50)",
+  "A friends list is full (250 at most)": "Arkadaş listelerinden biri dolu (en fazla 250)",
   "Accept {name} as a friend": "Arkadaşlığı kabul et: {name}",
   "Add {name} as a friend": "Arkadaş olarak ekle: {name}",
   "{name} wants to be friends: accept": "{name} arkadaş olmak istiyor: kabul et",
@@ -1236,7 +1236,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Henüz mesaj yok. Mesajlar, uzakta olan bir arkadaşı 7 güne kadar bekler.",
   "Write back": "Yanıtla",
   "Message a friend (in free roam)": "Arkadaşına mesaj gönder (serbest sürüşte)",
-  "Add a player by name": "Adıyla oyuncu ekle",
+  "Add a player": "Oyuncu ekle",
   "Send friend request": "Arkadaşlık isteği gönder",
   "That's your own name": "Bu senin kendi adın",
   "Not a player's name": "Bir oyuncu adı değil",
@@ -1501,5 +1501,7 @@
   "{name} isn't in free roam now": "{name} şu an serbest sürüşte değil",
   "invites you to crew \"{crew}\"": "seni \"{crew}\" ekibine davet ediyor",
   "{name} invites you to crew \"{crew}\"": "{name} seni \"{crew}\" ekibine davet ediyor",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Henüz ekibin yok mu? Arkadaşlarınla bir ad belirleyin ve herkes buraya yazsın ya da bir ekibin davet bağlantısını aç."
+  "Previous page": "Önceki sayfa",
+  "Next page": "Sonraki sayfa",
+  "No friend has that name": "Bu adda arkadaş yok"
 }

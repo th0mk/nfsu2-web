@@ -326,7 +326,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Namen, gescheiden door komma's: jullie zien elkaar nooit in Verkennen. De beheerder van de server ziet wie wie blokkeert.",
   "nobody": "niemand",
   "Crews": "Crews",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Spelers met dezelfde crewnaam zien elkaar in Verkennen altijd, met namen en kaartpijlen in de kleur van de crew. Iedereen die de naam typt, doet mee. Maximaal 4 crews.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Spelers met dezelfde crewnaam zien elkaar in Verkennen altijd, in de kleur van de crew. Typ een naam om een crew te beginnen of erbij te komen (maximaal 4).",
   "Crew name": "Crewnaam",
   "Join crew": "Bij crew aansluiten",
   "Leave crew {name}": "Crew {name} verlaten",
@@ -1243,7 +1243,7 @@
   "Changelog": "Wijzigingen",
   "Couldn't load the changelog.": "De wijzigingen konden niet worden geladen.",
   "You and {name} are friends now": "Jij en {name} zijn nu vrienden",
-  "A friends list is full (50 at most)": "Een vriendenlijst is vol (maximaal 50)",
+  "A friends list is full (250 at most)": "Een vriendenlijst is vol (maximaal 250)",
   "Accept {name} as a friend": "{name} accepteren als vriend",
   "Add {name} as a friend": "{name} toevoegen als vriend",
   "{name} wants to be friends: accept": "{name} wil vrienden worden: accepteren",
@@ -1302,7 +1302,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Nog geen berichten. Berichten wachten tot 7 dagen op een vriend die weg is.",
   "Write back": "Terugschrijven",
   "Message a friend (in free roam)": "Bericht aan een vriend (in Verkennen)",
-  "Add a player by name": "Speler toevoegen op naam",
+  "Add a player": "Speler toevoegen",
   "Send friend request": "Vriendschapsverzoek versturen",
   "That's your own name": "Dat is je eigen naam",
   "Not a player's name": "Geen spelersnaam",
@@ -1576,5 +1576,7 @@
   "{name} isn't in free roam now": "{name} is nu niet in Verkennen",
   "invites you to crew \"{crew}\"": "nodigt je uit voor crew \"{crew}\"",
   "{name} invites you to crew \"{crew}\"": "{name} nodigt je uit voor crew \"{crew}\"",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Nog geen crew? Spreek met je vrienden een naam af en typ die allemaal hier, of open de uitnodigingslink van een crew."
+  "Previous page": "Vorige pagina",
+  "Next page": "Volgende pagina",
+  "No friend has that name": "Geen vriend met die naam"
 }

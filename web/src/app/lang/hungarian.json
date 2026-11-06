@@ -545,7 +545,7 @@
   "Shown over your car and in the Online menu: 3 to 15 letters, digits, - or _.": "Az autód fölött és az Online menüben látszik: 3–15 betű, számjegy, - vagy _.",
   "profile name": "profilnév",
   "Crews": "Csapatok",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Az azonos csapatnevű játékosok Felfedező módban mindig látják egymást, a csapat színében megjelenő nevekkel és térképnyilakkal. Aki beírja a nevet, csatlakozik. Legfeljebb 4 csapat.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Az azonos csapatnevű játékosok Felfedező módban mindig látják egymást, a csapat színében. Írj be egy nevet, hogy csapatot alapíts, vagy csatlakozz egyhez (legfeljebb 4).",
   "Crew name": "Csapatnév",
   "Your horn": "A dudád",
   "Dual tone": "Kéthangú",
@@ -1171,7 +1171,7 @@
   "Changelog": "Változások",
   "Couldn't load the changelog.": "Nem sikerült betölteni a változásokat.",
   "You and {name} are friends now": "Te és {name} mostantól barátok vagytok",
-  "A friends list is full (50 at most)": "Az egyik barátlista megtelt (legfeljebb 50)",
+  "A friends list is full (250 at most)": "Az egyik barátlista megtelt (legfeljebb 250)",
   "Accept {name} as a friend": "{name} elfogadása barátként",
   "Add {name} as a friend": "{name} hozzáadása barátként",
   "{name} wants to be friends: accept": "{name} a barátod szeretne lenni: elfogadás",
@@ -1230,7 +1230,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Még nincs üzenet. Az üzenetek legfeljebb 7 napig várnak a távol lévő barátra.",
   "Write back": "Válasz írása",
   "Message a friend (in free roam)": "Üzenet egy barátnak (Felfedező módban)",
-  "Add a player by name": "Játékos hozzáadása név alapján",
+  "Add a player": "Játékos hozzáadása",
   "Send friend request": "Barátkérés küldése",
   "That's your own name": "Ez a saját neved",
   "Not a player's name": "Ez nem játékosnév",
@@ -1495,5 +1495,7 @@
   "{name} isn't in free roam now": "{name} most nincs Felfedező módban",
   "invites you to crew \"{crew}\"": "meghív ebbe a csapatba: „{crew}”",
   "{name} invites you to crew \"{crew}\"": "{name} meghív ebbe a csapatba: „{crew}”",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Még nincs csapatod? Állapodjatok meg egy névben a barátaiddal, és mindenki írja be ide, vagy nyisd meg egy csapat meghívólinkjét."
+  "Previous page": "Előző oldal",
+  "Next page": "Következő oldal",
+  "No friend has that name": "Nincs ilyen nevű barátod"
 }

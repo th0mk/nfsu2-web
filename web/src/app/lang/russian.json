@@ -352,7 +352,7 @@
   "Names, separated by commas: you never see each other in free roam. The server's operator sees who blocks whom.": "Имена через запятую: вы никогда не видите друг друга в свободной езде. Оператор сервера видит, кто кого блокирует.",
   "nobody": "никто",
   "Crews": "Команды",
-  "Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.": "Игроки с одинаковым названием команды всегда видят друг друга в свободной езде, а их имена и стрелки на карте — в цвете команды. Вступить может любой, кто введёт название. До 4 команд.",
+  "Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).": "Игроки с одинаковым названием команды всегда видят друг друга в свободной езде в цвете команды. Введите название, чтобы создать команду или вступить в неё (до 4).",
   "Crew name": "Название команды",
   "Join crew": "Вступить в команду",
   "Leave crew {name}": "Покинуть команду «{name}»",
@@ -1293,7 +1293,7 @@
   "Changelog": "Изменения",
   "Couldn't load the changelog.": "Не удалось загрузить список изменений.",
   "You and {name} are friends now": "Вы и {name} теперь друзья",
-  "A friends list is full (50 at most)": "Один из списков друзей заполнен (максимум 50)",
+  "A friends list is full (250 at most)": "Один из списков друзей заполнен (максимум 250)",
   "Accept {name} as a friend": "Принять в друзья: {name}",
   "Add {name} as a friend": "Добавить в друзья: {name}",
   "{name} wants to be friends: accept": "{name} хочет дружить: принять",
@@ -1352,7 +1352,7 @@
   "No messages yet. Messages wait up to 7 days for a friend who is away.": "Сообщений пока нет. Сообщения ждут отсутствующего друга до 7 дней.",
   "Write back": "Ответить",
   "Message a friend (in free roam)": "Написать другу (в свободной езде)",
-  "Add a player by name": "Добавить игрока по имени",
+  "Add a player": "Добавить игрока",
   "Send friend request": "Отправить запрос в друзья",
   "That's your own name": "Это ваше собственное имя",
   "Not a player's name": "Это не имя игрока",
@@ -1634,5 +1634,7 @@
   "{name} isn't in free roam now": "{name} сейчас нет в свободной езде",
   "invites you to crew \"{crew}\"": "приглашает вас в команду «{crew}»",
   "{name} invites you to crew \"{crew}\"": "{name} приглашает вас в команду «{crew}»",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ещё нет команды? Договоритесь с друзьями о названии и введите его здесь каждый, или откройте ссылку-приглашение команды."
+  "Previous page": "Предыдущая страница",
+  "Next page": "Следующая страница",
+  "No friend has that name": "Нет друга с таким именем"
 }
