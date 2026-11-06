@@ -11,9 +11,10 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-06 (38fc8e5)
+## 2026-11-06 (f646b2e)
 
 - **Friends:** Friends in the page menu (F9) in every free roam with others: requests to accept or decline, your friends, and Add a player by name. A request sent from afar shows at the top while you drive (F accepts), and I writes to a friend who just came into your room.
+- **Crews:** invite a friend who is in free roam to one of your crews, from their line in Friends (the two-people icon); they get a note at the top and press Z to join. As free roam starts, the log shows how many of each of your crews are in free roam, and the Crews box says how to start a crew.
 - **Page menu:** F9 is a short list showing each setting's state, without Back to the game and the frame-rate counter (F8 still shows it). Quit game warns when nothing was saved in the last 10 minutes and says how to save.
 - **Free roam:** the notes over the game share one look and sit under the game's outrun line; invites and friend requests have a lime border, the away warning an amber one. The log on the left is one size.
 - **Free roam:** new players driving off the airport with Ghost mode off are told where to turn it on, instead of "Please keep right".
