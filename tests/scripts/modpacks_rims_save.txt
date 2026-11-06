@@ -4,7 +4,7 @@
 # the game saves), back to Explore Mode with the autosave: --fetch the profile again and see whether it still has the
 # rim's key.  Without MODPACKS the car keeps its stock rims (overrides.c: "[parts] a saved car's part").  The log's "[mods]" lines say what the packs gave.
 #   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --data <game folder> --seed <that save tree>
-#        --a Sv:modpacks_rims_save.txt:NFSU2_ROAM=0[,NFSU2_UG2NET_PARTS=0] --fetch "NFS Underground 2/<profile>/<profile>"
+#        --a Sv:modpacks_rims_save.txt:NFSU2_ROAM=0[,NFSU2_MOD_RIMS=0] --fetch "NFS Underground 2/<profile>/<profile>"
 0     bot on
 +0    waitroam 6000
 +0    bot off

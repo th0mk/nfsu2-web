@@ -13,8 +13,6 @@ not guessed.
 
 ## 2026-11-06 (1dce334)
 
-- **Mods:** underground2.net Rims: Blitz, a new brand of 24 rims, in the rim shop (Mods tab, off by default). Friends see them on your car; your saves still work in the original game.
-- **Mods:** Mod parts on other cars: Original shows other players' cars with the game's own parts instead.
 - **Mods:** GPS Distance: the distance to your destination under the GPS arrow, in your Speedometer Units (off by default).
 - **Friends:** in the page menu (F9) in free roam: requests, your friends and Add a player by name. Requests from afar show at the top (F accepts).
 - **Friends:** a list holds 250 friends; the start page shows them in pages, with a filter.
@@ -49,7 +47,7 @@ not guessed.
 - **Races:** lobbies keep out players past the host's stage unless the host lets everyone in (V); friends and crew can always join. A cleaner lobby card with a speedometer of the fastest car against yours, and its keys on a controller's D-pad.
 - **Free roam:** the box at the top left shows only when it says something: a new message, at a race, shop or outrun, and for a moment at the start and after a menu.
 - **Touch controls:** Reset shows only when the car is slow, and Pressurize and Bounce only when they can be used; the other buttons stay where they are.
-- **Vinyls:** Art Factory 28 to 34, Sha_Do's designs that only the Japanese release had, on every car after Art Factory 27 (ported to the PC by the underground2.net team).
+- **Vinyls:** Art Factory 28 to 34, Sha_Do's designs that only the Japanese release had, on every car after Art Factory 27.
 - **Languages:** Czech, Slovak and Greek, the game and the start page.
 - **Music:** scrobble the songs you hear, EA Trax and the Radio, to Last.fm: Settings, Game.
 - **Controllers:** the Steam Controller (the 2015 and the 2026 one) and a Steam Deck's controls work without Steam in Chrome and Edge: Controls, Controller, Connect a Steam Controller.

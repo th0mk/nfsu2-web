@@ -343,15 +343,6 @@ Room set, the Room row says how many are in that room.
   and 8 stars in stages 1 to 4, 10 from stage 5), so every cover shoot of the stage is offered the next time free roam
   loads, and pays by that rating. The shops show no Visual Rating box. Turned off again, the next free-roam load
   offers the shoots by your car's own rating; the ones shot and paid stay.
-- **underground2.net Rims** (Mods): off by default. On, the Body Shop's Rims have Blitz, a brand of 24 rims from the
-  [underground2.net](https://nfsmods.xyz/mod/2004) mod, between BBS and Enkei. Everyone's game has them, so a friend's
-  car with them looks the same with this off; off, the shop offers only the game's own brands, and rims already on
-  your car stay. Your saves still work in the original game: there such a car has a similar rim of the game's in the
-  same size (Blitz BRW03: Avus AF-502, Technospeed Z1: Racing Hart CP8; the mod's parts are kept beside the profile,
-  in MODPARTS.DAT).
-- **Mod parts on other cars** (Mods, Seen by others): Shown by default, other players' cars with the mods' parts they
-  have. Original: those parts shown as the game's (the same look-alike rims, else the stock part), in free roam and in
-  races; your own car keeps its own either way.
 - **Upscaled HUD and Detailed Map** (Mods): Original (the default) is the game's own. Upscaled shows LunicAura106's
   [Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the
   server has their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times

@@ -6,12 +6,11 @@ designs for Art Factory Graphics.  The runtime (runtime/fileio.c) reads a car's
 VINYLS.BIN as the game's own file with these textures added, and
 runtime/vinylpacks.c adds their seven parts to the car part database.
 
-    tools/vinylpacks.py <game folder> --shado <underground2.net folder> [--out <folder>]
+    tools/vinylpacks.py <game folder> --shado <mod folder> [--out <folder>]
 
-<underground2.net folder> is the underground2.net mod (nfsmods.xyz/mod/2004, by
-the underground2.net team) extracted: the folder with "1 - Mod Files" in it, or
-that folder itself.  Its cars' VINYLS.BIN have
-the Sha_Do vinyls ported to the PC; only those 14 textures a car (7 vinyls, each
+<mod folder> is a PC mod with the Japanese release's vinyls, extracted: the
+folder with "1 - Mod Files" in it, or that folder itself.  Its cars'
+VINYLS.BIN have the Sha_Do vinyls ported to the PC; only those 14 textures a car (7 vinyls, each
 with its mask) are taken, nothing else of the mod.  The packs are written under
 <out> (default: the game folder): VINYLPACKS/...
 
@@ -340,9 +339,9 @@ def one_car(job):
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/vinylpacks.py <game folder> --shado <underground2.net folder> [--out <folder>]')
+    ap = argparse.ArgumentParser(usage='tools/vinylpacks.py <game folder> --shado <mod folder> [--out <folder>]')
     ap.add_argument('game')
-    ap.add_argument('--shado', metavar='MOD', help='the underground2.net mod (nfsmods.xyz/mod/2004), extracted')
+    ap.add_argument('--shado', metavar='MOD', help='a PC mod with the Japanese release\'s vinyls, extracted')
     ap.add_argument('--out', metavar='DIR', help='where VINYLPACKS/ goes (default: the game folder)')
     ap.add_argument('--cars', help='only these cars (comma-separated folder names), for a test')
     ap.add_argument('--jobs', type=int, default=os.cpu_count() or 4)

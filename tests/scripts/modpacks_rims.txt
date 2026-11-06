@@ -4,9 +4,9 @@
 # shop, the autosave and the car in the world (bz_world): --fetch "NFS Underground 2/<profile>/<profile>" copies the
 # profile with the rim out, for modpacks_rims_save.txt.  The log's "[mods]" lines say what the car part database gained and what
 # the rim shop lists; its "[file]" lines that CARS/WHEELS/TEXTURES.BIN was read with its pack and
-# CARS/WHEELS/GEOMETRY_BLITZ.BIN from MODPACKS.  With NFSU2_UG2NET_PARTS=0 the brands are the game's own.
+# CARS/WHEELS/GEOMETRY_BLITZ.BIN from MODPACKS.  With NFSU2_MOD_RIMS=0 the brands are the game's own.
 #   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --data <game folder with MODPACKS>
-#        --seed <career save> --a Rim:modpacks_rims.txt:NFSU2_ROAM=0,NFSU2_UG2NET_PARTS=1
+#        --seed <career save> --a Rim:modpacks_rims.txt:NFSU2_ROAM=0,NFSU2_MOD_RIMS=1
 0     bot on
 +0    waitroam 6000
 +0    bot off

@@ -4,9 +4,9 @@
  * a mod's switch (a settings.ini key, the pack names its environment name)
  * only decides whether the shops offer its parts.  Parts already on a car
  * stay, with the switch off too: a save never loses them.  Without
- * MODPACKS/PARTS.BIN nothing changes.  Today the packs hold new rim brands:
- * the underground2.net mod's (nfsmods.xyz/mod/2004, by the underground2.net
- * team), ug2net_parts = on (NFSU2_UG2NET_PARTS=1), off by default.
+ * MODPACKS/PARTS.BIN nothing changes.  Today the packs hold new rim brands
+ * (Blitz), mod_rims = on (NFSU2_MOD_RIMS=1), off by default; for now the
+ * page has no row for it (web/src/app/settings.ts).
  *
  * The parts: GLOBALB's car part database (chunk 0x80034602, its loader
  * 0x636BE0: runtime/vinylpacks.c, which hands its copy of the chunk here)
@@ -129,7 +129,9 @@ static int load(void){
     g.nmods = (int)nm;
     for (uint32_t i = 0; i < nm; i++){
         memcpy(g.env[i], m + PK_MOD * i, 31); g.env[i][31] = 0;
-        g.on[i] = switched_on(g.env[i]);
+        /* the rims are out for now (web/src/app/mods.ts): no shop offers them, whatever MODPACKS or
+         * settings.ini says; back: g.on[i] = switched_on(g.env[i]) */
+        g.on[i] = 0; (void)switched_on;
     }
     for (uint32_t i = 0; i < np; i++){
         const uint8_t *q = pp + PK_PART * i;

@@ -97,8 +97,9 @@ function section(id: string, title: string, rows: HTMLElement[]): HTMLElement {
   return box;
 }
 
-/** a section's first row, a setting of no mod's: how other players' cars show the mods' parts (settings-ui.ts) */
-const LEAD: Partial<Record<string, string>> = { shared: 'others_mod_parts' };
+/** a section's first row, a setting of no mod's: how other players' cars show the mods' parts (settings-ui.ts; out for
+ *  now with the rims: { shared: 'others_mod_parts' }) */
+const LEAD: Partial<Record<string, string>> = {};
 
 /**
  * The tab's sections, in KINDS' order (a section without entries is left out), a row per mod, then our changes, a row

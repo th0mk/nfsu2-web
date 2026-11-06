@@ -5,11 +5,10 @@ loads all of it, so a friend's car with a mod's part looks the same on every
 screen; each mod's switch (a settings.ini key) only decides whether its parts
 are offered in the shops (runtime/modpacks.c).
 
-    tools/modpacks.py <game folder> --ug2net <underground2.net folder> [--brands BLITZ,...] [--out <folder>]
+    tools/modpacks.py <game folder> --mod <mod folder> [--brands BLITZ,...] [--out <folder>]
 
-<underground2.net folder> is the underground2.net mod (nfsmods.xyz/mod/2004,
-by the underground2.net team) extracted: the folder with "1 - Mod Files" in
-it, or that folder itself.  Of it, only the rim brands named (default: BLITZ)
+<mod folder> is the PC mod with the rims, extracted: the folder with
+"1 - Mod Files" in it, or that folder itself.  Of it, only the rim brands named (default: BLITZ)
 are taken, each with all of its rims: their parts in the mod's car part
 database, the brand's model pack, the rims' textures and the brand's icon.
 Nothing the mod changes in the game's own parts is taken: the mod also takes
@@ -56,7 +55,7 @@ KIND_RIM, KIND_BRAND = 28, 67
 A_TEXTURE, A_OUTER, A_INNER, A_BRAND = (bstring_hash(n) for n in ('TEXTURE_NAME', 'OUTER_RADIUS', 'INNER_RADIUS', 'BRAND_NAME'))
 RIM_ATTRS = {A_TEXTURE, A_OUTER, A_INNER, A_BRAND}     # a rim's attributes: all plain values (no string indices)
 OWNER_WHEELS = bstring_hash('WHEELS')
-UG2NET = ('NFSU2_UG2NET_PARTS',)                       # the underground2.net row's switch (web/src/app/settings.ts)
+RIMS_SWITCH = ('NFSU2_MOD_RIMS',)                      # the rims' switch (web/src/app/settings.ts)
 # A mod rim's look-alike among the game's (picked from the rim shop's renders): its stand-in, in the same size, where
 # the game shows no mod parts (a profile, so the original game and pages of before; the Original view of other
 # players' cars; a game without MODPACKS).  A mod part without one stands in with the slot's stock part.
@@ -266,7 +265,7 @@ def unlisted(path, rels):
     return len(head), bytes(head), hit
 
 
-def ug2net_root(path):
+def mod_root(path):
     if find(path, 'CARS') and find(path, 'GLOBAL'): return path
     sub = next((os.path.join(path, n) for n in sorted(os.listdir(path)) if find(os.path.join(path, n), '1 - Mod Files/GLOBAL')), None)
     mod = find(sub, '1 - Mod Files') if sub else find(path, '1 - Mod Files')
@@ -284,15 +283,15 @@ class Strings:
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/modpacks.py <game folder> --ug2net <underground2.net folder> [--brands BLITZ,...] [--out <folder>]')
+    ap = argparse.ArgumentParser(usage='tools/modpacks.py <game folder> --mod <mod folder> [--brands BLITZ,...] [--out <folder>]')
     ap.add_argument('game')
-    ap.add_argument('--ug2net', metavar='MOD', help='the underground2.net mod (nfsmods.xyz/mod/2004), extracted')
+    ap.add_argument('--mod', metavar='MOD', help='the PC mod with the rims, extracted')
     ap.add_argument('--brands', default='BLITZ', help='its new rim brands to take (comma-separated)')
     ap.add_argument('--out', metavar='DIR', help='where MODPACKS/ goes (default: the game folder)')
     a = ap.parse_args()
-    if not a.ug2net: sys.exit(__doc__)
+    if not a.mod: sys.exit(__doc__)
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')
-    mod = ug2net_root(a.ug2net)
+    mod = mod_root(a.mod)
     game_db = PartDB(find(a.game, 'GLOBAL/GLOBALB.LZC') or find(a.game, 'GLOBAL/GLOBALB.BUN'))
     mod_db = PartDB(find(mod, 'GLOBAL/GLOBALB.LZC'))
     game_keys = {p['key'] for p in game_db.parts}
@@ -302,7 +301,7 @@ def main():
         if p['kind'] != KIND_RIM or p['owner'] != OWNER_WHEELS: continue
         ga = dict(game_db.attr_list(p['list']))
         game_rims[(gbrands.get(ga.get(A_BRAND)), game_db.str(p['name']), ga.get(A_INNER), ga.get(A_OUTER))] = p['key']
-    mods = list(UG2NET)
+    mods = list(RIMS_SWITCH)
     S = Strings()
     parts, texts, want_tex, geo = [], {}, {}, []
     mod_lang = lang_texts(find(mod, 'LANGUAGES/English.bin'))

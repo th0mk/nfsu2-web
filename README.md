@@ -79,9 +79,8 @@ GameHunter's [Hungarian translation](http://www.gamehunter.hu/2010/08/need-for-s
 (L_zooltan), from Clark X.'s [Ukrainian translation](https://kuli.com.ua/need-for-speed-underground-2), from ROXOR's and
 PINĎA & syn's Czech translation and from MixerX's Slovak one ([abcgames.cz](https://www.abcgames.cz/?p=preklady_zobraz&id=7774)). The texture packs are built from LunicAura106's
 [Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485), the
-uncensored songs from xGMVx's [Uncensored & Restored Soundtrack](https://nfsmods.xyz/mod/3649), and Art Factory 28 to
-34 from the underground2.net Team & Contributors' [PC port](https://nfsmods.xyz/mod/2004) of the Japanese release's
-vinyls. Split screen is BirdSentinel (Zack)'s port of mihaits'
+uncensored songs from xGMVx's [Uncensored & Restored Soundtrack](https://nfsmods.xyz/mod/3649). Split screen is
+BirdSentinel (Zack)'s port of mihaits'
 [NFSU2-SplitScreen](https://github.com/mihaits/NFSU2-SplitScreen). Other changes follow what these mods found out
 about the game: ThirteenAG's, Aero_'s and xan1242's [Widescreen Fixes Pack](https://nfsmods.xyz/mod/3327), dstudnicki's
 [NFSU2 High FPS Audio Fix](https://github.com/dstudnicki/NFSU2HighFPSAudioFix), the ExOpts Team's

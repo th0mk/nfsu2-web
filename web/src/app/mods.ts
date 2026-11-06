@@ -202,22 +202,16 @@ export const MODS: readonly Mod[] = [
     ],
     online: 'seen', files: ['runtime/cameras.c', 'runtime/lightkey.c', 'runtime/regional.c', 'runtime/vinylcat.c', 'runtime/quickrace.c'],
   },
-  {
-    id: 'art-factory', name: 'Art Factory 28 to 34', authors: [{ name: 'underground2.net Team & Contributors', port: true }],
-    links: { page: 'https://nfsmods.xyz/mod/2004' },
-    kind: 'shared', uses: 'data', control: { always: true },
-    line: N('Seven vinyls from the Japanese release.'),
-    details: 'Designs only the Japanese release (Sha_Do) had, after Art Factory 27 on every car. The game\'s own vinyls stay as they are.',
-    online: 'seen', files: ['runtime/vinylpacks.c', 'tools/vinylpacks.py'],
-  },
-  {
-    id: 'ug2net-parts', name: 'underground2.net Rims', authors: [{ name: 'underground2.net Team & Contributors' }],
-    links: { page: 'https://nfsmods.xyz/mod/2004' },
-    kind: 'shared', uses: 'data', control: { setting: 'ug2net_parts' },
-    line: N('New rim brands in the rim shop.'),
-    details: 'Blitz, a brand of 24 rims, in the rim shop. Everyone\'s game has them, so a friend\'s car with them looks the same with this off. Off, the shop offers only the game\'s own brands; rims already on your car stay. Your saves still work in the original game: there the car has a similar rim of the game\'s in the same size.',
-    online: 'seen', sizeMB: 1, files: ['runtime/modpacks.c', 'tools/modpacks.py'],
-  },
+  // The rims are out for now (with settings.ts's mod_rims and others_mod_parts, settings-ui.ts's rows and
+  // runtime/modpacks.c's shop switch); back with their makers' names and link:
+  // {
+  //   id: 'mod-rims', name: 'Blitz Rims', authors: [],
+  //   links: {},
+  //   kind: 'shared', uses: 'data', control: { setting: 'mod_rims' },
+  //   line: N('New rim brands in the rim shop.'),
+  //   details: 'Blitz, a brand of 24 rims, in the rim shop. Everyone\'s game has them, so a friend\'s car with them looks the same with this off. Off, the shop offers only the game\'s own brands; rims already on your car stay. Your saves still work in the original game: there the car has a similar rim of the game\'s in the same size.',
+  //   online: 'seen', sizeMB: 1, files: ['runtime/modpacks.c', 'tools/modpacks.py'],
+  // },
 
   // ---- Game rules
   {
@@ -301,6 +295,7 @@ export const ADDED: readonly { id: string; title: string; items: readonly Change
     { name: 'Power Units', key: '', line: 'Options, Gameplay: engine power in bhp or kW' },
     { name: 'Turn the car in the garage', key: 'right stick', line: 'The right stick or two fingers turn it' },
     { name: 'Tuning graphs', key: '', line: 'Drag the ECU and Turbo graphs\' dots' },
+    { name: 'Art Factory 28 to 34', key: '', line: 'The Japanese release\'s 7 vinyls, on every car' },
   ] },
   { id: 'controls', title: N('Controls'), items: [
     { name: 'Site keys', key: '', line: 'Set or turn off this site\'s keys and buttons' },

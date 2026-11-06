@@ -3,7 +3,7 @@
 # the friend's car has its rims' models (the shops' rims, CARS\WHEELS\GEOMETRY_BLITZ.BIN from MODPACKS), whatever
 # each page's switch is.
 #   node web/tools/roam-pair.mjs --page play --size 960x540 --data <game folder with MODPACKS> --seed <that save tree>
-#        --a Al:modpacks_rims_roam.txt:NFSU2_UG2NET_PARTS=1 --b Bo:modpacks_rims_roam.txt:NFSU2_UG2NET_PARTS=0
+#        --a Al:modpacks_rims_roam.txt:NFSU2_MOD_RIMS=1 --b Bo:modpacks_rims_roam.txt:NFSU2_MOD_RIMS=0
 0     bot on
 +0    waitroam 6000
 +0    bot off

@@ -2,7 +2,7 @@
 # stand-ins): a career save with everything unlocked, CC_BODYSHOP_1, Rims, then each brand's styles in turn
 # (rs_<BRAND>_<n>); a brand with no styles for the car (NFSU here) only shown in the list (rs_NFSU).
 #   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --data <game folder with MODPACKS>
-#        --seed <career save> --a Rs:modpacks_rimstyles.txt:NFSU2_ROAM=0,NFSU2_UG2NET_PARTS=1
+#        --seed <career save> --a Rs:modpacks_rimstyles.txt:NFSU2_ROAM=0,NFSU2_MOD_RIMS=1
 0     bot on
 +0    waitroam 6000
 +0    bot off
