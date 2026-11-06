@@ -1,9 +1,10 @@
-# Tyre smoke between players, instance B (renders): new career -> prologue
-# free roam; once A (roam_mp_drift_a.txt) has driven off, B jumps 8 m behind
-# its car every 70 frames and dumps a frame: the smoke at A's car while it
-# slides.  "mp carpeek 0 3c4 4" is A's car's rear wheels' slip on B's side
-# (slip_pose; 0 before the fix), "mp carpeek 0 39c 2" their surfaces, "mp
-# sounds 0" whether A's car has the game's skid sound (CARSFX_Skids).
+# Remote tyre-smoke regression, paired with roam_mp_drift_a.txt. The
+# observer follows the driver during handbrake turns. waitsmoke checks the
+# native emitter's duration and strength, so synchronizing slip alone cannot
+# pass. The port must exercise unindexed cars (logged by waitsmoke).
+# Capture smoke while sliding, then verify emission stops after braking.
+#   node web/tools/roam-pair.mjs --page play --play-only Vic --size 1280x720
+#        --a Drv:roam_mp_drift_a.txt --b Vic:roam_mp_drift_b.txt
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
 +30   tap RETURN
@@ -25,86 +26,20 @@
 +0    roam mp waitpeers 1 6000
 +0    roam mp waitcars 1 3000
 +0    roam mp waitsolid 1 6000
-+400  log watch
-+0    roam mp sounds 0
+# Follow when A begins its handbrake turns; assert native emission, not just slip.
++400  roam mp follow 0 8 2.5
++0    roam mp waitsmoke 0 1 6000
 +0    roam mp follow 0 8 2.5
-+30   dump dr_00
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_01
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_02
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_03
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_04
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_05
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_06
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_07
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_08
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_09
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_10
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_11
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_12
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_13
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_14
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
-+0    roam mp follow 0 8 2.5
-+30   dump dr_15
-+0    roam mp carpeek 0 3c4 4
-+0    roam mp carpeek 0 39c 2
-+40   log next
++20   dump remote_smoke
++0    roam mp carpeek 0 99c 5
++0    roam mp carpeek 0 3e4 4
++0    loop 6
++40   roam mp follow 0 10 2.5
++20   dump remote_slide
++0    endloop
+# Repeated handbrake turns end, then A brakes to a stop.
++840  roam mp follow 0 8 2.5
++0    roam mp waitsmoke 0 0 3000
++60   dump remote_smoke_stopped
++0    roam mp status
 +10   quit

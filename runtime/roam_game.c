@@ -164,9 +164,7 @@ static inline uint32_t coop_player(void){ return 0; }
 #define FN_CAR_SECTION  0x005f6cd0u   /* thiscall (): track section / collider after a move */
 #define FN_ROADTRACK    0x005da330u   /* thiscall (car +0x8D8, pos*): road tracker, as Car::SetPosition does */
 #define FN_CAR_BODYPOS  0x005f5010u   /* thiscall (): +0x50 = +0x60 - centre-of-mass offset (and a ground snap) */
-#define FN_CAR_FX       0x0061fb00u   /* thiscall (effect, float strength, 0, 0), callee pops: a car's effect this frame */
-#define FX_NOS          0xau          /* ...the nitrous flames (0x5F5730: on the throttle, from 5 mph) */
-#define FX_PURGE        0xdu          /* ...the nitrous let out (standing, off the throttle; and before a race) */
+#define FN_CAR_EFFECTS  0x005f5730u   /* thiscall (float distance): tyre smoke, dirt and nitrous */
 #define CAR_SUSP        0x380u        /* float[4]: each wheel's suspension offset (m, up), 0 at rest */
 #define CAR_STEER       0x40eu        /* u16: the front wheels' steering angle (65536 a turn, left positive) */
 #define CAR_SPIN        0x4e8u        /* float[4]: each wheel's spinner angle (rad); +0x10: its speed (rad/s) */
@@ -2177,26 +2175,14 @@ static void wheels_pose(Slot *s, const rc_pose *P, float dt){
         }
     }
 }
-/* A friend's car's nitrous (a sender of core version 4 and up; an older
- * one's car has none; its wheel heights are wheels_pose's): the car gets a
- * shot of its own that stays as full as the friend's, and the game draws for
- * it what it draws for any car on nitrous: the tail-light streaks (0x61AE90)
- * and, for a car in the car index, the flames (0x5F5730, from the World's
- * update).  A car outside the index gets the flames here, as 0x5F5730 would
- * give them: FX_NOS on the throttle from 5 mph, FX_PURGE otherwise and while
- * no race runs. */
-#define NOS_FULL        40000u        /* the friend's car's full shot: 10 s (a frame on, its share is the same within 0.2 %) */
-static void nos_pose(CPU *c, Slot *s, const rc_pose *P){
-    uint32_t car = s->car, n = car + CAR_NOS;
+/* The native effects update uses this nitrous state for both indexed cars
+ * and our unindexed cars (effects_pose). */
+#define NOS_FULL        40000u        /* the friend's car's full shot: 10 s */
+static void nos_pose(Slot *s, const rc_pose *P){
+    uint32_t n = s->car + CAR_NOS;
     if (!P->ext || !P->nos){ if (MR32(n + 0x420u)) MR32(n + 0x420u) = 0; return; }
     uint32_t now = MR32(G_TICKS);
     MR32(n + 0x414u) = NOS_FULL; MR32(n + 0x41cu) = (uint32_t)P->nos * (NOS_FULL / 100u); MR32(n + 0x420u) = now ? now : 1u;
-    if (!s->unindexed) return;
-    uint32_t ctl = rd32(car + 0x30u), race = rd32(G_RACE);
-    float thr = ok(ctl, 0x220) ? __builtin_fabsf(MRF32(ctl + 0x20cu)) : 0.f, mph = MRF32(car + 0x430u) * 2.237f;
-    uint32_t a[4] = { thr > 0.001f && mph >= 5.f ? FX_NOS : FX_PURGE, 0x3f800000u, 0, 0 };   /* strength 1.0 */
-    rh_call(c, FN_CAR_FX, car, 0, 4, a);
-    if (race && rd32(race) <= 3u){ a[0] = FX_PURGE; rh_call(c, FN_CAR_FX, car, 0, 4, a); }
 }
 /* A friend's wheels' slip and surfaces (from a sender whose wheels slide;
  * 0 otherwise, and from an older one always): the game makes the tyre smoke,
@@ -2211,7 +2197,29 @@ static void slip_pose(Slot *s, const rc_pose *P){
     for (uint32_t w = 0; w < 4; w++){
         MRF32(car + CAR_SLIP + 8u * w) = P->slip[2 * w]; MRF32(car + CAR_SLIP + 8u * w + 4u) = P->slip[2 * w + 1];
         if (P->slipx && P->surf[w] < N_SURF) MR32(car + CAR_SURF + 4u * w) = P->surf[w];
+        /* The sender clears airborne wheels' slip. Nonzero slip is therefore
+         * enough contact information for tyre effects, without a new packet. */
+        MR8(car + CAR_GROUND + w) = P->slip[2 * w] != 0.f || P->slip[2 * w + 1] != 0.f;
+        if (!MR8(car + CAR_GROUND + w)) MRF32(car + 0x99cu + 4u * w) = 0.f;
     }
+}
+/* World::DoTimestep updates effects only for indexed cars. The port's
+ * remote cars deliberately live outside that index so outrun AI can coexist.
+ * Use the native emitter once for these cars, including its surface settings,
+ * timing and nitrous; indexed cars still get their normal world update. */
+static void effects_pose(CPU *c, Slot *s){
+    uint32_t car = s->car, me = player_car();
+    if (!s->unindexed || !ok(me, 0x6cu) || MR8(car + 0x998u) || !MR8(car + CAR_ACTIVE) || !rd32(car + 0x5ccu)) return;
+    float d2 = car_d2(car, me);
+#if COOP
+    if (g_c2.on && ok(g_c2.car, 0x6cu)){
+        float d = car_d2(car, g_c2.car); if (d < d2) d2 = d;
+    }
+#endif
+    float distance = rc_sqrtf(d2);
+    if (!__builtin_isfinite(distance) || distance >= MRF32(0x7a5490u)) return;
+    uint32_t arg; memcpy(&arg, &distance, sizeof arg);
+    gcall1(c, FN_CAR_EFFECTS, car, arg);
 }
 static void apply_pose(CPU *c, Slot *s, const rc_pose *P, float dt){
     uint32_t car = s->car;
@@ -2240,7 +2248,7 @@ static void apply_pose(CPU *c, Slot *s, const rc_pose *P, float dt){
     gcall0(c, FN_CAR_SECTION, car);
     wheels_pose(s, P, dt);
     MR16(car + CAR_STEER) = (uint16_t)(int16_t)(int)(s->steer * 10430.378f);      /* the spinners' steering (wheels_pose) */
-    nos_pose(c, s, P);
+    nos_pose(s, P);
     slip_pose(s, P);
     s->pose_frames++;
 }
@@ -9622,12 +9630,19 @@ void roam_game_frame(CPU *c){
                     for (int i = 0; i < 3; i++){ v->pose.p[i] -= s->push_u[i] + s->push_r[i]; v->pose.v[i] -= s->push_v[i]; }
                     push_off(s);
                 }
+                /* A backgrounded client may never send a final zero-slip
+                 * snapshot. Held poses must not keep emitting smoke/nitrous. */
+                if (v->paused || v->pose.mode == RC_MODE_HOLD){
+                    v->pose.nos = 0;
+                    for (int i = 0; i < 8; i++) v->pose.slip[i] = 0.f;
+                }
                 apply_pose(c, s, &v->pose, (float)frame_dt / 1e6f);
                 soft_update(s, &v->pose, host);
                 body_update(c, k);
                 for (int i = 0; i < 3; i++){ s->drawn[i] = v->pose.p[i]; s->drawn_v[i] = v->pose.v[i]; }
                 s->hidden = 0; MR8(s->car + CAR_ACTIVE) = 1;
                 unblink(s);
+                if (world_runs) effects_pose(c, s);
                 if (g_poselog)
                     rh_fprintf(g_poselog, "R,%lld,%.0f,%08x,%.4f,%.4f,%.4f,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", (long long)host, g_sync, s->peer_id,
                             (double)v->pose.p[0], (double)v->pose.p[1], (double)v->pose.p[2], (double)v->pose.speed, v->pose.mode, (double)v->err,
@@ -10761,6 +10776,26 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
              g_aieng_calls, g_aieng_muted);
 #endif
         return 1;
+    }
+    if (!strcasecmp(sub, "waitsmoke")){
+        /* "mp waitsmoke K ON TIMEOUT": native tyre emission on the receiving
+         * car, not merely slip arriving over the network. */
+        long tmo = 3000; sscanf(args + used, "%*s %*s %ld", &tmo);
+        int k = atoi(a1), want = atoi(a2) != 0, have = 0;
+        uint32_t car = k >= 0 && k < NSLOT ? g_sl[k].car : 0;
+        int active = car && g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden && ok(car, 0x9e0u);
+        if (active) for (uint32_t w = 0; w < 4; w++)
+            have |= MR8(car + CAR_GROUND + w) && MRF32(car + 0x99cu + 4u * w) > 0.f && MRF32(car + 0x3e4u + 4u * w) > 0.f;
+        if (*wait_start < 0) *wait_start = f;
+        if (active && have == want){
+            rlog("[expect] PASS f=%ld mp waitsmoke %d %d (unindexed=%d)\n", f, k, want, g_sl[k].unindexed);
+            *wait_start = -1; return 1;
+        }
+        if (f - *wait_start >= tmo){
+            rlog("[expect] FAIL f=%ld mp waitsmoke %d %d: active=%d smoke=%d\n", f, k, want, active, have);
+            *wait_start = -1; return 1;
+        }
+        return 0;
     }
     if (!strcasecmp(sub, "carpoke") || !strcasecmp(sub, "carpeek")){
         /* "mp carpoke K OFF VALUE [N]": N floats (VALUE may be nan) into slot
