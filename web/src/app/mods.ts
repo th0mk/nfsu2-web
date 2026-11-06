@@ -18,7 +18,7 @@ export type Place = 'display' | 'mainMenu';
 export type Online = 'mine' | 'you' | 'seen' | 'career' | 'offline';
 /** what this port takes from the mod: its files, packed for the browser (data); its code, ported (code); or what it
  *  found out about the game (addresses, values), written anew (findings) */
-export type Uses = 'data' | 'code' | 'findings';
+export type Uses = 'original' | 'data' | 'code' | 'findings';
 
 /** setting: a settings.ini key (settings.ts KEYS) and the values that turn the mod on (none: a switch, on); always: no
  *  setting on the page; elsewhere: settings of its own elsewhere on the page (keys); menu: in the game's own menus */
@@ -92,6 +92,7 @@ export const ONLINE: Readonly<Record<Online, string>> = {
 };
 
 export const USES: Readonly<Record<Uses, string>> = {
+  original: N('Built for this project'),
   data: N('Its files, packed for the browser'),
   code: N('Its code, ported'),
   findings: N('Its findings, written anew'),
@@ -171,6 +172,16 @@ export const MODS: readonly Mod[] = [
     details: 'The game updates its sounds at most every 15 ms, and then by one frame\'s time only: above 60 fps the engine\'s pitch and the gear shifts ran slow, at 120 fps at half speed. Here an update also gets the time of the frames it skipped. At 60 fps and below nothing changes.',
     online: 'you', files: ['runtime/framerate.c'],
   },
+
+  {
+    id: 'gps-distance', name: 'GPS Distance', authors: [{ name: 'roman01la' }],
+    links: { source: 'https://github.com/roman01la/nfsu2-web' },
+    kind: 'screen', uses: 'original', control: { setting: 'gps_distance' },
+    line: N('Distance to your destination beneath the GPS arrow.'),
+    details: 'Shows straight-line distance while the GPS arrow is visible, using metres and kilometres or feet and miles to match Speedometer Units. Each split-screen player sees the distance from their own car. Disabled by default; changes apply the next time you launch the game.',
+    online: 'mine', files: ['runtime/gpsdistance.c', 'runtime/gpsdistance_format.h'],
+  },
+
 
   // ---- Seen by others
   {

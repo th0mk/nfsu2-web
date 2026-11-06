@@ -1,3 +1,4 @@
+# Requires --env NFSU2_GPS_DISTANCE=1 (Mods: GPS Distance).
 # Native GPS distance label: activate a normal map destination, drive, then cancel GPS.
 0     bot on
 +0    waitroam 6000

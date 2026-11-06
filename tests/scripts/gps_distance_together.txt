@@ -1,3 +1,4 @@
+# Requires --env NFSU2_GPS_DISTANCE=1 (Mods: GPS Distance).
 # GPS HUD lifecycle: together. Run with roam-pair --solo --page app --env NFSU2_ROAM=0.
 # The local race choices differ from the online Solo/Multiplayer lobby dialog.
 # A saved career with its first car is required; let the bot finish the prologue.

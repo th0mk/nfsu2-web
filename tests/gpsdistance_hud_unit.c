@@ -1,6 +1,7 @@
 /* Exercise the real HUD hook with two players and stand-ins for the native FE
  * calls. Browser scripts separately cover real package ownership/rendering.
  * cc -Wall -Wextra -Iruntime tests/gpsdistance_hud_unit.c -o out/gpsdistance_hud_unit
+ * Run without arguments for enabled HUD checks; unset/0/off/false/invalid check disabled.
  */
 #include <assert.h>
 #include <stdlib.h>
@@ -49,7 +50,18 @@ static void text_is(unsigned s, const char *text){
     uint32_t str = MR32(objects[s] + 0x64);
     for (unsigned i = 0;; ++i){ assert(MR16(str + 2 * i) == (unsigned char)text[i]); if (!text[i]) break; }
 }
-int main(void){
+int main(int argc, char **argv){
+    unsetenv("NFSU2_GPS_DISTANCE");
+    if (argc > 1){
+        if (strcmp(argv[1], "unset")) setenv("NFSU2_GPS_DISTANCE", argv[1], 1);
+        /* Disabled must return before touching any guest memory or native FE calls. */
+        CPU cpu = {0}, saved = cpu;
+        gpsdistance_hud(&cpu);
+        assert(!memcmp(&saved, &cpu, sizeof cpu) && !clones && !writes);
+        puts("PASS GPS HUD disabled");
+        return 0;
+    }
+    setenv("NFSU2_GPS_DISTANCE", "1", 1);
     g_mem = calloc(1, 0x1000000); assert(g_mem);
     MR8(0x8385b9) = 1; MR8(0x83aa1a) = 1;
     for (unsigned s = 0; s < 2; ++s){

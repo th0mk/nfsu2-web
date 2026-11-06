@@ -7,6 +7,8 @@
 #include "gpsdistance_format.h"
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
+#include <strings.h>
 
 void dispatch_indirect(CPU *, uint32_t);
 uint32_t roam_game_clone_hud_text(CPU *, uint32_t, uint32_t, const char *);
@@ -25,6 +27,13 @@ static uint32_t call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *
 static uint32_t one(CPU *c, uint32_t fn, uint32_t self, uint32_t arg){ return call(c, fn, self, 1, &arg); }
 
 void gpsdistance_hud(CPU *c){
+    /* settings.ini gps_distance; fixed for this launch, off by default. */
+    static int enabled = -1;
+    if (enabled < 0){
+        const char *v = getenv("NFSU2_GPS_DISTANCE");
+        enabled = v && (!strcmp(v, "1") || !strcasecmp(v, "on") || !strcasecmp(v, "true"));
+    }
+    if (!enabled) return;
     /* The destination is shared; distance and arrow visibility belong to
      * the Player whose HUD has just updated. Some HUDs have no GPS part. */
     uint32_t pl = c->esi;
