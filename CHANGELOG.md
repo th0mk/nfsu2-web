@@ -20,17 +20,17 @@ not guessed.
 - **Free roam:** new players with Ghost mode off are told where to turn it on.
 - **Start page:** a lime dot on Friends & crews when requests or messages wait.
 - **Loading screens:** nfsu2.xyz in the corner.
-- **iPhone and iPad:** no more one-second freezes in a busy free roam.
-- **Garage:** Split Screen no longer empties career slots 6 to 10.
-- **Vinyls:** Special lists only the vinyls the car can wear.
-- **Controllers:** Xbox Bluetooth triggers work in Firefox on a Mac.
-- **Phones:** PowerVR B-Series phones start in the window instead of full screen.
-- **Career:** no more error 134 after the car lot when the career car was missing.
-- **Races:** joining a race from free roam no longer loads for minutes and drops you back to the lobby.
-- **Photo mode:** Auto-turn starts off at every visit, and Reset stops it.
-- **iPhone:** two fingers turn the car in the garage again.
-- **Free roam:** Enter at a shop, race or cover shoot no longer stays dead until a reload.
-- **Keyboard:** Alt and Shift work in Firefox setups that sent them unusually.
+- **iPhone and iPad:** no more one-second freeze every 10 to 20 seconds in a busy free roam.
+- **Garage:** Split Screen no longer locks career slots 6 to 10 and loses their cars.
+- **Vinyls:** Special shows Street Reaper, Japan Tuning, David Choe, Snoop Dogg and The Doors only on the cars they were made for.
+- **Controllers:** Xbox Bluetooth triggers drive and brake in Firefox on a Mac.
+- **Phones:** POCO M7 Pro and other PowerVR B-Series phones start in the window, where they don't crash.
+- **Career:** no more error 134 after trading a car when the career car was missing.
+- **Races:** joining a race after using Options or Car Select in the Online menu no longer hangs for 3 minutes.
+- **Photo mode:** the camera no longer spins on its own; Reset stops Auto-turn.
+- **iPhone:** turning the car with two fingers in the garage works again.
+- **Free roam:** Enter at a shop, race or cover shoot no longer stops working until a reload.
+- **Keyboard:** Alt, Shift and Ctrl work in Firefox with privacy protection on.
 
 ## 2026-11-05 (0e56c9b)
 
