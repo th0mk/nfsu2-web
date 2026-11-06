@@ -300,12 +300,13 @@ Room set, the Room row says how many are in that room.
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
-  Thai, Portuguese (Brazil), Polish, Turkish, Hungarian, Ukrainian, Czech, Slovak or Greek, for the menus and all the
+  Thai, Portuguese (Brazil), Polish, Turkish, Hungarian, Ukrainian, Czech, Slovak, Greek or Bulgarian, for the menus and all the
   game's text. Where the server has the language packs, French, German, Italian, Spanish, Japanese and Russian also play
   with their dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish,
-  Turkish, Hungarian, Ukrainian, Czech, Slovak and Greek with their text at all. Without the packs those nine play in English, and the other
-  languages with English voices and movies. Your browser fetches only your language's files: the dubbed voices are
-  about 50 MB (Russian 94 MB), and the dubbed movies are smaller than the English ones they replace. Hungarian's
+  Turkish, Hungarian, Ukrainian, Czech, Slovak, Greek and Bulgarian with their text at all. Without the packs
+  those ten play in English, and the other languages with English voices and movies. Your browser fetches only
+  your language's files: the dubbed voices are about 50 MB (Russian 94 MB), and the dubbed movies are smaller than
+  the English ones they replace. Hungarian's
   text writes ő and ű as õ and û, as its translation does: the game's fonts have no ő or ű. Czech's writes č, ř, š and
   the other letters with the caron as c, r, s ..., as its translation does, for the same reason; Slovak's has every
   letter, with the fonts its translation brings, and Greek's with Greek letters added to the game's fonts. The start

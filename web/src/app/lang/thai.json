@@ -1439,6 +1439,8 @@
   "{names}: connected in this browser.": "{names}: เชื่อมต่อในเบราว์เซอร์นี้แล้ว",
   "Connect a Steam Controller": "เชื่อมต่อ Steam Controller",
   "Connect another": "เชื่อมต่ออีกเครื่อง",
+  "Bulgarian": "ภาษาบัลแกเรีย",
+  "Bulgarian: <0>StoyanKolev (IVANOFF)</0>.": "ภาษาบัลแกเรีย: <0>StoyanKolev (IVANOFF)</0>."
   "Invite sent to {name}": "ส่งคำเชิญถึง {name} แล้ว",
   "{name} isn't in free roam in your room now": "ตอนนี้ {name} ไม่ได้ขับอิสระอยู่ในห้องของคุณ",
   "Open a race lobby first, then invite": "เปิดล็อบบี้การแข่งก่อน แล้วค่อยเชิญ",

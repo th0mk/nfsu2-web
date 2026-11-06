@@ -7019,7 +7019,7 @@ static struct {
 #define MSG_MP_BACK     0x4d505303u
 /* The card's question and its buttons in the game's language: the languages whose fonts draw their own letters
  * (language_game_letters: Latin-1, Polish's, Turkish's, Hungarian's, Czech's and Slovak's as their packs have them), as photo.c and
- * sms.c do theirs; English for the others (Russian, Ukrainian, Chinese, Japanese, Korean, Thai: their fonts draw
+ * sms.c do theirs; English for the others (Russian, Ukrainian, Bulgarian, Chinese, Japanese, Korean, Thai: their fonts draw
  * ASCII only).  UTF-8 here.  q_lobby: the host's name, then the race's kind (in brackets: every language keeps that
  * order).  Each language's texts in one row of one brace (web/test/log-english.test.mjs takes such a row for the
  * game's text, not a log line): the kinds in race_kind's order, then the buttons in mp_lang_name's */
