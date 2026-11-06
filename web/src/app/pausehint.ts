@@ -76,7 +76,7 @@ export class PauseHint {
     const fs = this.deps.fullscreen(), roam = this.deps.roam();
     const list = document.createElement('span');
     list.className = 'pause-hint-list';
-    list.textContent = t(roam ? (fs ? N('Ghost mode, crews, full screen, controls') : N('Ghost mode, crews, controls'))
+    list.textContent = t(roam ? (fs ? N('Ghost mode, crews, friends, full screen, controls') : N('Ghost mode, crews, friends, controls'))
       : fs ? N('Full screen, frame-rate counter, controls') : N('Frame-rate counter, controls'));
     this.root.replaceChildren(...keys, document.createTextNode(t('More options')), list);
   }

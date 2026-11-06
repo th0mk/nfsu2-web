@@ -1315,6 +1315,15 @@ async fn free_roams_friends_through_the_server() {
     let r = post('A', "ask", "cy").await;
     assert_eq!((r["done"].as_str(), r["sent"].clone()), (Some("asked"), serde_json::json!(["Cy_"])), "{r}");
     assert_eq!(first(&cy, "asks", kc).await["name"], "Al_");
+    // ...and accepts it on /friends, from afar (its game's Friends popup or line): Al's open page hears of it, and both
+    // open pages get their lists again (the hub links them at once)
+    let (ka, kc) = (n(&al), n(&cy));
+    assert_eq!(post('C', "accept", "Al_").await["done"], "friends");
+    assert_eq!(first(&al, "friends", ka).await["name"], "Cy_");
+    assert_eq!(first(&al, "list", ka).await["friends"], serde_json::json!(["Cy_"]));
+    let l = first(&cy, "list", kc).await;
+    assert_eq!((l["friends"].clone(), l["asks"].clone()), (serde_json::json!(["Al_"]), serde_json::json!([])), "{l}");
+    assert_eq!(post('C', "accept", "Al_").await["done"], "none", "no request waits now");
     assert_eq!(post('A', "ask", "Nobody").await["done"], "claim", "a name nobody claimed");
     assert_eq!(post('A', "ask", "al").await["done"], "self");
     assert_eq!(http(port, "POST", "/friends", &[("authorization", &bearer('A'))], r#"{"op":"befriend","name":"Bo"}"#).await.0, 400, "no such op");

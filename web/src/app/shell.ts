@@ -44,7 +44,7 @@ import { checkSaves, exists, filesOf, listProfiles, NO_SAVE, PROFILES_DIR, readT
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, PlayersPanel, queueText, roomHash, roomLine, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
-import { panelTabs, type PanelTabs } from './tabs';
+import { panelTabs, refitTabs, type PanelTabs } from './tabs';
 import { CREW_MAX, crewList, crewsOf, crewsValue, freeColour, rgbsValue, rgbWords, type Crew } from './crews';
 import { checkInvite, inviteLink, readInvite, sameName, tidyInvite, type Invite } from './invite';
 import { privacy, SCRUB_NOTE } from './privacy';
@@ -165,6 +165,7 @@ let friendPrompt: FriendPrompt;          // free roam's friends: Add friend over
 let friendsPanel: FriendsPanel;          // ...and the friends on the start page
 const msgStore = new MessageStore();      // messages between friends (messages.ts): the conversations in this browser
 let friendMessages: FriendMessages;       // ...in the game: the log's lines, I and its card
+let friendsApi: FriendsApi;               // ...the server's /friends, for the start page and the game's page
 let chatDialog: ChatDialog;               // ...on the start page: one conversation
 let settings: SettingsPanel;
 let bigTabs: PanelTabs;
@@ -1219,16 +1220,20 @@ function hint(id: string) {
 }
 /** a person: what marks a line in the log as a friend's (friendNotice), as the speech balloon marks quick chat's */
 const FRIEND_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5z"/></svg>';
+/** how long a friend's line shows in the log (iconLine's time) */
+const NOTICE_LINE_MS = 8000;
 /** free roam: a friend (friends.ts: the server's friends lists) came into free roam: a line in the log as quick chat's
  *  (chatLine), a person first, the text with the friend's name in bold; these come seldom, so they show, where other
- *  players' joins are only logged */
-function friendNotice(name: string, text: string) {
+ *  players' joins are only logged.  here: in the player's room (no Join to offer), so "I Message" under it (messages.ts
+ *  offer: I writes to that friend while the line shows) */
+function friendNotice(name: string, text: string, here = false) {
   privacy.name(name, 'player');
   log.add(`[notice] ${name} is in free roam (a friend)`);
   const b = document.createElement('b'), at = text.indexOf(name);
   b.textContent = name;
   placeNotices();
   iconLine('chat', FRIEND_ICON, at < 0 ? [text] : [text.slice(0, at), b, text.slice(at + name.length)]);
+  if (here) friendMessages?.offer(name, NOTICE_LINE_MS);
 }
 /** quick chat (quickchat.ts) in free roam and races between players: a phrase said, from the game; and free roam's
  *  lines over the cars in each frame */
@@ -1282,9 +1287,10 @@ function msgLine(name: string, text: string, out: boolean, note: string, ms: num
   setTimeout(() => line.remove(), ms);
   return line;
 }
-/** "I Write back" under the newest friend's message (messages.ts), for ms; null: gone */
+/** "I Write back" under the newest friend's message (messages.ts), for ms, or "I Message" under a friend's notice
+ *  (text); null: gone */
 let msgHintTimer = 0;
-function msgHint(ms: number | null) {
+function msgHint(ms: number | null, text = t('Write back')) {
   const box = $('#notices');
   box.querySelector('.msg-hint')?.remove();
   clearTimeout(msgHintTimer);
@@ -1292,7 +1298,7 @@ function msgHint(ms: number | null) {
   const k = document.createElement('kbd'), key = siteKey('message');
   k.textContent = key ? keyName(key) : '';
   // (no key for it: the line alone, a tap on it answers)
-  const h = roamLine('msg-hint', '', key ? [k, t('Write back')] : [t('Write back')]);
+  const h = roamLine('msg-hint', '', key ? [k, text] : [text]);
   h.style.animationDuration = `${ms}ms`;
   box.append(h);
   msgHintTimer = window.setTimeout(() => h.remove(), ms);
@@ -1565,7 +1571,7 @@ function openMenu() {
   const crews = m.querySelector<HTMLButtonElement>('[data-act="crews"]')!;
   crews.hidden = roamCrews === null || !session?.net?.crews;
   crews.textContent = crewsLabel();
-  m.querySelector<HTMLButtonElement>('[data-act="friends"]')!.hidden = !friendPrompt.hasFriends();
+  m.querySelector<HTMLButtonElement>('[data-act="friends"]')!.hidden = !friendPrompt.available();
   const fr = m.querySelector<HTMLButtonElement>('[data-act="friend"]')!, item = friendPrompt.menuItem();
   fr.hidden = !item;
   if (item) fr.textContent = item.label;
@@ -1638,28 +1644,43 @@ async function menuCrews(list: Crew[], focus: (root: HTMLElement) => Element | n
   log.add(`[app] crews: ${list.length ? list.map(c => `${c.name} (${c.rgb})`).join(', ') : 'none'} (the page menu)`);
 }
 
-/** The menu's Friends popup (free roam, with friends), over the menu: the friends in free roam, a Join for each one in
- *  another room (the game switches to it at once, as an invite link's Join does), the others in a line.  Asked of the
+/** The menu's Friends popup (free roam with others, friends or not yet), over the menu: the requests to answer, the
+ *  friends in free roam, a Join for each one in another room (the game switches to it at once, as an invite link's
+ *  Join does), the others in a line; how to add one, a field to ask by name (friends.ts drawPlaced).  Asked of the
  *  server as it opens, drawn again with its answer; Done, Esc or a controller's B closes it, back on the menu's Friends
  *  button. */
 function openFriends() {
   const pop = $<HTMLDialogElement>('#friends-pop');
-  if (!friendPrompt.hasFriends() || pop.open) return;
+  if (!friendPrompt.available() || pop.open) return;
   drawPopFriends();
   pop.showModal();
-  ($('#friends-pop-box').querySelector<HTMLElement>('button') ?? pop.querySelector<HTMLElement>('[data-act="friends-done"]'))?.focus();
+  popFriendsFocus();
   friendPrompt.askWhere();
+}
+/** the popup's first button that does something now (a request's Accept, a Join), else Done */
+function popFriendsFocus() {
+  ($('#friends-pop-box').querySelector<HTMLElement>('button:not(:disabled)') ?? $('#friends-pop').querySelector<HTMLElement>('[data-act="friends-done"]'))?.focus();
 }
 function drawPopFriends() {
   const box = $('#friends-pop-box'), had = box.contains(document.activeElement);
-  friendPrompt.drawPlaced(box, room => void joinFriend(room));
-  if (had) ($('#friends-pop-box').querySelector<HTMLElement>('button') ?? $('#friends-pop').querySelector<HTMLElement>('[data-act="friends-done"]'))?.focus();
+  // (the line on Join only where a friend has one)
+  $('#friends-pop-help').hidden = !friendPrompt.drawPlaced(box, room => void joinFriend(room));
+  if (had && !box.contains(document.activeElement)) popFriendsFocus();   // (the field keeps it: friends.ts AskField)
 }
 /** the race lobby card's Invite (its key, a click or a tap): the menu's Friends popup, whose friends in this room each
- *  get an Invite while the player hosts a lobby with room in it */
+ *  get an Invite while the player hosts a lobby with room in it (with none yet, it says how to add one) */
 function inviteToRace() {
-  if (friendPrompt.hasFriends()) { openFriends(); return; }
-  toast(t('Add friends first: front bumpers touching for 3 s, or by name on the start page'), 5000);
+  openFriends();
+}
+/** the start page's Friends & crews tab: a lime dot after its name while requests or friends' messages wait for the
+ *  player (friends.ts FriendsPanel), their count its text for screen readers (style.css .tab-new); none, nothing */
+function friendsWaiting(n: number) {
+  const el = $('#settings .tab[data-tab="friends"] .tab-new');
+  const text = n > 99 ? '99+' : n > 0 ? String(n) : '';
+  if (el.textContent === text) return;
+  el.textContent = text;
+  el.hidden = !text;
+  refitTabs();
 }
 /** a Join in the menu's Friends: that friend's room, at once, and back to the game */
 async function joinFriend(room: string) {
@@ -2284,10 +2305,10 @@ export async function boot() {
     // another passphrase here (or none): the line under Your name asks again with it, and the friends
     onLink: () => { void nameRow.ask(); void friendsPanel.refresh(true); },
   });
+  friendsApi = new FriendsApi(() => testClaim() ? Promise.resolve(testClaim()) : vault ? vault.token() : Promise.resolve(null));
   friendsPanel = new FriendsPanel($('#friends'), {
-    api: new FriendsApi(() => testClaim() ? Promise.resolve(testClaim()) : vault ? vault.token() : Promise.resolve(null)),
-    join: room => void offerInvite({ room }), confirm: (title, body, ok) => confirmBox(title, body, ok),
-    idle: () => !session && !starting, log: logLine, store: msgStore, chat: name => chatDialog.open(name),
+    api: friendsApi, join: room => void offerInvite({ room }), confirm: (title, body, ok) => confirmBox(title, body, ok),
+    idle: () => !session && !starting, log: logLine, store: msgStore, chat: name => chatDialog.open(name), waiting: friendsWaiting,
   });
   chatDialog = new ChatDialog(msgStore, { send: (name, body) => friendsPanel.send(name, body), log: logLine });
   $<HTMLButtonElement>('#play').onclick = () => void play();
@@ -2377,6 +2398,7 @@ export async function boot() {
     toast: (s, o) => toast(o?.name ? named(s, o.name) : s, 5000, false, o?.hot ? 'hot' : ''),
     notice: friendNotice, menu: menuName, placed: () => { if ($<HTMLDialogElement>('#friends-pop').open) drawPopFriends(); },
     hosted: () => lobbyPanel.hosted(), joinLobby: (host, lobby, race) => session?.input?.lobby?.(LB_JOIN, host, lobby, race) ?? false,
+    api: friendsApi, driving: () => quickChat.driving(),
   });
   friendMessages = new FriendMessages($('#stage'), msgStore, {
     send: m => session?.net?.friend?.(m) ?? false, driving: () => quickChat.driving(), line: msgLine, hint: msgHint,

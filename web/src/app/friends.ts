@@ -6,9 +6,12 @@
 //   (runtime/roam_game.c bump_*, NET_KIND_FRIEND), the page asks the server what that player is to it ("can"), and a
 //   line in quick chat's look, just above the game's outrun line, offers it: "Add Bravo as a friend" (F, a click or a tap
 //   on the line, or the page's menu: a controller's every button is the game's), "Bravo wants to be friends: accept", or says why not;
-//   gone once the cars part.  It also tells the server the room's name once the player has friends (their Join), asks
-//   where the friends play every minute ("where"), says in the notices when one comes into free roam, and fills the
-//   page menu's Friends popup (Join a friend's room).
+//   gone once the cars part.  A request from afar (by name, from a start page or another game's Friends) gets the same
+//   line for a while once the player drives, and the newest one that waited does at the game's start: its answer goes
+//   on /friends, as the start page's.  It also tells the server the room's name once the player has friends (their
+//   Join), asks where the friends play every minute ("where"), says in the notices when one comes into free roam, and
+//   fills the page menu's Friends popup, there in every game in free roam with others: the requests to answer, the
+//   friends in free roam (Join a friend's room, Invite to the player's race), how to add one, a field to ask by name.
 // - FriendsPanel, on the start page (its Friends & crews tab): one line a friend, where it plays after its name and a
 //   Join in free roam, the requests to answer, the ones sent; icons for what each line does, a friend's Message among
 //   them (lime with a dot while messages wait to be read: messages.ts), and a friend's Discord icon, which copies its
@@ -158,6 +161,72 @@ function discordIcon(name: string): HTMLButtonElement {
   return b;
 }
 
+/** what a request by name did (friends.rs "ask": `r` the lists after it, null no answer), for the line under its
+ *  field; claim: what to say when the player has no claimed name (where it claims one differs) */
+function askNote(r: FriendLists | null, name: string, claim: string): { text: string; warn: boolean } {
+  const done = r?.done ?? '', shown = [...(r?.sent ?? []), ...(r?.friends.map(f => f.name) ?? [])].find(n => sameName(n, name)) ?? name;
+  switch (done) {
+    case 'asked': return { text: t('Friend request sent to {name}', { name: shown }), warn: false };
+    case 'friends': return { text: t('You and {name} are friends', { name: shown }), warn: false };
+    // (the server says "claim" for this player's own name too: its claim gone since the list was drawn)
+    case 'claim': return { text: r?.me ? t('{name} has no claimed name, so can\'t add friends yet', { name }) : claim, warn: true };
+    case 'self': return { text: t('That\'s your own name'), warn: true };
+    case 'name': return { text: t('Not a player\'s name'), warn: true };
+    case 'full': return { text: t('A friends list is full (50 at most)'), warn: true };
+    case 'rate': return { text: t('Wait a moment'), warn: true };
+    default: return { text: t('Not sent: try again in a moment'), warn: true };
+  }
+}
+
+/** The field to ask a player by name (the start page's Friends, the page menu's Friends popup): the Crews row's box
+ *  with a + in it, what the last request did under it.  One element over redraws, so a player typing in it keeps the
+ *  keyboard and the caret (nodes() puts them back). */
+class AskField {
+  private readonly box = document.createElement('div');
+  private readonly input = document.createElement('input');
+  private readonly note = document.createElement('p');
+
+  /** took: the lists after a request (null: no answer); claim: the note when the player has no claimed name */
+  constructor(private api: FriendsApi, private claim: () => string, private took: (r: FriendLists | null) => void, private log: (line: string) => void) {
+    const { box, input: inp } = this;
+    box.className = 'crew-add fl-add';
+    inp.type = 'text'; inp.autocomplete = 'off'; inp.spellcheck = false; inp.enterKeyHint = 'send'; inp.maxLength = 32;
+    const go = icon('fl-ask', t('Send friend request'), PLUS, () => void this.ask());
+    go.disabled = true;
+    inp.oninput = () => { go.disabled = !inp.value.trim(); };
+    inp.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); void this.ask(); } };
+    box.append(inp, go);
+    this.note.className = 'set-note fl-note'; this.note.setAttribute('aria-live', 'polite');
+  }
+
+  /** the field and its note, for a redraw (in the language now); keep(): after the redraw, the focus back in it */
+  nodes(): [HTMLElement, HTMLElement] {
+    this.input.placeholder = t('Add a player by name'); this.input.setAttribute('aria-label', t('Add a player by name'));
+    this.box.querySelector('.fl-ask')?.setAttribute('aria-label', t('Send friend request'));
+    return [this.box, this.note];
+  }
+  /** around a redraw that moves the field: its focus and caret kept */
+  keep(redraw: () => void) {
+    const inp = this.input, typing = document.activeElement === inp, at = [inp.selectionStart, inp.selectionEnd];
+    redraw();
+    if (typing) { inp.focus({ preventScroll: true }); inp.setSelectionRange(at[0], at[1]); }
+  }
+
+  /** a request to the player whose name is in the field (friends.rs "ask": any claimed name, wherever they are) */
+  private async ask() {
+    const inp = this.input, name = inp.value.trim();
+    if (!name) return;
+    let r: FriendLists | null = null;
+    try { r = await this.api.act('ask', name); } catch (e) { this.log(`[friends] ask failed: ${e}`); }
+    this.log(`[friends] ask by name: ${r?.done ?? 'no answer'}`);
+    const n = askNote(r, name, this.claim());
+    this.note.textContent = n.text;
+    this.note.classList.toggle('warn', n.warn);
+    if (r?.done === 'asked' || r?.done === 'friends') { inp.value = ''; inp.dispatchEvent(new Event('input')); }
+    this.took(r);
+  }
+}
+
 /** how often the list is tried until the game's link to the server is up (ms) */
 const LIST_TRY_MS = 2000;
 /** how often the game asks where its friends play, while it has some (ms) */
@@ -175,8 +244,8 @@ export interface FriendPromptDeps {
   toast(text: string, o?: { name?: string; hot?: boolean }): void;
   /** the column at the top the lines go in (shell.ts placeNotices: its place, the HUD's size) */
   place(): void;
-  /** a friend's line in the notices (shell.ts friendNotice): text names it */
-  notice(name: string, text: string): void;
+  /** a friend's line in the notices (shell.ts friendNotice): text names it; here: it is in the player's room */
+  notice(name: string, text: string, here: boolean): void;
   /** "the menu (F9)", with what opens it here (shell.ts menuName) */
   menu(): string;
   /** where the friends play changed (the page menu's Friends popup is drawn again) */
@@ -186,11 +255,17 @@ export interface FriendPromptDeps {
   hosted(): Hosted | null;
   /** a friend's invite taken: its lobby joined from wherever the player is (the game: input LB_JOIN) */
   joinLobby(host: number, lobby: number, race: number): boolean;
+  /** /friends: answers to requests and requests by name, which reach a player from afar */
+  api: FriendsApi;
+  /** driving in free roam now (quickchat.ts driving): a request's line waits for it */
+  driving(): boolean;
   log(line: string): void;
 }
 
 /** how long a friend shows "invited" in the Friends popup, and an invite's line shows, after it was sent (ms) */
 const INVITED_MS = 60_000, INVITE_LINE_MS = 20_000;
+/** how long a request from afar shows on the line, once the player drives (ms): then it waits in the Friends popup */
+const ASK_LINE_MS = 15_000;
 /** an invite from a friend that waits for the player's answer: who, its lobby (the host's id, the lobby's, its race's
  *  hash), what race, until when its line shows */
 interface Invite { name: string; host: number; lobby: number; race: number; kind: string; n: number; max: number; until: number }
@@ -218,9 +293,19 @@ export class FriendPrompt {
   private invite: Invite | null = null;
   private inviteEl: HTMLButtonElement;
   private inviteTimer = 0;
+  /** the player's claimed name as the server last listed it (null: none, so no friends; undefined: not listed yet),
+   *  the requests that wait for its answer, and whether this game's first list came (its newest request: the line) */
+  private me: string | null | undefined = undefined;
+  private asks: string[] = [];
+  private firstList = false;
+  /** a request to answer on the line while no cars touch: whose, and until when it shows (0: once the player drives) */
+  private asking: { name: string; until: number } | null = null;
+  /** the page menu's Friends popup's field to ask a player by name */
+  private askField: AskField;
 
   /** stage: the game's box; the line goes over the picture while the cars touch (place) */
   constructor(stage: HTMLElement, private deps: FriendPromptDeps) {
+    this.askField = new AskField(deps.api, () => t('Claim your name on the start page to add friends'), r => this.tookLists(r), deps.log);
     const b = this.root = document.createElement('button');
     b.type = 'button'; b.className = 'friend-prompt'; b.tabIndex = -1; b.hidden = true; b.dataset.nfsu2Ui = '';
     b.onpointerdown = e => e.preventDefault();     // the canvas keeps the focus (and with it the keyboard)
@@ -243,18 +328,32 @@ export class FriendPrompt {
   start(s: GameSession, on: boolean) {
     this.session = s; this.on = on; this.who = null; this.friends = []; this.roomSent = null; this.listed = false; this.triedAt = -Infinity;
     this.where = null; this.was.clear(); this.whereAt = -Infinity;
+    this.me = undefined; this.asks = []; this.firstList = false; this.asking = null;
     const tick = () => {
       const now = performance.now();
       if (!this.listed && now - this.triedAt > LIST_TRY_MS) { this.triedAt = now; this.listed = this.deps.send({ op: 'list' }); }
       if (this.listed && this.friends.length && now - this.whereAt > WHERE_MS) this.askWhere();
+      this.askingTick(now);
       this.raf = requestAnimationFrame(tick);
     };
     if (on) this.raf = requestAnimationFrame(tick);
   }
   stop() {
     cancelAnimationFrame(this.raf);
-    this.session = null; this.on = false; this.who = null;
+    this.session = null; this.on = false; this.who = null; this.asking = null;
     this.dropInvite();
+    this.draw();
+  }
+
+  /** a request's line: up once the player drives (for ASK_LINE_MS), gone when it stops (the request waits in the
+   *  Friends popup) */
+  private askingTick(now: number) {
+    const a = this.asking;
+    if (!a || this.who) return;
+    const driving = this.deps.driving();
+    if (!a.until && driving) a.until = now + ASK_LINE_MS;
+    else if (a.until && (now > a.until || !driving)) this.asking = null;
+    else return;
     this.draw();
   }
 
@@ -282,9 +381,13 @@ export class FriendPrompt {
     this.deps.send({ op: 'where' });
   }
 
-  /** the page menu has its Friends button: free roam with friends */
+  /** free roam with friends */
   hasFriends(): boolean {
     return this.on && this.friends.length > 0;
+  }
+  /** the page menu has its Friends button: free roam with others, friends or not yet (the popup says how to add one) */
+  available(): boolean {
+    return this.on;
   }
 
   /** the game: the cars touch nose to nose for 3 s (on 1), or parted (NET_KIND_FRIEND: {"id","name","on"}) */
@@ -308,11 +411,22 @@ export class FriendPrompt {
     const name = typeof m.name === 'string' ? m.name : '';
     const mine = !!this.who && !!name && sameName(this.who.name, name);
     switch (m.op) {
-      case 'list':
-        this.friends = Array.isArray(m.friends) ? m.friends.filter((f: unknown) => typeof f === 'string') : [];
+      case 'list': {
+        const names = (v: unknown): string[] => Array.isArray(v) ? v.filter((f: unknown): f is string => typeof f === 'string') : [];
+        this.friends = names(m.friends);
+        this.me = typeof m.me === 'string' ? m.me : null;
+        this.asks = names(m.asks);
+        // the game's first list: the newest request that waited, on the line once the player drives
+        if (!this.firstList) {
+          this.firstList = true;
+          const last = this.asks.at(-1);
+          if (last && !this.who) this.asking = { name: last, until: 0 };
+        } else if (this.asking && !this.asks.some(n => sameName(n, this.asking!.name))) this.asking = null;
         this.sendRoom();
         this.whereAt = -Infinity;                    // (where they are, with the next frame)
-        return;
+        this.deps.placed();
+        break;
+      }
       case 'where':
         this.placedNow(friendsOf(m.friends));
         return;
@@ -323,20 +437,25 @@ export class FriendPrompt {
         break;
       case 'add':
         // (the line says it while the cars touch; the note says it once they parted)
-        if (m.done === 'friends') this.was.set(name.toLowerCase(), 'roam');
+        if (m.done === 'friends') { this.was.set(name.toLowerCase(), 'roam'); this.answered(name); }
         if (m.done === 'friends' && !mine) this.deps.toast(t('You and {name} are friends now', { name }), { name });
         else if (m.done === 'full') this.deps.toast(t('A friends list is full (50 at most)'));
         if (mine && this.who && ['asked', 'friends', 'claim', 'theirs'].includes(m.done)) this.who = { name, st: m.done };
         else if (mine && m.done === 'full') this.who = null;
         break;
       case 'asks':
-        // the other player pressed first: answer here while the cars touch, or on the start page
+        // the other player pressed first, or asked from afar: answer here while the cars touch, else on the line for a
+        // while once the player drives, and in the Friends popup
+        if (!name) return;
+        if (!this.asks.some(n => sameName(n, name))) this.asks.push(name);
         if (mine && this.who) this.who = { name, st: 'asks' };
-        else this.deps.toast(t('{name} wants to be friends: answer under Friends on the start page', { name }), { name, hot: true });
+        else this.asking = { name, until: 0 };
+        this.deps.placed();
         break;
       case 'friends':
         // (just met here: no notice that it is in free roam)
         this.was.set(name.toLowerCase(), 'roam');
+        this.answered(name);
         if (mine && this.who) this.who = { name, st: 'friends' };
         else this.deps.toast(t('You and {name} are friends now', { name }), { name });
         break;
@@ -392,6 +511,42 @@ export class FriendPrompt {
     this.dropInvite();
   }
 
+  /** `name`'s request is answered (friends now, or declined): off the list, off the line */
+  private answered(name: string) {
+    this.asks = this.asks.filter(n => !sameName(n, name));
+    if (this.asking && sameName(this.asking.name, name)) this.asking = null;
+  }
+
+  /** the lists after a change on /friends (an answer, a request by name): the requests that wait now; the friends
+   *  come on the link (the server sends this page its list again on a friendship: friends.rs told) */
+  private tookLists(r: FriendLists | null) {
+    if (r?.me !== undefined) this.me = r.me;
+    if (r) this.asks = r.asks;
+    if (this.asking && !this.asks.some(n => sameName(n, this.asking!.name))) this.asking = null;
+    this.draw();
+    this.deps.placed();
+  }
+
+  /** an answer to `name`'s request, from the line or the Friends popup: on /friends, as the start page's, since the
+   *  request may be from afar (the game's "add" takes only a player its car touched) */
+  private async answer(name: string, yes: boolean) {
+    this.deps.log(`[friends] ${yes ? 'accepting' : 'declining'} ${name}'s request`);
+    this.answered(name);
+    this.draw();
+    this.deps.placed();
+    let r: FriendLists | null = null;
+    try { r = await this.deps.api.act(yes ? 'accept' : 'decline', name); } catch (e) { this.deps.log(`[friends] the answer failed: ${e}`); }
+    const done = r?.done ?? '';
+    this.deps.log(`[friends] ${yes ? 'accept' : 'decline'} ${name}: ${done || 'no answer'}`);
+    if (done === 'friends') this.deps.toast(t('You and {name} are friends now', { name }), { name });
+    else if (done === 'full') this.deps.toast(t('A friends list is full (50 at most)'));
+    else if (!r) {
+      this.deps.toast(t('Not sent: try again in a moment'));
+      if (!this.asks.some(n => sameName(n, name))) this.asks.push(name);   // (still waits: in the popup again)
+    }
+    this.tookLists(r);
+  }
+
   /** invite friend `name` to the player's race lobby (the page menu's Friends) */
   inviteFriend(name: string) {
     const h = this.deps.hosted();
@@ -408,52 +563,70 @@ export class FriendPrompt {
     this.where = list;
     for (const f of list) {
       if (f.where !== 'roam' || was.get(f.name.toLowerCase()) === 'roam') continue;
-      const name = f.name, menu = this.deps.menu();
-      this.deps.notice(name, f.room === undefined || inRoom(f, room) ? t('Your friend {name} is in free roam', { name })
+      const name = f.name, menu = this.deps.menu(), here = f.room === undefined || inRoom(f, room);
+      this.deps.notice(name, here ? t('Your friend {name} is in free roam', { name })
         : f.room ? t('Your friend {name} is in free roam, room {room}: Join in {menu}', { name, room: f.room, menu })
-        : t('Your friend {name} is in free roam, in no room: Join in {menu}', { name, menu }));
+        : t('Your friend {name} is in free roam, in no room: Join in {menu}', { name, menu }), here);
     }
     this.deps.placed();
   }
 
-  /** The page menu's Friends popup, in box: the friends in free roam, a Join for each one in another room (join: the
-   *  room's name, '' the room of everyone), a Discord icon for one that gave its Discord username; the others in a
-   *  line */
-  drawPlaced(box: HTMLElement, join: (room: string) => void) {
+  /** The page menu's Friends popup, in box: the requests to answer (Accept, Decline), the friends in free roam, a Join
+   *  for each one in another room (join: the room's name, '' the room of everyone), a Discord icon for one that gave
+   *  its Discord username; the others in a line; with no friends yet, how to add one; then the field to ask a player
+   *  by name.  Without a claimed name, only how to get one.  Returns whether a friend has a Join (the popup's line on
+   *  Join shows then). */
+  drawPlaced(box: HTMLElement, join: (room: string) => void): boolean {
     const p = (text: string) => Object.assign(document.createElement('p'), { className: 'hint', textContent: text });
+    if (this.me === null) { box.replaceChildren(p(t('Claim your name on the start page to add friends'))); return false; }
+    if (this.me === undefined) { box.replaceChildren(p(t('Checking.'))); return false; }
+    const lines: Line[] = this.asks.map(name => ({ name, state: t('wants to be friends'), ok: true, acts: [
+      icon('fl-yes', t('Accept'), CHECK, () => void this.answer(name, true)),
+      icon('fl-no', t('Decline'), CROSS, () => void this.answer(name, false)),
+    ] }));
+    const after: Node[] = [];
+    let joins = false;
     const all = this.where, room = this.deps.room();
-    if (!all) { box.replaceChildren(p(t('Checking.'))); return; }
-    const roam = all.filter(f => f.where === 'roam');
-    const nodes: Node[] = [];
-    const hosted = this.deps.hosted(), now = performance.now();
-    if (roam.length) {
-      nodes.push(friendList(roam.map(f => {
+    if (!this.friends.length) after.push(p(t('Touch front bumpers in free roam for 3 s to add a player.')));
+    else if (!all) after.push(p(t('Checking.')));
+    else {
+      const hosted = this.deps.hosted(), now = performance.now();
+      for (const f of all.filter(f => f.where === 'roam')) {
         const at = this.invited.get(f.name.toLowerCase()), sent = at !== undefined && now - at < INVITED_MS;
-        return {
+        const there = f.room !== undefined && !inRoom(f, room);
+        joins ||= there;
+        lines.push({
           name: f.name, state: sent ? `${whereText(f, room)} · ${t('invited')}` : whereText(f, room), ok: true,
           acts: [
             ...(f.contact ? [discordIcon(f.contact)] : []),
-            ...(f.room !== undefined && !inRoom(f, room) ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : []),
+            ...(there ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : []),
             // (a friend in our room, while we host a lobby with room in it: the invite joins it from where it is)
             ...(hosted && inRoom(f, room) && !sent ? [icon('fl-invite', t('Invite {name} to your race', { name: f.name }), FLAG, () => this.inviteFriend(f.name))] : []),
           ],
-        };
-      })));
-    } else {
-      nodes.push(p(t('None of your friends is in free roam now.')));
+        });
+      }
+      if (!all.some(f => f.where === 'roam')) after.push(p(t('None of your friends is in free roam now.')));
+      const names = (w: Friend['where']) => all.filter(f => f.where === w).map(f => f.name).join(', ');
+      const rest = [names('online') && t('In the Online lobby: {names}.', { names: names('online') }), names('') && t('Offline: {names}.', { names: names('') })];
+      if (rest.some(Boolean)) after.push(p(rest.filter(Boolean).join(' ')));
     }
-    const names = (w: Friend['where']) => all.filter(f => f.where === w).map(f => f.name).join(', ');
-    const rest = [names('online') && t('In the Online lobby: {names}.', { names: names('online') }), names('') && t('Offline: {names}.', { names: names('') })];
-    if (rest.some(Boolean)) nodes.push(p(rest.filter(Boolean).join(' ')));
-    box.replaceChildren(...nodes);
+    this.askField.keep(() => box.replaceChildren(...(lines.length ? [friendList(lines)] : []), ...after, ...this.askField.nodes()));
+    return joins;
   }
 
-  /** what the line offers: a request, or the answer to theirs */
+  /** the request from afar the line shows now (no cars touch), or null */
+  private shownAsk(): string | null {
+    return !this.who && this.asking?.until ? this.asking.name : null;
+  }
+
+  /** what the line offers: a request, or the answer to theirs (the player the car touches, or one from afar) */
   private actionable(): boolean {
-    return !!this.who && (this.who.st === 'new' || this.who.st === 'asks');
+    return !!this.who ? this.who.st === 'new' || this.who.st === 'asks' : this.shownAsk() !== null;
   }
 
   private act() {
+    const far = this.shownAsk();
+    if (far) { void this.answer(far, true); return; }
     if (!this.actionable() || !this.who) return;
     this.deps.log(`[friends] ${this.who.st === 'asks' ? 'accepting' : 'asking'} ${this.who.name}`);
     if (this.deps.send({ op: 'add', name: this.who.name })) { this.who = { ...this.who, st: 'wait' }; this.draw(); }
@@ -461,9 +634,9 @@ export class FriendPrompt {
 
   /** the page's menu (shell.ts): its button for the line while the line offers something, else null */
   menuItem(): { label: string; act: () => void } | null {
-    if (!this.actionable() || !this.who) return null;
-    const name = this.who.name;
-    return { label: this.who.st === 'asks' ? t('Accept {name} as a friend', { name }) : t('Add {name} as a friend', { name }), act: () => this.act() };
+    if (!this.actionable()) return null;
+    const far = this.shownAsk(), name = far ?? this.who!.name;
+    return { label: far || this.who?.st === 'asks' ? t('Accept {name} as a friend', { name }) : t('Add {name} as a friend', { name }), act: () => this.act() };
   }
 
   private key(e: KeyboardEvent) {
@@ -501,7 +674,7 @@ export class FriendPrompt {
 
   private draw() {
     this.drawInvite();
-    const w = this.who, b = this.root;
+    const far = this.shownAsk(), w = this.who ?? (far ? { name: far, st: 'asks' as St } : null), b = this.root;
     if (!w || w.st === 'wait') { b.hidden = true; return; }
     const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };
     const fk = siteKey('friend');                   // (the player's key for it: sitekeys.ts, F by default)
@@ -533,6 +706,8 @@ export interface FriendsPanelDeps {
   confirm(title: string, body: string, ok: string): Promise<boolean>;
   /** whether the start page is in front and no game runs (the list is asked for then, every POLL_MS) */
   idle(): boolean;
+  /** what waits for the player: the requests to answer and the friends' messages not read yet (the tab's count) */
+  waiting?(n: number): void;
   log(line: string): void;
 }
 
@@ -549,6 +724,7 @@ export class FriendsPanel {
   private again = false;
 
   constructor(private root: HTMLElement, private deps: FriendsPanelDeps) {
+    this.askField = new AskField(deps.api, () => t('Claim your name (Online, Your name) to add friends.'), r => { this.took(r); this.render(); }, deps.log);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) void this.refresh(); });
     this.timer = window.setInterval(() => void this.refresh(), POLL_MS);
     deps.store.onChange(() => this.render());
@@ -591,10 +767,8 @@ export class FriendsPanel {
     if (this.again) { this.again = false; void this.refresh(true); }
   }
 
-  /** the field to ask a player by name (kept over renders: the player may be typing), and what the last ask did */
-  private addInput: HTMLInputElement | null = null;
-  private addBox: HTMLElement | null = null;
-  private addNote = { text: '', warn: false };
+  /** the field to ask a player by name (kept over renders: the player may be typing), with what the last ask did */
+  private askField: AskField;
   /** the Your Discord row (kept over renders, as the field above), and what the last change of it did ('' fine) */
   private discordInput: HTMLInputElement | null = null;
   private discordRow: HTMLElement | null = null;
@@ -643,45 +817,6 @@ export class FriendsPanel {
     this.render();
   }
 
-  private addField(): HTMLElement {
-    if (this.addBox) return this.addBox;
-    const box = document.createElement('div');
-    box.className = 'crew-add fl-add';
-    const inp = this.addInput = document.createElement('input');
-    inp.type = 'text'; inp.placeholder = t('Add a player by name'); inp.setAttribute('aria-label', t('Add a player by name'));
-    inp.autocomplete = 'off'; inp.spellcheck = false; inp.enterKeyHint = 'send'; inp.maxLength = 32;
-    const go = icon('fl-ask', t('Send friend request'), PLUS, () => void this.ask());
-    go.disabled = true;
-    inp.oninput = () => { go.disabled = !inp.value.trim(); };
-    inp.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); void this.ask(); } };
-    box.append(inp, go);
-    return this.addBox = box;
-  }
-
-  /** a request to the player whose name is in the field (friends.rs "ask": any claimed name, wherever they are) */
-  private async ask() {
-    const inp = this.addInput, name = inp?.value.trim() ?? '';
-    if (!inp || !name) return;
-    let r: FriendLists | null = null;
-    try { r = await this.deps.api.act('ask', name); } catch (e) { this.deps.log(`[friends] ask failed: ${e}`); }
-    this.deps.log(`[friends] ask by name: ${r?.done ?? 'no answer'}`);
-    this.took(r);
-    const done = r?.done ?? '', shown = [...(r?.sent ?? []), ...(r?.friends.map(f => f.name) ?? [])].find(n => sameName(n, name)) ?? name;
-    const say = (text: string, warn: boolean) => { this.addNote = { text, warn }; };
-    if (done === 'asked') say(t('Friend request sent to {name}', { name: shown }), false);
-    else if (done === 'friends') say(t('You and {name} are friends', { name: shown }), false);
-    // (the server says "claim" for this player's own name too: its claim gone since the list was drawn)
-    else if (done === 'claim' && !r?.me) say(t('Claim your name (Online, Your name) to add friends.'), true);
-    else if (done === 'claim') say(t('{name} has no claimed name, so can\'t add friends yet', { name }), true);
-    else if (done === 'self') say(t('That\'s your own name'), true);
-    else if (done === 'name') say(t('Not a player\'s name'), true);
-    else if (done === 'full') say(t('A friends list is full (50 at most)'), true);
-    else if (done === 'rate') say(t('Wait a moment'), true);
-    else say(t('Not sent: try again in a moment'), true);
-    if (done === 'asked' || done === 'friends') { inp.value = ''; inp.dispatchEvent(new Event('input')); }
-    this.render();
-  }
-
   private async act(op: 'accept' | 'decline' | 'remove' | 'block', name: string) {
     try {
       const r = await this.deps.api.act(op, name);
@@ -705,6 +840,7 @@ export class FriendsPanel {
       if (ctl.length) { const c = document.createElement('div'); c.className = 'set-control'; c.append(...ctl); r.append(c); }
       return r;
     };
+    this.deps.waiting?.(l?.me ? l.asks.length + l.friends.reduce((n, f) => n + this.deps.store.unread(f.name), 0) : 0);
     if (!l?.me) {
       root.replaceChildren(row(t('Claim your name (Online, Your name) to add friends.')));
       return;
@@ -730,18 +866,13 @@ export class FriendsPanel {
     for (const name of l.sent) {
       lines.push({ name, state: t('request sent'), off: true, acts: [icon('fl-del', t('Take back'), CROSS, () => this.act('remove', name))] });
     }
-    const note = document.createElement('p');
-    note.className = 'set-note fl-note' + (this.addNote.warn ? ' warn' : ''); note.setAttribute('aria-live', 'polite');
-    note.textContent = this.addNote.text;
-    const ctl = [...(lines.length ? [friendList(lines)] : []), this.addField(), note];
-    // the field stays the same element: a player typing in it keeps the keyboard and the caret
-    const inp = this.addInput!, typing = document.activeElement === inp, at = [inp.selectionStart, inp.selectionEnd];
+    const ctl = [...(lines.length ? [friendList(lines)] : []), ...this.askField.nodes()];
     // (the Your Discord field shows the server's name unless the player is changing it)
     const dIn = this.discordInput, dTyping = !!dIn && document.activeElement === dIn;
     const dRow = this.discordField();
     if (!dTyping && !this.discordState.text) this.discordInput!.value = l.contact ?? '';
-    root.replaceChildren(row(t('Touch front bumpers in free roam for 3 s to add a player.'), ...ctl), dRow);
-    if (typing) { inp.focus({ preventScroll: true }); inp.setSelectionRange(at[0], at[1]); }
+    // the field stays the same element: a player typing in it keeps the keyboard and the caret
+    this.askField.keep(() => root.replaceChildren(row(t('Touch front bumpers in free roam for 3 s to add a player.'), ...ctl), dRow));
     if (dTyping) this.discordInput!.focus({ preventScroll: true });
   }
 

@@ -184,6 +184,9 @@ kbd {
 .tab { height: 36px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 24px; }
 .tab:hover { color: var(--text); }
 .tab[aria-selected="true"] { color: var(--lime); box-shadow: inset 0 -3px var(--lime); }
+/* the Friends & crews tab's dot, as a friend's envelope has it, while requests or friends' messages wait (shell.ts
+ * friendsWaiting); its count is its text, for screen readers only */
+.tab-new { display: inline-block; width: 8px; height: 8px; margin: 2px 0 0 4px; border-radius: 50%; background: var(--lime); font-size: 0; vertical-align: top; }
 
 /* a panel's own tabs as its heading (tabs.ts: the big panel's, About's): the Controls sheet's tabs at a heading's
  * size, 44 px with its 28 px line (the panes start 88 px down, as under an h2).  Where one line is too narrow for them

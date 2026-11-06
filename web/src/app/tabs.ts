@@ -28,6 +28,8 @@ function fitAll() {
   at(i);
 }
 let fitting = false;
+/** a tab's words changed (the Friends & crews tab's count came or went): every list sized again */
+export const refitTabs = (): void => fitAll();
 
 /** what panelTabs() gives: show(the tab, whether it takes the focus), the open one, and settled(): the panel's panes
  *  are drawn, so the place an address named at the start (#other: the Game tab's game data) can be scrolled to */

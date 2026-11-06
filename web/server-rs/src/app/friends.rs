@@ -40,14 +40,15 @@
 //! the server then); a message while the page is open comes as {"t":"friend","op":"mail","from":...,"body":...,
 //! "at":<ms since 1970>} to every page of the player's keyphrase (`LanSwitch::vips_of_owner`).
 //!
-//! On the start page, with the keyphrase's token as /names takes it (this server's own pages only):
+//! On the start page (and the game's page, for a request from afar: its Friends popup and its line), with the
+//! keyphrase's token as /names takes it (this server's own pages only):
 //! - GET /friends -> {"me":<name>|null,"friends":[{"name","where":"roam"|"online"|"","room":<its room's name, "" for
 //!   the room of everyone; none when not in free roam or its page did not tell it>,"contact":<its Discord username,
 //!   when it gave one>}],"asks":[names],"sent":[names],"mail":[the messages that waited, as above],"contact":<the
 //!   player's own Discord username>|null}
 //! - POST /friends {"op":"accept"|"decline"|"remove"|"block","name":...}, {"op":"msg","name":...,"body":...},
 //!   {"op":"ask","name":<a player's name, as typed>} (a request by name: any claimed name, wherever its player is; its
-//!   open pages hear of it), or {"op":"discord","name":<the player's Discord username, as typed; "" none>} (its
+//!   open pages hear of it, as of an accepted request, and on friends both players' open pages get their lists), or {"op":"discord","name":<the player's Discord username, as typed; "" none>} (its
 //!   friends both ways see it: nfsu2-online buddy.rs `discord_name`; "name" when it is not one) -> {"done":...} and
 //!   the same lists after it
 //!
@@ -321,17 +322,29 @@ impl Friends {
         }
     }
 
-    /// a request from the start page to `name` from `me` did `done`: the other player's open pages hear of it, as of
-    /// one in free roam ("asks", or "friends" when it had asked first)
-    fn told(&self, name: &str, me: &str, done: &str) {
+    /// a request (or an answer to one) on /friends to `name` from `me` (keyphrase `mine`) did `done`: the other
+    /// player's open pages hear of it, as of one in free roam ("asks", or "friends" when it had asked first or this
+    /// accepted its request); on friends both players' open pages get their lists again, so the hub links them at once
+    /// (a game page answers a request from afar there: friends.ts FriendPrompt)
+    async fn told(&self, name: &str, me: &str, mine: Arc<str>, group: Arc<str>, done: &str) {
         let op = match done {
             "asked" => "asks",
             "friends" => "friends",
             _ => return,
         };
         let Some(owner) = self.claims.holder(name, Self::now()) else { return };
-        for vip in self.lan.vips_of_owner(&owner) {
+        let theirs = self.lan.vips_of_owner(&owner);
+        for &vip in &theirs {
             self.say(vip, json!({ "t": "friend", "op": op, "name": me }));
+        }
+        if done != "friends" {
+            return;
+        }
+        for vip in theirs {
+            self.send_list(vip, Some(owner.clone()), group.clone()).await;
+        }
+        for vip in self.lan.vips_of_owner(&mine) {
+            self.send_list(vip, Some(mine.clone()), group.clone()).await;
         }
     }
 
@@ -449,12 +462,12 @@ impl App {
             _ => return self.plain(q, s, 405, "Method not allowed", &[("allow", "GET, POST"), ("connection", "close")], Cache::Store, true).await,
         };
         let asked = match &ask {
-            FriendAsk::AskByName(n) => Some(n.clone()),
+            FriendAsk::AskByName(n) | FriendAsk::Answer(n, true) => Some(n.clone()),
             _ => None,
         };
-        let r = f.lists(owner, group, ask).await;
+        let r = f.lists(owner.clone(), group.clone(), ask).await;
         if let (Some(n), Some(me)) = (asked, &r.me) {
-            f.told(&n, me, r.done);
+            f.told(&n, me, owner, group, r.done).await;
         }
         let v = f.page_json(r).await;
         self.json(q, s, 200, &v).await

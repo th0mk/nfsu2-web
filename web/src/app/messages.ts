@@ -9,6 +9,7 @@
 //                pick first, 1-9.  Enter sends, Esc closes; the game has no keys while the card is open.  On a touch
 //                screen a tap on a message answers it, and quick chat's sheet has "Message a friend".  A message that
 //                comes while the player is not driving in free roam (a race, a shop, a menu) shows once they are.
+//                A friend's notice that it came into the player's room has "I Message" under it: I writes to it then.
 //   wire         {"t":"friend","op":"msg","name","body","id"} -> {"op":"msg","id","done"};
 //                {"op":"mail","from","body","at"} and the list's "mail" bring the friends' (friends.rs).
 //   start page   friends.ts FriendsPanel: Message on each friend, the unread ones counted on it; ChatDialog.
@@ -145,8 +146,8 @@ export interface FriendMessagesDeps {
   /** a message's line in the log (shell.ts msgLine): its name, text, whether it is the player's, a note after it, how
    *  long it stays, and what a tap on it does (none: nothing); returns the line */
   line(name: string, text: string, out: boolean, note: string, ms: number, tap?: () => void): HTMLElement;
-  /** "I Write back" under the newest message, for ms (shell.ts msgHint); null: gone */
-  hint(ms: number | null): void;
+  /** "I Write back" under the newest message, for ms (shell.ts msgHint), or another word after the key; null: gone */
+  hint(ms: number | null, text?: string): void;
   /** the card's place: the log's (shell.ts placeNotices calls place()) */
   placeNow(): void;
   /** the keyboard back to the game */
@@ -171,6 +172,8 @@ export class FriendMessages {
   private listed = false;
   /** the newest message of this game that was shown, for MSG_KEY */
   private newest: { name: string; at: number } | null = null;
+  /** a friend whose notice says it came into free roam (offer), for MSG_KEY until then */
+  private offered: { name: string; until: number } | null = null;
   /** the friends' messages not shown yet (the player was not driving) */
   private queue: { from: string; body: string }[] = [];
   /** the player's messages on their way: page id -> the friend, its time (the store's key), its text, when it went */
@@ -196,7 +199,7 @@ export class FriendMessages {
 
   /** a game started: messages on (free roam with others) or off */
   start(s: GameSession, on: boolean) {
-    this.session = s; this.on = on; this.friends = []; this.listed = false; this.newest = null; this.queue = []; this.waiting.clear();
+    this.session = s; this.on = on; this.friends = []; this.listed = false; this.newest = null; this.offered = null; this.queue = []; this.waiting.clear();
     clearInterval(this.timer);
     if (on) this.timer = window.setInterval(() => this.tick(), 250);
   }
@@ -274,7 +277,7 @@ export class FriendMessages {
       const ms = lineMs(body);
       this.deps.line(from, body, false, '', ms, () => this.write(from, true));
       this.store.read(from);
-      this.newest = { name: from, at: now };
+      this.newest = { name: from, at: now }; this.offered = null;
       this.deps.hint(touchFirst() ? null : ms);
     }
   }
@@ -287,9 +290,19 @@ export class FriendMessages {
     if (this.mode || !this.deps.driving() || gameHas(this.session, KEY_MESSAGE)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (e.repeat) return;
-    const n = this.newest;
-    if (n && performance.now() - n.at < REPLY_MS) this.write(n.name, false);
+    const n = this.newest, o = this.offered, now = performance.now();
+    if (o && now < o.until) this.write(o.name, false);
+    else if (n && now - n.at < REPLY_MS) this.write(n.name, false);
     else this.pick(false);
+  }
+
+  /** a friend came into free roam (friends.ts's notice, shell.ts friendNotice): for the notice's time MSG_KEY writes
+   *  to it, and the hint under the notice says so ("I Message"); not on a touch screen (quick chat's sheet has
+   *  Message a friend), nor while the key is the game's */
+  offer(name: string, ms: number) {
+    if (!this.on || this.mode || touchFirst() || !msgKey() || !this.deps.driving() || gameHas(this.session, KEY_MESSAGE)) return;
+    this.offered = { name, until: performance.now() + ms };
+    this.deps.hint(ms, t('Message'));
   }
 
   /** quick chat's touch sheet: "Message a friend" */

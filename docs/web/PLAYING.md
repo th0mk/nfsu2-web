@@ -826,18 +826,22 @@ Good to know:
   each: where each one plays now after the name (free roam and its room, the game's Online lobby, offline),
   with a Join arrow to drive in their room, Discord's mark when they gave their Discord username (a click copies it,
   for Discord's Add Friend), an envelope for your messages (lime with a dot while some are unread) and a grey bin to
-  remove them; a request you could not answer in the game waits there (30 days), with ✓ and ✕, and one
-  you sent has a ✕ to take it back. Under the list, **Add a player by name** sends a request to a player who is not
-  near you: type their name (a claimed one) and press Enter or +; they get it in the game, or there, and answer it.
+  remove them; a request you did not answer in the game waits there (30 days), with ✓ and ✕, and one
+  you sent has a ✕ to take it back; a lime dot on the tab says requests or unread messages wait. Under the list,
+  **Add a player by name** sends a request to a player who is not near you: type their name (a claimed one) and press
+  Enter or +. If they are driving in free roam, their line says **Al wants to be friends: accept** for 15 seconds
+  (**F**, a click or a tap, or the page menu, accepts); a request that waited shows there at the next game's start.
   **Your Discord**, under it, is your Discord username for your friends (and nobody else) to add you on Discord: only
   a username as Discord has them fits (2 to 32 small letters, digits, _ or .), and an empty field takes it away.
   In free roam the server pairs friends first, as crew-mates, so you see each other however busy it is: a friend's
   name over the car shows at any distance, in a pale lime white (a friend in one of your crews has the crew's colour),
   and so do their arrows on the minimap and the world map. When a friend comes into free roam, the notices on the left
-  say so; the page menu then has **Friends**: who is in free roam, with **Join** for one in another room and Discord's
-  mark to copy one's Discord username. A friend is a
+  say so (with **I Message** under it when they are in your room). The page menu has **Friends** in every game in
+  free roam with other players: the requests to answer (✓ and ✕), who is in free roam, with **Join** for one in
+  another room and Discord's mark to copy one's Discord username, the others in a line, and **Add a player by name**;
+  with no friends yet, it says how to add one. A friend is a
   friend in the game's Online mode too (EA Messenger), up to 50. In free roam the server takes a request only between
-  two players whose cars are within 30 m of each other; by name, from the start page, five at once and then one every
+  two players whose cars are within 30 m of each other; by name, from the start page or the page menu, five at once and then one every
   30 seconds (a player you block in EA Messenger never sends you one again). Your friends see the name of
   the room you play in, nobody else (it is told to the server only once you have a friend, and kept in memory only).
 - **Messages to friends:** a friend's message shows in the log on the left, where quick chat's phrases show, with an
