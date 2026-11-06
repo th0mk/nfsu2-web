@@ -177,7 +177,11 @@ export class QuickChat {
   /** driving in free roam with others (the game's status: runtime/web/status_web.c "drive" 2, not in a cutscene; it
    *  says 2 in the career's free roam with free roam off too); messages.ts asks too */
   driving(): boolean {
-    if (!this.session || !this.on || !this.roam) return false;
+    return this.on && this.roaming();
+  }
+  /** driving in free roam with others, quick chat on or off (shell.ts: the crews' counts) */
+  roaming(): boolean {
+    if (!this.session || !this.roam) return false;
     this.readStatus();
     return (this.drive & 3) === 2 && (this.drive & 8) === 0;
   }

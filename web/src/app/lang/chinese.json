@@ -1476,5 +1476,13 @@
   "Everyone can join": "所有人可加入",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "你的比賽大廳：誰可以加入（你的階段及以下、好友與車隊，或所有人）",
   "Invite to a race": "邀請參加比賽",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "邀請好友到你的比賽大廳、接受好友的邀請、離開從遠處加入的比賽"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "邀請好友到你的比賽大廳、接受好友的邀請、離開從遠處加入的比賽",
+  "Invite {name} to a crew": "邀請 {name} 加入車隊",
+  "Invite {name} to": "邀請 {name} 加入：",
+  "Invite {name} to crew {crew}": "邀請 {name} 加入車隊「{crew}」",
+  "Invited {name} to {crew}": "已邀請 {name} 加入「{crew}」",
+  "{name} isn't in free roam now": "{name} 目前不在自由漫遊中",
+  "invites you to crew \"{crew}\"": "邀請你加入車隊「{crew}」",
+  "{name} invites you to crew \"{crew}\"": "{name} 邀請你加入車隊「{crew}」",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "還沒有車隊？和朋友們約好一個名稱，各自在這裡輸入，或打開車隊的邀請連結。"
 }

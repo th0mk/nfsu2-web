@@ -49,13 +49,20 @@
 //! - POST /friends {"op":"accept"|"decline"|"remove"|"block","name":...}, {"op":"msg","name":...,"body":...},
 //!   {"op":"ask","name":<a player's name, as typed>} (a request by name: any claimed name, wherever its player is; its
 //!   open pages hear of it, as of an accepted request, and on friends both players' open pages get their lists), or {"op":"discord","name":<the player's Discord username, as typed; "" none>} (its
-//!   friends both ways see it: nfsu2-online buddy.rs `discord_name`; "name" when it is not one) -> {"done":...} and
-//!   the same lists after it
+//!   friends both ways see it: nfsu2-online buddy.rs `discord_name`; "name" when it is not one), or {"op":"crew",
+//!   "name":<a friend>,"crew":<one of the player's crews>,"room":<its room, "" the room of everyone>} (an invite to the
+//!   crew: `Friends::crew_invite`) -> {"done":...} and the same lists after it
+//! - A crew's invite: only to a friend both ways in free roam now, whose open pages each hear
+//!   {"t":"friend","op":"crew","name":<the inviter's claimed name>,"crew":...,"room":...} (its game offers Join, which
+//!   takes the crew and the room as an invite link's does: web/src/app/friends.ts); "done" "sent", "away" (not in free
+//!   roam now, or no page open), "none" (not a friend both ways), "name" (a crew or room no page would take), "claim",
+//!   "rate".  The names are the only ones a page ever sends of its crews (the hub has their hashes): kept nowhere, and
+//!   never in the console.
 //!
 //! Limits: per client (and twice that per site) READ_BURST reads of /friends, then READ_RATE a second; per page
 //! SAY_BURST friend messages, then SAY_RATE a second (on top of the switch's own budget for control messages); per
 //! keyphrase MSG_BURST messages to friends, then MSG_RATE a second, from the game and the start page together (quick
-//! chat's three in six seconds), INVITE_BURST invites, then one every 5 s, ASK_BURST requests by name, then one every
+//! chat's three in six seconds), INVITE_BURST invites (to races and crews together), then one every 5 s, ASK_BURST requests by name, then one every
 //! 30 s, and DISCORD_BURST changes of the Discord username, then one every 10 s.  The console has the requests,
 //! friendships and messages (nfsu2-online's lines: who to whom, never what) and that a Discord username changed (never
 //! which), never a keyphrase; an invite is no line.
@@ -89,6 +96,10 @@ pub const DISCORD_RATE: f64 = 1.0 / 10.0;
 const MAX_BODY: usize = 1024;
 /// a race's kinds as an invite may name them (runtime/roam_game.c race_kind's words: the page translates them)
 const RACE_KINDS: [&str; 7] = ["race", "URL race", "circuit", "sprint", "Street X", "drag", "drift"];
+/// the longest crew name, in characters, and room name, in UTF-8 bytes (web/src/app/crews.ts CREW_LEN, the roam_room
+/// setting's 63)
+const CREW_LEN: usize = 24;
+const ROOM_BYTES: usize = 63;
 
 /// Free roam's friends: the hosts that keep them and show them, and the limits.
 pub struct Friends {
@@ -252,6 +263,32 @@ impl Friends {
         (friend, if told { "sent" } else { "away" })
     }
 
+    /// An invite of keyphrase `owner`'s player to its friend `name`, to its crew `crew` in room `room` (the module's
+    /// doc): the lists as they are, and what became of it.  Only a friend both ways (`FriendRow::mutual`) in free roam
+    /// now is told, on its open pages; the names are tidied (`tidy`), and one that reads as a slur (nfsu2-names, as the
+    /// pages' Crews and Room refuse it) goes nowhere.
+    async fn crew_invite(&self, owner: Arc<str>, group: Arc<str>, name: &str, crew: &str, room: &str) -> (FriendReply, &'static str) {
+        let r = self.lists(owner, group, FriendAsk::List).await;
+        let Some(me) = r.me.clone() else { return (r, "claim") };
+        let (crew, room) = (tidy(crew), tidy(room));
+        let bad = |n: &str| nfsu2_names::blocked_name(n);
+        if crew.is_empty() || crew.chars().count() > CREW_LEN || room.len() > ROOM_BYTES || bad(&crew) || (!room.is_empty() && bad(&room)) {
+            return (r, "name");
+        }
+        let Some(friend) = r.friends.iter().find(|f| f.mutual && f.name.eq_ignore_ascii_case(name)).map(|f| f.name.clone()) else {
+            return (r, "none");
+        };
+        let Some(theirs) = self.claims.holder(&friend, Self::now()) else { return (r, "away") };
+        let at = self.roam.whereabouts(vec![theirs.clone()]).await.unwrap_or_default();
+        if !matches!(at.first(), Some(Some(_))) {
+            return (r, "away");
+        }
+        let v = json!({ "t": "friend", "op": "crew", "name": me, "crew": crew, "room": room });
+        let v = bytes::Bytes::from(nfsu2_util::json::stringify(&v));
+        let told = self.lan.vips_of_owner(&theirs).into_iter().fold(false, |any, x| self.lan.send_text(x, v.clone()) || any);
+        (r, if told { "sent" } else { "away" })
+    }
+
     /// the page's lists to it, with the messages that waited for it, and its friends to the hub: the friendships both
     /// ways only (`FriendRow::mutual`), since the hub links each one's friends with it, and puts it on theirs
     async fn send_list(&self, vip: u32, owner: Option<Arc<str>>, group: Arc<str>) {
@@ -392,6 +429,27 @@ impl Friends {
     }
 }
 
+/// A crew's or a room's name in an invite, tidied near enough as a page tidies a typed one (web/src/app/invite.ts
+/// tidyName; the friend's page tidies and checks it again before its Join): control and format characters out (no
+/// line break or bidi trick reaches the friend's settings.ini), each run of white space one space, trimmed.  Not
+/// nfsu2-lan's `clean_name`, a display name's: that one cuts at 32 characters, and makes "player" of an empty name
+/// (the room of everyone) and of one that reads as a slur (refused here instead).
+fn tidy(s: &str) -> String {
+    let format = |c: char| matches!(c, '\u{ad}' | '\u{600}'..='\u{605}' | '\u{61c}' | '\u{6dd}' | '\u{70f}' | '\u{180e}' | '\u{200b}'..='\u{200f}'
+        | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{206f}' | '\u{feff}' | '\u{fff9}'..='\u{fffb}');
+    let mut t = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_whitespace() {
+            if !t.is_empty() && !t.ends_with(' ') {
+                t.push(' ');
+            }
+        } else if !c.is_control() && !format(c) {
+            t.push(c);
+        }
+    }
+    t.trim_end().to_string()
+}
+
 /// messages for a page, as its list's "mail" has them
 fn mail_json(mail: &[PageMail]) -> Value {
     mail.iter().map(|m| json!({ "from": m.from, "body": m.body, "at": m.t })).collect()
@@ -452,6 +510,16 @@ impl App {
                         }
                         FriendAsk::Discord(name)
                     }
+                    Some("crew") => {
+                        if !f.invites.take(&owner, "") {
+                            return self.json(q, s, 200, &json!({ "done": "rate" })).await;
+                        }
+                        let text = |k: &str| b.get(k).and_then(Value::as_str).unwrap_or("").chars().take(64).collect::<String>();
+                        let (r, done) = f.crew_invite(owner, group, &name, &text("crew"), &text("room")).await;
+                        let mut v = f.page_json(r).await;
+                        v["done"] = done.into();
+                        return self.json(q, s, 200, &v).await;
+                    }
                     Some("accept") => FriendAsk::Answer(name, true),
                     Some("decline") => FriendAsk::Answer(name, false),
                     Some("remove") => FriendAsk::Remove(name),
@@ -473,3 +541,4 @@ impl App {
         self.json(q, s, 200, &v).await
     }
 }
+

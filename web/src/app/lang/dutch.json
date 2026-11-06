@@ -1563,5 +1563,13 @@
   "Everyone can join": "Iedereen kan meedoen",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Je racelobby: wie mag meedoen (jouw niveau en lager, vrienden & crew, of iedereen)",
   "Invite to a race": "Uitnodigen voor een race",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Vrienden uitnodigen voor je racelobby, een uitnodiging van een vriend aannemen, een race verlaten waar je op afstand aan meedoet"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Vrienden uitnodigen voor je racelobby, een uitnodiging van een vriend aannemen, een race verlaten waar je op afstand aan meedoet",
+  "Invite {name} to a crew": "{name} uitnodigen voor een crew",
+  "Invite {name} to": "{name} uitnodigen voor",
+  "Invite {name} to crew {crew}": "{name} uitnodigen voor crew {crew}",
+  "Invited {name} to {crew}": "{name} uitgenodigd voor {crew}",
+  "{name} isn't in free roam now": "{name} is nu niet in Verkennen",
+  "invites you to crew \"{crew}\"": "nodigt je uit voor crew \"{crew}\"",
+  "{name} invites you to crew \"{crew}\"": "{name} nodigt je uit voor crew \"{crew}\"",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Nog geen crew? Spreek met je vrienden een naam af en typ die allemaal hier, of open de uitnodigingslink van een crew."
 }

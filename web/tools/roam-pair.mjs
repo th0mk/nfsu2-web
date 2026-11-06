@@ -36,7 +36,9 @@
 //                    presses Join; `log INVITE-NO <fragment>` presses Not now (tests/scripts/roam_invite.txt);
 //                    `log FRIENDS shot <name>` opens the menu's Friends popup (F9, Friends), saves the page and says
 //                    what the popup says, and goes back; `log FRIENDS join <friend>` presses that friend's Join there
-//                    (tests/scripts/roam_friend_app_a.txt); `log RENAME <name>` answers the box that asks for
+//                    (tests/scripts/roam_friend_app_a.txt); `log FRIENDS crew <friend> [<crew>]` its crew icon (and
+//                    that crew among the player's, with several), what the toast at it says, and goes back
+//                    (tests/scripts/roam_crew_invite_a.txt); `log RENAME <name>` answers the box that asks for
 //                    another name (the operator took the player's away) with that name (tests/scripts/roam_sanctions.txt)
 //        `log CTL <words>`  any page: an operator's command to our own server (nfsu2-server ctl: who, raceban,
 //                    rename ...), its answer in the instance's log as [ctl]
@@ -311,13 +313,21 @@ async function start(i, name, script, own) {
         .then(() => w(`[crew] ${op} ${k ?? ''} ${arg}`), e => w(`[crew] ${op} ${arg} failed: ${e}`));
     }
     // the menu's Friends popup as the player uses it, at a script's `log FRIENDS shot <name>` (F9, Friends, its
-    // picture once the server answered, what it says, Done, Close) or `log FRIENDS join <friend>` (that
-    // friend's Join, which goes back to the game itself)
-    const fk = APP && /LOG FRIENDS (shot|join) (\S+)/.exec(m.text());
+    // picture once the server answered, what it says, Done, Close), `log FRIENDS join <friend>` (that
+    // friend's Join, which goes back to the game itself) or `log FRIENDS crew <friend> [<crew>]` (its crew icon, the
+    // crew under its line with several, the toast's words, Done, Close)
+    const fk = APP && /LOG FRIENDS (shot|join|crew) (\S+)(?: (.+?))?\s*$/.exec(m.text());
     if (fk) {
-      const [, op, arg] = fk, pop = '#friends-pop';
+      const [, op, arg, crewName] = fk, pop = '#friends-pop';
+      const line = () => page.locator(`${pop} .fl li`, { has: page.locator('.fl-name', { hasText: arg }) });
       const act = op === 'join'
-        ? () => page.waitForTimeout(800).then(() => page.locator(`${pop} .fl li`, { has: page.locator('.fl-name', { hasText: arg }) }).locator('.fl-join').click({ timeout: 5000 }))
+        ? () => page.waitForTimeout(800).then(() => line().locator('.fl-join').click({ timeout: 5000 }))
+        : op === 'crew'
+        ? () => page.waitForTimeout(800).then(() => line().locator('.fl-crew').click({ timeout: 5000 }))
+          .then(() => crewName ? page.locator(`${pop} .crew-pick`, { hasText: crewName }).click({ timeout: 5000 }) : undefined)
+          .then(() => page.waitForSelector('.copy-toast.on', { timeout: 5000 })).then(() => page.textContent('.copy-toast.on'))
+          .then(said => { w(`[friends] the crew invite: ${said}`); return page.click(`${pop} [data-act="friends-done"]`); })
+          .then(() => page.click('#menu [data-act="resume"]'))
         : () => page.waitForTimeout(800).then(() => page.screenshot({ path: path.join(OUT, `${name}-${arg}.png`) }))
           .then(() => page.evaluate(() => document.getElementById('friends-pop-box').innerText.replace(/\s*\n+\s*/g, ' / ')))
           .then(said => { w(`[friends] the popup: ${said}`); return page.click(`${pop} [data-act="friends-done"]`); })

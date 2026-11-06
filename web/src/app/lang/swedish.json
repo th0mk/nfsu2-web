@@ -1563,5 +1563,13 @@
   "Everyone can join": "Alla kan gå med",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Din racelobby: vem får gå med (din nivå och lägre, vänner & crew, eller alla)",
   "Invite to a race": "Bjud in till ett race",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Bjud in vänner till din racelobby, tacka ja till en väns inbjudan, lämna ett race du gått med i på avstånd"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Bjud in vänner till din racelobby, tacka ja till en väns inbjudan, lämna ett race du gått med i på avstånd",
+  "Invite {name} to a crew": "Bjud in {name} till en crew",
+  "Invite {name} to": "Bjud in {name} till",
+  "Invite {name} to crew {crew}": "Bjud in {name} till crewen {crew}",
+  "Invited {name} to {crew}": "{name} inbjuden till {crew}",
+  "{name} isn't in free roam now": "{name} är inte i läget Utforska nu",
+  "invites you to crew \"{crew}\"": "bjuder in dig till crewen ”{crew}”",
+  "{name} invites you to crew \"{crew}\"": "{name} bjuder in dig till crewen ”{crew}”",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ingen crew än? Kom överens om ett namn med dina vänner och skriv in det här var och en, eller öppna en crews inbjudningslänk."
 }

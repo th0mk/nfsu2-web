@@ -1476,5 +1476,13 @@
   "Everyone can join": "ทุกคนเข้าร่วมได้",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "ล็อบบี้การแข่งของคุณ: ใครเข้าร่วมได้ (ด่านของคุณลงไป เพื่อนและทีม หรือทุกคน)",
   "Invite to a race": "เชิญเข้าร่วมการแข่ง",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "เชิญเพื่อนเข้าล็อบบี้การแข่งของคุณ ตอบรับคำเชิญของเพื่อน ออกจากการแข่งที่คุณเข้าร่วมจากระยะไกล"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "เชิญเพื่อนเข้าล็อบบี้การแข่งของคุณ ตอบรับคำเชิญของเพื่อน ออกจากการแข่งที่คุณเข้าร่วมจากระยะไกล",
+  "Invite {name} to a crew": "เชิญ {name} เข้าทีม",
+  "Invite {name} to": "เชิญ {name} เข้า:",
+  "Invite {name} to crew {crew}": "เชิญ {name} เข้าทีม {crew}",
+  "Invited {name} to {crew}": "เชิญ {name} เข้าทีม {crew} แล้ว",
+  "{name} isn't in free roam now": "ตอนนี้ {name} ไม่ได้ขับอิสระอยู่",
+  "invites you to crew \"{crew}\"": "เชิญคุณเข้าทีม \"{crew}\"",
+  "{name} invites you to crew \"{crew}\"": "{name} เชิญคุณเข้าทีม \"{crew}\"",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "ยังไม่มีทีมใช่ไหม? ตกลงชื่อกับเพื่อนๆ แล้วให้ทุกคนพิมพ์ชื่อนั้นที่นี่ หรือเปิดลิงก์เชิญของทีม"
 }

@@ -182,6 +182,9 @@ export async function copyLink(link: string, at: HTMLElement): Promise<string | 
   return t('Copy this invite link: {link}', { link });
 }
 
+/** the note under the crews' box while the player has no crew (a player's question on Discord: "how i use crew feature?") */
+const NO_CREW = N('No crew yet? Agree on a name with your friends and each type it here, or open a crew\'s invite link.');
+
 /** What a crews control shows and does: the Crews row's, and the page menu's while a game is in free roam */
 export interface CrewControl {
   /** the crews now, in the player's order, with their colours */
@@ -207,8 +210,8 @@ export interface CrewControl {
  * game, a button that opens the palette under the line; its name, how many are in free roam in it when the server
  * says, a button that copies an invite link to it, and Leave), then a value box with Join in it (or Enter).  Join
  * waits for a name that can join (crews.ts checkCrew), and the note under the box says why one cannot (and what a
- * link's copy did, without o.said); with 4 crews the box waits for one to be left.  A Leave keeps the others'
- * colours; a Join takes the first colour no crew has.  A line under the chips names a crew counted with more than
+ * link's copy did, without o.said), or with no crew yet how to get one; with 4 crews the box waits for one to be
+ * left.  A Leave keeps the others' colours; a Join takes the first colour no crew has.  A line under the chips names a crew counted with more than
  * CREW_BIG players (showCrewCounts).  Returns the box's field.
  */
 export function crewControl(o: CrewControl, ctl: HTMLElement): HTMLInputElement {
@@ -288,8 +291,9 @@ export function crewControl(o: CrewControl, ctl: HTMLElement): HTMLInputElement 
   const check = () => {
     const r = checkCrew(inp.value, list.map(c => c.name)), full = list.length >= CREW_MAX;
     inp.disabled = full; join.disabled = !r.ok;
-    note.textContent = r.ok || !r.why ? '' : t(r.why, { name: r.name ?? '' });
-    note.classList.toggle('warn', !full);
+    const why = r.ok || !r.why ? '' : t(r.why, { name: r.name ?? '' });
+    note.textContent = why || (list.length ? '' : t(NO_CREW));
+    note.classList.toggle('warn', !!why && !full);
     return r;
   };
   const add = () => {

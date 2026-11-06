@@ -1482,5 +1482,13 @@
   "Everyone can join": "Bárki csatlakozhat",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "A versenylobbid: ki csatlakozhat (a szakaszod és alatta, barátok és csapattársak, vagy mindenki)",
   "Invite to a race": "Meghívás versenyre",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Barátok meghívása a versenylobbidba, egy barát meghívásának elfogadása, kilépés a versenyből, amelyhez távolról csatlakoztál"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Barátok meghívása a versenylobbidba, egy barát meghívásának elfogadása, kilépés a versenyből, amelyhez távolról csatlakoztál",
+  "Invite {name} to a crew": "{name} meghívása egy csapatba",
+  "Invite {name} to": "{name} meghívása ide:",
+  "Invite {name} to crew {crew}": "{name} meghívása ebbe a csapatba: {crew}",
+  "Invited {name} to {crew}": "{name} meghívva ide: {crew}",
+  "{name} isn't in free roam now": "{name} most nincs Felfedező módban",
+  "invites you to crew \"{crew}\"": "meghív ebbe a csapatba: „{crew}”",
+  "{name} invites you to crew \"{crew}\"": "{name} meghív ebbe a csapatba: „{crew}”",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Még nincs csapatod? Állapodjatok meg egy névben a barátaiddal, és mindenki írja be ide, vagy nyisd meg egy csapat meghívólinkjét."
 }

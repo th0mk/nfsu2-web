@@ -1621,5 +1621,13 @@
   "Everyone can join": "Pridať sa môže ktokoľvek",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Tvoje závodné loby: kto sa môže pridať (tvoja úroveň a nižšie, priatelia a partia, alebo všetci)",
   "Invite to a race": "Pozvať do závodu",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvať priateľov do svojho závodného loby, prijať pozvánku priateľa, opustiť závod, ku ktorému si sa pridal na diaľku"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Pozvať priateľov do svojho závodného loby, prijať pozvánku priateľa, opustiť závod, ku ktorému si sa pridal na diaľku",
+  "Invite {name} to a crew": "Pozvať hráča {name} do partie",
+  "Invite {name} to": "Pozvať hráča {name} do:",
+  "Invite {name} to crew {crew}": "Pozvať hráča {name} do partie {crew}",
+  "Invited {name} to {crew}": "Hráč {name} pozvaný do partie {crew}",
+  "{name} isn't in free roam now": "{name} teraz nie je vo voľnej jazde",
+  "invites you to crew \"{crew}\"": "ťa pozýva do partie „{crew}“",
+  "{name} invites you to crew \"{crew}\"": "{name} ťa pozýva do partie „{crew}“",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ešte nemáš partiu? Dohodni sa s kamarátmi na názve, nech ho sem každý napíše, alebo otvor odkaz s pozvánkou do partie."
 }

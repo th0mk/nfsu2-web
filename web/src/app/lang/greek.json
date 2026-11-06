@@ -1503,5 +1503,13 @@
   "Everyone can join": "Μπορούν να μπουν όλοι",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Η αίθουσα αγώνα σου: ποιος μπορεί να μπει (το στάδιό σου και κάτω, φίλοι και ομάδα ή όλοι)",
   "Invite to a race": "Πρόσκληση σε αγώνα",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Πρόσκληση φίλων στην αίθουσα αγώνα σου, αποδοχή πρόσκλησης φίλου, αποχώρηση από αγώνα στον οποίο μπήκες από μακριά"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Πρόσκληση φίλων στην αίθουσα αγώνα σου, αποδοχή πρόσκλησης φίλου, αποχώρηση από αγώνα στον οποίο μπήκες από μακριά",
+  "Invite {name} to a crew": "Πρόσκληση του παίκτη {name} σε ομάδα",
+  "Invite {name} to": "Πρόσκληση του παίκτη {name} σε:",
+  "Invite {name} to crew {crew}": "Πρόσκληση του παίκτη {name} στην ομάδα {crew}",
+  "Invited {name} to {crew}": "Ο παίκτης {name} προσκλήθηκε στην ομάδα {crew}",
+  "{name} isn't in free roam now": "Ο παίκτης {name} δεν είναι τώρα σε ελεύθερη οδήγηση",
+  "invites you to crew \"{crew}\"": "σε προσκαλεί στην ομάδα «{crew}»",
+  "{name} invites you to crew \"{crew}\"": "Ο παίκτης {name} σε προσκαλεί στην ομάδα «{crew}»",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Δεν έχεις ομάδα ακόμα; Συμφωνήστε ένα όνομα με τους φίλους σου και πληκτρολογήστε το όλοι εδώ, ή άνοιξε τον σύνδεσμο πρόσκλησης μιας ομάδας."
 }

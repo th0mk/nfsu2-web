@@ -19,10 +19,17 @@
 // - race invites: an Invite in the page menu's Friends for each friend in free roam in the player's room while the
 //   player hosts a race lobby with room in it, what the server said of it; a friend's invite: its line, the lobby key
 //   (Z) or a click joins its lobby (the game's LB_JOIN with the host's id, the lobby's and its race's hash)
+// - crew invites: a crew icon on a friend in free roam (the start page's Friends, the page menu's Friends) while the
+//   player has a crew; one crew a click invites to it, more open under the line and a click on one invites to that;
+//   what the server said in a toast at the icon.  A friend's invite: its card under a race invite's, Z (when no race
+//   invite shows) or a click joins its crew in its room; it waits in the page menu's Crews (Join, Decline) until the
+//   game ends; none for a crew the player is in, or names no Crews box would take
+// - the Crews control (settings-ui.ts) says how to get a crew while there is none
 // - /friends asked with the keyphrase's token, its answer read leniently
 // The module is bundled from web/src with esbuild into a blank page.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
@@ -31,7 +38,7 @@ import { pickBrowser } from '../tools/browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const js = (await esbuild.build({
-  stdin: { contents: `export * from './web/src/app/friends.ts'; export * from './web/src/app/messages.ts';`, resolveDir: ROOT, loader: 'ts' },
+  stdin: { contents: `export * from './web/src/app/friends.ts'; export * from './web/src/app/messages.ts'; export { crewControl } from './web/src/app/settings-ui.ts';`, resolveDir: ROOT, loader: 'ts' },
   bundle: true, format: 'iife', globalName: 'F', write: false, platform: 'browser',
 })).outputFiles[0].text;
 
@@ -48,13 +55,18 @@ async function page() {
     w.sent = []; w.toasts = []; w.notices = []; w.placed = 0; w.columned = 0; w.room = ''; w.hosted = null; w.joined = [];
     // /friends (its answers and requests by name): what it was asked, and the lists it answers with (null: no answer)
     w.apiActs = []; w.apiLists = { me: 'Al_', friends: [], asks: [], sent: [], mail: [], done: 'friends' }; w.driving = true;
-    const api = { act: async (op, name) => { w.apiActs.push([op, name]); return w.apiLists; } };
+    w.crews = []; w.crewJoins = []; w.crewsChanged = 0; w.crewAsked = []; w.crewDone = 'sent';
+    const api = {
+      act: async (op, name) => { w.apiActs.push([op, name]); return w.apiLists; },
+      crew: async (name, crew, room) => { w.crewAsked.push([name, crew, room]); return w.crewDone ? { ...w.apiLists, done: w.crewDone } : null; },
+    };
     w.prompt = new w.F.FriendPrompt(document.getElementById('stage'), {
       send: m => { w.sent.push(m); return true; }, room: () => w.room, log: () => {}, place: () => { w.columned++; },
       toast: (s, o) => w.toasts.push(o?.hot ? `[hot] ${s}` : s),
       notice: (name, text, here) => w.notices.push(here ? [name, text, 'here'] : [name, text]), menu: () => 'the menu (F9)', placed: () => { w.placed++; },
       hosted: () => w.hosted, joinLobby: (host, lobby, race) => { w.joined.push([host, lobby, race]); return true; },
       api, driving: () => w.driving,
+      crews: () => w.crews, joinCrew: (crew, room) => w.crewJoins.push([crew, room]), crewsChanged: () => { w.crewsChanged++; },
     });
     w.prompt.start({ viewRect: () => ({ x: 0, y: 0, w: 640, h: 480 }) }, true);
   });
@@ -113,7 +125,8 @@ test('the other player asked first: accept on the line, by a click', async () =>
   assert.deepEqual(await line(p), { text: 'FCy_Two wants to be friends: accept', offer: true });
   assert.deepEqual(await p.evaluate(() => [[...document.querySelector('.toasts').children].map(e => e.className),
     document.querySelector('.friend-prompt b')?.textContent, /** @type {any} */ (window).columned > 0]),
-  [['friend-prompt offer invite', 'friend-prompt offer'], 'Cy_Two', true], 'in the column of notes at the top, the invite\'s first; the name bold');
+  [['friend-prompt offer invite', 'friend-prompt offer invite crew-invite', 'friend-prompt offer'], 'Cy_Two', true],
+  'in the column of notes at the top, the invites first (a race\'s, a crew\'s); the name bold');
   assert.equal(await p.evaluate(() => /** @type {any} */ (window).prompt.menuItem()?.label), 'Accept Cy_Two as a friend');
   await sent(p);
   await p.click('.friend-prompt:not(.invite)');
@@ -375,8 +388,10 @@ async function panel(p, lists) {
   await p.evaluate(l => {
     const w = /** @type {any} */ (window);
     w.acts = []; w.joined = []; w.chats = []; w.lists = l; w.confirmYes = true; w.discords = []; w.discordDone = 'ok';
+    w.crewAsked = []; w.crewDone = 'sent';
     const api = {
       list: async () => w.lists, act: async (op, name) => { w.acts.push([op, name]); return w.lists; },
+      crew: async (name, crew, room) => { w.crewAsked.push([name, crew, room]); return w.crewDone ? { ...w.lists, done: w.crewDone } : null; },
       discord: async name => {
         w.discords.push(name);
         if (w.discordDone === 'ok') w.lists = { ...w.lists, contact: name || null };
@@ -388,6 +403,7 @@ async function panel(p, lists) {
     w.panel = new w.F.FriendsPanel(document.getElementById('friends'), {
       api, join: room => w.joined.push(room), confirm: async () => w.confirmYes, idle: () => true, log: () => {},
       store: w.store, chat: name => w.chats.push(name), waiting: n => w.waiting.push(n),
+      crews: () => w.panelCrews ? { crews: w.panelCrews, room: w.panelRoom ?? '' } : null,
     });
   }, lists);
   await p.evaluate(() => /** @type {any} */ (window).panel.refresh(true));
@@ -442,6 +458,201 @@ test('race invites: Invite in the menu\'s Friends while hosting, and a friend\'s
   assert.deepEqual(await p.evaluate(() => /** @type {any} */ (window).joined.splice(0)), [[1, 2, 3]], 'a click');
   await server(p, { op: 'invite', name: 'Dee', host: 0, lobby: 2, race: 3 });
   assert.equal(await inv(), null, 'an invite that names no lobby: none');
+  await p.close();
+});
+
+/** the newest copy toast's text (copy.ts), after the server's answer came */
+const toastNow = p => p.evaluate(async () => { await new Promise(r => setTimeout(r, 30)); return [...document.querySelectorAll('.copy-toast')].at(-1)?.textContent ?? null; });
+
+test('crew invites: an icon on a friend in free roam, the crews to pick under its line, the server\'s answer at it', async () => {
+  const p = await page();
+  await raf(p);
+  await p.evaluate(() => { /** @type {any} */ (window).room = 'Night Owls'; });
+  await server(p, { op: 'list', me: 'Al_', friends: ['Bo_', 'Cy_'], asks: [] });
+  await server(p, { op: 'where', friends: [{ name: 'Bo_', where: 'roam', room: 'night owls' }, { name: 'Cy_', where: 'online' }] });
+  await notices(p); await sent(p);
+  // the page menu's Friends popup, drawn again as the shell does when the prompt says so (placed)
+  const draw = () => p.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    w.box?.remove();
+    const box = w.box = document.createElement('div');
+    document.body.append(box);
+    w.prompt.drawPlaced(box, () => {});
+  });
+  const rowsOf = sel => p.$$eval(sel, ls => ls.map(li => [li.classList.contains('fl-pick') ? '(under)' : li.querySelector('.fl-name').firstChild.textContent,
+    li.querySelector('.fl-st').textContent, [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]));
+  const asked = () => p.evaluate(() => /** @type {any} */ (window).crewAsked.splice(0));
+  await draw();
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'free roam · your room', '']], 'no crew: no icon');
+  await p.evaluate(() => { /** @type {any} */ (window).crews = [{ name: 'JDM', rgb: '3cd2ff' }]; });
+  await draw();
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'free roam · your room', 'Invite Bo_ to a crew']]);
+  await p.click('.fl-crew');
+  assert.deepEqual(await asked(), [['Bo_', 'JDM', 'Night Owls']], 'one crew: invited at once, in the game\'s room');
+  assert.equal(await toastNow(p), 'Invited Bo_ to JDM');
+  for (const [done, text] of [['away', 'Bo_ isn\'t in free roam now'], ['rate', 'Wait a moment'], ['none', 'Not sent: try again in a moment'], [null, 'Not sent: try again in a moment']]) {
+    await p.evaluate(d => { /** @type {any} */ (window).crewDone = d; }, done);
+    await p.click('.fl-crew');
+    assert.equal(await toastNow(p), text, String(done));
+  }
+  await asked();
+  await p.evaluate(() => { const w = /** @type {any} */ (window); w.crewDone = 'sent'; w.crews = [{ name: 'JDM', rgb: '3cd2ff' }, { name: 'Wangan', rgb: 'ff50c8' }]; w.placed = 0; });
+  await draw();
+  await p.click('.fl-crew');
+  assert.deepEqual(await asked(), [], 'more crews: one to pick');
+  assert.equal(await p.evaluate(() => /** @type {any} */ (window).placed), 1, 'drawn again');
+  await draw();
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'free roam · your room', 'Invite Bo_ to a crew'], ['(under)', 'Invite Bo_ to', 'Invite Bo_ to crew JDM|Invite Bo_ to crew Wangan']]);
+  assert.equal(await p.getAttribute('.fl-crew', 'aria-expanded'), 'true');
+  assert.deepEqual(await p.$$eval('.crew-pick', bs => bs.map(b => [b.textContent, b.style.getPropertyValue('--crew')])), [['JDM', '#3cd2ff'], ['Wangan', '#ff50c8']], 'as the Crews row\'s chips');
+  await p.click('.crew-pick >> nth=1');
+  assert.deepEqual(await asked(), [['Bo_', 'Wangan', 'Night Owls']]);
+  await draw();
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'free roam · your room', 'Invite Bo_ to a crew']], 'closed once sent');
+  assert.equal(await toastNow(p), 'Invited Bo_ to Wangan', 'at the icon');
+  await p.evaluate(() => /** @type {any} */ (window).box.remove());
+  // the start page's Friends: settings.ini's crews and room, on the friends in free roam only
+  await p.evaluate(() => { document.getElementById('friends').hidden = false; });
+  await panel(p, { me: 'Al_', asks: [], sent: [], friends: [{ name: 'Bo_', where: 'roam', room: '' }, { name: 'Gus', where: 'online' }] });
+  assert.deepEqual(await rowsOf('#friends .fl li'), [['Bo_', 'free roam', 'Join|Message|Remove'], ['Gus', 'Online lobby', 'Message|Remove']], 'no crew: no icon');
+  await p.evaluate(() => { const w = /** @type {any} */ (window); w.panelCrews = [{ name: 'JDM', rgb: '3cd2ff' }, { name: 'Wangan', rgb: 'ff50c8' }]; w.panelRoom = 'Blue Room'; w.panel.render(); });
+  assert.deepEqual(await rowsOf('#friends .fl li'), [['Bo_', 'free roam', 'Join|Invite Bo_ to a crew|Message|Remove'], ['Gus', 'Online lobby', 'Message|Remove']]);
+  await p.click('#friends .fl-crew');
+  assert.deepEqual((await rowsOf('#friends .fl li'))[1], ['(under)', 'Invite Bo_ to', 'Invite Bo_ to crew JDM|Invite Bo_ to crew Wangan']);
+  assert.equal(await p.evaluate(() => document.activeElement?.textContent), 'JDM', 'the keyboard on the first crew');
+  await p.click('#friends .fl-crew');
+  assert.equal((await rowsOf('#friends .fl li')).length, 2, 'the icon again closes them');
+  await p.click('#friends .fl-crew');
+  await p.click('#friends .crew-pick >> nth=0');
+  assert.deepEqual(await asked(), [['Bo_', 'JDM', 'Blue Room']], 'settings.ini\'s room');
+  assert.equal(await toastNow(p), 'Invited Bo_ to JDM');
+  assert.equal(await p.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Invite Bo_ to a crew', 'the keyboard back on the icon');
+  await p.close();
+});
+
+test('a friend\'s crew invite: its card, Z or a click joins its crew in its room, it waits in the menu\'s Crews', async () => {
+  const p = await page();
+  await raf(p);
+  const card = () => p.evaluate(() => { const b = document.querySelector('.friend-prompt.crew-invite'); return b.hidden ? null : b.textContent; });
+  const joins = () => p.evaluate(() => /** @type {any} */ (window).crewJoins.splice(0));
+  const waiting = () => p.evaluate(() => /** @type {any} */ (window).prompt.crewAsksNow().map(a => [a.name, a.crew, a.room]));
+  await server(p, { op: 'crew', name: 'Bo_', crew: 'Touge', room: 'Blue Room' });
+  assert.equal(await card(), 'Bo_ invites you to crew "Touge"ZJoin');
+  assert.equal(await p.evaluate(() => document.querySelector('.friend-prompt.crew-invite b')?.textContent), 'Bo_', 'the friend\'s name bold');
+  assert.ok(await p.evaluate(() => /** @type {any} */ (window).crewsChanged) > 0, 'the menu\'s Crews told');
+  assert.deepEqual(await waiting(), [['Bo_', 'Touge', 'Blue Room']]);
+  await p.keyboard.press('KeyZ');
+  assert.deepEqual(await joins(), [['Touge', 'Blue Room']], 'Z joins, in the friend\'s room');
+  assert.equal(await card(), null);
+  assert.deepEqual(await waiting(), []);
+  await p.keyboard.press('KeyZ');
+  assert.deepEqual(await joins(), [], 'Z does nothing without one');
+  // the names tidied as a link's; a click; the room of everyone
+  await server(p, { op: 'crew', name: 'Cy_', crew: '  Night   Owls ', room: '' });
+  assert.equal(await card(), 'Cy_ invites you to crew "Night Owls"ZJoin');
+  await p.click('.friend-prompt.crew-invite');
+  assert.deepEqual(await joins(), [['Night Owls', '']], 'a click');
+  // a race's invite with it: Z takes the race's (only while its lobby is open), the crew's stays
+  await server(p, { op: 'crew', name: 'Dee', crew: 'Wangan', room: '' });
+  await server(p, { op: 'invite', name: 'Dee', host: 1, lobby: 2, race: 3, kind: 'sprint', n: 1, max: 4 });
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.toasts .friend-prompt:not([hidden])')].map(e => e.className)),
+    ['friend-prompt offer invite', 'friend-prompt offer invite crew-invite'], 'the race\'s first');
+  await p.keyboard.press('KeyZ');
+  assert.deepEqual([await p.evaluate(() => /** @type {any} */ (window).joined.splice(0)), await joins()], [[[1, 2, 3]], []]);
+  assert.equal(await card(), 'Dee invites you to crew "Wangan"ZJoin');
+  // the page menu's Crews: a line each, Join and Decline
+  await server(p, { op: 'crew', name: 'Eve', crew: 'Touge', room: 'Blue Room' });
+  const crewsPop = () => p.evaluate(() => {
+    const w = /** @type {any} */ (window), ul = w.prompt.drawCrewAsks();
+    if (!ul) return null;
+    document.body.append(ul); w.ul = ul;
+    return [...ul.querySelectorAll('li')].map(li => [li.querySelector('.fl-name').firstChild.textContent, li.querySelector('.fl-st').textContent,
+      [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]);
+  });
+  assert.deepEqual(await crewsPop(), [['Dee', 'invites you to crew "Wangan"', 'Join|Decline'], ['Eve', 'invites you to crew "Touge"', 'Join|Decline']]);
+  await p.evaluate(() => /** @type {any} */ (window).ul.querySelector('.fl-no').click());
+  assert.deepEqual([await joins(), await waiting()], [[], [['Eve', 'Touge', 'Blue Room']]], 'Dee\'s declined');
+  await p.evaluate(() => /** @type {any} */ (window).ul.remove());
+  assert.equal(await card(), 'Eve invites you to crew "Touge"ZJoin', 'the newest one\'s card');
+  await crewsPop();
+  await p.evaluate(() => /** @type {any} */ (window).ul.querySelector('.fl-yes').click());
+  assert.deepEqual([await joins(), await waiting(), await card()], [[['Touge', 'Blue Room']], [], null], 'Eve\'s joined, its card gone');
+  assert.equal(await crewsPop(), null, 'none waits');
+  // with 4 crews already: a note, and it waits (Leave is beside it in the menu's Crews)
+  await p.evaluate(() => { /** @type {any} */ (window).crews = ['A', 'B', 'C', 'D'].map(name => ({ name, rgb: '3cd2ff' })); });
+  await server(p, { op: 'crew', name: 'Fox', crew: 'Neon', room: '' });
+  await toasts(p);
+  await p.keyboard.press('KeyZ');
+  assert.deepEqual([await joins(), await toasts(p), await waiting(), await card()], [[], ['Up to 4 crews: leave one to join another.'], [['Fox', 'Neon', '']], null]);
+  await p.evaluate(() => { /** @type {any} */ (window).crews = []; });
+  await p.evaluate(() => /** @type {any} */ (window).prompt.answerCrew(/** @type {any} */ (window).prompt.crewAsks[0], false));
+  // none for a crew the player is in (it joined one since: that one's left out), nor names no Crews box would take
+  await server(p, { op: 'crew', name: 'Fox', crew: 'Neon', room: '' });
+  await p.evaluate(() => { /** @type {any} */ (window).crews = [{ name: 'JDM', rgb: '3cd2ff' }, { name: 'neon', rgb: 'ff50c8' }]; });
+  assert.deepEqual(await waiting(), [], 'joined since');
+  await p.evaluate(() => /** @type {any} */ (window).prompt.answerCrew(/** @type {any} */ (window).prompt.crewAsks[0], false));
+  for (const m of [{ name: 'Fox', crew: 'jdm' }, { name: 'Fox', crew: 'a, b' }, { name: 'Fox', crew: 'x_fag_x' }, { name: 'Fox', crew: 'x'.repeat(25) },
+    { name: 'Fox', crew: 'Ok', room: 'x_fag_x' }, { name: '', crew: 'Ok' }, { name: 'Fox', crew: '' }, { name: 'Fox', crew: 5 }]) {
+    await server(p, { op: 'crew', ...m });
+    assert.equal(await card(), null, JSON.stringify(m));
+  }
+  assert.deepEqual(await waiting(), []);
+  // the game's end: none waits
+  await server(p, { op: 'crew', name: 'Gus', crew: 'Late', room: '' });
+  await p.evaluate(() => /** @type {any} */ (window).prompt.stop());
+  assert.deepEqual([await waiting(), await card()], [[], null]);
+  await p.close();
+});
+
+test('the notes at the top in one look: a crew\'s invite as a race\'s, the friend line and a plain note (only the border apart)', async () => {
+  const p = await page();
+  await raf(p);
+  // the page's own stylesheet (style.css), a plain note (shell.ts toast) beside the prompt's lines in the column
+  await p.addStyleTag({ content: fs.readFileSync(path.join(ROOT, 'web/src/app/style.css'), 'utf8') });
+  await p.evaluate(() => {
+    document.getElementById('stage').style.setProperty('--u', '1.5px');
+    const t = Object.assign(document.createElement('div'), { className: 'toast', textContent: 'You and Bo_ are friends now' });
+    document.querySelector('.toasts').append(t);
+  });
+  await bump(p, 'Bo', 1);
+  await server(p, { op: 'can', name: 'Bo_', st: 'friends' });
+  await server(p, { op: 'crew', name: 'Bo_', crew: 'Touge', room: '' });
+  await server(p, { op: 'invite', name: 'Bo_', host: 1, lobby: 2, race: 3, kind: 'sprint', n: 1, max: 4 });
+  const look = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.toasts > *')].map(e => {
+    const c = getComputedStyle(e), r = e.getBoundingClientRect();
+    return [e.className, { box: [Math.round(r.height), c.paddingTop, c.paddingLeft, c.borderTopLeftRadius, c.backgroundColor, c.fontSize, c.lineHeight].join(' '),
+      border: c.boxShadow !== 'none' }];
+  })));
+  const note = look.toast.box;
+  assert.deepEqual(look, {
+    'friend-prompt offer invite': { box: note, border: true }, 'friend-prompt offer invite crew-invite': { box: note, border: true },
+    'friend-prompt': { box: note, border: false }, toast: { box: note, border: false },
+  }, 'one box for all; a lime border only on what waits for an answer in its time');
+  assert.equal(note, '53 15px 18px 4px rgba(13, 13, 13, 0.78) 16.5px 23.1px', 'the cards\' box at 1.5 px a HUD unit');
+  await p.close();
+});
+
+test('the Crews control says how to get a crew while there is none', async () => {
+  const p = await page();
+  await p.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    w.ctl = list => {
+      w.cbox?.remove();
+      const box = w.cbox = document.createElement('div');
+      document.body.append(box);
+      w.F.crewControl({ list, id: 'c', labelId: 'l', placeholder: 'Crew name', draft: '', onDraft() {}, change() {}, link: () => '' }, box);
+    };
+  });
+  const note = () => p.evaluate(() => { const n = document.getElementById('c-note'); return [n.textContent, n.classList.contains('warn')]; });
+  const HOW = 'No crew yet? Agree on a name with your friends and each type it here, or open a crew\'s invite link.';
+  await p.evaluate(() => /** @type {any} */ (window).ctl([]));
+  assert.deepEqual(await note(), [HOW, false]);
+  await p.fill('#c', 'a, b');
+  assert.deepEqual(await note(), ['No commas, # or ; in a crew name.', true], 'why a name cannot join, in the warning\'s colour');
+  await p.fill('#c', 'Night Owls');
+  assert.deepEqual(await note(), [HOW, false], 'one that can: the how again');
+  await p.evaluate(() => /** @type {any} */ (window).ctl([{ name: 'JDM', rgb: '3cd2ff' }]));
+  assert.deepEqual(await note(), ['', false], 'in a crew: nothing');
   await p.close();
 });
 
@@ -616,6 +827,7 @@ test('/friends with the keyphrase\'s token', async () => {
     const api = new w.F.FriendsApi(async () => 'T'.repeat(43));
     const list = await api.list(), act = await api.act('remove', 'Bo_');
     await api.discord('al.races');
+    await api.crew('Bo_', 'Night Owls', 'Blue Room');
     const none = await new w.F.FriendsApi(async () => null).list();
     w.fetch = async () => new Response('', { status: 404 });
     const gone = await api.list();
@@ -627,6 +839,7 @@ test('/friends with the keyphrase\'s token', async () => {
     { url: '/friends', method: 'GET', auth: `Bearer ${'T'.repeat(43)}`, body: null },
     { url: '/friends', method: 'POST', auth: `Bearer ${'T'.repeat(43)}`, body: '{"op":"remove","name":"Bo_"}' },
     { url: '/friends', method: 'POST', auth: `Bearer ${'T'.repeat(43)}`, body: '{"op":"discord","name":"al.races"}' },
+    { url: '/friends', method: 'POST', auth: `Bearer ${'T'.repeat(43)}`, body: '{"op":"crew","name":"Bo_","crew":"Night Owls","room":"Blue Room"}' },
   ]);
   assert.equal(r.none, null, 'no keyphrase: not asked');
   assert.equal(r.gone, null, 'a server without friends (404)');

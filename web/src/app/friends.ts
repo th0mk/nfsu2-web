@@ -11,7 +11,12 @@
 //   on /friends, as the start page's.  It also tells the server the room's name once the player has friends (their
 //   Join), asks where the friends play every minute ("where"), says in the notices when one comes into free roam, and
 //   fills the page menu's Friends popup, there in every game in free roam with others: the requests to answer, the
-//   friends in free roam (Join a friend's room, Invite to the player's race), how to add one, a field to ask by name.
+//   friends in free roam (Join a friend's room, Invite to the player's race, Invite to a crew), how to add one, a field
+//   to ask by name.  A friend's invite to its crew (from its start page or its game's Friends) gets a card at the top
+//   as a race invite's (the race invite's key, a click or a tap joins, as an invite link would: the crew, in the
+//   friend's room), then waits in the page menu's Crews until the game ends.
+// - CrewInvites: a friend in free roam's crew icon (the start page's Friends, the page menu's Friends): one crew, a
+//   click invites to it; more, they open under the friend's line, a click on one invites to that.
 // - FriendsPanel, on the start page (its Friends & crews tab): one line a friend, where it plays after its name and a
 //   Join in free roam, the requests to answer, the ones sent; icons for what each line does, a friend's Message among
 //   them (lime with a dot while messages wait to be read: messages.ts), and a friend's Discord icon, which copies its
@@ -31,6 +36,8 @@ import { iconButton, TRASH } from './settings-ui';
 import { named } from './cards';
 import { copyText, copyToast, READ_MS } from './copy';
 import { mailOf, type MessageStore } from './messages';
+import { CREW_MAX, type Crew } from './crews';
+import { checkInvite, sameName as sameCrew, tidyInvite } from './invite';
 
 /** two names of one player: the same Online form, in any case (the name over a car, a claimed name) */
 function sameName(a: string, b: string): boolean {
@@ -96,6 +103,11 @@ export class FriendsApi {
   send(name: string, body: string): Promise<FriendLists | null> {
     return this.ask({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'msg', name, body }) });
   }
+  /** an invite to friend `name` (in free roam) to the player's crew `crew`, in room `room` ('' the room of everyone):
+   *  the lists after it, `done` "sent", "away" (not in free roam now), "rate", ... (friends.rs crew_invite) */
+  crew(name: string, crew: string, room: string): Promise<FriendLists | null> {
+    return this.ask({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'crew', name, crew, room }) });
+  }
 }
 
 /** the room f plays in is `mine` (the game's room: '' none), in free roam */
@@ -118,12 +130,14 @@ const CHECK = 'M5 12.5l4.5 4.5L19 7.5', CROSS = 'M6 6l12 12M18 6L6 18';
 const JOIN = 'M10 17l5-5-5-5M15 12H3M14 4h6v16h-6', ENVELOPE = 'M3 6h18v12H3zM3 7l9 6 9-6', PLUS = 'M12 5v14M5 12h14';
 /** a race's flag on its pole: Invite to the player's race lobby */
 const FLAG = 'M5 21V4M5 4h13l-3 4.5 3 4.5H5';
+/** two people, one behind the other: Invite to a crew */
+const GROUP = 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2 20c0-3.6 3.1-6 7-6s7 2.4 7 6M15.5 4.3a3.5 3.5 0 0 1 0 6.4M17.5 14.4c2.6.6 4.5 2.7 4.5 5.6';
 /** Discord's mark (as the start page's Discord button has it): a filled shape, the icon's class says so (style.css) */
 const DISCORD = 'M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z';
 
 /** a line of a friends list: the name, where it plays (or the request's state) after it in small text, lime while it
- *  plays; dimmed while it does not; the icons at its end */
-interface Line { name: string; state: string; ok?: boolean; off?: boolean; acts: HTMLButtonElement[] }
+ *  plays; dimmed while it does not; the icons at its end; under: a line under it (the player's crews to invite it to) */
+interface Line { name: string; state: string; ok?: boolean; off?: boolean; acts: HTMLButtonElement[]; under?: HTMLElement | null }
 
 function icon(cls: string, name: string, path: string, f: () => void): HTMLButtonElement {
   const b = iconButton(cls, name, path);
@@ -148,8 +162,87 @@ function friendList(lines: Line[]): HTMLUListElement {
     acts.append(...l.acts);
     li.append(name, acts);
     ul.append(li);
+    if (l.under) ul.append(l.under);
   }
   return ul;
+}
+
+/** the player's crews and the room it plays in ('' the room of everyone), for a friend's crew invite: the running
+ *  game's in its Friends popup, settings.ini's on the start page */
+export interface CrewsNow { crews: readonly Crew[]; room: string }
+
+/** A friend's crew invite (its friends both ways in free roam only, as the server tells only those): an icon on the
+ *  friend's line; with one crew a click invites to it, with more it opens the player's crews under the line (a chip
+ *  each, as the Crews row's: its dot and name), a click on one invites to that.  What the server did shows in a toast
+ *  at the icon (copy.ts: the copy buttons' look).  The crew's name goes to the server and that friend only, and in
+ *  the log never. */
+export class CrewInvites {
+  /** the friend whose line has the crews open under it ('' none), and its icon as last drawn (the toast's place) */
+  private open = '';
+  private icons = new Map<string, HTMLButtonElement>();
+
+  /** now: the crews and room (null: none known); redraw: the list drawn again (a line opened or closed) */
+  constructor(private api: FriendsApi, private now: () => CrewsNow | null, private redraw: () => void, private log: (line: string) => void) {}
+
+  /** the icon for friend `name`'s line (none while the player has no crew) */
+  acts(name: string): HTMLButtonElement[] {
+    const o = this.now(), key = name.toLowerCase();
+    if (!o?.crews.length) { this.icons.delete(key); return []; }
+    const b = icon('fl-crew', t('Invite {name} to a crew', { name }), GROUP, () => {
+      const c = this.now();
+      if (!c?.crews.length) return;
+      if (c.crews.length === 1) { void this.send(name, c.crews[0].name, c.room); return; }
+      this.open = sameName(this.open, name) ? '' : name;
+      this.redraw();
+      if (this.open) this.icons.get(key)?.closest('li')?.nextElementSibling?.querySelector<HTMLElement>('.crew-pick')?.focus();
+    });
+    if (o.crews.length > 1) b.setAttribute('aria-expanded', String(!!this.open && sameName(this.open, name)));
+    this.icons.set(key, b);
+    return [b];
+  }
+
+  /** the line under friend `name`'s while its crews are open: "Invite {name} to" and the crews (null: closed) */
+  under(name: string): HTMLLIElement | null {
+    const o = this.now();
+    if (!this.open || !sameName(this.open, name) || !o || o.crews.length < 2) return null;
+    const li = document.createElement('li');
+    li.className = 'fl-pick';
+    const lead = document.createElement('span'); lead.className = 'fl-st'; lead.textContent = t('Invite {name} to', { name });
+    li.append(lead);
+    for (const c of o.crews) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'crew crew-pick';
+      b.style.setProperty('--crew', `#${c.rgb}`);
+      b.setAttribute('aria-label', t('Invite {name} to crew {crew}', { name, crew: c.name }));
+      const dot = document.createElement('span'); dot.className = 'crew-dot';
+      const text = document.createElement('span'); text.className = 'crew-text';
+      const nm = document.createElement('span'); nm.className = 'crew-name'; nm.textContent = c.name;
+      text.append(nm);
+      b.append(dot, text);
+      b.onclick = () => {
+        this.open = '';
+        this.redraw();
+        this.icons.get(name.toLowerCase())?.focus();
+        void this.send(name, c.name, o.room);
+      };
+      li.append(b);
+    }
+    return li;
+  }
+
+  /** the invite on /friends, and what became of it in a toast at the friend's icon */
+  private async send(name: string, crew: string, room: string) {
+    let r: FriendLists | null = null;
+    try { r = await this.api.crew(name, crew, room); } catch (e) { this.log(`[friends] the crew invite failed: ${e}`); }
+    const done = r?.done ?? '';
+    this.log(`[friends] a crew invite to ${name}: ${done || 'no answer'}`);
+    const text = done === 'sent' ? t('Invited {name} to {crew}', { name, crew })
+      : done === 'away' ? t('{name} isn\'t in free roam now', { name })
+      : done === 'rate' ? t('Wait a moment')
+      : t('Not sent: try again in a moment');
+    const at = this.icons.get(name.toLowerCase());
+    if (at?.isConnected) copyToast(at, text, READ_MS);
+  }
 }
 
 /** a friend's Discord icon: a click copies its username, and a toast at it says so with the name (for long enough to
@@ -259,8 +352,19 @@ export interface FriendPromptDeps {
   api: FriendsApi;
   /** driving in free roam now (quickchat.ts driving): a request's line waits for it */
   driving(): boolean;
+  /** the running game's crews (shell.ts roamCrews) */
+  crews(): readonly Crew[];
+  /** a friend's crew invite taken: the crew and room joined, as an invite link's Join (shell.ts) */
+  joinCrew(crew: string, room: string): void;
+  /** the crew invites that wait changed (the page menu's Crews popup is drawn again) */
+  crewsChanged(): void;
   log(line: string): void;
 }
+
+/** a friend's invite to its crew, in its room ('' the room of everyone) */
+export interface CrewAsk { name: string; crew: string; room: string }
+/** the most crew invites that wait in the page menu's Crews (the newest kept) */
+const CREW_ASKS_MAX = 4;
 
 /** how long a friend shows "invited" in the Friends popup, and an invite's line shows, after it was sent (ms) */
 const INVITED_MS = 60_000, INVITE_LINE_MS = 20_000;
@@ -302,6 +406,14 @@ export class FriendPrompt {
   private asking: { name: string; until: number } | null = null;
   /** the page menu's Friends popup's field to ask a player by name */
   private askField: AskField;
+  /** the page menu's Friends popup's crew icons */
+  private crewInvites: CrewInvites;
+  /** friends' crew invites that wait for the player's answer (the page menu's Crews), the one whose card shows at the
+   *  top, and the card */
+  private crewAsks: CrewAsk[] = [];
+  private crewCard: CrewAsk | null = null;
+  private crewTimer = 0;
+  private crewEl: HTMLButtonElement;
 
   /** stage: the game's box; the line goes over the picture while the cars touch (place) */
   constructor(stage: HTMLElement, private deps: FriendPromptDeps) {
@@ -313,12 +425,19 @@ export class FriendPrompt {
     // in the column of the notes over the game, at its top (style.css .toasts: an invite first, then this line)
     const col = stage.querySelector<HTMLElement>('.toasts') ?? stage;
     col.prepend(b);
+    // a friend's invite to its crew: a line of the same look as a race invite's, under it
+    const ce = this.crewEl = document.createElement('button');
+    ce.type = 'button'; ce.className = 'friend-prompt offer invite crew-invite'; ce.tabIndex = -1; ce.hidden = true; ce.dataset.nfsu2Ui = '';
+    ce.onpointerdown = e => e.preventDefault();
+    ce.onclick = () => { if (this.crewCard) this.answerCrew(this.crewCard, true); };
+    col.prepend(ce);
     // a friend's invite to its race: a line of the same look, above the friend line (a click or a tap joins)
     const iv = this.inviteEl = document.createElement('button');
     iv.type = 'button'; iv.className = 'friend-prompt offer invite'; iv.tabIndex = -1; iv.hidden = true; iv.dataset.nfsu2Ui = '';
     iv.onpointerdown = e => e.preventDefault();
     iv.onclick = () => this.takeInvite();
     col.prepend(iv);
+    this.crewInvites = new CrewInvites(deps.api, () => this.on ? { crews: deps.crews(), room: deps.room() } : null, () => deps.placed(), deps.log);
     // caught before the game's input: F is the game's for nothing (its key maps: dinput_kbd.c), and only while the
     // line offers something
     window.addEventListener('keydown', e => this.key(e), { capture: true });
@@ -329,6 +448,7 @@ export class FriendPrompt {
     this.session = s; this.on = on; this.who = null; this.friends = []; this.roomSent = null; this.listed = false; this.triedAt = -Infinity;
     this.where = null; this.was.clear(); this.whereAt = -Infinity;
     this.me = undefined; this.asks = []; this.firstList = false; this.asking = null;
+    this.crewAsks = []; this.dropCrewCard();
     const tick = () => {
       const now = performance.now();
       if (!this.listed && now - this.triedAt > LIST_TRY_MS) { this.triedAt = now; this.listed = this.deps.send({ op: 'list' }); }
@@ -341,6 +461,7 @@ export class FriendPrompt {
   stop() {
     cancelAnimationFrame(this.raf);
     this.session = null; this.on = false; this.who = null; this.asking = null;
+    this.crewAsks = []; this.dropCrewCard();
     this.dropInvite();
     this.draw();
   }
@@ -467,6 +588,9 @@ export class FriendPrompt {
         if (typeof m.done === 'string') return this.inviteAnswer(name, m.done);
         this.invitedBy(m);
         return;
+      case 'crew':
+        this.crewInvitedBy(m);
+        return;
       default:
         return;
     }
@@ -506,6 +630,58 @@ export class FriendPrompt {
     this.invite = null;
     this.inviteEl.hidden = true;
   }
+  /** A friend's invite to its crew (friends.rs crew_invite: we are in free roam): its card for INVITE_LINE_MS (the
+   *  race invite's key, a click or a tap joins), then it waits in the page menu's Crews until the game ends; the
+   *  newest from a friend to a crew the player is not in, checked as an invite link's names are (a page of the
+   *  friend's could send anything) */
+  private crewInvitedBy(m: any) {
+    const name = typeof m.name === 'string' ? m.name : '', inv = tidyInvite({ crew: typeof m.crew === 'string' ? m.crew : '', room: typeof m.room === 'string' ? m.room : '' });
+    if (!this.on || !name || !inv.crew || !checkInvite(inv).ok) return;
+    if (this.deps.crews().some(c => sameCrew(c.name, inv.crew!))) { this.deps.log(`[friends] ${name} invites us to a crew we are in`); return; }
+    this.deps.log(`[friends] ${name} invites us to a crew`);
+    const ask: CrewAsk = { name, crew: inv.crew, room: inv.room ?? '' };
+    this.crewAsks = [...this.crewAsks.filter(a => !sameCrew(a.crew, ask.crew)), ask].slice(-CREW_ASKS_MAX);
+    this.crewCard = ask;
+    clearTimeout(this.crewTimer);
+    this.crewTimer = window.setTimeout(() => { this.dropCrewCard(); }, INVITE_LINE_MS);
+    this.draw();
+    this.deps.crewsChanged();
+  }
+  private dropCrewCard() {
+    clearTimeout(this.crewTimer);
+    this.crewCard = null;
+    this.crewEl.hidden = true;
+  }
+  /** the crew invites that wait, but for crews the player joined since */
+  crewAsksNow(): readonly CrewAsk[] {
+    const mine = this.deps.crews();
+    return this.crewAsks.filter(a => !mine.some(c => sameCrew(c.name, a.crew)));
+  }
+  /** a crew invite answered (its card, its key, or the page menu's Crews): yes joins its crew in its room; with 4
+   *  crews already, a note says so and it waits (the page menu's Crews has the Leave beside it) */
+  answerCrew(a: CrewAsk, yes: boolean) {
+    if (this.crewCard === a) this.dropCrewCard();
+    if (yes && this.deps.crews().length >= CREW_MAX) {
+      this.deps.toast(t('Up to 4 crews: leave one to join another.'));
+      this.deps.crewsChanged();
+      return;
+    }
+    this.crewAsks = this.crewAsks.filter(x => x !== a);
+    this.deps.log(`[friends] ${yes ? 'joining' : 'declining'} ${a.name}'s crew invite`);
+    if (yes) this.deps.joinCrew(a.crew, a.room);
+    this.deps.crewsChanged();
+  }
+  /** The page menu's Crews popup's crew invites, above its crews: a line each, the friend and the crew, Join and
+   *  Decline (null: none waits) */
+  drawCrewAsks(): HTMLUListElement | null {
+    const asks = this.crewAsksNow();
+    if (!asks.length) return null;
+    return friendList(asks.map(a => ({ name: a.name, state: t('invites you to crew "{crew}"', { crew: a.crew }), ok: true, acts: [
+      icon('fl-yes', t('Join'), CHECK, () => this.answerCrew(a, true)),
+      icon('fl-no', t('Decline'), CROSS, () => this.answerCrew(a, false)),
+    ] })));
+  }
+
   /** the invite taken: its lobby joined (the game leaves one it is in for it) */
   private takeInvite() {
     const iv = this.invite;
@@ -606,7 +782,9 @@ export class FriendPrompt {
             ...(there ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : []),
             // (a friend in our room, while we host a lobby with room in it: the invite joins it from where it is)
             ...(hosted && inRoom(f, room) && !sent ? [icon('fl-invite', t('Invite {name} to your race', { name: f.name }), FLAG, () => this.inviteFriend(f.name))] : []),
+            ...this.crewInvites.acts(f.name),
           ],
+          under: this.crewInvites.under(f.name),
         });
       }
       if (!all.some(f => f.where === 'roam')) after.push(p(t('None of your friends is in free roam now.')));
@@ -644,11 +822,12 @@ export class FriendPrompt {
   }
 
   private key(e: KeyboardEvent) {
-    if (this.invite && e.code === siteKey('lobbyInvite') && !e.metaKey && !e.ctrlKey && !e.altKey && !gameHas(this.session, KEY_LOBBY_INVITE)) {
+    if ((this.invite || this.crewCard) && e.code === siteKey('lobbyInvite') && !e.metaKey && !e.ctrlKey && !e.altKey && !gameHas(this.session, KEY_LOBBY_INVITE)) {
       const el = e.target as HTMLElement | null;
       if (!el?.closest?.('input, textarea, select') && !pageDialog()) {
         e.preventDefault(); e.stopImmediatePropagation();
-        if (!e.repeat) this.takeInvite();
+        // (a race's first: it lasts only while its lobby is open; the crew's waits in the page menu's Crews)
+        if (!e.repeat) { if (this.invite) this.takeInvite(); else if (this.crewCard) this.answerCrew(this.crewCard, true); }
         return;
       }
     }
@@ -676,8 +855,21 @@ export class FriendPrompt {
     el.hidden = false;
   }
 
+  /** a friend's crew invite's card: "Ann invites you to crew "Touge"", the race invite's key, Join */
+  private drawCrew() {
+    const c = this.crewCard, el = this.crewEl;
+    if (!c || !this.on) { el.hidden = true; return; }
+    const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };
+    const ik = siteKey('lobbyInvite'), key = ik && !touchFirst() && !gameHas(this.session, KEY_LOBBY_INVITE) ? [kbd(keyName(ik))] : [];
+    const text = (s: string) => Object.assign(document.createElement('span'), { textContent: s });
+    el.replaceChildren(named(t('{name} invites you to crew "{crew}"', { name: c.name, crew: c.crew }), c.name), ...key, text(t('Join')));
+    this.place();
+    el.hidden = false;
+  }
+
   private draw() {
     this.drawInvite();
+    this.drawCrew();
     const far = this.shownAsk(), w = this.who ?? (far ? { name: far, st: 'asks' as St } : null), b = this.root;
     if (!w || w.st === 'wait') { b.hidden = true; return; }
     const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };
@@ -712,6 +904,8 @@ export interface FriendsPanelDeps {
   idle(): boolean;
   /** what waits for the player: the requests to answer and the friends' messages not read yet (the tab's count) */
   waiting?(n: number): void;
+  /** the player's crews and room as settings.ini has them, for a friend's crew invite (none: no crew icons) */
+  crews?(): CrewsNow | null;
   log(line: string): void;
 }
 
@@ -728,6 +922,7 @@ export class FriendsPanel {
   private again = false;
 
   constructor(private root: HTMLElement, private deps: FriendsPanelDeps) {
+    this.crewInvites = new CrewInvites(deps.api, () => deps.crews?.() ?? null, () => this.render(), deps.log);
     this.askField = new AskField(deps.api, () => t('Claim your name (Online, Your name) to add friends.'), r => { this.took(r); this.render(); }, deps.log);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) void this.refresh(); });
     this.timer = window.setInterval(() => void this.refresh(), POLL_MS);
@@ -773,6 +968,8 @@ export class FriendsPanel {
 
   /** the field to ask a player by name (kept over renders: the player may be typing), with what the last ask did */
   private askField: AskField;
+  /** the crew icons of the friends in free roam */
+  private crewInvites: CrewInvites;
   /** the Your Discord row (kept over renders, as the field above), and what the last change of it did ('' fine) */
   private discordInput: HTMLInputElement | null = null;
   private discordRow: HTMLElement | null = null;
@@ -860,12 +1057,13 @@ export class FriendsPanel {
       const acts: HTMLButtonElement[] = [];
       if (f.contact) acts.push(discordIcon(f.contact));
       if (f.where === 'roam' && f.room !== undefined) acts.push(icon('fl-join', t('Join'), JOIN, () => this.deps.join(f.room!)));
+      if (f.where === 'roam') acts.push(...this.crewInvites.acts(f.name));
       const unread = this.deps.store.unread(f.name);
       acts.push(icon(unread ? 'fl-msg unread' : 'fl-msg', unread ? t('Message ({n})', { n: unread }) : t('Message'), ENVELOPE, () => this.deps.chat(f.name)));
       acts.push(icon('fl-del', t('Remove'), TRASH, async () => {
         if (await this.deps.confirm(t('Remove {name}?', { name: f.name }), t('You are friends no more, on both lists.'), t('Remove'))) void this.act('remove', f.name);
       }));
-      lines.push({ name: f.name, state: whereText(f), ok: !!f.where, off: !f.where, acts });
+      lines.push({ name: f.name, state: whereText(f), ok: !!f.where, off: !f.where, acts, under: f.where === 'roam' ? this.crewInvites.under(f.name) : null });
     }
     for (const name of l.sent) {
       lines.push({ name, state: t('request sent'), off: true, acts: [icon('fl-del', t('Take back'), CROSS, () => this.act('remove', name))] });

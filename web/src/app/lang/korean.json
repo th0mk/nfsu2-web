@@ -1476,5 +1476,13 @@
   "Everyone can join": "누구나 참가 가능",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "내 레이스 로비: 참가할 수 있는 사람 (내 단계 이하, 친구와 크루, 또는 모두)",
   "Invite to a race": "레이스에 초대",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "내 레이스 로비에 친구 초대, 친구의 초대에 참가, 멀리서 참가한 레이스에서 나가기"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "내 레이스 로비에 친구 초대, 친구의 초대에 참가, 멀리서 참가한 레이스에서 나가기",
+  "Invite {name} to a crew": "{name} 님을 크루에 초대",
+  "Invite {name} to": "{name} 님을 초대할 크루:",
+  "Invite {name} to crew {crew}": "{name} 님을 {crew} 크루에 초대",
+  "Invited {name} to {crew}": "{name} 님을 {crew} 크루에 초대했어요",
+  "{name} isn't in free roam now": "{name} 님은 지금 자유 주행 중이 아니에요",
+  "invites you to crew \"{crew}\"": "님이 '{crew}' 크루에 초대했어요",
+  "{name} invites you to crew \"{crew}\"": "{name} 님이 '{crew}' 크루에 초대했어요",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "아직 크루가 없나요? 친구들과 이름을 정해 각자 여기에 입력하거나, 크루 초대 링크를 여세요."
 }

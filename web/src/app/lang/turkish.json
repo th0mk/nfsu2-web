@@ -1488,5 +1488,13 @@
   "Everyone can join": "Herkes katılabilir",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Yarış lobin: kimler katılabilir (senin aşaman ve altı, arkadaşlar ve ekip ya da herkes)",
   "Invite to a race": "Yarışa davet et",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Arkadaşlarını yarış lobine davet et, bir arkadaşının davetini kabul et, uzaktan katıldığın bir yarıştan ayrıl"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Arkadaşlarını yarış lobine davet et, bir arkadaşının davetini kabul et, uzaktan katıldığın bir yarıştan ayrıl",
+  "Invite {name} to a crew": "{name} adlı oyuncuyu bir ekibe davet et",
+  "Invite {name} to": "{name} adlı oyuncuyu davet et:",
+  "Invite {name} to crew {crew}": "{name} adlı oyuncuyu {crew} ekibine davet et",
+  "Invited {name} to {crew}": "{name} adlı oyuncu {crew} ekibine davet edildi",
+  "{name} isn't in free roam now": "{name} şu an serbest sürüşte değil",
+  "invites you to crew \"{crew}\"": "seni \"{crew}\" ekibine davet ediyor",
+  "{name} invites you to crew \"{crew}\"": "{name} seni \"{crew}\" ekibine davet ediyor",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Henüz ekibin yok mu? Arkadaşlarınla bir ad belirleyin ve herkes buraya yazsın ya da bir ekibin davet bağlantısını aç."
 }

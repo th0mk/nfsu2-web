@@ -818,7 +818,20 @@ Good to know:
   the list says so (pick a less common name). Capitals and spaces don't count ("Blue Room" is "blueroom"); a name that
   reads as a slur is no crew. Everyone else is still there, unlike a Room. Not private: anyone who types the same name
   joins, but other players never learn your crews: the server tells each game which players near it share one. A
-  player on an older version is in no crew.
+  player on an older version is in no crew. With no crew yet, the line under the crew box says how to get one (agree
+  on a name with your friends, or open a crew's invite link). A few seconds after you start driving in free roam, the
+  log on the left has a line for each of your crews with others in free roam ("Night Owls 3 in free roam", in the
+  crew's colour; you count too).
+- **Inviting a friend to a crew:** a friend who is in free roam now has a crew icon (two people) on their line, on the
+  start page (Friends & crews) and in the page menu's Friends, while you are in a crew: with one crew it invites them
+  to it, with more your crews open under the line and you pick one; a toast at the icon says it was sent, or why not
+  (not in free roam now). The friend gets a note at the top, with a lime border, "Ann invites you to crew "Night
+  Owls"": the race invite's key (**Z**, set on the start page under Controls, Site), a click or a tap joins the crew
+  and your room (crew-mates meet only in one room; your settings keep both, as an invite link's Join does). Under a
+  race invite when both show, Z takes the race. Not taken within 20 seconds, it waits in the page menu's Crews (✓
+  joins, ✕ declines) until that game ends; with 4 crews already, Join says so and it waits there beside your crews'
+  Leave. Only the friend and the server see the crew's name, and the server keeps
+  it nowhere and never logs it; six invites at once, then one every 5 seconds (race and crew invites together).
 - **Friends:** touch front bumpers with another player (nose to nose, both cars' fronts) for 3 seconds, solid or in
   ghost mode, and a note at the top, with a lime border, offers **Add Bo as a friend**: press **F**, click or tap the
   line, or use the page menu (F9, ☰, or Home on a controller). The other player's line then says **Al wants to be

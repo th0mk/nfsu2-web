@@ -1592,5 +1592,13 @@
   "Everyone can join": "Tout le monde peut rejoindre",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Votre salon de course : qui peut le rejoindre (votre étape et moins, amis & équipe, ou tout le monde)",
   "Invite to a race": "Inviter à une course",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Inviter des amis dans votre salon de course, accepter l'invitation d'un ami, quitter une course rejointe à distance"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Inviter des amis dans votre salon de course, accepter l'invitation d'un ami, quitter une course rejointe à distance",
+  "Invite {name} to a crew": "Inviter {name} dans une équipe",
+  "Invite {name} to": "Inviter {name} dans",
+  "Invite {name} to crew {crew}": "Inviter {name} dans l'équipe {crew}",
+  "Invited {name} to {crew}": "Invitation à {crew} envoyée à {name}",
+  "{name} isn't in free roam now": "{name} n'est pas en mode Exploration pour l'instant",
+  "invites you to crew \"{crew}\"": "vous invite dans l'équipe « {crew} »",
+  "{name} invites you to crew \"{crew}\"": "{name} vous invite dans l'équipe « {crew} »",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Pas encore d'équipe ? Choisissez un nom avec vos amis et saisissez-le chacun ici, ou ouvrez le lien d'invitation d'une équipe."
 }

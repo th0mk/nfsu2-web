@@ -795,6 +795,7 @@ async function startGame() {
   driftPanel.start(session);
   photo.start(session);
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
+  crewCountsOnce();
   friendMessages.start(session, net && r.env.NFSU2_ROAM === '1');
   // (the races' between players free roam on or not; free roam's only with it on: the career's free roam alone keeps
   // 1-4, Esc and the right stick's click for the game)
@@ -993,6 +994,7 @@ function endStage() {
   photo.stop();
   quickChat.stop();
   friendPrompt.stop();
+  clearInterval(crewCountTimer);
   friendMessages.stop();
   awake?.(); awake = null;
   away?.stop(); away = null;
@@ -1235,6 +1237,44 @@ function friendNotice(name: string, text: string, here = false) {
   iconLine('chat', FRIEND_ICON, at < 0 ? [text] : [text.slice(0, at), b, text.slice(at + name.length)]);
   if (here) friendMessages?.offer(name, NOTICE_LINE_MS);
 }
+/** how long the player drives in free roam before its crews' counts show (ms): its HELLO reaches the server's hub, which
+ *  counts it in its crews */
+const CREW_COUNT_AFTER_MS = 4000;
+let crewCountTimer = 0;
+/** Free roam: the player's crews' counts, once a game, the first time it drives in free roam: in the log, a line a crew
+ *  with others in free roam (the count as the Crews row's chips have it, the player in it), the crew's dot and name in
+ *  its colour.  Asked of the server once (players.ts askCrews, as the menu's Crews popup asks). */
+function crewCountsOnce() {
+  clearInterval(crewCountTimer);
+  if (!roamCrews?.length) return;
+  let since = 0;
+  crewCountTimer = window.setInterval(() => {
+    if (!session || !roamCrews?.length) { clearInterval(crewCountTimer); return; }
+    if (!quickChat.roaming()) { since = 0; return; }
+    since ||= performance.now();
+    if (performance.now() - since < CREW_COUNT_AFTER_MS) return;
+    clearInterval(crewCountTimer);
+    const crews = roamCrews, game = session;
+    if (offline) return;
+    void askCrews(crews.map(c => roomHash(c.name)), 5000).then(counts => {
+      if (!counts || session !== game) return;
+      for (const c of crews) {
+        const n = counts.get(roomHash(c.name)) ?? 0;
+        if (n >= 2) crewCountLine(c, n);
+      }
+    });
+  }, 500);
+}
+/** a dot in the crew's colour (style.css .notices .crew-in) */
+const CREW_DOT = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/></svg>';
+function crewCountLine(c: Crew, n: number) {
+  privacy.name(c.name, 'crew');
+  log.add(`[notice] crew ${c.name}: ${n} in free roam`);
+  const b = document.createElement('b');
+  b.textContent = c.name;
+  placeNotices();
+  iconLine('chat crew-in', CREW_DOT, [b, ` ${t('{n} in free roam', { n })}`]).style.setProperty('--crew', `#${c.rgb}`);
+}
 /** quick chat (quickchat.ts) in free roam and races between players: a phrase said, from the game; and free roam's
  *  lines over the cars in each frame */
 function say(json: string) {
@@ -1263,11 +1303,12 @@ function roamLine(cls: string, icon: string, parts: (string | Node)[]): HTMLElem
   line.append(ic, tx);
   return line;
 }
-function iconLine(cls: string, icon: string, parts: (string | Node)[]) {
+function iconLine(cls: string, icon: string, parts: (string | Node)[]): HTMLElement {
   const box = $('#notices'), line = roamLine(cls, icon, parts);
   box.append(line);
   while (box.childElementCount > 4) box.firstElementChild!.remove();
   setTimeout(() => line.remove(), 8000);
+  return line;
 }
 /** a friend's message in the log (messages.ts): an envelope, the name, the text wrapping under the name; the player's
  *  own as "To <name>" with a note after it; on a touch screen a tap on a friend's answers it.  In the notices' box, for
@@ -1625,7 +1666,9 @@ async function askPopCounts(ms = 0) {
  *  in there */
 function drawPopCrews(focus?: (root: HTMLElement) => Element | null | undefined) {
   const box = $('#crews-pop-box'), had = box.contains(document.activeElement);
-  box.replaceChildren();
+  // (friends' invites to their crews first: friends.ts)
+  const asks = friendPrompt.drawCrewAsks();
+  box.replaceChildren(...(asks ? [asks] : []));
   crewControl({ list: roamCrews ?? [], id: 'crews-pop-input', labelId: 'crews-pop-title', placeholder: N('Crew name'), counts: popCounts, draft: crewDraft,
     onDraft: v => { crewDraft = v; }, change: (list, f) => void menuCrews(list, f),
     // with the room the game is in, if any (crew-mates meet within one room); what the copy did goes in the popup's note
@@ -1685,6 +1728,15 @@ function friendsWaiting(n: number) {
   el.textContent = text;
   el.hidden = !text;
   refitTabs();
+}
+/** a friend's crew invite taken (friends.ts: its card, its key, the menu's Crews): its crew in its room, at once, as
+ *  an invite link's Join (the names checked when it came) */
+function joinCrew(crew: string, room: string) {
+  log.add('[app] a friend\'s crew invite: joining');
+  void joinHere(tidyInvite({ crew, room })).then(() => {
+    menuValue('crews', crewsCount());
+    if ($<HTMLDialogElement>('#crews-pop').open) { drawPopCrews(); void askPopCounts(1500); }
+  });
 }
 /** a Join in the menu's Friends: that friend's room, at once, and back to the game */
 async function joinFriend(room: string) {
@@ -1756,7 +1808,7 @@ async function applyInvite(given: Invite): Promise<Joined> {
   }
   if (text !== was) {
     await writeFile(SAVE, 'settings.ini', text);
-    settingsText = text; void settings.refresh(); players?.now(); vault?.changed();
+    settingsText = text; void settings.refresh(); players?.now(); vault?.changed(); friendsPanel?.render();
   }
   // (the names, for the log as it leaves the browser: privacy.ts)
   privacy.name(inv.room, 'room'); if (inv.crew) privacy.name(inv.crew, 'crew');
@@ -2266,6 +2318,7 @@ export async function boot() {
       const was = packsKey(); settingsText = text;
       if (packsKey() !== was) void saves.refresh();
       vault?.changed(); players?.now();
+      friendsPanel?.render();
       applyLanguage();
       siteKeysNow();
     },
@@ -2324,6 +2377,7 @@ export async function boot() {
   friendsPanel = new FriendsPanel($('#friends'), {
     api: friendsApi, join: room => void offerInvite({ room }), confirm: (title, body, ok) => confirmBox(title, body, ok),
     idle: () => !session && !starting, log: logLine, store: msgStore, chat: name => chatDialog.open(name), waiting: friendsWaiting,
+    crews: () => { const n = inviteNow(settingsText); return { crews: n.crews, room: n.room }; },
   });
   chatDialog = new ChatDialog(msgStore, { send: (name, body) => friendsPanel.send(name, body), log: logLine });
   $<HTMLButtonElement>('#play').onclick = () => void play();
@@ -2414,6 +2468,7 @@ export async function boot() {
     notice: friendNotice, menu: menuName, placed: () => { if ($<HTMLDialogElement>('#friends-pop').open) drawPopFriends(); },
     hosted: () => lobbyPanel.hosted(), joinLobby: (host, lobby, race) => session?.input?.lobby?.(LB_JOIN, host, lobby, race) ?? false,
     api: friendsApi, driving: () => quickChat.driving(),
+    crews: () => roamCrews ?? [], joinCrew, crewsChanged: () => { if ($<HTMLDialogElement>('#crews-pop').open) drawPopCrews(); },
   });
   friendMessages = new FriendMessages($('#stage'), msgStore, {
     send: m => session?.net?.friend?.(m) ?? false, driving: () => quickChat.driving(), line: msgLine, hint: msgHint,

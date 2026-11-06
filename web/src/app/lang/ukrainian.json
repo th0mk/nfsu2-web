@@ -1621,5 +1621,13 @@
   "Everyone can join": "Можуть приєднатися всі",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Ваше лобі гонки: хто може приєднатися (ваш етап і нижче, друзі й команда або всі)",
   "Invite to a race": "Запросити в гонку",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Запросити друзів у своє лобі гонки, прийняти запрошення друга, вийти з гонки, до якої ви приєдналися здалеку"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Запросити друзів у своє лобі гонки, прийняти запрошення друга, вийти з гонки, до якої ви приєдналися здалеку",
+  "Invite {name} to a crew": "Запросити {name} до команди",
+  "Invite {name} to": "Запросити {name} до:",
+  "Invite {name} to crew {crew}": "Запросити {name} до команди «{crew}»",
+  "Invited {name} to {crew}": "Запрошення до «{crew}» надіслано: {name}",
+  "{name} isn't in free roam now": "{name} зараз немає у вільній їзді",
+  "invites you to crew \"{crew}\"": "запрошує вас до команди «{crew}»",
+  "{name} invites you to crew \"{crew}\"": "{name} запрошує вас до команди «{crew}»",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ще немає команди? Домовтеся з друзями про назву й введіть її тут кожен, або відкрийте посилання-запрошення команди."
 }

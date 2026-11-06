@@ -1563,5 +1563,13 @@
   "Everyone can join": "Alle kan deltage",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "Din løbslobby: hvem kan deltage (dit niveau og lavere, venner & crew, eller alle)",
   "Invite to a race": "Invitér til et løb",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Invitér venner til din løbslobby, tag imod en vens invitation, forlad et løb, du deltog i på afstand"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "Invitér venner til din løbslobby, tag imod en vens invitation, forlad et løb, du deltog i på afstand",
+  "Invite {name} to a crew": "Invitér {name} til et crew",
+  "Invite {name} to": "Invitér {name} til",
+  "Invite {name} to crew {crew}": "Invitér {name} til crewet {crew}",
+  "Invited {name} to {crew}": "{name} er inviteret til {crew}",
+  "{name} isn't in free roam now": "{name} er ikke i udforsknings-mode lige nu",
+  "invites you to crew \"{crew}\"": "inviterer dig til crewet »{crew}«",
+  "{name} invites you to crew \"{crew}\"": "{name} inviterer dig til crewet »{crew}«",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Intet crew endnu? Aftal et navn med dine venner, og skriv det her hver især, eller åbn et crews invitationslink."
 }

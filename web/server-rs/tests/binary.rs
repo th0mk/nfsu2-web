@@ -1351,9 +1351,31 @@ async fn free_roams_friends_through_the_server() {
         dones.push(post('A', "discord", "al.races").await["done"].as_str().unwrap().to_string());
     }
     assert_eq!(dones, ["ok", "ok", "ok", "rate"]);
+    // a crew's invite (the start page's, the game's Friends): Bo's open page hears it, the names tidied; not to Cy (no
+    // friend), nor a crew no page would take; Bo gone from free roam: away
+    let invite = |to: &str, crew: &str, room: &str| {
+        let (b, body) = (bearer('A'), serde_json::json!({ "op": "crew", "name": to, "crew": crew, "room": room }).to_string());
+        async move {
+            let (code, r) = http(port, "POST", "/friends", &[("authorization", &b), ("content-type", "application/json")], &body).await;
+            assert_eq!(code, 200, "{r}");
+            serde_json::from_str::<Value>(&r).unwrap()["done"].as_str().unwrap().to_string()
+        }
+    };
+    let kb = n(&bo);
+    assert_eq!(invite("bo_", "  Night \u{200b}Owls ", "Blue  Room").await, "sent");
+    let m = first(&bo, "crew", kb).await;
+    assert_eq!((m["name"].as_str(), m["crew"].as_str(), m["room"].as_str()), (Some("Al_"), Some("Night Owls"), Some("Blue Room")), "{m}");
+    assert_eq!(invite("Cy_", "Night Owls", "").await, "none", "not a friend");
+    assert_eq!(invite("Bo_", "x_fag_x", "").await, "name", "reads as a slur");
+    let kb = n(&bo);
+    assert_eq!(invite("Bo_", "Night Owls", "").await, "sent");
+    assert_eq!(first(&bo, "crew", kb).await["room"], "", "the room of everyone stays none");
+    assert_eq!(invite("Bo_", &"x".repeat(25), "").await, "name", "past 24 characters");
     for x in [al, bo, cy, dee] {
         x.close().await;
     }
+    sleep(1200).await;
+    assert_eq!(invite("Bo_", "Night Owls", "").await, "away", "not in free roam");
     assert_eq!(srv.stop().await, Some(0));
     let lines = srv.lines();
     for l in [
@@ -1367,6 +1389,7 @@ async fn free_roams_friends_through_the_server() {
         assert!(lines.iter().any(|x| x.contains(l)), "{l}: {lines:?}");
     }
     assert!(!lines.iter().any(|x| x.contains("al.races")), "the log never has it");
+    assert!(!lines.iter().any(|x| x.contains("Night Owls") || x.contains("Blue Room")), "nor a crew's invite");
     let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--vault-gb", "1"]), port);
     srv.ready().await;
     assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "" }]), "over the restart");

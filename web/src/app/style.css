@@ -886,6 +886,14 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .fl .fl-discord svg { fill: currentColor; stroke: none; }   /* (Discord's mark is a filled shape, the others are lines) */
 #friends > .set { box-shadow: inset 0 1px var(--line); }   /* under the Crews row, as the rows of a group */
+/* a friend's crew invite (friends.ts CrewInvites): the player's crews under the friend's line, no line between them,
+ * each a chip as the Crews row's (its dot and name) that is a button, its dot ringed in lime under the pointer */
+.fl li.fl-pick { box-shadow: none; gap: 8px; padding-bottom: 8px; }
+.fl-pick .fl-st { margin-left: 0; line-height: 24px; }   /* (centred by the 40 px chips: on the 4 px grid) */
+.crew-pick { border: 0; padding-right: 12px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.crew-pick .crew-dot { pointer-events: none; }
+.crew-pick:is(:hover, :focus-visible) .crew-dot::before { box-shadow: 0 0 0 2px var(--field), 0 0 0 4px var(--lime); }
+.fl .fl-crew[aria-expanded="true"] { color: var(--lime); }
 /* a request by name (friends.ts addField): the Crews row's box (its field's rules) under the list, a setting's 240 px
  * (the row's width on a phone), what the last one did under it */
 .fl-add { flex: none; width: 240px; }
@@ -977,6 +985,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .notices div.msg.tap { pointer-events: auto; cursor: pointer; }
 .notices div.msg-hint { color: var(--muted); }
 .notices .msg-hint kbd { margin-right: 0.5em; text-shadow: none; }   /* (the cards' key cap, .ov-act kbd) */
+/* a crew's count as free roam starts (shell.ts crewCountLine): its dot and name in the crew's colour */
+.notices div.crew-in .ic svg { fill: var(--crew); }
+.notices div.crew-in b { color: var(--crew); }
 /* free roam: quick chat over the cars (quickchat.ts): the phrase in lime after a speech balloon, over the name the
  * game draws, sized with the HUD (--u, 16 units at the nearest) and scaled with the name by the line's transform
  * (quickchat.ts LINE_MIN: never below 70 %), which follows the game's marks every frame; it pops up, and fades out

@@ -1476,5 +1476,13 @@
   "Everyone can join": "誰でも参加できます",
   "Your race lobby: who can join it (your stage and below, friends & crew, or everyone)": "自分のレースロビー: 参加できる人（自分のステージ以下、フレンドとクルー、または全員）",
   "Invite to a race": "レースに招待",
-  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "フレンドを自分のレースロビーに招待、フレンドの招待に参加、離れた場所から参加したレースから抜ける"
+  "Invite friends to your race lobby, join a friend's invite, leave a race you joined from afar": "フレンドを自分のレースロビーに招待、フレンドの招待に参加、離れた場所から参加したレースから抜ける",
+  "Invite {name} to a crew": "{name}をクルーに招待",
+  "Invite {name} to": "{name}を招待するクルー:",
+  "Invite {name} to crew {crew}": "{name}をクルー「{crew}」に招待",
+  "Invited {name} to {crew}": "{name}を「{crew}」に招待しました",
+  "{name} isn't in free roam now": "{name}は今フリーローム中ではありません",
+  "invites you to crew \"{crew}\"": "からクルー「{crew}」への招待",
+  "{name} invites you to crew \"{crew}\"": "{name}からクルー「{crew}」への招待",
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "まだクルーがありませんか？友だちと名前を決めて全員がここに入力するか、クルーの招待リンクを開いてください。"
 }
