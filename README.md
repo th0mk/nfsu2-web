@@ -86,7 +86,9 @@ vinyls. Split screen is BirdSentinel (Zack)'s port of mihaits'
 about the game: ThirteenAG's, Aero_'s and xan1242's [Widescreen Fixes Pack](https://nfsmods.xyz/mod/3327), dstudnicki's
 [NFSU2 High FPS Audio Fix](https://github.com/dstudnicki/NFSU2HighFPSAudioFix), the ExOpts Team's
 [NFSU2 Extra Options](https://nfsmods.xyz/mod/290), MaxHwoy's [Show Hidden Races Mod](https://nfsmods.xyz/mod/1583)
-and thelink2012's [Visual Reputation Remover](https://nfsmods.xyz/mod/2773). The start page's Mods tab lists them all.
+thelink2012's [Visual Reputation Remover](https://nfsmods.xyz/mod/2773) and Broski280's Bayview Forever (its Endless
+Career, Virtual Garage, covers, unique parts, race AI, drag steering, H-shifter, turbo sound and wheel parts, written anew
+from what its release found out). The start page's Mods tab lists them all.
 Built with the help of Claude Code.
 
 ## License

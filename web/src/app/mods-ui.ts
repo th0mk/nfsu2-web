@@ -104,11 +104,30 @@ function section(id: string, title: string, rows: HTMLElement[]): HTMLElement {
 export function modSections(settingRow: (key: string) => HTMLElement): HTMLElement[] {
   const mods = KINDS.flatMap(k => {
     const ms = MODS.filter(m => m.kind === k.kind && !m.row);
-    return ms.length ? [section(k.kind, k.title, ms.map(m => 'setting' in m.control ? settingRow(m.control.setting) : modRow(m)))] : [];
+    return ms.length ? [section(k.kind, k.title, ms.flatMap(m => 'setting' in m.control
+      ? [settingRow(m.control.setting), ...subRows(m, (m.control.more ?? []).map(k => subRow(settingRow(k))))] : [modRow(m)]))] : [];
   });
   return [...mods, section('ours', OURS.title, ADDED.map(g =>
     plainRow(g.id, t(g.title), t(LABELS.ours, { name: t(g.title) }), groupHelp(g.items))))];
 }
+
+/** a mod's own settings' rows: under the mod's as they are, or, more than SUB_OPEN of them (Bayview Forever's parts),
+ *  in a part of their own that opens (its summary: how many), so the tab stays a list of mods */
+const SUB_OPEN = 3;
+const openSubs = new Set<string>();
+function subRows(m: Mod, rows: HTMLElement[]): HTMLElement[] {
+  if (rows.length <= SUB_OPEN) return rows;
+  const d = document.createElement('details'); d.className = 'more mods-more'; d.dataset.mod = m.id;
+  d.open = openSubs.has(m.id);
+  d.ontoggle = () => { if (d.open) openSubs.add(m.id); else openSubs.delete(m.id); };
+  const sum = document.createElement('summary');
+  sum.textContent = tn(rows.length, '{name}: {n} setting', '{name}: {n} settings', { name: m.name });
+  d.append(sum, ...rows);
+  return [d];
+}
+
+/** a mod's own setting's row (Mod control more), set in under the mod's */
+function subRow(row: HTMLElement): HTMLElement { row.classList.add('set-sub'); return row; }
 
 /** a row with no control: its name with its (i) (named about), and its help line */
 function plainRow(id: string, name: string, about: string, help: (Node | string)[]): HTMLElement {

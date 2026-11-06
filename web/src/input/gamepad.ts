@@ -45,14 +45,17 @@ import {
 } from './proto';
 import {
   describeMap, findHat, guessMap, hatDirs, isPedals, loadMap, loadShifter, pedalSetOf, pedalsOf, readWheel, Shifter,
-  shifterGear, usbIds, WHEEL_MAP_EVENT, wheelOf, withSetUp, type OtherAxes, type ShifterMode, type WheelInfo, type WheelMap,
+  clutchOf, shifterGear, usbIds, WHEEL_MAP_EVENT, wheelOf, withSetUp, type OtherAxes, type ShifterMode, type WheelInfo, type WheelMap,
 } from './wheel';
 import { HidPadReader, knownPad } from './hidpad';
 import { LocalPadWriter } from './local-pads';
 import { allPads, useSteamPads } from './steampad';
 export { allPads };
 
-export interface PadSnapshot { connected: boolean; buttons: number; axes: number[]; family: number; name: string; index: number; wheel?: boolean }
+/** shifter: a wheel's H-shifter lever (shifterGear: 0 neutral, 1 to 6, 7 reverse), clutch its clutch pedal (0..1); both
+ *  only for Bayview Forever's H-shifter (runtime/bf_hshifter.c), -1 or absent: none */
+export interface PadSnapshot { connected: boolean; buttons: number; axes: number[]; family: number; name: string; index: number; wheel?: boolean;
+  shifter?: number; clutch?: number }
 
 // standard mapping: buttons[i] -> PAD_* (6 and 7 are the analog triggers)
 const BUTTON_OF: (number | -1)[] = [PAD_A, PAD_B, PAD_X, PAD_Y, PAD_LB, PAD_RB, -1, -1, PAD_BACK, PAD_START,
@@ -101,12 +104,25 @@ export function mapStandard(g: Gamepad, notStick?: ReadonlySet<number>): PadSnap
 /** a steering wheel -> the virtual pad (wheel.ts): the wheel on LX, the brake and gas pedals on LT and RT (others:
  *  pedals on their own USB); its shifter's gears through shift (the lever's state, and what the player picked for it) */
 export function mapWheel(g: Gamepad, m: WheelMap, hat: number, shift?: { shifter: Shifter; mode: ShifterMode },
-                         others?: OtherAxes): PadSnapshot {
+                         others?: OtherAxes, hShifter = false): PadSnapshot {
   const pressed = g.buttons.map(b => !!b && (b.pressed || b.value > 0.5));
   const { buttons: own, axes } = readWheel(g.axes, pressed, m, hat, others);
-  const buttons = own | (shift && m.gears ? shift.shifter.buttons(shifterGear(pressed, m.gears), shift.mode, performance.now()) : 0);
   const { family, name } = familyOf(g.id);
+  // Bayview Forever's H-shifter: the lever is the gear and the clutch pedal the clutch (the game's own manual with
+  // clutch, runtime/bf_hshifter.c), not shifts up and down
+  if (hShifter) return { connected: true, buttons: own, axes, family, name, index: g.index, wheel: true,
+    shifter: m.gears ? shifterGear(pressed, m.gears) : -1, clutch: clutchOf(g.axes, m) };
+  const buttons = own | (shift && m.gears ? shift.shifter.buttons(shifterGear(pressed, m.gears), shift.mode, performance.now()) : 0);
   return { connected: true, buttons, axes, family, name, index: g.index, wheel: true };
+}
+
+/** the IM_PAD_WHEEL word: bit 0 a wheel, bits 8-11 its shifter's position + 1 (0: none), bits 16-31 its clutch's
+ *  travel 0..65534 + 1 (0: none); a wheel without them 1, as ever */
+export function wheelWord(s: PadSnapshot): number {
+  if (!s.connected || !s.wheel) return 0;
+  const g = s.shifter === undefined || s.shifter < 0 ? 0 : (s.shifter + 1) & 15;
+  const c = s.clutch === undefined || s.clutch < 0 ? 0 : Math.round(Math.max(0, Math.min(1, s.clutch)) * 65534) + 1;
+  return (1 | g << 8 | c << 16) | 0;
 }
 
 /** a known pad (8BitDo's, Xbox's on Bluetooth on a Mac) without the standard mapping -> the virtual pad (hidpad.ts) */
@@ -306,7 +322,7 @@ export class PadPoller {
    *  menu and dialogs */
   constructor(h: Int32Array, u8: Uint8Array, private base: number,
               private onPress: () => void, private log: (s: string) => void, private onUse?: () => void,
-              private page?: PadPage) {
+              private page?: PadPage, private hShifter = false) {
     this.h = h; this.u8 = u8;
     this.localPads = new LocalPadWriter(u8.buffer, base);
     addEventListener('gamepadconnected', this.onConnect);
@@ -444,7 +460,7 @@ export class PadPoller {
           `${k.map.gears ? `; the shifter: ${k.mode}` : ''}`);
       }
       const others: OtherAxes = id => { for (const p of pads) if (p?.connected && p.id === id) return p.axes; return undefined; };
-      return mapWheel(g, k.map, k.hat, k, others);
+      return mapWheel(g, k.map, k.hat, k, others, this.hShifter);
     }
     const s = mapStandard(g, k.std ? undefined : k.ends);
     if (!k.std && k.hat >= 0) s.buttons |= hatDirs(g.axes[k.hat]);
@@ -494,7 +510,7 @@ export class PadPoller {
 
   private same(s: PadSnapshot) {
     const l = this.last;
-    return !!l && l.connected === s.connected && l.buttons === s.buttons && l.index === s.index && !!l.wheel === !!s.wheel &&
+    return !!l && l.connected === s.connected && l.buttons === s.buttons && l.index === s.index && wheelWord(l) === wheelWord(s) &&
       l.axes.every((v, i) => v === s.axes[i]);
   }
 
@@ -508,7 +524,7 @@ export class PadPoller {
     Atomics.store(h, IM_PAD_CONNECTED, s.connected ? 1 : 0);
     Atomics.store(h, IM_PAD_FAMILY, s.family);
     Atomics.store(h, IM_PAD_BUTTONS, s.buttons);
-    Atomics.store(h, IM_PAD_WHEEL, s.connected && s.wheel ? 1 : 0);
+    Atomics.store(h, IM_PAD_WHEEL, wheelWord(s));
     for (let i = 0; i < 6; i++) { this.f32[0] = s.axes[i]; Atomics.store(h, IM_PAD_AXIS + i, this.i32[0]); }
     if (newPad) {
       const name = s.name.replace(/[^\x20-\x7e]/g, '?').slice(0, 63);

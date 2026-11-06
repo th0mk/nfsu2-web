@@ -264,6 +264,7 @@ void mprot_arm(uint32_t);
 /* CoreAudio output (runtime/audio.m) */
 int      audio_register(uint32_t data, uint32_t bytes, uint32_t rate,
                         uint32_t chans, uint32_t bits);
+__attribute__((weak)) int audio_max_channels(void);   /* audio_web.c: 6 with the surround output (none on the Mac) */
 void     audio_play(int id, int loop);
 void     audio_stop(int id);
 uint32_t audio_cursor(int id);
@@ -4118,6 +4119,8 @@ int com_call(CPU *c, uint32_t magic){
               if (pfmt && mem_is_committed(pfmt+15)){
                   uint32_t ch = MR16(pfmt+2), sr = MR32(pfmt+4), bt = MR16(pfmt+14);
                   if (ch>=1u && ch<=2u) chans = ch;
+                  /* 4 and 6 (quad, 5.1): the game's surround mix, where the output has the channels (bf_surround.c) */
+                  else if ((ch==4u || ch==6u) && audio_max_channels && audio_max_channels() >= 6) chans = ch;
                   if (sr>=4000u && sr<=192000u) rate = sr;
                   if (bt==8u || bt==16u) bits = bt;
               }

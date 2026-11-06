@@ -41,7 +41,8 @@ export const IM_TEXT_SEQ = 33;      // wasm: seqlock over the text entry words (
 export const IM_TEXT_MAX = 34;      // wasm: the game's text entry is up: the most characters it takes (0: none)
 export const IM_TEXT_KIND = 35;     // wasm: which characters it takes besides letters and digits
 export const IM_TEXT_LEN = 36;      // wasm: the characters in it now
-export const IM_PAD_WHEEL = 37;     // page: 1 when the controller driving the pad is a steering wheel (under IM_PAD_SEQ)
+export const IM_PAD_WHEEL = 37;     // page: bit 0 a steering wheel drives the pad (under IM_PAD_SEQ); bits 8-11 its H-shifter
+                                    // lever + 1, bits 16-31 its clutch travel + 1 (0 none): gamepad.ts wheelWord
 export const IM_VIEW_ROLL = 38;     // page: float bits, the phone's tilt the 3D view turns against (radians, + = clockwise)
 export const IM_MENU_SCALE = 39;    // page: float bits, the menus' help bar buttons' and arrows' size (1 = the game's own;
                                     // 0 = not set; negative: the arrows' alone, the bar at the game's own)

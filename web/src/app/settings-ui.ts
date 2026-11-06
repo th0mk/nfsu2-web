@@ -25,6 +25,7 @@ import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } fro
 import { SITE_KEYS } from './sitekeys';
 import { copyText, copyToast } from './copy';
 import { MODS } from './mods';
+import { BF_CONTROLS, BF_MORE } from './bf';
 import { modName, modSections, rowHelp, rowName } from './mods-ui';
 
 type Control =
@@ -34,6 +35,8 @@ type Control =
    *  value chosen (the promise ends when it has played), stop ends that early */
   | { t: 'select'; opts: [value: string, label: string][]; preview?: { play(value: string): Promise<void>; stop(): void } }
   | { t: 'num'; min?: number; max?: number; step?: number; unit?: string }
+  /** a slider from min to max, its value beside it (with its unit), saved when let go */
+  | { t: 'range'; min: number; max: number; step: number; unit?: string }
   /** invite: the Room's box, with a button in it that copies an invite link to the room typed (invite.ts) */
   | { t: 'text'; placeholder?: string; invite?: boolean }
   /** the crews (crews.ts): a line per crew with Leave, and a box with Join for one more */
@@ -75,10 +78,16 @@ export const MOD_CONTROLS: Record<string, Control> = {
   songs: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] },
   show_hidden_races: { t: 'switch' },
   visual_rep_remover: { t: 'switch' },
+  ...BF_CONTROLS,
+};
+/** the mods' own settings (mods.ts Mod control more), each a row under its mod's in the Mods tab */
+const MOD_MORE: Record<string, { label: string; help: string }> = {
+  ...BF_MORE,
 };
 /** the Mods tab's rows with a setting, in the catalogue's order (a shared row once: its first entry's) */
 const MOD_ITEMS: Item[] = MODS.flatMap(m => 'setting' in m.control && !m.row
-  ? [{ key: m.control.setting, label: m.name, help: m.line, c: MOD_CONTROLS[m.control.setting] ?? { t: 'switch' }, mod: m.id }] : []);
+  ? [{ key: m.control.setting, label: m.name, help: m.line, c: MOD_CONTROLS[m.control.setting] ?? { t: 'switch' }, mod: m.id },
+     ...(m.control.more ?? []).map(k => ({ key: k, label: MOD_MORE[k].label, help: MOD_MORE[k].help, c: MOD_CONTROLS[k] }))] : []);
 
 const GROUPS: Group[] = [
   { title: N('Online'), more: N('More online settings'), own: true, items: [
@@ -358,7 +367,7 @@ function shown(it: Item, v: string): string {
   if (c.t === 'phrases') return phrasesOf(v).map(p => t(PHRASES[p].text)).join(', ');
   if (c.t === 'flag') { const f = flagCode(v); return f ? flagName(f) : t('No flag'); }
   if (v === '') return t('empty');
-  return c.t === 'num' && c.unit ? `${v} ${c.unit}` : v;
+  return (c.t === 'num' || c.t === 'range') && c.unit ? `${v}${c.t === 'range' ? '' : ' '}${c.unit}` : v;
 }
 
 /**
@@ -773,6 +782,17 @@ export class SettingsPanel {
       ctl.append(pic, sel);
       described = sel;
       if (!this.countryAsked) { this.countryAsked = true; void this.askCountry(); }
+    } else if (c.t === 'range') {
+      const r = document.createElement('input'); r.type = 'range'; r.id = id;
+      r.min = String(c.min); r.max = String(c.max); r.step = String(c.step);
+      r.value = cur || String(c.min);
+      const v = document.createElement('output'); v.className = 'val'; v.htmlFor.add(id);
+      const show = () => { v.textContent = `${r.value}${c.unit ?? ''}`; };
+      show();
+      r.oninput = show;
+      r.onchange = () => { if (r.value !== this.current(it.key)) void this.put(it.key, r.value); };
+      ctl.append(v, r);
+      described = r;
     } else if (c.t === 'crews') {
       row.classList.add('set-list');
       described = crewControl({ list: crewsOf(cur, this.current('roam_crew_colours')), id, labelId: label.id, placeholder: c.placeholder, counts: this.crewCounts,

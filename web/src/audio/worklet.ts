@@ -11,7 +11,8 @@
 // its AudioWorkletNode (and the context it belongs to); one that returns true
 // forever keeps both alive as long as the page lives.
 import {
-  AR_HDR_WORDS, AR_LOUD, AR_OFF_PCM, AR_QUANTA, AR_R, AR_UNDERRUNS, AR_W, AUDIO_RATE, AUDIO_RING_FRAMES,
+  AR_CHANNELS, AR_HDR_WORDS, AR_LOUD, AR_MAX_CHANNELS, AR_OFF_PCM, AR_QUANTA, AR_R, AR_UNDERRUNS, AR_W, AUDIO_RATE,
+  AUDIO_RING_FRAMES,
 } from './proto';
 
 // AudioWorkletGlobalScope (TypeScript ships no lib for it)
@@ -28,12 +29,14 @@ class NfsuOut extends AudioWorkletProcessor {
   private step: number;
   private frames = AUDIO_RING_FRAMES;
   private frac = 0;               // resampling: position between ring frames r and r+1
+  private ch = 2;                 // channels a ring frame has (AR_CHANNELS: 2, or 6 with the surround)
 
   constructor(o: { processorOptions: Opts }) {
     super();
     const { buf, ptr } = o.processorOptions;
     this.h = new Int32Array(buf, ptr, AR_HDR_WORDS);
-    this.pcm = new Float32Array(buf, ptr + AR_OFF_PCM, this.frames * 2);
+    this.pcm = new Float32Array(buf, ptr + AR_OFF_PCM, this.frames * AR_MAX_CHANNELS);
+    this.ch = Math.max(1, Math.min(AR_MAX_CHANNELS, Atomics.load(this.h, AR_CHANNELS) || 2));
     this.step = AUDIO_RATE / sampleRate;
     this.port.onmessage = (e: MessageEvent) => { if (e.data === 'stop') { this.h = null; this.pcm = null; } };
   }
@@ -48,6 +51,7 @@ class NfsuOut extends AudioWorkletProcessor {
     }
     const out = outputs[0];
     if (!out || !out.length) return true;
+    if (this.ch !== 2) return this.many(h, pcm, out);
     const L = out[0], R = out[1] ?? out[0], n = L.length, MASK = this.frames - 1;
     Atomics.add(h, AR_QUANTA, 1);
     const w = Atomics.load(h, AR_W);
@@ -83,6 +87,40 @@ class NfsuOut extends AudioWorkletProcessor {
     }
     if (k < n) {
       for (let i = k; i < n; i++) { L[i] = 0; R[i] = 0; }
+      Atomics.add(h, AR_UNDERRUNS, 1);
+    }
+    if (peak > SILENT) Atomics.add(h, AR_LOUD, 1);
+    Atomics.store(h, AR_R, r);
+    Atomics.notify(h, AR_R, 1);
+    return true;
+  }
+
+  /** process() for a ring of this.ch channels (the surround's 6): each to its output channel, as many as the node
+   *  has; the same pacing, resampling and counters as the stereo path */
+  private many(h: Int32Array, pcm: Float32Array, out: Float32Array[]): boolean {
+    const C = this.ch, n = out[0].length, MASK = this.frames - 1, outs = Math.min(C, out.length);
+    Atomics.add(h, AR_QUANTA, 1);
+    const w = Atomics.load(h, AR_W);
+    let r = Atomics.load(h, AR_R);
+    let avail = (w - r) >>> 0;
+    if (avail > this.frames) avail = 0;
+    let peak = 0, k = 0, f = this.frac;
+    for (; k < n; k++) {
+      const i0 = Math.floor(f);
+      if (this.step === 1 ? i0 >= avail : i0 + 1 >= avail) break;
+      const t = f - i0, j0 = ((r + i0) & MASK) * C, j1 = ((r + i0 + 1) & MASK) * C;
+      for (let c = 0; c < outs; c++) {
+        const v = this.step === 1 ? pcm[j0 + c] : pcm[j0 + c] + (pcm[j1 + c] - pcm[j0 + c]) * t;
+        out[c][k] = v;
+        const m = v > 0 ? v : -v; if (m > peak) peak = m;
+      }
+      f += this.step;
+    }
+    const used = Math.floor(f);
+    this.frac = f - used;
+    r = (r + used) | 0;
+    if (k < n) {
+      for (let c = 0; c < out.length; c++) out[c].fill(0, k);
       Atomics.add(h, AR_UNDERRUNS, 1);
     }
     if (peak > SILENT) Atomics.add(h, AR_LOUD, 1);

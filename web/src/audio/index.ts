@@ -24,7 +24,7 @@ import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
 import {
   AR_CTX, AR_CTX_CLOSED, AR_CTX_RUNNING, AR_CTX_SUSPENDED, AR_FRAMES, AR_HDR_WORDS, AR_LOUD, AR_MAGIC, AR_MIXED, AR_MODE, AR_MUTED,
-  AR_NOSOUND, AR_OFF_PCM, AR_PAGE_RATE, AR_PEAK, AR_QUANTA, AR_R, AR_RESET, AR_RMS, AR_TARGET, AR_UNDERRUNS,
+  AR_CHANNELS, AR_MAX_CHANNELS, AR_NOSOUND, AR_OFF_PCM, AR_PAGE_RATE, AR_PEAK, AR_QUANTA, AR_R, AR_RESET, AR_RMS, AR_TARGET, AR_UNDERRUNS,
   AR_VERSION, AR_W, AR_WALL_MS, AUDIO_MAGIC, AUDIO_RATE, AUDIO_RING_FRAMES, AUDIO_VERSION,
 } from './proto';
 
@@ -136,8 +136,18 @@ export async function attachAudio(proc: GameProcess, opts: AudioOptions = {}): P
     gain = c.createGain(); gain.gain.value = audible(); gain.connect(c.destination);
     const connect = () => {
       if (!ring || node || ctx !== c) return;
+      // the ring's channels: 6 with the surround (5.1, Web Audio's order L R C LFE SL SR), which the destination takes
+      // as far as the device has speakers ('speakers': the browser downmixes the rest)
+      const chans = h ? Math.max(1, Math.min(AR_MAX_CHANNELS, Atomics.load(h, AR_CHANNELS) || 2)) : 2;
+      if (chans > 2) {
+        for (const n of [gain!, c.destination] as AudioNode[]) {
+          n.channelCount = n === c.destination ? Math.max(2, Math.min(chans, c.destination.maxChannelCount)) : chans;
+          n.channelCountMode = 'explicit'; n.channelInterpretation = 'speakers';
+        }
+        log(`[audio] ${chans} channels to a device of ${c.destination.maxChannelCount}`);
+      }
       node = new AudioWorkletNode(c, 'nfsu2-out', {
-        numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+        numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [chans],
         processorOptions: { buf: proc.memory.buffer as unknown as SharedArrayBuffer, ptr: ring.ptr },
       });
       node.connect(gain!);
@@ -192,7 +202,7 @@ export async function attachAudio(proc: GameProcess, opts: AudioOptions = {}): P
     if (closed) return;
     const view = new Int32Array(proc.memory.buffer, reg.ptr, AR_HDR_WORDS);
     if (view[AR_MAGIC] !== AUDIO_MAGIC || view[AR_VERSION] !== AUDIO_VERSION || view[AR_FRAMES] !== AUDIO_RING_FRAMES ||
-        AR_OFF_PCM + AUDIO_RING_FRAMES * 8 > reg.size) {
+        AR_OFF_PCM + AUDIO_RING_FRAMES * 4 * AR_MAX_CHANNELS > reg.size) {
       log(`[audio] ring at 0x${reg.ptr.toString(16)} has magic 0x${(view[AR_MAGIC] >>> 0).toString(16)} version ${view[AR_VERSION]}, ` +
           `${view[AR_FRAMES]} frames in ${reg.size} bytes: not ours, no sound`);
       return;

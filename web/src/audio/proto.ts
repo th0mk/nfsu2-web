@@ -3,7 +3,7 @@
 // The header is an array of 32-bit words; the PCM follows it.
 
 export const AUDIO_MAGIC = 0x4E415544;
-export const AUDIO_VERSION = 1;
+export const AUDIO_VERSION = 2;   // 2: AR_CHANNELS, the ring sized for 6 channels
 export const AUDIO_RING_FRAMES = 16384;
 export const AUDIO_RATE = 44100;
 
@@ -27,6 +27,9 @@ export const AR_RESET = 16;       // pump: rebuild the context when this changes
 export const AR_WALL_MS = 17;     // pump: ms mixed without a consumer
 export const AR_MIXED = 18;       // pump: frames mixed (low 32 bits)
 export const AR_PAGE_RATE = 19;   // page: the context's sample rate
+export const AR_CHANNELS = 20;    // pump: channels per ring frame, 2 or 6 (L R C LFE SL SR: Bayview Forever's surround)
+/** the most channels a ring frame has: the ring's pcm holds AUDIO_RING_FRAMES * AR_MAX_CHANNELS floats */
+export const AR_MAX_CHANNELS = 6;
 export const AR_HDR_WORDS = 32;
 
 export const AR_CTX_NONE = 0, AR_CTX_RUNNING = 1, AR_CTX_SUSPENDED = 2, AR_CTX_CLOSED = 3;

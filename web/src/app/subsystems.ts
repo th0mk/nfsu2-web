@@ -43,7 +43,9 @@ export const attachAudio: AttachAudio = async (proc, o) => {
 };
 
 export const attachInput: AttachInput = (proc, element, o) =>
-  inputAttach(proc, element, { log: o.log, viewRect: o.viewRect, toggleFullscreen: o.toggleFullscreen, padPage: o.padPage });
+  inputAttach(proc, element, { log: o.log, viewRect: o.viewRect, toggleFullscreen: o.toggleFullscreen, padPage: o.padPage,
+    // Bayview Forever's H-shifter (settings.ini bf_features_hshifter; settings.ts writes a bool as 1 or 0)
+    hShifter: o.env.NFSU2_BF_FEATURES_HSHIFTER === '1' });
 
 export const attachNet: AttachNet = (proc, o) => {
   const link = netAttach(proc, { name: o.name, id: o.id, was: o.was, claim: o.claim, block: o.block, log: o.log, onNotice: o.notice, onLobby: o.lobby, onSay: o.say, onBump: o.bump, onBattle: o.battle, onCoop: o.coop, onFriend: o.friend, onBack: o.back,

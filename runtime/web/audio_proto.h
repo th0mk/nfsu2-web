@@ -15,7 +15,7 @@
 #include <stddef.h>
 
 #define AUDIO_MAGIC        0x4E415544u  /* 'NAUD' */
-#define AUDIO_VERSION      1u
+#define AUDIO_VERSION      2u   /* 2: AR_CHANNELS, the ring sized for 6 channels */
 #define AUDIO_RING_FRAMES  16384u       /* power of two: 372 ms at 44.1 kHz (a phone's 175 ms bursts, smoothly) */
 #define AUDIO_RATE         44100u       /* the mixer's output rate */
 
@@ -41,6 +41,7 @@ enum {
     AR_WALL_MS = 17,     /* pump: milliseconds mixed on the wall clock (no consumer) */
     AR_MIXED = 18,       /* pump: frames mixed (low 32 bits) */
     AR_PAGE_RATE = 19,   /* page: the context's real sample rate */
+    AR_CHANNELS = 20,    /* pump: channels per ring frame, 2 or 6 (5.1: bf_surround.c), set before it registers */
     AR_HDR_WORDS = 32
 };
 enum { AR_CTX_NONE = 0, AR_CTX_RUNNING = 1, AR_CTX_SUSPENDED = 2, AR_CTX_CLOSED = 3 };
@@ -48,7 +49,7 @@ enum { AR_MODE_IDLE = 0, AR_MODE_RING = 1, AR_MODE_WALL = 2 };
 
 typedef struct {
     _Atomic uint32_t h[AR_HDR_WORDS];
-    float pcm[AUDIO_RING_FRAMES * 2];     /* interleaved L, R */
+    float pcm[AUDIO_RING_FRAMES * 6];     /* interleaved, AR_CHANNELS a frame: L R, or L R C LFE SL SR */
 } AudioRing;
 
 #define AR_OFF_PCM 128   /* byte offset of pcm */
