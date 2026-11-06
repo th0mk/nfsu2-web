@@ -504,9 +504,14 @@ context lists the problems flagged for the developer, with the first thread of e
   doors, horn, headlights, free look, quick chat, message, add friend, photo mode, hide HUD, menu, next song,
   frame-rate counter) with each one's key and controller button as caps; click one, then press the new key or button,
   or Off (the free look's cap switches Auto / Off with a click). Keys the game itself uses can't
-  be picked, quick chat's 1-4 stay, the menu always keeps a key (and Home or both sticks), and a key the player put a
+  be picked (since fa648f82 a game key is free once its game control has another key in the game's Options, Controls,
+  e.g. Q after HUD is moved, and the debug camera's L, [, ], Numpad 6-9 can be picked), quick chat's 1-4 stay, the menu always keeps a key (and Home or both sticks), and a key the player put a
   game control on says so there. It applies at the next Play; the touch controls' Drift and Horn work whatever is
   picked. Until that is live, only the game's own Controls can be changed.
+- Right Alt (nitrous) also shifting down: on a layout with AltGr (German, French, Turkish, Polish, Nordic ...) Windows
+  sends that key as Left Ctrl (Shift Down) plus Right Alt. Since ef7e0436 the page keeps that Left Ctrl from the game
+  after the first AltGr in a browser (the first one still shifts down; the log says `[keys] this browser sends AltGr as
+  Left Ctrl and Right Alt`). Until that is live: Left Alt for nitrous, or Nitrous on another key in Options, Controls.
 
 ## Decided
 
