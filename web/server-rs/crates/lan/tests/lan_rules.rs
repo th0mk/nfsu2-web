@@ -1,5 +1,5 @@
 //! The switch's own tests, the second half (tests/lan.rs has the first): the audit's F2 (what one client can make the
-//! switch send, and whom it can get cut), the store, the 16000 addresses, LAN play's broadcasts, a page that lets go,
+//! switch send, and whom it can get cut), the store, the 24000 addresses, LAN play's broadcasts, a page that lets go,
 //! the breakdown, bundles, a player behind on its path (lag.rs).
 
 mod harness;
@@ -465,14 +465,14 @@ async fn with_a_store_an_address_nobody_came_back_for_is_gone_for_the_hosts() {
     sw.close().await;
 }
 
-// addresses: 16000 on 10.77.0.0/18, handed out round the sixty-four of its /24s; never .0, .1 or .252 and up; full past them
+// addresses: 24000 on 10.77.0.0/17, handed out round the ninety-six of its /24s; never .0, .1 or .252 and up; full past them
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn addresses_16000_round_the_sixty_four_24s_full_past_them() {
+async fn addresses_24000_round_the_ninety_six_24s_full_past_them() {
     let _s = serial().await;
-    let lan = LanSwitch::new(LanOptions { max_peers: 16000, ..LanOptions::default() }, "", None, None, None, None);
+    let lan = LanSwitch::new(LanOptions { max_peers: 24000, ..LanOptions::default() }, "", None, None, None, None);
     let mut got = Vec::new();
     let now = nfsu2_util::now_ms();
-    for i in 0..16000 {
+    for i in 0..24000 {
         let v = lan.allocate();
         assert!(v != 0, "address {i}");
         got.push(v);
@@ -483,9 +483,11 @@ async fn addresses_16000_round_the_sixty_four_24s_full_past_them() {
     want.extend(["10.77.16.2".to_string(), "10.77.17.2".to_string()]);
     assert_eq!(first, want);
     assert_eq!(ip_str(got[63]), "10.77.63.2");
-    assert_eq!(ip_str(got[64]), "10.77.0.3");
-    assert_eq!(ip_str(got[15999]), "10.77.63.251");
-    assert_eq!(got.iter().collect::<HashSet<_>>().len(), 16000, "all distinct");
+    assert_eq!(ip_str(got[64]), "10.77.64.2");
+    assert_eq!(ip_str(got[95]), "10.77.95.2");
+    assert_eq!(ip_str(got[96]), "10.77.0.3");
+    assert_eq!(ip_str(got[23999]), "10.77.95.251");
+    assert_eq!(got.iter().collect::<HashSet<_>>().len(), 24000, "all distinct");
     let mut sorted = got.clone();
     sorted.sort();
     let mut all = all_vips();

@@ -54,14 +54,14 @@ services:
       - ${NFSU2_MODULE:-./module}:/module:ro
       - state:/state
     # what the systemd unit (nfsu2-web.service) allows the server, as far as a container goes: nothing to write
-    # but its state, no capabilities, no swap, 262144 open files (the Rust image's 16000 players take up to 128000
-    # connections, 8 each, and 131072 left too few for its files besides); 12 GB of memory (about half a GB a thousand
+    # but its state, no capabilities, no swap, 262144 open files (the Rust image's 24000 players take up to 192000
+    # connections, 8 each, and 131072 left too few for its files besides); 16 GB of memory (about half a GB a thousand
     # players: 4.9 GB at 13,163 on nfsu2.xyz, 2026-11-05), not the unit's 3 GB
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    mem_limit: 12g
-    memswap_limit: 12g
+    mem_limit: 16g
+    memswap_limit: 16g
     ulimits: { nofile: 262144 }
     # the game's share of the VPS's CPU, with Caddy's (or cloudflared's): web/deploy/nfsu2.slice.  A cgroup of its
     # own (no `cgroup: host`): the server does not see the slice, so a full slice never gives players fewer friends
@@ -73,8 +73,8 @@ configs:
   caddyfile:
     # web/deploy/Caddyfile for NFSU2_HOST.  Caddy names no software (no Server or Via header, also not on its
     # redirects and errors), closes a connection for any other name (the bare address, a scanner's made-up name)
-    # without an answer, and opens at most 127900 connections to the server (the Rust image takes 128000 with
-    # 16000 players).  It believes no proxy in front: the client's address is the one that connected, and a
+    # without an answer, and opens at most 191900 connections to the server (the Rust image takes 192000 with
+    # 24000 players).  It believes no proxy in front: the client's address is the one that connected, and a
     # CF-Connecting-IP a client sends is replaced by it (behind Cloudflare's proxy: compose.cloudflare.yml).  The
     # admin API (127.0.0.1:2019) stays off: nothing reconfigures Caddy while it runs.
     content: |
@@ -95,7 +95,7 @@ configs:
       	reverse_proxy 127.0.0.1:${NFSU2_HTTP_PORT:-8080} {
       		header_up CF-Connecting-IP {client_ip}
       		transport http {
-      			max_conns_per_host 127900
+      			max_conns_per_host 191900
       		}
       	}
       	header -Server

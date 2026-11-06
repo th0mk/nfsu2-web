@@ -537,7 +537,7 @@ or use a Room to keep to a group.
 
 Good to know:
 
-- **How many:** up to 16000 players on a server set up with `web/deploy/` (2000 with the older Node server), 128 on
+- **How many:** up to 24000 players on a server set up with `web/deploy/` (2000 with the older Node server), 128 on
   one started by hand (its owner can change that). Only free roam and the LAN and Online screens take a place;
   single-player takes none. When it is full, you wait in line for a place, first come first served: the top of the
   screen shows your place and, once a few went in, about how long it takes. You play alone meanwhile and join the

@@ -169,14 +169,14 @@ pub struct RoamOptions {
     /// port of its own, its HELLO flagged: hub.rs `Player::seat2`), and one more for a game started again while its
     /// last start's endpoint lingers (until `gone_ms`).  A browser's endpoints are never linked with each other.
     pub max_per_vip: usize,
-    /// The players (endpoints) on the hub at most, 15360: of the switch's 16000 places (nfsu2-lan `ADDRS`, one browser
-    /// each) some two in five are in free roam at once (nfsu2.xyz, 2026-11-05: 4,968 of 13,163), a tenth of those in
-    /// co-op (desktop pages only), each with its second player an endpoint more (a restart's lingering endpoint is one
-    /// too, for a few seconds).  At most 16384 (hub.rs SLOTS_MAX: a world
-    /// map's key names a slot under it), and that far under it that a full hub's new player purges the slots of the
-    /// ones gone at most once in 1024 (else an eighth of the players, as before).  What grows with it: a player's
-    /// slot (some 1.5 KB with its links), the kept watches (one each at most), the tick (each link; a second player
-    /// asks for few, its first one fewer: their page's two together, as many as one player's).
+    /// The players (endpoints) on the hub at most, 24576: the switch's 24000 places (nfsu2-lan `ADDRS`, one browser
+    /// each), of which nearly all can be in free roam (the hub keeps those in a race, a shop or the menus too: 10,401 of
+    /// 11,571 on nfsu2.xyz, 2026-11-06), and 576 more for co-op's second players (desktop pages only) and a restart's
+    /// lingering endpoints (a few seconds each).  At most hub.rs SLOTS_MAX (25600), and that far under it that a full
+    /// hub's new player purges the slots of the ones gone at most once in 1024 (else an eighth of the players, as
+    /// before).  What grows with it: a player's slot (some 1.5 KB with its links), the kept watches (one each at most),
+    /// the tick (each link; a second player asks for few, its first one fewer: their page's two together, as many as
+    /// one player's).  The world map's keys are a pool of their own (hub.rs MAP_KEYS), for the players it shows.
     pub max_players: usize,
     pub exact_room: usize,
     pub min_degree: usize,
@@ -245,7 +245,7 @@ impl Default for RoamOptions {
             keep: 0.5,
             hold_ms: 5_000.0,
             max_per_vip: 3,
-            max_players: 15360,
+            max_players: 24576,
             exact_room: 256,
             min_degree: 8,
             busy_high: 0.85,
