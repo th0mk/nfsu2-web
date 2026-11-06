@@ -25,6 +25,7 @@ import { pageDialog } from './padnav';
 import { onlineName } from './claim';
 import { roomHash } from './players';
 import { iconButton, TRASH } from './settings-ui';
+import { named } from './cards';
 import { copyText, copyToast, READ_MS } from './copy';
 import { mailOf, type MessageStore } from './messages';
 
@@ -165,29 +166,15 @@ const WHERE_MS = 60_000;
 /** what touching the other car may lead to: the server's answer to "can", or what the page did since */
 type St = 'wait' | 'new' | 'asks' | 'asked' | 'friends' | 'claim' | 'theirs';
 
-/** the line's top edge, in the game's HUD units from the middle of the picture: just above the game's outrun line
- *  (runtime/roam_game.c du_hud: its middle at -165), which shows too, as the cars are near each other */
-const LINE_TOP_U = -195;
-/** a friend's invite's line, this far above that (HUD units) */
-const INVITE_ABOVE_U = 26;
-/** the line's icon (18x16 units): a person with a plus while it offers something, else a person */
-const PERSON_PLUS = 'M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM0 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5zM14.5 3.25h1.5v2h2v1.5h-2v2h-1.5v-2h-2v-1.5h2z';
-const PERSON = 'M9 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5z';
-function personIcon(d: string): SVGSVGElement {
-  const ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg'), p = document.createElementNS(ns, 'path');
-  s.setAttribute('viewBox', '0 0 18 16'); s.setAttribute('aria-hidden', 'true');
-  p.setAttribute('d', d);
-  s.append(p);
-  return s;
-}
-
 export interface FriendPromptDeps {
   /** a friend message to the server on the game's link (net/index.ts friend); false: not connected now */
   send(m: Record<string, unknown>): boolean;
   /** the game's room now ('' none) */
   room(): string;
-  /** a line over the game for a moment (shell.ts toast) */
-  toast(text: string): void;
+  /** a line over the game for a moment (shell.ts toast): name in it bold, hot with the border of something to answer */
+  toast(text: string, o?: { name?: string; hot?: boolean }): void;
+  /** the column at the top the lines go in (shell.ts placeNotices: its place, the HUD's size) */
+  place(): void;
   /** a friend's line in the notices (shell.ts friendNotice): text names it */
   notice(name: string, text: string): void;
   /** "the menu (F9)", with what opens it here (shell.ts menuName) */
@@ -226,8 +213,6 @@ export class FriendPrompt {
   private where: Friend[] | null = null;
   private was = new Map<string, Friend['where']>();
   private whereAt = 0;
-  /** where the line was put last (place) */
-  private spot = '';
   /** the friends invited lately (by name in lower case: when), and a friend's invite that waits for an answer, its line */
   private invited = new Map<string, number>();
   private invite: Invite | null = null;
@@ -240,13 +225,15 @@ export class FriendPrompt {
     b.type = 'button'; b.className = 'friend-prompt'; b.tabIndex = -1; b.hidden = true; b.dataset.nfsu2Ui = '';
     b.onpointerdown = e => e.preventDefault();     // the canvas keeps the focus (and with it the keyboard)
     b.onclick = () => this.act();
-    stage.append(b);
-    // a friend's invite to its race: a line of the same look, just above the friend line (a click or a tap joins)
+    // in the column of the notes over the game, at its top (style.css .toasts: an invite first, then this line)
+    const col = stage.querySelector<HTMLElement>('.toasts') ?? stage;
+    col.prepend(b);
+    // a friend's invite to its race: a line of the same look, above the friend line (a click or a tap joins)
     const iv = this.inviteEl = document.createElement('button');
     iv.type = 'button'; iv.className = 'friend-prompt offer invite'; iv.tabIndex = -1; iv.hidden = true; iv.dataset.nfsu2Ui = '';
     iv.onpointerdown = e => e.preventDefault();
     iv.onclick = () => this.takeInvite();
-    stage.append(iv);
+    col.prepend(iv);
     // caught before the game's input: F is the game's for nothing (its key maps: dinput_kbd.c), and only while the
     // line offers something
     window.addEventListener('keydown', e => this.key(e), { capture: true });
@@ -260,7 +247,6 @@ export class FriendPrompt {
       const now = performance.now();
       if (!this.listed && now - this.triedAt > LIST_TRY_MS) { this.triedAt = now; this.listed = this.deps.send({ op: 'list' }); }
       if (this.listed && this.friends.length && now - this.whereAt > WHERE_MS) this.askWhere();
-      if (!this.root.hidden || !this.inviteEl.hidden) this.place();   // (the window may change size while they show)
       this.raf = requestAnimationFrame(tick);
     };
     if (on) this.raf = requestAnimationFrame(tick);
@@ -338,7 +324,7 @@ export class FriendPrompt {
       case 'add':
         // (the line says it while the cars touch; the note says it once they parted)
         if (m.done === 'friends') this.was.set(name.toLowerCase(), 'roam');
-        if (m.done === 'friends' && !mine) this.deps.toast(t('You and {name} are friends now', { name }));
+        if (m.done === 'friends' && !mine) this.deps.toast(t('You and {name} are friends now', { name }), { name });
         else if (m.done === 'full') this.deps.toast(t('A friends list is full (50 at most)'));
         if (mine && this.who && ['asked', 'friends', 'claim', 'theirs'].includes(m.done)) this.who = { name, st: m.done };
         else if (mine && m.done === 'full') this.who = null;
@@ -346,13 +332,13 @@ export class FriendPrompt {
       case 'asks':
         // the other player pressed first: answer here while the cars touch, or on the start page
         if (mine && this.who) this.who = { name, st: 'asks' };
-        else this.deps.toast(t('{name} wants to be friends: answer under Friends on the start page', { name }));
+        else this.deps.toast(t('{name} wants to be friends: answer under Friends on the start page', { name }), { name, hot: true });
         break;
       case 'friends':
         // (just met here: no notice that it is in free roam)
         this.was.set(name.toLowerCase(), 'roam');
         if (mine && this.who) this.who = { name, st: 'friends' };
-        else this.deps.toast(t('You and {name} are friends now', { name }));
+        else this.deps.toast(t('You and {name} are friends now', { name }), { name });
         break;
       case 'invite':
         if (typeof m.done === 'string') return this.inviteAnswer(name, m.done);
@@ -368,13 +354,13 @@ export class FriendPrompt {
   private inviteAnswer(name: string, done: string) {
     this.deps.log(`[friends] the invite to ${name}: ${done}`);
     switch (done) {
-      case 'sent': this.invited.set(name.toLowerCase(), performance.now()); this.deps.toast(t('Invite sent to {name}', { name })); break;
-      case 'away': this.deps.toast(t('{name} isn\'t in free roam in your room now', { name })); break;
+      case 'sent': this.invited.set(name.toLowerCase(), performance.now()); this.deps.toast(t('Invite sent to {name}', { name }), { name }); break;
+      case 'away': this.deps.toast(t('{name} isn\'t in free roam in your room now', { name }), { name }); break;
       case 'nolobby': this.deps.toast(t('Open a race lobby first, then invite')); break;
       case 'full': this.deps.toast(t('Your race lobby is full')); break;
       case 'claim': this.deps.toast(t('Claim your name on the start page to invite friends')); break;
       case 'rate': this.deps.toast(t('Too many invites at once: try again in a moment')); break;
-      default: this.deps.toast(t('{name} can\'t be invited now', { name }));
+      default: this.deps.toast(t('{name} can\'t be invited now', { name }), { name });
     }
     this.deps.placed();
   }
@@ -402,7 +388,7 @@ export class FriendPrompt {
     const iv = this.invite;
     if (!iv) return;
     this.deps.log(`[friends] taking ${iv.name}'s invite`);
-    if (!this.deps.joinLobby(iv.host, iv.lobby, iv.race)) this.deps.toast(t('{name} can\'t be invited now', { name: iv.name }));
+    if (!this.deps.joinLobby(iv.host, iv.lobby, iv.race)) this.deps.toast(t('{name} can\'t be invited now', { name: iv.name }), { name: iv.name });
     this.dropInvite();
   }
 
@@ -411,7 +397,7 @@ export class FriendPrompt {
     const h = this.deps.hosted();
     if (!h) { this.deps.toast(t('Open a race lobby first, then invite')); return; }
     this.deps.log(`[friends] inviting ${name} to our ${h.kind}`);
-    if (!this.deps.send({ op: 'invite', name, kind: h.kind, stage: h.stage })) this.deps.toast(t('{name} can\'t be invited now', { name }));
+    if (!this.deps.send({ op: 'invite', name, kind: h.kind, stage: h.stage })) this.deps.toast(t('{name} can\'t be invited now', { name }), { name });
   }
 
   /** the server's "where": a notice for each friend that came into free roam since the last one (or is there at the
@@ -497,21 +483,9 @@ export class FriendPrompt {
     if (!e.repeat) this.act();
   }
 
-  /** the line in the middle of the picture, its top LINE_TOP_U HUD units above the middle (--u: one unit, its size) */
-  private place() {
-    const v = this.session?.viewRect();
-    if (!v || !v.w || !v.h) return;
-    const u = Math.min(v.w / 640, v.h / 480), x = v.x + v.w / 2, y = v.y + v.h / 2 + LINE_TOP_U * u;
-    const spot = `${x} ${y} ${u}`;
-    if (spot === this.spot) return;
-    this.spot = spot;
-    for (const [el, dy] of [[this.root, 0], [this.inviteEl, -INVITE_ABOVE_U * u]] as const) {
-      const s = el.style;
-      s.left = `${x}px`;
-      s.setProperty('--y', `${y + dy}px`);
-      s.setProperty('--u', `${u}px`);
-    }
-  }
+  /** the column's place and the HUD's size, as the line shows (shell.ts placeNotices) */
+  private place() { this.deps.place(); }
+
 
   private drawInvite() {
     const iv = this.invite, el = this.inviteEl;
@@ -520,7 +494,7 @@ export class FriendPrompt {
     const ik = siteKey('lobbyInvite'), key = ik && !touchFirst() && !gameHas(this.session, KEY_LOBBY_INVITE) ? [kbd(keyName(ik))] : [];
     const text = (s: string) => Object.assign(document.createElement('span'), { textContent: s });
     const kind = raceKindText(iv.kind), count = iv.max ? ` (${iv.n}/${iv.max})` : '';
-    el.replaceChildren(personIcon(PERSON), text(t('{name} invites you to a {kind}', { name: iv.name, kind }) + count), ...key, text(t('Join')));
+    el.replaceChildren(named(t('{name} invites you to a {kind}', { name: iv.name, kind }) + count, iv.name), ...key, text(t('Join')));
     this.place();
     el.hidden = false;
   }
@@ -532,8 +506,7 @@ export class FriendPrompt {
     const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };
     const fk = siteKey('friend');                   // (the player's key for it: sitekeys.ts, F by default)
     const offer = this.actionable(), key = offer && fk && !touchFirst() && !gameHas(this.session, KEY_FRIEND) ? [kbd(keyName(fk))] : [];
-    const text = (s: string) => Object.assign(document.createElement('span'), { textContent: s });
-    const line = (s: string) => b.replaceChildren(personIcon(offer ? PERSON_PLUS : PERSON), ...key, text(s));
+    const line = (s: string) => b.replaceChildren(...key, named(s, w.name));
     switch (w.st) {
       case 'new': line(t('Add {name} as a friend', { name: w.name })); break;
       case 'asks': line(t('{name} wants to be friends: accept', { name: w.name })); break;

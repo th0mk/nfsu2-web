@@ -1,4 +1,4 @@
-# Keep right and the page menu's Ghost mode, instance B: new career -> prologue free roam, wait until the other
+# Ghost mode's hint and the page menu's Ghost mode, instance B: new career -> prologue free roam, wait until the other
 # player's car is shown, then the game's autopilot drives off the new career's start too (off it, and moving, B's
 # own reasons to let cars through are gone): the status every 5 s says whether A's car is passable here, which it is
 # while A has ghost mode on (roam_keepright_a.txt).

@@ -62,7 +62,8 @@ import { LobbyPanel } from './lobby';
 import { ICON as CHAT_ICON, QuickChat } from './quickchat';
 import { groupsOf, phrasesOf } from './phrases';
 import { FriendPrompt, FriendsApi, FriendsPanel } from './friends';
-import { ChatDialog, FriendMessages, MSG_ICON, MessageStore } from './messages';
+import { ChatDialog, FriendMessages, MessageStore } from './messages';
+import { named } from './cards';
 import { applySiteKeys, keyName, menuKeyOf, siteButton, siteKey, siteKeyList, SiteKeysView } from './sitekeys';
 import { LB_JOIN, PAD_LS, PAD_RS } from '../input/proto';
 import { GameSession } from './game';
@@ -1191,17 +1192,30 @@ function openHelp(tab?: Tab) {
  *  each for 5 s.  Friends' lines are only logged for now: with the crowds on the server they came too often */
 const FRIEND_NOTICES = false;
 function notice(text: string, who?: string) {
+  if (!who && text.startsWith('\x1e')) { hint(text.slice(1)); return; }
   privacy.name(who, 'player');
   log.add(`[notice] ${text}`);
   if (!who) { toast(t(text), 6000); return; }     // English in the log
   if (!FRIEND_NOTICES) return;
-  const box = $('#notices'), line = document.createElement('div');
-  if (text.startsWith(who)) { const b = document.createElement('b'); b.textContent = who; line.append(b, text.slice(who.length)); }
-  else line.textContent = text;
+  const box = $('#notices'), b = document.createElement('b');
+  b.textContent = who;
+  const line = roamLine('quiet', '', text.startsWith(who) ? [b, text.slice(who.length)] : [text]);
   placeNotices();
   box.append(line);
   while (box.childElementCount > 4) box.firstElementChild!.remove();
   setTimeout(() => line.remove(), 5000);
+}
+/** a hint from the game (roam_plat_hint), worded here: "ghost", as the car drives off the new career's start among
+ *  other players with Ghost mode off (roam_game.c gh_frame): where Ghost mode is, with what opens the menu (as the pause
+ *  menu's line, pausehint.ts), for 15 s */
+function hint(id: string) {
+  log.add(`[notice] hint: ${id}`);
+  if (id !== 'ghost') return;
+  const line = document.createElement('span');
+  for (const k of [touchFirst() ? '☰' : keyName(siteKey('menu') ?? 'F9'), ...(padSeen() ? ['Home'] : [])])
+    line.append(Object.assign(document.createElement('kbd'), { textContent: k }));
+  line.append(t('Turn on Ghost mode in the menu'));
+  toast(line, 15000);
 }
 /** a person: what marks a line in the log as a friend's (friendNotice), as the speech balloon marks quick chat's */
 const FRIEND_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5z"/></svg>';
@@ -1235,12 +1249,17 @@ function chatLine(name: string, text: string, me: boolean) {
   iconLine('chat' + (me ? ' me' : ''), CHAT_ICON, [b, ` ${text}`]);
 }
 /** a line in the notices' box with an icon first (quick chat's, a friend's), for 8 s */
+/** a line of free roam's log (style.css .notices): its icon in a column of its own (none for a friend coming and going:
+ *  the column stays, so every line's text starts in one place) and its text, all in one size */
+function roamLine(cls: string, icon: string, parts: (string | Node)[]): HTMLElement {
+  const line = document.createElement('div'), ic = document.createElement('span'), tx = document.createElement('span');
+  line.className = cls; ic.className = 'ic'; ic.innerHTML = icon; tx.className = 'tx';
+  tx.append(...parts);
+  line.append(ic, tx);
+  return line;
+}
 function iconLine(cls: string, icon: string, parts: (string | Node)[]) {
-  const box = $('#notices'), line = document.createElement('div'), span = document.createElement('span');
-  line.className = cls;
-  line.innerHTML = icon;
-  span.append(...parts);
-  line.append(span);
+  const box = $('#notices'), line = roamLine(cls, icon, parts);
   box.append(line);
   while (box.childElementCount > 4) box.firstElementChild!.remove();
   setTimeout(() => line.remove(), 8000);
@@ -1248,15 +1267,15 @@ function iconLine(cls: string, icon: string, parts: (string | Node)[]) {
 /** a friend's message in the log (messages.ts): an envelope, the name, the text wrapping under the name; the player's
  *  own as "To <name>" with a note after it; on a touch screen a tap on a friend's answers it.  In the notices' box, for
  *  ms (the line fades out at its end) */
+/** an envelope, filled as quick chat's balloon and the friend's person beside it in the log (the page's MSG_ICON is in lines) */
+const MSG_FILLED = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 3h14v10H1z"/><path d="M1.6 3.8 8 8.9l6.4-5.1" fill="none" stroke="rgba(0,0,0,0.6)" stroke-width="1.4"/></svg>';
 function msgLine(name: string, text: string, out: boolean, note: string, ms: number, tap?: () => void): HTMLElement {
   placeNotices();
-  const box = $('#notices'), line = document.createElement('div'), b = document.createElement('b');
-  line.className = 'chat msg' + (out ? ' me' : '');
-  line.style.animationDuration = `${ms}ms`;
-  line.innerHTML = MSG_ICON;
+  const box = $('#notices'), b = document.createElement('b');
   b.textContent = name;
-  line.append(b, ` ${text}`);
-  if (note) line.append(Object.assign(document.createElement('i'), { textContent: ` ${note}` }));
+  const line = roamLine('chat msg' + (out ? ' me' : ''), MSG_FILLED,
+    note ? [b, ` ${text}`, Object.assign(document.createElement('i'), { textContent: ` ${note}` })] : [b, ` ${text}`]);
+  line.style.animationDuration = `${ms}ms`;
   if (tap && touchFirst()) { line.classList.add('tap'); line.addEventListener('click', tap); }
   box.append(line);
   while (box.childElementCount > 4) box.firstElementChild!.remove();
@@ -1270,12 +1289,11 @@ function msgHint(ms: number | null) {
   box.querySelector('.msg-hint')?.remove();
   clearTimeout(msgHintTimer);
   if (ms === null) return;
-  const h = document.createElement('div'), k = document.createElement('kbd'), key = siteKey('message');
-  h.className = 'msg-hint';
-  h.style.animationDuration = `${ms}ms`;
+  const k = document.createElement('kbd'), key = siteKey('message');
   k.textContent = key ? keyName(key) : '';
-  if (key) h.append(k);                   // (no key for it: the line alone, a tap on it answers)
-  h.append(t('Write back'));
+  // (no key for it: the line alone, a tap on it answers)
+  const h = roamLine('msg-hint', '', key ? [k, t('Write back')] : [t('Write back')]);
+  h.style.animationDuration = `${ms}ms`;
   box.append(h);
   msgHintTimer = window.setTimeout(() => h.remove(), ms);
 }
@@ -1293,6 +1311,8 @@ function placeLobby() {
  *  units: runtime/widescreen.c shows a 640x480 HUD in the middle of the image, and with hud = wide moves the
  *  radar's side out by up to 109 units (the edge of the image, at most of a centred 16:9 area).  So no size or
  *  shape of the screen puts them over the HUD.  --u: CSS px per HUD unit. */
+/** where the column of notes starts in free roam: just under the game's own line at the top (HUD units from the middle) */
+const UNDER_LINE_U = -150;
 function placeNotices() {
   const v = session?.viewRect();
   if (!v || !v.w || !v.h) return;
@@ -1302,6 +1322,11 @@ function placeNotices() {
   s.left = `${left}px`;
   s.top = `${top}px`;
   s.setProperty('--u', `${u}px`);
+  $('#stage').style.setProperty('--u', `${u}px`);   // (the notes over the game, the away line: the cards' size)
+  // in free roam (the game's "drive" 2) the column of notes starts under the game's own line at the top (an outrun's,
+  // a drift battle's: roam_game.c du_hud, its middle 165 units over the picture's), so that the two never overlap
+  const drive = session?.status?.read()?.get('drive');
+  if (drive !== undefined) $('.toasts').style.setProperty('--under', (drive & 3) === 2 ? `${v.y + v.h / 2 + UNDER_LINE_U * u}px` : '0px');
   quickChat.place(left, top, u);               // its picker opens there
   friendMessages?.place(left, top, u);         // and messages.ts's card
 }
@@ -1313,6 +1338,7 @@ function netQueue(q: NetQueue | null) {
   inLine = q !== null;
   $<HTMLButtonElement>('#menu [data-act="offline"]').hidden = !inLine;
   const t = $('#queue');
+  placeNotices();
   t.hidden = q === null;
   t.textContent = q ? queueText(q) : '';
 }
@@ -1429,6 +1455,7 @@ async function coopCheck(name: string) {
  *  up) */
 function removedLine(text: string) {
   const box = $('#removed');
+  placeNotices();
   box.textContent = text;
   box.hidden = false;
   const from = performance.now() + REMOVED_MS;
@@ -1445,6 +1472,7 @@ function hideRemoved() {
 /** the away check's message over the game (away.ts), null: none */
 function awayLine(text: string | null) {
   const t = $('#away');
+  placeNotices();
   t.hidden = text === null;
   t.textContent = text ?? '';
 }
@@ -1475,22 +1503,26 @@ function renderCheckTimes(): RenderCheckTimes {
  */
 const TOAST_LINES = ['toast', 'toast-also'];
 const toastTimers = new Map<string, ReturnType<typeof setTimeout>>(), toastKept = new Set<string>();
-const toastsWaiting: { msg: string; ms: number; keep: boolean }[] = [];
-function toast(msg: string, ms: number, keep = false) {
+type ToastMsg = string | Node;
+const toastsWaiting: { msg: ToastMsg; ms: number; keep: boolean; cls: string }[] = [];
+/** cls: 'hot' for something to answer soon (a friend's request: a lime border) */
+function toast(msg: ToastMsg, ms: number, keep = false, cls = '') {
   const line = TOAST_LINES.find(id => !toastKept.has(id));
-  if (line) { showToast(line, msg, ms, keep); return; }
-  if (keep) toastsWaiting.splice(toastsWaiting.filter(w => w.keep).length, 0, { msg, ms, keep });
-  else toastsWaiting.splice(0, toastsWaiting.length, ...toastsWaiting.filter(w => w.keep), { msg, ms, keep });
+  if (line) { showToast(line, msg, ms, keep, cls); return; }
+  if (keep) toastsWaiting.splice(toastsWaiting.filter(w => w.keep).length, 0, { msg, ms, keep, cls });
+  else toastsWaiting.splice(0, toastsWaiting.length, ...toastsWaiting.filter(w => w.keep), { msg, ms, keep, cls });
 }
-function showToast(id: string, msg: string, ms: number, keep: boolean) {
+function showToast(id: string, msg: ToastMsg, ms: number, keep: boolean, cls: string) {
   const el = $(`#${id}`);
-  el.textContent = msg; el.hidden = false;
+  placeNotices();
+  el.className = cls ? `toast ${cls}` : 'toast';
+  el.replaceChildren(msg); el.hidden = false;
   if (keep) toastKept.add(id); else toastKept.delete(id);
   clearTimeout(toastTimers.get(id));
   toastTimers.set(id, setTimeout(() => {
     el.hidden = true; toastKept.delete(id);
     const next = toastsWaiting.shift();
-    if (next) showToast(id, next.msg, next.ms, next.keep);
+    if (next) showToast(id, next.msg, next.ms, next.keep, next.cls);
   }, ms));
 }
 /** no toast left over from a game that ended */
@@ -2341,7 +2373,8 @@ export async function boot() {
   touch = new TouchControls($('#stage'), { toast, log: logLine, chat: () => quickChat.toggle(), chatOn: () => quickChat.enabled,
     settings: () => openHelp('keys') });
   friendPrompt = new FriendPrompt($('#stage'), {
-    send: m => session?.net?.friend?.(m) ?? false, room: () => roamRoom ?? '', toast: s => toast(s, 5000), log: logLine,
+    send: m => session?.net?.friend?.(m) ?? false, room: () => roamRoom ?? '', log: logLine, place: placeNotices,
+    toast: (s, o) => toast(o?.name ? named(s, o.name) : s, 5000, false, o?.hot ? 'hot' : ''),
     notice: friendNotice, menu: menuName, placed: () => { if ($<HTMLDialogElement>('#friends-pop').open) drawPopFriends(); },
     hosted: () => lobbyPanel.hosted(), joinLobby: (host, lobby, race) => session?.input?.lobby?.(LB_JOIN, host, lobby, race) ?? false,
   });

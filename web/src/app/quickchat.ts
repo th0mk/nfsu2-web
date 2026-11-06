@@ -33,6 +33,7 @@ import type { GameSession } from './game';
 import { chatBit, gameHas } from './gamekeys';
 import { t } from './i18n';
 import { catName, COUNTDOWN, DEFAULT_GROUPS, DEFAULT_PHRASES, PHRASES, type CatId } from './phrases';
+import { act, block, el } from './cards';
 
 /** the picker closes this long after it opened or the last pick in it (ms) */
 const PICK_MS = 4000;
@@ -132,7 +133,7 @@ export class QuickChat {
     this.layer = document.createElement('div');
     this.layer.className = 'qc-lines';
     this.picker = document.createElement('div');
-    this.picker.className = 'qc-picker';
+    this.picker.className = 'ov-card qc-picker';
     this.picker.hidden = true;
     this.picker.dataset.nfsu2Ui = '';
     this.picker.addEventListener('click', e => {
@@ -311,36 +312,28 @@ export class QuickChat {
     this.draw(0, t('You are not allowed to start a countdown here'));
   }
 
+  /** the picker as a card (cards.ts): its title, then the four (a key cap and the phrase; with the controller its
+   *  arrows), then "Esc closes"; waiting or refused, why; on a touch screen all sixteen, four columns of buttons */
   private draw(hold = 0, no = '') {
     clearTimeout(this.closeTimer);
     const p = this.picker, wait = no ? 0 : Math.max(hold, this.wait(performance.now()));
     this.deps.place();
     p.dataset.mode = this.mode;
     p.hidden = false;
-    const kids: HTMLElement[] = [];
-    const el = (tag: string, cls: string, text?: string) => {
-      const e = document.createElement(tag); e.className = cls; if (text !== undefined) e.textContent = text; return e;
-    };
-    if (no) {
-      kids.push(el('div', 'qc-title', t('Quick chat')), el('div', 'qc-wait qc-no', no));
-      this.closeTimer = window.setTimeout(() => this.close(), PICK_MS);
-    } else if (wait > 0) {
-      kids.push(el('div', 'qc-title', t('Quick chat')), el('div', 'qc-wait', t('Wait a moment')));
-      this.closeTimer = window.setTimeout(() => this.close(), Math.min(wait, PICK_MS));
+    const kids: HTMLElement[] = [], title = (text: string) => block(el('div', 'ov-title', text));
+    if (no || wait > 0) {
+      kids.push(title(t('Quick chat')), block(el('div', no ? 'ov-dim qc-wait qc-no' : 'ov-dim qc-wait', no || t('Wait a moment'))));
+      this.closeTimer = window.setTimeout(() => this.close(), no ? PICK_MS : Math.min(wait, PICK_MS));
     } else if (this.open === GROUPS) {
-      kids.push(el('div', 'qc-title', t('Quick chat')));
-      for (let g = 0; g < 4; g++) {
-        const row = el('div', 'qc-row');
-        row.append(el('kbd', '', ARROWS[g]), el('span', 'qc-text', t(catName(this.groups[g]))));
-        kids.push(row);
-      }
+      const rows = [0, 1, 2, 3].map(g => { const r = act(ARROWS[g], t(catName(this.groups[g]))); r.classList.add('qc-row'); return r; });
+      kids.push(title(t('Quick chat')), block(...rows));
       this.closeTimer = window.setTimeout(() => this.close(), PICK_MS);
     } else if (this.open === ALL) {
       for (let g = 0; g < 4; g++) {
         const col = el('div', 'qc-group');
-        col.append(el('div', 'qc-title', t(catName(this.groups[g]))));
+        col.append(el('div', 'ov-title', t(catName(this.groups[g]))));
         for (let i = 0; i < 4; i++) {
-          const b = el('button', 'qc-say') as HTMLButtonElement;
+          const b = el('button', 'qc-say');
           this.slotText(b, g * 4 + i);
           b.type = 'button'; b.dataset.slot = String(g * 4 + i);
           col.append(b);
@@ -349,22 +342,21 @@ export class QuickChat {
       }
       const m = this.deps.message;
       if (m?.on() && this.driving()) {               // (messages go in free roam: messages.ts)
-        const b = el('button', 'qc-say qc-msg', t('Message a friend')) as HTMLButtonElement;
+        const b = el('button', 'qc-say qc-msg', t('Message a friend'));
         b.type = 'button';
         b.addEventListener('click', () => { this.close(); m.open(); });
         kids.push(b);
       }
     } else {
-      kids.push(el('div', 'qc-title', t(catName(this.groups[this.open]))));
-      for (let i = 0; i < 4; i++) {
-        const row = el('div', 'qc-row');
-        row.dataset.slot = String(this.open * 4 + i);
+      const rows = [0, 1, 2, 3].map(i => {
         const tx = el('span', 'qc-text');
         this.slotText(tx, this.open * 4 + i);
-        row.append(el('kbd', '', this.mode === 'pad' ? ARROWS[i] : String(i + 1)), tx);
-        kids.push(row);
-      }
-      if (this.mode === 'keys') kids.push(el('div', 'qc-foot', t('Esc closes')));
+        const r = act(this.mode === 'pad' ? ARROWS[i] : String(i + 1), tx);
+        r.classList.add('qc-row'); r.dataset.slot = String(this.open * 4 + i);
+        return r;
+      });
+      kids.push(title(t(catName(this.groups[this.open]))), block(...rows));
+      if (this.mode === 'keys') kids.push(block(el('div', 'ov-small', t('Esc closes'))));
       this.closeTimer = window.setTimeout(() => this.close(), PICK_MS);
     }
     p.replaceChildren(...kids);

@@ -63,6 +63,10 @@ void     roam_plat_get_stats(roam_plat_stats *out);
  * what alone, as the room's "Nobody else"): the page shows it (web);
  * elsewhere a log line.  With the session lock held */
 void     roam_plat_notice(const char *name, const char *what);
+/* a hint the page words itself (id "ghost": Ghost mode is in its menu, as a
+ * car drives off the new career's start among other players).  1 shown
+ * (web), 0 not here (no such menu).  With the session lock held */
+int      roam_plat_hint(const char *id);
 /* the race lobby's panel over the game (roam_game.c mp_panel): its state as
  * a JSON object, "{}" for none, sent when it changes.  1: the page shows it
  * (web); 0: this platform has no panel, the game's top line says it.  With

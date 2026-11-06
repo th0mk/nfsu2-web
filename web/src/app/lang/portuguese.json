@@ -116,7 +116,6 @@
     "many": "{n} de voltas",
     "other": "{n} voltas"
   },
-  "you": "você",
   "A player": "Um jogador",
   "Open a lobby": "Abrir um lobby",
   "Join": "Entrar",
@@ -360,6 +359,7 @@
   "No commas, # or ; in a crew name.": "Sem vírgulas, # ou ; no nome de uma equipe.",
   "Up to 4 crews: leave one to join another.": "Até 4 equipes: saia de uma para entrar em outra.",
   "Ghost mode": "Modo fantasma",
+  "Turn on Ghost mode in the menu": "Ative o modo fantasma no menu",
   "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "Jogadores: você atravessa os carros dos outros jogadores. Tudo: no Modo Livre, também o trânsito e os tuners do jogo, mas não um tuner contra quem você está num racha.",
   "Online mode": "Modo Online",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "O menu Online do jogo pula o EA Login: lobby, chat e corridas com todos neste servidor.",

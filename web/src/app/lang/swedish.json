@@ -115,7 +115,6 @@
     "one": "{n} varv",
     "other": "{n} varv"
   },
-  "you": "du",
   "A player": "En spelare",
   "Open a lobby": "Öppna en lobby",
   "Join": "Gå med",
@@ -347,6 +346,7 @@
   "No commas, # or ; in a crew name.": "Inga kommatecken, # eller ; i ett crewnamn.",
   "Up to 4 crews: leave one to join another.": "Upp till 4 crews: lämna en för att gå med i en annan.",
   "Ghost mode": "Spökläge",
+  "Turn on Ghost mode in the menu": "Slå på spökläge i menyn",
   "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "Spelare: kör igenom andra spelares bilar. Allt: i Utforska även genom trafik och spelets tuners, men inte genom en tuner du kör outrun-race mot.",
   "Online mode": "Online-läge",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Spelets Online-meny hoppar över EA-inloggningen: lobby, chatt och race med alla på den här servern.",

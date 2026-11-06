@@ -117,7 +117,6 @@
     "many": "{n} okrążeń",
     "other": "{n} okrążenia"
   },
-  "you": "ty",
   "A player": "Gracz",
   "Open a lobby": "Otwórz poczekalnię",
   "Join": "Dołącz",
@@ -373,6 +372,7 @@
   "No commas, # or ; in a crew name.": "Bez przecinków, # i ; w nazwie ekipy.",
   "Up to 4 crews: leave one to join another.": "Maksymalnie 4 ekipy: opuść jedną, aby dołączyć do innej.",
   "Ghost mode": "Tryb ducha",
+  "Turn on Ghost mode in the menu": "Włącz tryb ducha w menu",
   "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "Gracze: przejeżdżasz przez samochody innych graczy. Wszystko: na przejażdżce także przez ruch uliczny i tunerów z gry, ale nie przez tunera, z którym ścigasz się w Outrunie.",
   "Online mode": "Tryb sieciowy",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Menu Sieć w grze pomija logowanie EA: poczekalnia, czat i wyścigi ze wszystkimi na tym serwerze.",

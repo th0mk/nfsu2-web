@@ -74,8 +74,9 @@
  *  - outruns: two players who stay near each other can challenge each other
  *    to the game's own outrun, raced against each other's car (du_frame),
  *    away from the doors and their open events.
- *  - keep right: a new player's car driving out of the new career's start
- *    gets a line at the top asking them to keep right (kr_frame).
+ *  - Ghost mode's hint: a new player's car driving out of the new career's
+ *    start among other players gets the page's hint where Ghost mode is
+ *    (gh_frame).
  *  - leaving free roam (shop, crib, race, menus) parks the cars; their
  *    rides are unloaded once the world is gone.  A peer that leaves, times
  *    out or goes into a shop or race disappears (soft-parked), and its slot
@@ -5353,37 +5354,27 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
     }
     db_panel(host);
 }
-/* ---- keep right: new players leaving the airport ------------------------------------------------ */
+/* ---- Ghost mode's hint: new players leaving the airport --------------------------------------- */
 /* Every new player's car appears at the new career's start, the airport's
  * car park, and drives out from there onto roads full of other players.  A
- * player whose car stood on that spot gets a line at the top as it drives
- * off, while friends are in free roam (du_hud: an outrun's or a race lobby's
- * line first): KR_SHOW_US of it, counted while it shows. */
-#define KR_TEXT         "Please keep right to help avoid crashes"
-#define KR_GO_M         15.f          /* the car is this far from the spot: it drives off */
-#define KR_SHOW_US      15000000
-static struct { int armed; int64_t left, at; } g_kr;   /* at: when it showed last (0: not last frame) */
-static void kr_frame(void){
+ * player whose car stood on that spot gets a hint as it drives off, while
+ * friends are in free roam and its Ghost mode is off: the page's menu has
+ * Ghost mode (roam_plat_hint "ghost"; a platform without that menu: none) */
+#define GH_GO_M         15.f          /* the car is this far from the spot: it drives off */
+static int g_gh_armed;
+static void gh_frame(void){
     if (!g_lp_ok) return;
     float dx = g_lp[0] - SPAWN_X, dy = g_lp[1] - SPAWN_Y, dz = g_lp[2] - SPAWN_Z, d2 = dx * dx + dy * dy + dz * dz;
     float v = rc_sqrtf(g_lv[0] * g_lv[0] + g_lv[1] * g_lv[1] + g_lv[2] * g_lv[2]);
-    if (d2 < (float)(SPAWN_M * SPAWN_M) && v < IDLE_MPS) g_kr.armed = 1;
-    else if (g_kr.armed && d2 > KR_GO_M * KR_GO_M){
-        g_kr.armed = 0;
-        int about = 0;
+    if (d2 < (float)(SPAWN_M * SPAWN_M) && v < IDLE_MPS) g_gh_armed = 1;
+    else if (g_gh_armed && d2 > GH_GO_M * GH_GO_M){
+        g_gh_armed = 0;
+        int about = 0, shown = 0;
         for (int i = 0; i < g_npv; i++) if (g_pv[i].visible) about++;
-        if (about){ g_kr.left = KR_SHOW_US; g_kr.at = 0; }
-        rlog("[roam] f=%ld keep right: the car drives off the new career's start, %d friend(s) in free roam%s\n", rh_frame(), about,
-             about ? ": the line shows" : ": no line");
+        if (about && O.collide){ roam_plat_lock(); shown = roam_plat_hint("ghost"); roam_plat_unlock(); }
+        rlog("[roam] f=%ld ghost hint: the car drives off the new career's start, %d friend(s) in free roam%s\n", rh_frame(), about,
+             !about ? ": no hint" : !O.collide ? ": Ghost mode is on already" : shown ? ": the page shows it" : ": no menu to point at");
     }
-}
-/* the line this frame, while some of its time is left; last: when it showed last frame (0: it did not) */
-static int kr_line(int64_t host, int64_t last){
-    if (g_kr.left <= 0) return 0;
-    int64_t dt = last ? host - last : 0;
-    g_kr.left -= dt < 0 ? 0 : dt > 100000 ? 100000 : dt;
-    g_kr.at = host;
-    return 1;
 }
 
 /* the line of text, top centre, after the HUD's update (roam_game_hud) */
@@ -5394,8 +5385,6 @@ static int64_t g_mp_hud_at;                   /* free roam's HUD was up, no dial
 static void du_hud(CPU *c, int64_t host){
     uint32_t pl = rd32(G_PLAYER1), hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0;
     uint32_t pkg = hud && ok(hud, 0x14) ? rd32(hud + 0x10u) : 0;
-    int64_t kr_last = g_kr.at;
-    g_kr.at = 0;
     if (!hud || hud != g_tag.hud || !ok(pkg, 0x20) || !g_gmem) return;
     char tx[TAG_DUEL_MAX] = {0};
 #if MPRACES
@@ -5416,7 +5405,6 @@ static void du_hud(CPU *c, int64_t host){
         else if (g_du.st == DU_ACCEPTED) snprintf(tx, sizeof tx, g_du.drift ? "Drift battle with %s" : "Outrun with %s", g_du.name);
         else if (g_du.drift && (g_du.st == DU_RACE || g_du.st == DU_OVER)) db_line(host, tx, sizeof tx);
         if (!tx[0] && g_du.note[0] && host < g_du.note_until && g_du.st != DU_RACE && g_du.st != DU_OVER) snprintf(tx, sizeof tx, "%s", g_du.note);
-        if (!tx[0] && g_du.st == DU_IDLE && !rd32(0x00838974u /* a dialog up */) && kr_line(host, kr_last)) snprintf(tx, sizeof tx, "%s", KR_TEXT);
     }
     if (!tx[0]){ tag_hide(c, TAG_DUEL); return; }
     uint32_t obj = tag_obj(c, TAG_DUEL, pkg);
@@ -9564,7 +9552,7 @@ void roam_game_frame(CPU *c){
 #endif
         em_update(c, em_why, host);
         soft_me(c, host, st);
-        if (DUELS) kr_frame();
+        if (DUELS) gh_frame();
 #if MPRACES
         spots_read(c, host);
 #endif

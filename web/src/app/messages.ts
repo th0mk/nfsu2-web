@@ -17,6 +17,7 @@ import { gameHas, KEY_MESSAGE } from './gamekeys';
 import { t } from './i18n';
 import { siteKey } from './sitekeys';
 import { touchFirst } from './device';
+import { act, block, el } from './cards';
 
 /** an envelope: what marks a line in the log as a friend's message (quick chat's have a speech balloon) */
 export const MSG_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.8 4l6.2 5 6.2-5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
@@ -179,7 +180,7 @@ export class FriendMessages {
 
   constructor(stage: HTMLElement, private store: MessageStore, private deps: FriendMessagesDeps) {
     const c = this.card = document.createElement('div');
-    c.className = 'qc-picker msg-card'; c.hidden = true; c.tabIndex = -1; c.dataset.nfsu2Ui = '';
+    c.className = 'ov-card qc-picker msg-card'; c.hidden = true; c.tabIndex = -1; c.dataset.nfsu2Ui = '';
     c.addEventListener('click', e => {
       const row = (e.target as HTMLElement).closest<HTMLElement>('[data-friend]');
       if (row) this.write(row.dataset.friend!);
@@ -354,36 +355,37 @@ export class FriendMessages {
     this.close();
   }
 
+  /** the card (cards.ts, quick chat's picker's place): picking, its title, the friends (a key cap, the name, where
+   *  each plays; on a touch screen rows to tap), "Esc closes"; writing, its title, the message answered and the field,
+   *  then what the keys do and the characters left (on a touch screen Send) */
   private draw() {
     const c = this.card;
     this.deps.placeNow();
     c.dataset.mode = this.touch ? 'touch' : 'keys';
-    const el = (tag: string, cls: string, text?: string) => {
-      const e = document.createElement(tag); e.className = cls; if (text !== undefined) e.textContent = text; return e;
-    };
     const kids: HTMLElement[] = [];
     if (this.mode === 'pick') {
-      kids.push(el('div', 'qc-title', t('Message a friend')));
+      kids.push(block(el('div', 'ov-title', t('Message a friend'))));
       const list = this.sorted();
-      for (const [i, f] of list.entries()) {
-        const row = el(this.touch ? 'button' : 'div', 'qc-row msg-friend');
-        if (row instanceof HTMLButtonElement) row.type = 'button';
-        row.dataset.friend = f.name;
-        if (!this.touch) row.append(el('kbd', '', String(i + 1)));
+      const rows = list.map((f, i) => {
         const where = f.at === 'roam' ? t('free roam') : f.at === 'online' ? t('Online lobby') : t('offline');
-        row.append(el('span', 'qc-text', f.name), el('span', 'msg-where' + (f.at ? ' ok' : ''), where));
-        kids.push(row);
-      }
-      if (!list.length) kids.push(el('div', 'qc-wait', this.listed ? t('Touch front bumpers in free roam for 3 s to add a player.') : t('Wait a moment')));
-      if (!this.touch) kids.push(el('div', 'qc-foot', t('Esc closes')));
+        const name = el('span', '', f.name), at = el('span', 'msg-where' + (f.at ? ' ok' : ''), where);
+        let row: HTMLElement;
+        if (this.touch) { row = el('button', 'msg-friend'); (row as HTMLButtonElement).type = 'button'; row.append(name, at); }
+        else { row = act(String(i + 1), name); row.classList.add('msg-friend'); row.append(at); }
+        row.dataset.friend = f.name;
+        return row;
+      });
+      kids.push(rows.length ? block(...rows)
+        : block(el('div', 'ov-dim', this.listed ? t('Touch front bumpers in free roam for 3 s to add a player.') : t('Wait a moment'))));
+      if (!this.touch) kids.push(block(el('div', 'ov-small', t('Esc closes'))));
     } else if (this.mode === 'write') {
-      kids.push(el('div', 'qc-title', t('Message {name}', { name: this.to })));
+      kids.push(block(el('div', 'ov-title', t('Message {name}', { name: this.to }))));
       // what is answered: the friend's message, when it is the conversation's newest
-      const last = this.store.messages(this.to).at(-1);
+      const body: HTMLElement[] = [], last = this.store.messages(this.to).at(-1);
       if (last?.dir === 'in') {
         const q = el('div', 'msg-quote'), b = el('b', '', this.to);
         q.append(b, document.createTextNode(` ${last.body}`));
-        kids.push(q);
+        body.push(q);
       }
       const input = document.createElement('input');
       input.type = 'text'; input.className = 'msg-input'; input.maxLength = MSG_MAX; input.autocomplete = 'off';
@@ -391,10 +393,11 @@ export class FriendMessages {
       input.setAttribute('aria-label', t('Message {name}', { name: this.to }));
       const left = el('span', 'msg-left', String(MSG_MAX));
       input.addEventListener('input', () => { left.textContent = String(MSG_MAX - input.value.length); });
-      kids.push(input);
-      const foot = el('div', 'qc-foot msg-foot');
+      body.push(input);
+      kids.push(block(...body));
+      const foot = el('div', 'ov-small msg-foot');
       if (this.touch) {
-        const send = el('button', 'qc-say msg-send', t('Send')) as HTMLButtonElement;
+        const send = el('button', 'qc-say msg-send', t('Send'));
         send.type = 'button';
         send.addEventListener('pointerdown', e => e.preventDefault());    // the field keeps the focus (and the keyboard)
         send.addEventListener('click', () => this.sendNow());
@@ -402,7 +405,7 @@ export class FriendMessages {
       } else {
         foot.append(el('span', '', t('Enter sends · Esc closes')), left);
       }
-      kids.push(foot);
+      kids.push(block(foot));
     }
     c.replaceChildren(...kids);
     c.hidden = !this.mode;

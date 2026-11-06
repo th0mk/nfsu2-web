@@ -9,6 +9,7 @@ import { drivingPad, PAD_DRIVER_EVENT } from '../input/gamepad';
 import { gameHas, KEY_LOBBY, KEY_LOBBY_INVITE, KEY_LOBBY_NEW, KEY_LOBBY_PRIVATE } from './gamekeys';
 import { keyName, siteKey, type OurId } from './sitekeys';
 import { pageDialog } from './padnav';
+import { act, block, el } from './cards';
 import { LB_LEAVE, LB_NEW, LB_NEXT, LB_PRIVATE } from '../input/proto';
 import type { GameSession } from './game';
 
@@ -143,15 +144,7 @@ function speedometer(vs: number): SVGSVGElement {
 /** quick chat: a phrase stays beside its player's name this long (ms) */
 const SAID_MS = 6000;
 
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
 
-/** a block of the card (a line above all but the first) */
-const block = (...kids: HTMLElement[]) => { const b = el('div', 'lobby-block'); b.append(...kids); return b; };
 
 /** the card's keys: the player's for each (sitekeys.ts), and the status bit that says the game has one of its controls
  *  on it (then the key is the game's: gamekeys.ts) */
@@ -256,16 +249,16 @@ export class LobbyPanel {
   }
 
   /** the race and how full it is; where it is (its stage, track, laps), a win's worth in our career */
-  private head(s: LobbyState) {
+  private head(s: LobbyState, trip = false) {
     const top = el('div', 'lobby-top');
-    top.append(el('span', 'lobby-race', game(s.kind ?? 'race')));
-    if (s.names?.length) top.append(el('span', 'lobby-count', t('Lobby {n}/{max}', { n: s.names.length, max: s.max ?? 6 })));
+    top.append(el('span', 'lobby-race ov-title', game(s.kind ?? 'race')));
+    if (s.names?.length && !trip) top.append(el('span', 'lobby-count', t('Lobby {n}/{max}', { n: s.names.length, max: s.max ?? 6 })));
     const where = [s.stage ? t('Stage {n}', { n: s.stage }) : '', this.heats(s), s.track, s.laps ? tn(s.laps, '{n} lap', '{n} laps') : ''].filter(Boolean).join(' · ');
     const out = [top];
-    if (where) out.push(el('div', 'lobby-small', where));
+    if (where) out.push(el('div', 'ov-small', where));
     if (s.counts) {
       // (and a friend's or crew-mate's win, with such players in it: theirs counts for us too)
-      const fr = (s.fr ?? []).some(Boolean), cr = (s.cr ?? []).some(Boolean), d = el('div', 'lobby-small');
+      const fr = (s.fr ?? []).some(Boolean), cr = (s.cr ?? []).some(Boolean), d = el('div', 'ov-small');
       d.append(el('span', 'lobby-star', '★ '), fr && cr ? t('A win counts in your career, and so does a friend\'s or crew-mate\'s')
         : fr ? t('A win counts in your career, and so does a friend\'s') : cr ? t('A win counts in your career, and so does a crew-mate\'s')
         : t('A win counts in your career'));
@@ -288,7 +281,6 @@ export class LobbyPanel {
     (s.stand ?? []).forEach((r, i) => {
       const li = el('li', r.me ? 'taken mine' : 'taken');
       li.append(el('span', 'lobby-n', String(i + 1)), el('span', 'lobby-name', r.n));
-      if (r.me) li.append(el('span', 'lobby-tag', t('you')));
       li.append(el('span', 'lobby-time', tn(r.p, '{n} point', '{n} points')));
       ol.append(li);
     });
@@ -298,20 +290,20 @@ export class LobbyPanel {
 
   /** the lobby's places: its players, the host first and marked, ★ where a win counts in that player's career, our
    *  friends and crew-mates in lime, ours bold (as over the cars in free roam); then the open ones */
-  private players(s: LobbyState) {
+  private players(s: LobbyState, open = true) {
     const ul = el('ul', s.st === 'asked' ? 'lobby-players dim' : 'lobby-players'), now = performance.now();
-    const names = s.names ?? [], open = Math.max(2, Math.min(6, s.max ?? 6)) - names.length;
+    const names = s.names ?? [], free = open ? Math.max(2, Math.min(6, s.max ?? 6)) - names.length : 0;
     for (const [k, w] of this.said) if (w.until <= now) this.said.delete(k);
     names.forEach((name, i) => {
       const li = el('li', i === s.me ? 'me' : s.fr?.[i] || s.cr?.[i] ? 'mate' : '');
       li.append(el('span', 'lobby-pname', name));
       const w = this.said.get(name);
       if (w) li.append(el('span', 'lobby-said', w.text));
-      if (i === 0) li.append(el('span', 'lobby-small', t('host')));
+      if (i === 0) li.append(el('span', 'ov-small', t('host')));
       if (s.c?.[i]) li.append(el('span', 'lobby-star', '★'));
       ul.append(li);
     });
-    for (let i = 0; i < open; i++) ul.append(el('li', 'open', t('open')));
+    for (let i = 0; i < free; i++) ul.append(el('li', 'open', t('open')));
     return ul;
   }
 
@@ -323,17 +315,6 @@ export class LobbyPanel {
     return [d];
   }
 
-  /** a key and what it does; with f a button too (a click or a tap does it: the card's own, not the game's Enter) */
-  private act(key: string | null, what: string, f?: () => void) {
-    const d = el('div', f ? 'lobby-act tap' : 'lobby-act');
-    if (key) d.append(el('kbd', '', key));
-    d.append(el('span', '', what));
-    if (f) {
-      d.onpointerdown = e => e.preventDefault();   // the canvas keeps the focus (and with it the keyboard)
-      d.onclick = () => f();
-    }
-    return d;
-  }
   /** a card key's cap now: the keyboard's (none on a touch screen: a tap, or where the game has the key), or with a
    *  controller driving its D-pad direction held (arrow: runtime dinput_pad.c lobby_pad), none where it has none */
   private cap(which: keyof typeof KEYS, arrow?: string): string | null {
@@ -346,7 +327,7 @@ export class LobbyPanel {
   private enter() { return drivingPad() && !touchFirst() ? '↑' : 'Enter'; }
   /** one of the card's own actions, with its key (on a touch screen none: a tap) */
   private own(which: keyof typeof KEYS, what: string, f: () => void, arrow?: string) {
-    return this.act(this.cap(which, arrow), what, f);
+    return act(this.cap(which, arrow), what, f);
   }
   /** where E goes at a start of several lobbies (this one pg of nl): the next one by its number */
   private nextPage(s: LobbyState) {
@@ -363,18 +344,18 @@ export class LobbyPanel {
     if (s.v === 'note') { p.replaceChildren(block(el('div', '', noteText(s.text ?? '')))); return; }
     const settings: HTMLElement[] = [], go: HTMLElement[] = [];
     const line = (cls: string, text: string) => go.push(el('div', cls, text));
-    if (s.v === 'spot') go.push(this.act(this.enter(), t('Open a lobby')));
-    else if (s.v === 'join') go.push(this.act(this.enter(), t('Join')));
+    if (s.v === 'spot') go.push(act(this.enter(), t('Open a lobby')));
+    else if (s.v === 'join') go.push(act(this.enter(), t('Join')));
     else if (s.v === 'lobby') {
       const mine = s.me === 0;
       // (every game of the lobby, the host's too, 2 s from the host's Enter: no numbers to count)
-      if (s.st === 'count') line('lobby-go', t('Starting the race') + '…');
-      else if (s.st === 'asked') line('lobby-dim', t('Joining {host}\'s {kind}…', { host, kind: game(s.kind ?? 'race') }));
+      if (s.st === 'count') line('ov-go', t('Starting the race') + '…');
+      else if (s.st === 'asked') line('ov-dim', t('Joining {host}\'s {kind}…', { host, kind: game(s.kind ?? 'race') }));
       else {
-        if (s.away) line('lobby-warn', mine ? t('You seem away: the lobby closes in {n} s unless you press a key', { n: s.away })
+        if (s.away) line('ov-warn', mine ? t('You seem away: the lobby closes in {n} s unless you press a key', { n: s.away })
           : t('{host} seems away: the lobby closes in {n} s', { host, n: s.away }));
-        if (mine && names.length >= 2) go.push(this.act(this.enter(), t('Start the race')));
-        else if (!s.away) line('lobby-dim', !mine ? t('Waiting for {host} to start', { host })
+        if (mine && names.length >= 2) go.push(act(this.enter(), t('Start the race')));
+        else if (!s.away) line('ov-dim', !mine ? t('Waiting for {host} to start', { host })
           : s.closes !== undefined ? t('Closes in {n} s if nobody joins', { n: s.closes }) : t('Waiting for players'));
       }
       // the host's settings: who can join (V goes round its choices), invite friends; joined from afar: leave
@@ -389,7 +370,7 @@ export class LobbyPanel {
     if (o.fresh) go.push(this.own('fresh', t('New lobby'), o.fresh, '←'));
     if (o.next) go.push(this.own('next', this.nextPage(s), o.next, '→'));
     // (how to leave: drive away, but from a lobby joined from afar)
-    if (s.v === 'lobby' && s.st !== 'count' && s.st !== 'asked') go.push(el('div', 'lobby-small', s.me === 0 ? t('Drive away to call it off')
+    if (s.v === 'lobby' && s.st !== 'count' && s.st !== 'asked') go.push(el('div', 'ov-small', s.me === 0 ? t('Drive away to call it off')
       : s.far ? t('You joined from afar: the race leaves from where you are') : t('Drive away to leave')));
     const blocks = [block(...this.head(s))];
     if (s.v !== 'spot') blocks.push(block(this.players(s), ...this.gauge(s)));
@@ -410,7 +391,6 @@ export class LobbyPanel {
     for (const r of s.res ?? []) {
       const li = el('li', r.me ? 'taken mine' : 'taken');
       li.append(el('span', 'lobby-n', r.f ? String(++place) : '–'), el('span', 'lobby-name', r.n));
-      if (r.me) li.append(el('span', 'lobby-tag', t('you')));
       const what = !r.f ? t('DNF') : r.p !== undefined ? tn(r.p, '{n} point', '{n} points') : r.t !== undefined ? raceTime(r.t) : '';
       if (what) li.append(el('span', 'lobby-time', what));
       if (r.me && s.credit && s.credited !== -1) li.append(el('span', 'lobby-prize', `★ ${s.credit === 2 ? t('Friend\'s win') : t('Career win')}`));
@@ -423,7 +403,8 @@ export class LobbyPanel {
 
   private drawCover(s: LobbyState) {
     const card = el('div', 'lobby-card');
-    card.append(block(...this.head(s)), block(s.res?.length ? this.results(s) : this.players(s)));
+    // (on the way: the race and its players, no places open; back: its results)
+    card.append(block(...this.head(s, true)), block(s.res?.length ? this.results(s) : this.players(s, false)));
     if (s.stand?.length && !s.fin) card.append(block(this.standings(s)));
     const step = el('div', 'lobby-step');
     step.append(el('span', 'lobby-spin'), el('span', '', `${s.step ? game(s.step) : t('Loading')}…`));

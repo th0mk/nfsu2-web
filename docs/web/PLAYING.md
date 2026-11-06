@@ -578,9 +578,9 @@ Good to know:
   the stage's other events): within 20 m of it you drive through every car, and every car through yours, so nobody
   blocks it; for players who don't have that event it is an ordinary spot. A player on an older version doesn't know
   about your events or your Ghost mode setting, and collides with you there as before.
-- **Keep right:** a new career starts in the airport's car park, and every new player drives out of it into the
-  others. As your car leaves that spot, the top of the screen says "Please keep right to help avoid crashes" for 15 s
-  (while other players are in free roam).
+- **Ghost mode hint:** a new career starts in the airport's car park, and every new player drives out of it into the
+  others. As your car leaves that spot with Ghost mode off (while other players are in free roam), a note at the top
+  says to turn on Ghost mode in the menu (F9; ☰ on a touch screen, Home on a controller), for 15 s.
 - **Names over the cars** follow the game's own player-names option, as in its LAN races: Show Player Names in the
   game's Options, Gameplay (also the pause menu's) turns them off. A player who paused shows as "paused" there.
 - **Horn:** hold N to honk, or click the controller's left stick (on a car with hydraulics that click works the
@@ -818,7 +818,7 @@ Good to know:
   joins, but other players never learn your crews: the server tells each game which players near it share one. A
   player on an older version is in no crew.
 - **Friends:** touch front bumpers with another player (nose to nose, both cars' fronts) for 3 seconds, solid or in
-  ghost mode, and a line above the outrun one offers **Add Bo as a friend**: press **F**, click or tap the
+  ghost mode, and a note at the top, with a lime border, offers **Add Bo as a friend**: press **F**, click or tap the
   line, or use the page menu (F9, ☰, or Home on a controller). The other player's line then says **Al wants to be
   friends: accept**; once both said yes you are friends. Touching the side or the back of a car offers nothing, nor
   does a race, an outrun or a race lobby. Both of you need a claimed name ("Your name": a claim needs cloud saves);

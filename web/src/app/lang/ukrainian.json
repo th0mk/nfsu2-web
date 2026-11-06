@@ -117,7 +117,6 @@
     "many": "{n} кіл",
     "other": "{n} кола"
   },
-  "you": "ви",
   "A player": "Гравець",
   "Open a lobby": "Відкрити лобі",
   "Join": "Приєднатися",
@@ -366,6 +365,7 @@
   "No commas, # or ; in a crew name.": "Назва команди не може містити ком, # і ;.",
   "Up to 4 crews: leave one to join another.": "Не більше 4 команд: покиньте одну, щоб приєднатися до іншої.",
   "Ghost mode": "Режим привида",
+  "Turn on Ghost mode in the menu": "Увімкніть режим привида в меню",
   "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "Гравці: ви проїжджаєте крізь машини інших гравців. Усе: у вільній їзді також крізь трафік і тюнерів гри, але не крізь тюнера, з яким ви в дуелі.",
   "Online mode": "Гра через Інтернет",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Пункт «Гра через Інтернет» у грі пропускає вхід у систему EA: лобі, чат і гонки з усіма на цьому сервері.",

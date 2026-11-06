@@ -291,6 +291,12 @@ static void notice(const char *name, const char *what){
     if (MB && n > 0) tx_push(NET_KIND_NOTICE, 0, 0, (const uint8_t *)t, n);
 }
 void roam_plat_notice(const char *name, const char *what){ notice(name, what); }
+/* a hint by its id, the page's words for it: a NET_KIND_NOTICE line starting with 0x1E */
+int roam_plat_hint(const char *id){
+    char t[32];
+    int n = snprintf(t, sizeof t, "\x1e%s", id);
+    return MB && n > 1 && n < (int)sizeof t && tx_push(NET_KIND_NOTICE, 0, 0, (const uint8_t *)t, n) ? 1 : 0;
+}
 /* the race lobby's panel: its state to the page (NET_KIND_LOBBY), in a race too; -1: the ring is full, again later */
 int roam_plat_lobby(const char *json){
     int n = (int)strlen(json);

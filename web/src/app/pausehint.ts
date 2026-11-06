@@ -89,5 +89,6 @@ export class PauseHint {
     st.left = `${v.x + v.w / 2}px`;
     st.top = `${v.y + v.h / 2 + TOP_U * u}px`;
     st.maxWidth = `${WIDE_U * u}px`;
+    st.setProperty('--u', `${u}px`);   // (the cards' size, .ov-card)
   }
 }

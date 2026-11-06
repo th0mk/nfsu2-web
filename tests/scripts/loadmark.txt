@@ -1,0 +1,8 @@
+# The site's address on a loading screen (runtime/intro.c loading_tell, web/src/app/titlemark.ts corner): into free
+# roam the game's PC_Loading is up, and the game says so ("loading" 1; its log: "[intro] a loading screen").
+#   node web/tools/roam-pair.mjs --solo --seed <save tree> --a Ann:loadmark.txt
+0     bot on
++0    waitroam 6000
++0    bot off
++60   log LOAD DONE
++10   quit

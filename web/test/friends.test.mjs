@@ -41,13 +41,14 @@ test.after(() => browser.close());
 /** a blank page with the module, a stage and the Friends box, and a FriendPrompt with deps that record what it does */
 async function page() {
   const p = await browser.newPage();
-  await p.setContent('<div id="stage" style="position:relative;width:640px;height:480px"></div><div id="friends" hidden></div><input id="field">');
+  await p.setContent('<div id="stage" style="position:relative;width:640px;height:480px"><div class="toasts"></div></div><div id="friends" hidden></div><input id="field">');
   await p.addScriptTag({ content: js });
   await p.evaluate(() => {
     const w = /** @type {any} */ (window);
-    w.sent = []; w.toasts = []; w.notices = []; w.placed = 0; w.room = ''; w.hosted = null; w.joined = [];
+    w.sent = []; w.toasts = []; w.notices = []; w.placed = 0; w.columned = 0; w.room = ''; w.hosted = null; w.joined = [];
     w.prompt = new w.F.FriendPrompt(document.getElementById('stage'), {
-      send: m => { w.sent.push(m); return true; }, room: () => w.room, toast: s => w.toasts.push(s), log: () => {},
+      send: m => { w.sent.push(m); return true; }, room: () => w.room, log: () => {}, place: () => { w.columned++; },
+      toast: (s, o) => w.toasts.push(o?.hot ? `[hot] ${s}` : s),
       notice: (name, text) => w.notices.push([name, text]), menu: () => 'the menu (F9)', placed: () => { w.placed++; },
       hosted: () => w.hosted, joinLobby: (host, lobby, race) => { w.joined.push([host, lobby, race]); return true; },
     });
@@ -55,7 +56,7 @@ async function page() {
   });
   return p;
 }
-const line = p => p.evaluate(() => { const b = document.querySelector('.friend-prompt'); return b.hidden ? null : { text: b.textContent, offer: b.classList.contains('offer') }; });
+const line = p => p.evaluate(() => { const b = document.querySelector('.friend-prompt:not(.invite)'); return b.hidden ? null : { text: b.textContent, offer: b.classList.contains('offer') }; });
 const sent = p => p.evaluate(() => /** @type {any} */ (window).sent.splice(0));
 const toasts = p => p.evaluate(() => /** @type {any} */ (window).toasts.splice(0));
 const bump = (p, name, on) => p.evaluate(([n, o]) => /** @type {any} */ (window).prompt.bump(JSON.stringify({ id: 7, name: n, on: o })), [name, on]);
@@ -106,9 +107,12 @@ test('the other player asked first: accept on the line, by a click', async () =>
   await bump(p, 'Cy Two', 1);
   await server(p, { op: 'can', name: 'Cy_Two', st: 'asks' });
   assert.deepEqual(await line(p), { text: 'FCy_Two wants to be friends: accept', offer: true });
+  assert.deepEqual(await p.evaluate(() => [[...document.querySelector('.toasts').children].map(e => e.className),
+    document.querySelector('.friend-prompt b')?.textContent, /** @type {any} */ (window).columned > 0]),
+  [['friend-prompt offer invite', 'friend-prompt offer'], 'Cy_Two', true], 'in the column of notes at the top, the invite\'s first; the name bold');
   assert.equal(await p.evaluate(() => /** @type {any} */ (window).prompt.menuItem()?.label), 'Accept Cy_Two as a friend');
   await sent(p);
-  await p.click('.friend-prompt');
+  await p.click('.friend-prompt:not(.invite)');
   assert.deepEqual(await sent(p), [{ op: 'add', name: 'Cy_Two' }], 'a click on the line');
   await server(p, { op: 'add', name: 'Cy_Two', done: 'friends' });
   assert.deepEqual(await toasts(p), [], 'the line says it');
@@ -121,7 +125,7 @@ test('the other player asked first: accept on the line, by a click', async () =>
   assert.deepEqual((await sent(p)).slice(-1), [{ op: 'add', name: 'Dee' }], 'their request while the cars touch: the menu accepts');
   // a request while the cars do not touch: answered on the start page
   await server(p, { op: 'asks', name: 'Eve' });
-  assert.deepEqual(await toasts(p), ['Eve wants to be friends: answer under Friends on the start page']);
+  assert.deepEqual(await toasts(p), ['[hot] Eve wants to be friends: answer under Friends on the start page'], 'a request: the border');
   await p.close();
 });
 
@@ -137,7 +141,7 @@ test('one of the game\'s controls on F (the game\'s status "keys"): F is the gam
   await sent(p);
   await p.keyboard.press('KeyF');
   assert.deepEqual(await sent(p), [], 'F is the game\'s');
-  await p.click('.friend-prompt');
+  await p.click('.friend-prompt:not(.invite)');
   assert.deepEqual(await sent(p), [{ op: 'add', name: 'Bo_' }], 'a click on the line still asks');
   await p.close();
 });

@@ -315,10 +315,27 @@ static uint32_t title_copyright(CPU *c, uint32_t *pk){
     return ok(o, 0x70) && MR32(o + 0x18u) == 2u && ok(MR32(o + 0x2cu), 0x40) ? o : 0;   /* 2: a string */
 }
 
+#ifdef __wasm__
+/* a loading screen up (PC_Loading: into a race, into free roam or out of it; HUD_World_Loading: free roam's world
+ * catching up): the page draws the site's address in the picture's bottom right corner (titlemark.ts), status
+ * "loading" 1 */
+static void loading_tell(void){
+    static int slot = -2;
+    static double last = -1;
+    const char *top = autotest_top_fng();
+    double v = top && (!strcasecmp(top, "PC_Loading.fng") || !strcasecmp(top, "HUD_World_Loading.fng"));
+    if (slot == -2) slot = host_status_slot("loading");
+    if (slot < 0 || v == last) return;
+    if (v > 0 && last < 0.5){ static int said; if (!said++) fprintf(stderr, "[intro] a loading screen (%s): the page draws the site's address in its corner\n", top); }
+    last = v;
+    host_status_set_n(&slot, &v, 1);
+}
+#endif
 void intro_frame(CPU *c){
     uint32_t pk = 0, o = title_copyright(c, &pk), a;
 #ifdef __wasm__
     title_tell(o);                               /* the page draws the line: no copy */
+    loading_tell();
     return;
 #endif
     if (!o) return;
