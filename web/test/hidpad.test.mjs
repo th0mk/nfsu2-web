@@ -171,3 +171,28 @@ test('an 8BitDo pad under Chrome on Android: Android\'s places as they come, not
   assert.ok(linux.logs.some(s => /read as an 8BitDo controller \(xbox buttons\)/.test(s)));
   assert.equal(linux.face[2], 0);                                  // its index 2 is a gap there
 });
+
+test('Xbox\'s Bluetooth controllers in Firefox on a Mac: their own layout, LT before RT (a Mac player\'s: the triggers did nothing)', () => {
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:153.0) Gecko/20100101 Firefox/153.0';
+  const WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0';
+  const ONE_S = '45e-b20-Xbox Wireless Controller';                  // Firefox's id on macOS (no leading zeros)
+  assert.deepEqual(D.knownPad(ONE_S, MAC), { face: 'xbox', maker: 'Xbox', ltFirst: true });
+  assert.equal(D.knownPad('45e-b22-Xbox Elite Wireless Controller Series 2', MAC)?.maker, 'Xbox');
+  assert.equal(D.knownPad(ONE_S, WIN), null);                        // Windows: no triggers in such a pad, read as before
+  assert.equal(D.knownPad(ONE_S, 'Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0'), null);
+  assert.equal(D.knownPad('45e-2e0-Xbox Wireless Controller', MAC), null);   // the older firmware: Firefox maps it
+  assert.equal(D.knownPad(ULTIMATE, WIN)?.maker, '8BitDo');
+  // the report's order: the sticks X Y and Z Rz, the Brake (LT) and the Accelerator (RT) let go at -1, the hat switch
+  const ff = [c, c, c, c, -1, -1, H], k = D.knownPad(ONE_S, MAC);
+  const r = new D.HidPadReader(k.face, ff, k.ltFirst, k.maker);
+  assert.deepEqual(r.read(ff, press(15)), { buttons: 0, axes: [c, c, c, c, 0, 0] });
+  assert.deepEqual(r.read([c, c, c, c, -1, 1, H], press(15)).axes.slice(4), [0, 1]);   // RT all the way: throttle
+  assert.deepEqual(r.read([c, c, c, c, 0, -1, H], press(15)).axes.slice(4), [0.5, 0]); // LT half way: brake
+  assert.equal(r.read(ff, press(15, 0)).buttons, bit(P.PAD_A));
+  assert.equal(r.read(ff, press(15, 3)).buttons, bit(P.PAD_X));
+  assert.equal(r.read(ff, press(15, 4)).buttons, bit(P.PAD_Y));
+  assert.equal(r.read(ff, press(15, 6, 7, 10, 11, 13, 14)).buttons, bit(P.PAD_LB, P.PAD_RB, P.PAD_BACK, P.PAD_START, P.PAD_LS, P.PAD_RS));
+  assert.match(r.describe(), /^an Xbox controller \(xbox buttons\), sticks on axes 0 1 and 2 3, triggers L2 4 R2 5/);
+  // where Chrome places them by usage (no mapping of its own): LT on 3, RT on 4, as Chromium's MapperXboxBluetooth
+  assert.deepEqual(D.placeHidAxes([c, c, c, -1, -1, c, 0, 0, 0, H], true), { lx: 0, ly: 1, rx: 2, ry: 5, lt: 3, rt: 4, hat: 9 });
+});
