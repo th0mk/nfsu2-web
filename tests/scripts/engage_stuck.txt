@@ -1,0 +1,13 @@
+# Engage at a marker after the career was left "engaging" (runtime/engage.c): Career +0x7138 set by hand in free
+# roam, as a stuck Engage leaves it (the prompt up at every marker, Enter doing nothing); within a few seconds the
+# log's "[engage] ... cleared" and the byte 0 again; then a shop's door engages (its dialog comes up).
+#   node web/tools/roam-pair.mjs --solo --page play --seed <a career save> --a Ex:engage_stuck.txt:NFSU2_ROAM=1,NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++120  poke 0x861e78 1 byte            # Career +0x7138: engaging
++600  expect b:0x861e78 == 0
++0    shopgo CC_GRAPHICS
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++60   log ENGAGE DONE
++10   quit
