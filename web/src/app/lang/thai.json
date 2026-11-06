@@ -1491,5 +1491,7 @@
   "{name} invites you to crew \"{crew}\"": "{name} เชิญคุณเข้าทีม \"{crew}\"",
   "Previous page": "หน้าก่อนหน้า",
   "Next page": "หน้าถัดไป",
-  "No friend has that name": "ไม่มีเพื่อนชื่อนี้"
+  "No friend has that name": "ไม่มีเพื่อนชื่อนี้",
+  "Built for this project": "พัฒนาขึ้นสำหรับโปรเจกต์นี้",
+  "Distance to your destination beneath the GPS arrow.": "ระยะทางถึงจุดหมายใต้ลูกศร GPS"
 }

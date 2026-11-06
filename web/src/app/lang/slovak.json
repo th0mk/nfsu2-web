@@ -1636,5 +1636,7 @@
   "{name} invites you to crew \"{crew}\"": "{name} ťa pozýva do partie „{crew}“",
   "Previous page": "Predchádzajúca stránka",
   "Next page": "Ďalšia stránka",
-  "No friend has that name": "Žiadny priateľ s týmto menom"
+  "No friend has that name": "Žiadny priateľ s týmto menom",
+  "Built for this project": "Vytvorené pre tento projekt",
+  "Distance to your destination beneath the GPS arrow.": "Vzdialenosť do cieľa pod šípkou GPS."
 }

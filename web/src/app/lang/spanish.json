@@ -1607,5 +1607,7 @@
   "{name} invites you to crew \"{crew}\"": "{name} te invita al equipo «{crew}»",
   "Previous page": "Página anterior",
   "Next page": "Página siguiente",
-  "No friend has that name": "Ningún amigo tiene ese nombre"
+  "No friend has that name": "Ningún amigo tiene ese nombre",
+  "Built for this project": "Creado para este proyecto",
+  "Distance to your destination beneath the GPS arrow.": "Distancia a tu destino debajo de la flecha del GPS."
 }

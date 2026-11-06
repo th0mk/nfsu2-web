@@ -1503,5 +1503,7 @@
   "{name} invites you to crew \"{crew}\"": "{name} seni \"{crew}\" ekibine davet ediyor",
   "Previous page": "Önceki sayfa",
   "Next page": "Sonraki sayfa",
-  "No friend has that name": "Bu adda arkadaş yok"
+  "No friend has that name": "Bu adda arkadaş yok",
+  "Built for this project": "Bu proje için geliştirildi",
+  "Distance to your destination beneath the GPS arrow.": "GPS okunun altında hedefinize olan mesafe."
 }

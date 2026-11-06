@@ -1491,5 +1491,7 @@
   "{name} invites you to crew \"{crew}\"": "{name}からクルー「{crew}」への招待",
   "Previous page": "前のページ",
   "Next page": "次のページ",
-  "No friend has that name": "その名前のフレンドはいません"
+  "No friend has that name": "その名前のフレンドはいません",
+  "Built for this project": "このプロジェクト向けに開発",
+  "Distance to your destination beneath the GPS arrow.": "GPSの矢印の下に目的地までの距離を表示。"
 }

@@ -1518,5 +1518,7 @@
   "{name} invites you to crew \"{crew}\"": "Ο παίκτης {name} σε προσκαλεί στην ομάδα «{crew}»",
   "Previous page": "Προηγούμενη σελίδα",
   "Next page": "Επόμενη σελίδα",
-  "No friend has that name": "Κανένας φίλος με αυτό το όνομα"
+  "No friend has that name": "Κανένας φίλος με αυτό το όνομα",
+  "Built for this project": "Δημιουργήθηκε για αυτό το έργο",
+  "Distance to your destination beneath the GPS arrow.": "Απόσταση μέχρι τον προορισμό σας κάτω από το βέλος GPS."
 }

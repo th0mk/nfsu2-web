@@ -73,6 +73,7 @@ export const MOD_CONTROLS: Record<string, Control> = {
   ui_textures: { t: 'seg', opts: [['original', N('Original')], ['map', N('Map only')], ['uhud', N('Upscaled')]] },
   subtitles: { t: 'switch' },
   songs: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] },
+  gps_distance: { t: 'switch' },
   show_hidden_races: { t: 'switch' },
   visual_rep_remover: { t: 'switch' },
   ug2net_parts: { t: 'switch' },

@@ -1578,5 +1578,7 @@
   "{name} invites you to crew \"{crew}\"": "{name} bjuder in dig till crewen ”{crew}”",
   "Previous page": "Föregående sida",
   "Next page": "Nästa sida",
-  "No friend has that name": "Ingen vän heter så"
+  "No friend has that name": "Ingen vän heter så",
+  "Built for this project": "Utvecklat för det här projektet",
+  "Distance to your destination beneath the GPS arrow.": "Avstånd till din destination under GPS-pilen."
 }

@@ -1491,5 +1491,7 @@
   "{name} invites you to crew \"{crew}\"": "{name} 邀請你加入車隊「{crew}」",
   "Previous page": "上一頁",
   "Next page": "下一頁",
-  "No friend has that name": "沒有這個名字的好友"
+  "No friend has that name": "沒有這個名字的好友",
+  "Built for this project": "專為本專案開發",
+  "Distance to your destination beneath the GPS arrow.": "在 GPS 箭頭下方顯示到目的地的距離。"
 }
