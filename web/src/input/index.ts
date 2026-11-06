@@ -204,6 +204,17 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     (e.altKey ? IKF_ALT : 0) | (e.ctrlKey ? IKF_CTRL : 0) | (e.shiftKey ? IKF_SHIFT : 0) | (e.isTrusted ? 0 : IKF_SYNTH);
   const vkOf = (code: string, e: KeyboardEvent, vk: number) => keyVk(code, e, vk, layout);
   const charsOf = (code: string, e: KeyboardEvent) => keyChars(code, e, mac, layout);
+  /** the key's code; a modifier's from its key and side where the browser gave it no code of ours (a privacy mode
+   *  writes codes from a US table and blanks some: a player's Alt and Shift did nothing in Firefox, 2026-11-05) */
+  let codeless = false;
+  const codeOf = (e: KeyboardEvent): string => {
+    if (CODES[e.code]) return e.code;
+    const side = e.location === 2 ? 'Right' : 'Left';
+    const c = e.key === 'Shift' ? `Shift${side}` : e.key === 'Control' ? `Control${side}` : e.key === 'Alt' ? `Alt${side}`
+      : e.key === 'AltGraph' ? 'AltRight' : '';
+    if (c && !codeless) { codeless = true; log(`[input] a key with no code of ours (code "${e.code}", key ${e.key}, side ${e.location}): taken as ${c}`); }
+    return c || e.code;
+  };
   function onKeyDown(e: KeyboardEvent) {
     if (detached || ignored(e) || e.isComposing || e.keyCode === 229) return;
     if (isMeta(e.code) || e.key === 'Meta') {
@@ -215,12 +226,12 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
       if (mac && e.code === 'KeyF' && !e.repeat) { e.preventDefault(); if (opts.toggleFullscreen) opts.toggleFullscreen(); else void api.toggleFullscreen(); }
       return;
     }
-    const k = CODES[e.code];
+    const code = codeOf(e), k = CODES[code];
     if (!k) return;
-    if (!pass.has(e.code)) e.preventDefault();
-    if (mac && e.code === 'CapsLock') { push(IEV_KEY_TAP, k.dik, k.vk, flagsOf(e)); return; }
-    const { chars, dead, sys } = charsOf(e.code, e);
-    push(IEV_KEY_DOWN, k.dik, vkOf(e.code, e, k.vk), flagsOf(e) | (e.repeat ? IKF_REPEAT : 0) | (dead ? IKF_DEAD : 0), chars, 0, sys);
+    if (!pass.has(code)) e.preventDefault();
+    if (mac && code === 'CapsLock') { push(IEV_KEY_TAP, k.dik, k.vk, flagsOf(e)); return; }
+    const { chars, dead, sys } = charsOf(code, e);
+    push(IEV_KEY_DOWN, k.dik, vkOf(code, e, k.vk), flagsOf(e) | (e.repeat ? IKF_REPEAT : 0) | (dead ? IKF_DEAD : 0), chars, 0, sys);
   }
   function onKeyUp(e: KeyboardEvent) {
     // every release goes to the game, even one aimed at the page's own UI:
@@ -228,10 +239,10 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     // ignores releases of keys the game does not hold)
     if (detached) return;
     if (isMeta(e.code) || e.key === 'Meta') return;
-    const k = CODES[e.code];
+    const code = codeOf(e), k = CODES[code];
     if (!k) return;
-    if (!pass.has(e.code) && !ignored(e)) e.preventDefault();   // also keeps Alt from opening a menu bar
-    if (mac && e.code === 'CapsLock') { push(IEV_KEY_TAP, k.dik, k.vk, flagsOf(e)); return; }
+    if (!pass.has(code) && !ignored(e)) e.preventDefault();   // also keeps Alt from opening a menu bar
+    if (mac && code === 'CapsLock') { push(IEV_KEY_TAP, k.dik, k.vk, flagsOf(e)); return; }
     push(IEV_KEY_UP, k.dik, k.vk, flagsOf(e));
   }
 
