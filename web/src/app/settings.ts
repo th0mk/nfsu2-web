@@ -271,7 +271,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # greek.  French, German, Italian, Spanish, Japanese and Russian come with
 # their dubbed voices and movies where the server has the language packs;
 # Russian, Portuguese, Polish, Turkish, Hungarian, Ukrainian, Czech, Slovak
-# and Greek take their text from them too.
+# and Greek take their text from them too.  Not set: your browser's
+# language where it is one of these, else English.
 # [NFSU2_LANGUAGE]
 #language = english
 
