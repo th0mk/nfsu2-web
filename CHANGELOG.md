@@ -11,7 +11,7 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-06 (f646b2e)
+## 2026-11-06 (3c32f4b)
 
 - **Friends:** in the page menu (F9) in free roam: requests, your friends and Add a player by name. Requests from afar show at the top (F accepts).
 - **Crews:** invite a friend in free roam to one of your crews from Friends; they press Z to join. The Crews box says how to start one.
@@ -26,6 +26,11 @@ not guessed.
 - **Controllers:** Xbox Bluetooth triggers work in Firefox on a Mac.
 - **Phones:** PowerVR B-Series phones start in the window instead of full screen.
 - **Career:** no more error 134 after the car lot when the career car was missing.
+- **Races:** joining a race from free roam no longer loads for minutes and drops you back to the lobby.
+- **Photo mode:** Auto-turn starts off at every visit, and Reset stops it.
+- **iPhone:** two fingers turn the car in the garage again.
+- **Free roam:** Enter at a shop, race or cover shoot no longer stays dead until a reload.
+- **Keyboard:** Alt and Shift work in Firefox setups that sent them unusually.
 
 ## 2026-11-05 (0e56c9b)
 
