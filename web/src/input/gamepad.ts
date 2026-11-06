@@ -47,7 +47,7 @@ import {
   describeMap, findHat, guessMap, hatDirs, isPedals, loadMap, loadShifter, pedalSetOf, pedalsOf, readWheel, Shifter,
   shifterGear, usbIds, WHEEL_MAP_EVENT, wheelOf, withSetUp, type OtherAxes, type ShifterMode, type WheelInfo, type WheelMap,
 } from './wheel';
-import { eightBitDoFace, HidPadReader, knownPad } from './hidpad';
+import { HidPadReader, knownPad } from './hidpad';
 import { LocalPadWriter } from './local-pads';
 import { allPads, useSteamPads } from './steampad';
 export { allPads };
@@ -61,13 +61,13 @@ const BUTTON_OF: (number | -1)[] = [PAD_A, PAD_B, PAD_X, PAD_Y, PAD_LB, PAD_RB, 
 /** the controller family and a display name from Gamepad.id: Chrome writes
  *  "Name (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)", Firefox "054c-0ce6-Name"
  *  (on Linux and macOS without the leading zeros: "54c-ce6-Name").
- *  A wheel's family is its buttons' (a G29's are PlayStation's, a G920's Xbox's), an 8BitDo pad's its labels'; Valve
+ *  A wheel's family is its buttons' (a G29's are PlayStation's, a G920's Xbox's), a known pad's its labels'; Valve
  *  labels A, B, X and Y as Xbox does (its controllers, Steam's virtual pad). */
 export function familyOf(id: string): { family: number; name: string } {
   const v = usbIds(id)?.vendor;
   let name = id.replace(/\s*\((?:STANDARD GAMEPAD\s*)?(?:Vendor:[^)]*)?\)\s*$/i, '').replace(/^[0-9a-f]{1,4}-[0-9a-f]{1,4}-/i, '').trim();
   if (!name) name = 'Game Controller';
-  const s = id.toLowerCase(), w = wheelOf(id)?.layout, e = eightBitDoFace(id);
+  const s = id.toLowerCase(), w = wheelOf(id)?.layout, e = knownPad(id)?.face;
   if (w === 'ps' || w === 'xbox') return { family: w === 'ps' ? PADF_PLAYSTATION : PADF_XBOX, name };
   if (e) return { family: e === 'xbox' ? PADF_XBOX : PADF_NINTENDO, name };
   const family = v === '045e' || v === '28de' || /xbox|xinput/.test(s) ? PADF_XBOX

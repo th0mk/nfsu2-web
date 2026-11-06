@@ -55,28 +55,28 @@ const XBOX_BUTTONS = [PAD_A, PAD_B, -1, PAD_X, PAD_Y, -1, PAD_LB, PAD_RB, -1, -1
   PAD_LS, PAD_RS];
 const L2 = 8, R2 = 9;
 
-// other makers' HID pads with the same report, as vendor:product, and their face labels: the Zikway HID gamepad (a
-// GameSir-made pad; read on Linux: A, B, -, X, Y, -, LB, RB, LT, RT, Select, Start, -, LS, RS, the triggers on
-// ABS_GAS and ABS_BRAKE; read as the standard mapping its RB was the right trigger, the throttle)
-const SAME_AS_8BITDO: Record<string, Face> = { '3537:1041': 'xbox' };
-
-/** an 8BitDo controller's face buttons (its model's), or another with 8BitDo's layout, from Gamepad.id; null: neither */
+/** an 8BitDo controller's face buttons (its model's), from Gamepad.id; null: not 8BitDo's */
 export function eightBitDoFace(id: string): Face | null {
   const u = usbIds(id);
-  if (u?.vendor !== '2dc8') return SAME_AS_8BITDO[`${u?.vendor}:${u?.product}`] ?? null;
-  return XBOX_FACE.has(u.product) ? 'xbox' : 'nintendo';
+  return u?.vendor !== '2dc8' ? null : XBOX_FACE.has(u.product) ? 'xbox' : 'nintendo';
 }
+
+// other makers' HID pads with 8BitDo's report, as vendor:product: the Zikway HID gamepad (a GameSir-made pad; read on
+// Linux: A, B, -, X, Y, -, LB, RB, LT, RT, Select, Start, -, LS, RS, the triggers on ABS_GAS and ABS_BRAKE; read as
+// the standard mapping its RB was the right trigger, the throttle)
+const SAME_AS_8BITDO: Record<string, { face: Face; maker: 'Zikway' }> = { '3537:1041': { face: 'xbox', maker: 'Zikway' } };
 
 /** Xbox's Bluetooth controllers with the newer firmware, by product id */
 const XBOX_BT = new Set(['0b13', '0b20', '0b21', '0b22']);
 
 /** a controller whose layout this file knows, read so when the browser gives it no standard mapping: its face
  *  buttons, whose it is, and whether its report has LT before RT; null: none of them (or not on this system) */
-export interface KnownPad { face: Face; maker: '8BitDo' | 'Xbox'; ltFirst: boolean }
+export interface KnownPad { face: Face; maker: '8BitDo' | 'Xbox' | 'Zikway'; ltFirst: boolean }
 export function knownPad(id: string, ua = globalThis.navigator?.userAgent ?? ''): KnownPad | null {
   const e = eightBitDoFace(id);
   if (e) return { face: e, maker: '8BitDo', ltFirst: false };
-  const u = usbIds(id);
+  const u = usbIds(id), same = u && SAME_AS_8BITDO[`${u.vendor}:${u.product}`];
+  if (same) return { ...same, ltFirst: false };
   if (u?.vendor === '045e' && XBOX_BT.has(u.product) && /Macintosh/.test(ua)) return { face: 'xbox', maker: 'Xbox', ltFirst: true };
   return null;
 }
@@ -136,7 +136,7 @@ export class HidPadReader {
   /** a short line for the log: where its axes are */
   describe(): string {
     const a = this.at, ax = (i: number) => i >= 0 ? `${i}` : '-';
-    const who = `an ${this.maker} controller (${this.face} buttons)`;
+    const who = `${this.maker === 'Zikway' ? 'a' : 'an'} ${this.maker} controller (${this.face} buttons)`;
     if (!a) return `${who}, its axes not read yet`;
     return `${who}, sticks on axes ${a.lx} ${a.ly} and ${ax(a.rx)} ${ax(a.ry)}, ` +
       `triggers L2 ${ax(a.lt)} R2 ${ax(a.rt)} (or their buttons), D-pad ${a.dpad ? `axes ${a.dpad.join(' and ')}` :
