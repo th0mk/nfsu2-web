@@ -786,8 +786,11 @@ static uint32_t find_part(CPU *c, uint32_t type, uint32_t sl, uint32_t key, uint
  * the record looked up by its key in the CarPartDB (NewGetCarPart, owner
  * checked) and written; slots the record does not name are left empty, as
  * on the sender; a part this game does not have keeps the stock part.
+ * others: another player's car (the mods' parts maybe shown as the game's:
+ * runtime/modpacks.c modpacks_for_others).
  * Returns the number of parts not found, or -1. */
-static int build_ride(CPU *c, const rc_carcfg *cc, uint32_t ride, uint32_t skin, char *why, int whylen){
+uint32_t modpacks_for_others(uint32_t key);          /* modpacks.c: a mod part's stand-in (others_mod_parts = original) */
+static int build_ride(CPU *c, const rc_carcfg *cc, uint32_t ride, uint32_t skin, char *why, int whylen, int others){
     uint32_t types = rd32(G_CARTYPES);
     uint32_t ti = gcall1(c, FN_TYPE_BY_HASH, 0, cc->type_hash);
     uint32_t type;
@@ -832,9 +835,12 @@ static int build_ride(CPU *c, const rc_carcfg *cc, uint32_t ride, uint32_t skin,
     uint32_t want[RC_PART_SLOTS] = {0}; uint8_t named[RC_PART_SLOTS] = {0};
     char miss[48] = {0}; int at = 0;
     for (int k = 0; k < cc->n_parts; k++){
-        uint32_t sl = cc->part[k].slot, found = find_part(c, type, sl, cc->part[k].key, cc->part[k].owner);
+        /* (another player's car with the mods' parts shown as the game's: the part's stand-in, 0 the stock part) */
+        uint32_t key = others ? modpacks_for_others(cc->part[k].key) : cc->part[k].key;
+        uint32_t sl = cc->part[k].slot, found = key ? find_part(c, type, sl, key, cc->part[k].owner) : 0;
         named[sl] = 1;
         if (found) want[sl] = found;
+        else if (!key) {}                                                   /* the stand-in: the stock part */
         else { missing++; if (at < (int)sizeof miss - 8) at += snprintf(miss + at, sizeof miss - (size_t)at, " 0x%x", sl); }
     }
     for (uint32_t sl = 0; sl < RC_PART_SLOTS; sl++){
@@ -1997,7 +2003,7 @@ static int begin_load(CPU *c, int k, const uint8_t *cfg, int len, uint32_t gen){
     if (!pool_room(c, s, cc.type_name)) return 0;
     uint32_t ride = s->ride_new;
     char why[96] = {0};
-    int miss = build_ride(c, &cc, ride, skin, why, sizeof why);
+    int miss = build_ride(c, &cc, ride, skin, why, sizeof why, 1);
     if (miss < 0) return 0;
     if (rh_opt("NFSU2_ROAM_TEST_COPYRIDE")){
         /* test control: the player's own RideInfo byte for byte (same car
@@ -10855,7 +10861,7 @@ static void run_job(CPU *c, const char *job){
         if (n <= 0 || rc_carcfg_decode(b, n, &cc) != RC_OK || !g_gmem){ rlog("[roam] f=%ld mp cfgtest: no record\n", f); return; }
         uint32_t car = player_car(), src = rd32(car + 0x10u), dst = g_sl[NSLOT - 1].ride_new;
         char why[96] = {0};
-        int miss = build_ride(c, &cc, dst, 1u, why, sizeof why);      /* the player's skin slot */
+        int miss = build_ride(c, &cc, dst, 1u, why, sizeof why, 0);   /* the player's skin slot */
         int diff_slots = 0, diff_bytes = 0, first = -1;
         for (uint32_t sl = 0; sl < RC_PART_SLOTS; sl++) if (MR32(src + 0x590u + 4u * sl) != MR32(dst + 0x590u + 4u * sl)) diff_slots++;
         for (uint32_t o = 0; o < 0x8f0u; o++){

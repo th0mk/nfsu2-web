@@ -31,7 +31,8 @@ PARTS.BIN (little-endian):
   header   'MPRT', version 1, mods, parts, texts, strings' size, 0, 0
   mods     32 bytes each: the settings.ini key's environment name (NFSU2_...) that switches the mod's
            parts on in the shops
-  parts    PART_SZ bytes each: key, kind, category and level (the game's byte), its +6 byte, mod (index),
+  parts    PART_SZ bytes each (the last word: the stand-in, a game part's key, 0 the slot's stock part):
+           key, kind, category and level (the game's byte), its +6 byte, mod (index),
            owner (bStringHash of it), name, the model record (its first two bytes, 1 if the part has one, 0,
            base name, 8 names),
            attributes (count, then 8 of {hash, value})
@@ -47,7 +48,7 @@ from texpacks import bstring_hash, chunks, find, jdlz, tpks  # noqa: E402
 from vinylpacks import read_tpk, splice, parse_tpk, jdlz_pack, jdlz_game, MAGIC, VERSION as VPAK_VERSION  # noqa: E402
 
 PART_MAGIC, PART_VERSION = b'MPRT', 1
-PART_SZ = 4 + 4 + 4 + 4 + 4 + 4 + 32 + 4 + 64
+PART_SZ = 4 + 4 + 4 + 4 + 4 + 4 + 32 + 4 + 64 + 4
 NONE = 0xFFFFFFFF
 CHUNK_PARTS = 0x80034602
 SUB = {0x34603: 'hdr', 0x34606: 'str', 0x3460C: 'list', 0x34605: 'attr', 0x3460A: 'model', 0x3460B: 'owner', 0x34604: 'part'}
@@ -56,6 +57,13 @@ A_TEXTURE, A_OUTER, A_INNER, A_BRAND = (bstring_hash(n) for n in ('TEXTURE_NAME'
 RIM_ATTRS = {A_TEXTURE, A_OUTER, A_INNER, A_BRAND}     # a rim's attributes: all plain values (no string indices)
 OWNER_WHEELS = bstring_hash('WHEELS')
 UG2NET = ('NFSU2_UG2NET_PARTS',)                       # the underground2.net row's switch (web/src/app/settings.ts)
+# A mod rim's look-alike among the game's (picked from the rim shop's renders): its stand-in, in the same size, where
+# the game shows no mod parts (a profile, so the original game and pages of before; the Original view of other
+# players' cars; a game without MODPACKS).  A mod part without one stands in with the slot's stock part.
+LOOKALIKES = {
+    'BLITZ_STYLE01': ('AVUS', 'AF-502'),                # Blitz BRW03: five split spokes
+    'BLITZ_STYLE02': ('RACINGHART', 'CP8'),             # Blitz Technospeed Z1: ten thin spokes
+}
 IMG_BASE = 0x30000000                                  # the new textures' TextureInfo image offsets (each its own)
 
 
@@ -103,9 +111,11 @@ class PartDB:
         return [self.attrs[struct.unpack_from('<h', L, 2 * li + 2 + 2 * j)[0]] for j in range(n)]
 
     def model(self, mo):
-        """(first two bytes, base name, the 8 names), or None"""
+        """(first two bytes, base name, the 8 names), or None; a record the game takes for none (its first byte 0:
+        the loader and 0x60FF80 skip it) with no names (what it has there the game never reads)"""
         if mo == 0xFFFF: return None
         m = self.s['model'][0x24 * mo:0x24 * mo + 0x24]
+        if not m[0]: return m[:2], None, [None] * 8
         base, = struct.unpack_from('<H', m, 2)
         names = struct.unpack_from('<8I', m, 4)
         return m[:2], (self.str(base) if base != 0xFFFF else None), [self.str(x) if x != NONE else None for x in names]
@@ -286,6 +296,12 @@ def main():
     game_db = PartDB(find(a.game, 'GLOBAL/GLOBALB.LZC') or find(a.game, 'GLOBAL/GLOBALB.BUN'))
     mod_db = PartDB(find(mod, 'GLOBAL/GLOBALB.LZC'))
     game_keys = {p['key'] for p in game_db.parts}
+    gbrands = {p['key']: game_db.str(p['name']) for p in game_db.parts if p['kind'] == KIND_BRAND}
+    game_rims = {}                                     # (brand, name, inner, outer) -> key
+    for p in game_db.parts:
+        if p['kind'] != KIND_RIM or p['owner'] != OWNER_WHEELS: continue
+        ga = dict(game_db.attr_list(p['list']))
+        game_rims[(gbrands.get(ga.get(A_BRAND)), game_db.str(p['name']), ga.get(A_INNER), ga.get(A_OUTER))] = p['key']
     mods = list(UG2NET)
     S = Strings()
     parts, texts, want_tex, geo = [], {}, {}, []
@@ -313,8 +329,14 @@ def main():
             name = mod_db.str(p['name'])
             if p['kind'] == KIND_RIM and name.upper().startswith(brand + ' '):
                 name = name[len(brand) + 1:]            # the shop shows "<brand> <name>", as the game's own ("CH")
+            stand = 0
+            if p['kind'] == KIND_RIM and m and m[1] and f'{brand}{m[1]}' in LOOKALIKES:
+                lb, ln = LOOKALIKES[f'{brand}{m[1]}']
+                ra = dict(at)
+                stand = game_rims.get((lb, ln, ra.get(A_INNER), ra.get(A_OUTER)), 0)
+                if not stand: sys.exit(f'{brand}{m[1]} {ra.get(A_INNER)}/{ra.get(A_OUTER)}: no {lb} {ln} of that size in the game')
             parts.append(dict(key=p['key'], kind=p['kind'], cl=p['cl'], b6=p['b6'], owner=p['owner'],
-                              name=S(name), model=m and (m[0], S(m[1]), [S(x) for x in m[2]]), attrs=at))
+                              name=S(name), model=m and (m[0], S(m[1]), [S(x) for x in m[2]]), attrs=at, stand=stand))
         name = mod_lang.get(bstring_hash(f'RIMS_BRAND_{brand}')) or brand
         texts[bstring_hash(f'RIMS_BRAND_{brand}')] = S(name)
     # the textures: each rim style's "<brand>_STYLEnn_..." (TEXTURE_NAME's value is the hash of "<brand>_STYLEnn";
@@ -395,11 +417,13 @@ def main():
         body += struct.pack('<8I', *(m[2] if m else [NONE] * 8))
         at = p['attrs'] + [(0, 0)] * (8 - len(p['attrs']))
         body += struct.pack('<I', len(p['attrs'])) + b''.join(struct.pack('<II', h, v) for h, v in at)
+        body += struct.pack('<I', p.get('stand', 0))
     for h in sorted(texts): body += struct.pack('<II', h, texts[h])
     body += S.b
     assert len(body) == 32 + 32 * len(mods) + PART_SZ * len(parts) + 8 * len(texts) + len(S.b)
     put('PARTS.BIN', bytes(body))
-    print(f'{len(geo)} rim brand{"s" if len(geo) != 1 else ""} ({", ".join(b for b, _ in geo)}): {len(parts)} parts, '
+    print(f'{len(geo)} rim brand{"s" if len(geo) != 1 else ""} ({", ".join(b for b, _ in geo)}): {len(parts)} parts '
+          f'({sum(1 for p in parts if p.get("stand"))} with a look-alike), '
           f'{len(new)} textures ({len(tail) / 1e6:.2f} MB: {", ".join(sorted(g[0] for g in got.values()))}), '
           f'{len(icon_tex)} icon{"s" if len(icon_tex) != 1 else ""}, '
           f'model packs {sum(os.path.getsize(p) for _, p in geo) / 1e6:.2f} MB: {out}')

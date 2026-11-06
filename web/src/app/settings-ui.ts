@@ -77,6 +77,11 @@ export const MOD_CONTROLS: Record<string, Control> = {
   visual_rep_remover: { t: 'switch' },
   ug2net_parts: { t: 'switch' },
 };
+/** the Mods tab's one row that is no mod's: how other players' cars show the mods' parts (mods-ui.ts: first in "Seen by
+ *  others") */
+const OTHERS_ITEM: Item = { key: 'others_mod_parts', label: N('Mod parts on other cars'),
+  help: N('Original: other players\' cars with the game\'s own parts instead.'),
+  c: { t: 'seg', opts: [['shown', N('Shown')], ['original', N('Original')]] } };
 /** the Mods tab's rows with a setting, in the catalogue's order (a shared row once: its first entry's) */
 const MOD_ITEMS: Item[] = MODS.flatMap(m => 'setting' in m.control && !m.row
   ? [{ key: m.control.setting, label: m.name, help: m.line, c: MOD_CONTROLS[m.control.setting] ?? { t: 'switch' }, mod: m.id }] : []);
@@ -137,7 +142,7 @@ const GROUPS: Group[] = [
     { key: 'gamepad_trigger_deadzone', label: N('Trigger dead zone'), help: N('Fraction of full travel, 0 to 0.9.'), c: { t: 'num', min: 0, max: 0.9, step: 0.01 }, more: true },
     { key: 'gamepad_trigger_click', label: N('Trigger full press'), help: N('How far a trigger travels before it counts as fully pressed.'), c: { t: 'num', min: 0, max: 1, step: 0.01 }, more: true },
   ] },
-  { title: N('Mods'), more: '', own: true, at: 'mods-body', mods: true, items: MOD_ITEMS },
+  { title: N('Mods'), more: '', own: true, at: 'mods-body', mods: true, items: [OTHERS_ITEM, ...MOD_ITEMS] },
 ];
 
 /** a row's second key, which its control writes with its own and its Reset resets too (not listed under "Other

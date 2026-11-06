@@ -63,7 +63,7 @@ void sub_0050e960_orig(CPU *c);
 /* MODPACKS/PARTS.BIN (tools/modpacks.py) */
 #define PK_HDR        32u
 #define PK_MOD        32u
-#define PK_PART       124u
+#define PK_PART       128u
 #define MAX_MODS      8
 #define MAX_PARTS     4096
 #define MAX_BRANDS    32
@@ -72,7 +72,7 @@ static const uint32_t SUB[7] = { 0x34603u, 0x34606u, 0x3460cu, 0x34605u, 0x3460a
 enum { S_HDR, S_STR, S_LIST, S_ATTR, S_MODEL, S_OWNER, S_PART };
 
 typedef struct {
-    uint32_t key, owner, name, mbase, mstr[8], nattr, attr[8][2];
+    uint32_t key, owner, name, mbase, mstr[8], nattr, attr[8][2], stand;
     uint8_t kind, cl, b6, mod, m0, m1, has_model;
 } Part;
 typedef struct { uint32_t key, tex, text; char name[32]; int mod; } Brand;
@@ -141,6 +141,7 @@ static int load(void){
         for (int k = 0; k < 8; k++) p->mstr[k] = rd32(q + 24 + 4 * k);
         p->nattr = rd32(q + 56);
         for (int k = 0; k < 8; k++){ p->attr[k][0] = rd32(q + 60 + 8 * k); p->attr[k][1] = rd32(q + 64 + 8 * k); }
+        p->stand = rd32(q + 124);
         int bad = p->mod >= nm || p->nattr > 8 || !pstr(p->name) || p->kind == KIND_DECAL || p->kind == KIND_VINYL ||
                   (p->has_model && p->mbase != NONE && !pstr(p->mbase));
         for (int k = 0; k < 8 && !bad; k++) bad = p->mstr[k] != NONE && !pstr(p->mstr[k]);
@@ -362,7 +363,8 @@ void sub_0050e960(CPU *c){
  * Our saves work in the original game, which has no mod parts.  So a profile
  * (and garage.c's GARAGE.DAT, which a page of before reads) holds the game's
  * parts only: while the game makes a profile's payload (0x52A280, garage.c),
- * each car slot with a mod's part holds the slot's stock part (the stand-in:
+ * each car slot with a mod's part holds a part of the game's (the stand-in:
+ * the mod part's look-alike, tools/modpacks.py, else the slot's stock part,
  * what 0x637040 gives a new ride of that car), and the mod parts go into
  * "NFS Underground 2/<NAME>/MODPARTS.DAT", written when the profile is
  * (fileio.c -> garage.c).  When a profile's cars load (0x516850, garage.c),
@@ -443,6 +445,11 @@ static int mod_key(uint32_t key){
     for (int i = 0; i < g.nparts; i++) if (g.p[i].key == key) return 1;
     return 0;
 }
+/* a mod part's look-alike among the game's (tools/modpacks.py LOOKALIKES: a rim of the same size), 0: none */
+static uint32_t lookalike(uint32_t key){
+    for (int i = 0; i < g.nparts; i++) if (g.p[i].key == key) return g.p[i].stand;
+    return 0;
+}
 /* the stock part's key of a car type's slot (0: none, or not known: then 0 all the same, the game's "no part") */
 static uint32_t stock_key(CPU *c, uint32_t type, uint32_t slot){
     for (int i = 0; i < g_nstock; i++) if (g_stock[i].type == type) return g_stock[i].key[slot];
@@ -494,7 +501,8 @@ static void collect(CPU *c, uint32_t db, int p, MList *l, int hide){
         for (uint32_t s = 0; s < N_SLOTS; s++){
             uint32_t at = r[i] + R_PARTS + 0xcu + 4u * s, key = MR32(at);
             if (!mod_key(key)) continue;
-            uint32_t stand = stock_key(c, type, s);
+            uint32_t stand = lookalike(key);
+            if (!stand) stand = stock_key(c, type, s);
             if (l->n < MP_MAX){
                 MPart *e = &l->e[l->n++];
                 memset(e, 0, sizeof *e);
@@ -657,4 +665,62 @@ void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const
     if (wait) fprintf(stderr, ", %d this game has not (MODPACKS): the stock ones meanwhile, kept for later", wait);
     if (gone) fprintf(stderr, ", %d whose car changed elsewhere: as it is", gone);
     fprintf(stderr, "\n");
+}
+
+/* --- other players' cars: the mods' parts, or the game's --------------------
+ * others_mod_parts = original (NFSU2_OTHERS_MOD_PARTS): other players' cars
+ * without the mods' parts, each one's stand-in in its place (its look-alike,
+ * a game's rim of the same size, else the slot's stock part), the player's
+ * own car as it is: free roam's cars of others (roam_game.c build_ride) and a
+ * race's (the game's LAN car message, 0x5F04D0: thiscall (ride, message, ?),
+ * ret 0xC, the ride Init'ed (+0 its car type) and its parts set). */
+#define FN_GETCARPART  0x0061b980u  /* thiscall CarPartDB (type, slot, key, prev, -1) */
+#define G_CARPARTDB    0x008a2b68u
+#define FN_PARTS_ON    0x0061bcd0u  /* thiscall ride: UpdatePartsEnabled */
+int modpacks_others_original(void){
+    static int v = -1;
+    if (v < 0){
+        const char *e = getenv("NFSU2_OTHERS_MOD_PARTS");
+        v = e && !strcasecmp(e, "original");
+        if (v) fprintf(stderr, "[mods] other players' cars: the game's parts in place of the mods' (others_mod_parts = original)\n");
+    }
+    return v;
+}
+/* roam_game.c: a friend's car's part key -> the key to show it with (0: the slot's stock part); the key itself where
+ * the mods' parts are shown, or for a part of the game's */
+uint32_t modpacks_for_others(uint32_t key){
+    if (!modpacks_others_original() || !mod_key(key)) return key;
+    uint32_t la = lookalike(key);
+    static int said;
+    if (said++ < 8) fprintf(stderr, "[mods] another player's car: its mod part %08x shown as %s %08x\n", key, la ? "its look-alike" : "the stock part", la);
+    return la;
+}
+/* the stock part of a ride's slot (a ride of ours Init'ed as it was: its car type, +5, +6) */
+static uint32_t stock_part(CPU *c, uint32_t ride, uint32_t slot){
+    if (!g_ride && !(g_ride = gheap_alloc(1, 0x1000u, 1))) return 0;
+    for (uint32_t o = 0; o < 0x1000u; o += 4u) MR32(g_ride + o) = 0;
+    uint32_t a[4] = { MR32(ride), 0, MR8(ride + 5u), MR8(ride + 6u) }, z = 0;
+    mcall(c, FN_RIDE_INIT, g_ride, 4, a);
+    mcall(c, FN_RIDE_STOCK, g_ride, 1, &z);
+    return MR32(g_ride + RIDE_PARTS + 4u * slot);
+}
+void sub_005f04d0_orig(CPU *c);
+void sub_005f04d0(CPU *c){
+    uint32_t ride = MR32(c->esp + 4u);
+    sub_005f04d0_orig(c);
+    if (!modpacks_others_original() || !g_grown || !ok(ride, 0x8f0u)) return;
+    int n = 0, la_n = 0;
+    for (uint32_t s = 0; s < N_SLOTS; s++){
+        uint32_t part = MR32(ride + RIDE_PARTS + 4u * s);
+        if (!part || !ok(part, 4u) || !mod_key(MR32(part))) continue;
+        uint32_t la = lookalike(MR32(part)), np = 0;
+        if (la){ uint32_t a[5] = { MR32(ride), s, la, 0, 0xffffffffu }; np = mcall(c, FN_GETCARPART, G_CARPARTDB, 5, a); }
+        if (np) la_n++; else np = stock_part(c, ride, s);
+        MR32(ride + RIDE_PARTS + 4u * s) = np; n++;
+    }
+    if (!n) return;
+    mcall(c, FN_PARTS_ON, ride, 0, 0);
+    static int said;
+    if (said++ < 8) fprintf(stderr, "[mods] a race's car (ride 0x%08x): %d mod part%s shown as the game's (%d look-alike%s, the rest stock)\n",
+                            ride, n, n == 1 ? "" : "s", la_n, la_n == 1 ? "" : "s");
 }

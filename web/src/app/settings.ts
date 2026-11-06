@@ -190,6 +190,10 @@ export const KEYS: readonly KeyDef[] = [
   // friend's car shows them either way).  Not in bundle.m's table: there a lower-case key, so it reaches the runtime as
   // NFSU2_UG2NET_PARTS all the same
   { key: 'ug2net_parts', env: 'NFSU2_UG2NET_PARTS', kind: 'bool', scope: 'web' },
+  // other players' cars with the mods' parts or with the game's in their place (runtime/modpacks.c: the parts'
+  // look-alikes, else the stock ones; free roam's cars and the race's).  Not in bundle.m's table: there a lower-case
+  // key, so it reaches the runtime as NFSU2_OTHERS_MOD_PARTS all the same
+  { key: 'others_mod_parts', env: 'NFSU2_OTHERS_MOD_PARTS', kind: 'enum', vals: 'shown|original', scope: 'web' },
   // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
   // pointTex).  Not in bundle.m's table
   { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
@@ -321,6 +325,12 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # them looks the same either way, and rims already on your car stay.
 # off = the shops offer only the original game's.  [NFSU2_UG2NET_PARTS]
 #ug2net_parts = off
+
+# Other players' cars: shown = with the mods' parts they have (rims of a
+# mod's on above), as they see them; original = with parts of the original
+# game in their place (a look-alike rim of the same size, else the stock
+# part).  Your own car keeps its own either way.  [NFSU2_OTHERS_MOD_PARTS]
+#others_mod_parts = shown
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"

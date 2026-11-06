@@ -206,7 +206,7 @@ export const MODS: readonly Mod[] = [
     links: { page: 'https://nfsmods.xyz/mod/2004' },
     kind: 'shared', uses: 'data', control: { setting: 'ug2net_parts' },
     line: N('New rim brands in the rim shop.'),
-    details: 'Blitz, a brand of 24 rims, in the rim shop. Everyone\'s game has them, so a friend\'s car with them looks the same with this off. Off, the shop offers only the game\'s own brands; rims already on your car stay. Your saves still work in the original game: there the car has its stock rims.',
+    details: 'Blitz, a brand of 24 rims, in the rim shop. Everyone\'s game has them, so a friend\'s car with them looks the same with this off. Off, the shop offers only the game\'s own brands; rims already on your car stay. Your saves still work in the original game: there the car has a similar rim of the game\'s in the same size.',
     online: 'seen', sizeMB: 1, files: ['runtime/modpacks.c', 'tools/modpacks.py'],
   },
 
