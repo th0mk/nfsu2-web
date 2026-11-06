@@ -105,7 +105,8 @@ misread the log's numbers:
   Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover,
   Crash Damage (off by default: dents, loose parts and scratches on the racers' cars, looks only; in free roam players
   who have it on see each other's damage, with it off every car shows undamaged), Rubberbanding (Original, No boost,
-  Off: the career races' catch-up). Music in drag and drift races is the site's own setting: Game.
+  Off: the career races' catch-up), Transmission Whine (ropsli's UG2WhineGen: NFS Carbon's gearbox whine on your
+  car, off by default). Music in drag and drift races is the site's own setting: Game.
 - Resolution scale: 50%, 75%, 100%, 150%, 200%. 50% is the lowest (a quarter of the pixels); phones start at 75%.
 - Frame rate: Auto, 30, 60, 120, 240. Auto picks one of those from the screen's refresh rate (240 from 239 Hz, 120
   from 119 Hz, 30 at 31 Hz or less, else 60; runtime/framerate.c). A 75 Hz screen gets 60 and a 144-165 Hz one 120,

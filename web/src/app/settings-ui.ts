@@ -35,6 +35,8 @@ type Control =
    *  value chosen (the promise ends when it has played), stop ends that early */
   | { t: 'select'; opts: [value: string, label: string][]; preview?: { play(value: string): Promise<void>; stop(): void } }
   | { t: 'num'; min?: number; max?: number; step?: number; unit?: string }
+  /** a slider from min to max, its value beside it (with its unit), saved when let go */
+  | { t: 'range'; min: number; max: number; step: number; unit?: string }
   | { t: 'text'; placeholder?: string }
   /** the worlds (worlds.ts): a drop-down list of the main world, World 1 to 4 and Own name, each with how many are in
    *  free roam there; Own name opens a box for the name, with a button in it that copies an invite link (invite.ts) */
@@ -82,6 +84,12 @@ export const MOD_CONTROLS: Record<string, Control> = {
   crash_damage: { t: 'switch' },
   catchup: { t: 'seg', opts: [['original', N('Original')], ['noboost', N('No boost')], ['off', N('Off')]] },
   // mod_rims: { t: 'switch' },   (the rims: out for now, mods.ts)
+  gearbox_whine: { t: 'switch' },
+  gearbox_whine_volume: { t: 'range', min: 0, max: 400, step: 5, unit: '%' },
+};
+/** the mods' own settings (mods.ts Mod control more), each a row under its mod's in the Mods tab */
+const MOD_MORE: Record<string, { label: string; help: string }> = {
+  gearbox_whine_volume: { label: N('Whine volume'), help: N('100% is the mod\'s own; louder at high speed: raise it.') },
 };
 /** the Mods tab's one row that is no mod's: how other players' cars show the mods' parts (mods-ui.ts: first in "Seen by
  *  others").  Out for now with the rims (mods.ts): */
@@ -90,7 +98,8 @@ export const MOD_CONTROLS: Record<string, Control> = {
 //   c: { t: 'seg', opts: [['shown', N('Shown')], ['original', N('Original')]] } };
 /** the Mods tab's rows with a setting, in the catalogue's order (a shared row once: its first entry's) */
 const MOD_ITEMS: Item[] = MODS.flatMap(m => 'setting' in m.control && !m.row
-  ? [{ key: m.control.setting, label: m.name, help: m.line, c: MOD_CONTROLS[m.control.setting] ?? { t: 'switch' }, mod: m.id }] : []);
+  ? [{ key: m.control.setting, label: m.name, help: m.line, c: MOD_CONTROLS[m.control.setting] ?? { t: 'switch' }, mod: m.id },
+     ...(m.control.more ?? []).map(k => ({ key: k, label: MOD_MORE[k].label, help: MOD_MORE[k].help, c: MOD_CONTROLS[k] }))] : []);
 
 const GROUPS: Group[] = [
   { title: N('Online'), more: N('More online settings'), own: true, items: [
@@ -382,7 +391,7 @@ function shown(it: Item, v: string): string {
   if (c.t === 'phrases') return phrasesOf(v).map(p => t(PHRASES[p].text)).join(', ');
   if (c.t === 'flag') { const f = flagCode(v); return f ? flagName(f) : t('No flag'); }
   if (v === '') return t('empty');
-  return c.t === 'num' && c.unit ? `${v} ${c.unit}` : v;
+  return (c.t === 'num' || c.t === 'range') && c.unit ? `${v}${c.t === 'range' ? '' : ' '}${c.unit}` : v;
 }
 
 /**
@@ -799,6 +808,17 @@ export class SettingsPanel {
       ctl.append(pic, sel);
       described = sel;
       if (!this.countryAsked) { this.countryAsked = true; void this.askCountry(); }
+    } else if (c.t === 'range') {
+      const r = document.createElement('input'); r.type = 'range'; r.id = id;
+      r.min = String(c.min); r.max = String(c.max); r.step = String(c.step);
+      r.value = cur || String(c.min);
+      const v = document.createElement('output'); v.className = 'val'; v.htmlFor.add(id);
+      const show = () => { v.textContent = `${r.value}${c.unit ?? ''}`; };
+      show();
+      r.oninput = show;
+      r.onchange = () => { if (r.value !== this.current(it.key)) void this.put(it.key, r.value); };
+      ctl.append(v, r);
+      described = r;
     } else if (c.t === 'crews') {
       row.classList.add('set-list');
       described = crewControl({ list: crewsOf(cur, this.current('roam_crew_colours')), id, labelId: label.id, placeholder: c.placeholder, counts: this.crewCounts,

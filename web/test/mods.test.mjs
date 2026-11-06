@@ -285,7 +285,16 @@ test('the rows: each setting\'s row in the Mods tab only, once, with a control o
       assert.deepEqual(c.opts.map(([v]) => v).sort(), d.vals.split('|').sort(), `${key}: the values it takes`);
     }
   }
-  assert.deepEqual(Object.keys(UI.MOD_CONTROLS).sort(), [...settings].sort(), 'MOD_CONTROLS: the mods\' settings only');
+  // a mod's own settings (control more: its volume, say): a row each, under the mod's, a number on a slider
+  const more = MODS.flatMap(m => 'setting' in m.control ? m.control.more ?? [] : []);
+  for (const key of more) {
+    assert.equal(UI.PANEL_KEYS.filter(k => k === key).length, 1, `${key}: one row`);
+    const c = UI.MOD_CONTROLS[key], d = S.keyDef(key);
+    assert.ok(c && c.t === 'range' && d?.kind === 'int' && S.DEFAULTS.has(key), `${key}: a slider, an int key in KEYS and TEMPLATE`);
+    const [lo, hi] = d.vals.split('..').map(Number);
+    assert.ok(c.min === lo && c.max === hi, `${key}: the slider's ends are the key's (${d.vals})`);
+  }
+  assert.deepEqual(Object.keys(UI.MOD_CONTROLS).sort(), [...settings, ...more].sort(), 'MOD_CONTROLS: the mods\' settings only');
   // the site's own settings keep their rows elsewhere: Music in drag and drift races in the Game tab
   assert.equal(UI.PANEL_KEYS.filter(k => k === 'race_music').length, 1, 'race_music: one row');
   assert.ok(!settings.includes('race_music'), 'race_music: not a mod\'s');

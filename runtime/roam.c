@@ -827,6 +827,7 @@ void sms_frame(CPU *c);                       /* sms.c: a text message of ours o
 void engage_frame(CPU *c);                    /* engage.c: Engage at a marker mended when the game would refuse it for good */
 void hiddenraces_frame(void);                 /* hiddenraces.c: the career's hidden races on the map (show_hidden_races) */
 void visualrep_frame(void);                   /* visualrep.c: the visual rating by the stage (visual_rep_remover) */
+void whine_frame(void);                       /* whine.c: the gearbox whine (gearbox_whine) */
 void visualrep_meter(CPU *c);                 /* visualrep.c: ... and no Visual Rating box in the shops */
 void carspot_frame(void);                     /* carspot.c: the career's kept spot, if no place, the new career's start (issue 55) */
 void walls_frame(void);                       /* walls.c: a car past the career's walls back on the roads it can reach */
@@ -847,7 +848,7 @@ __attribute__((weak)) int roam_asipeer_cmd(CPU *c, const char *args, long *wait_
 __attribute__((weak)) void damage_frame(CPU *c);      /* damage.c: crash damage's texture pack (only where it is linked) */
 int roam_hook(CPU *c, uint32_t ip){
     switch (ip){
-    case HOOK_SITE(0x00581475): if (damage_frame) damage_frame(c); reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); visualrep_frame(); carspot_frame(); walls_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); lightkey_frame(c); photo_frame(c); savegame_frame(); coop_frame(c); engage_frame(c); roam_frame(c); return 1;
+    case HOOK_SITE(0x00581475): if (damage_frame) damage_frame(c); reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); visualrep_frame(); whine_frame(); carspot_frame(); walls_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); lightkey_frame(c); photo_frame(c); savegame_frame(); coop_frame(c); engage_frame(c); roam_frame(c); return 1;
     /* Player::Update's HUD step (0x600590), behind its call of the HUD
      * update (0x4EC5A0), where the game places its own LAN race labels */
     case HOOK_SITE(0x006005e0): gpsdistance_hud(c); roam_game_hud(c); return 1;
