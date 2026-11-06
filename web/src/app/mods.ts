@@ -204,6 +204,13 @@ export const MODS: readonly Mod[] = [
 
   // ---- Game rules
   {
+    id: 'open-tunnel', name: 'Open Construction Tunnel', authors: [{ name: 'roman01la' }], links: { source: 'https://github.com/roman01la/nfsu2-web' },
+    kind: 'rules', uses: 'data', control: { setting: 'open_tunnel' },
+    line: N('Drive through the Construction Tunnel, including early in your career.'),
+    details: 'Opens the tunnel entrances, removes construction blockers and loads the drivable tunnel geometry. This can bypass career region restrictions and let you explore later areas early. Disabled by default and requires the server to provide the tunnel pack. Changes apply the next time you launch the game; other players need to enable it to use the tunnel too.',
+    online: 'career', files: ['tools/open_tunnel.py', 'runtime/opentunnel.h'],
+  },
+  {
     id: 'hidden-races', name: 'Show Hidden Races', mod: 'Show Hidden Races Mod', authors: [{ name: 'MaxHwoy' }], links: { page: 'https://nfsmods.xyz/mod/1583' },
     kind: 'rules', uses: 'findings', control: { setting: 'show_hidden_races' },
     line: N('The 33 hidden races on the map.'),

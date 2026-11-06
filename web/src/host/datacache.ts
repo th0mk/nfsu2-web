@@ -39,8 +39,9 @@ export interface CacheFile { h: FileSystemSyncAccessHandle; have: Uint8Array; ha
 export const manifestFiles = (m: Manifest): DataFile[] => m.files.filter(f => !f.d).map(f => ({ path: f.p, size: f.s ?? 0, mtime: f.m ?? 0 }));
 const parts = (f: DataFile) => f.path.toLowerCase().split('/');
 /** The data the settings pick: a texture pack (TEXPACKS/<name>.pak, runtime/web/texrep_web.c; '' for none) and the
- *  songs (settings.ini songs: 'original' reads pfdata/original's files in place of pfdata's, songsPath). */
-export interface Packs { texpack: string; songs: string }
+ *  songs (settings.ini songs: 'original' reads pfdata/original's files in place of pfdata's, songsPath), and
+ *  the optional Construction Tunnel map overlay. */
+export interface Packs { texpack: string; songs: string; openTunnel?: boolean }
 export const NO_PACKS: Packs = { texpack: '', songs: '' };
 /** EA's own songs (tools/musicpack.py --original) for a file of pfdata: pfdata/<name> -> pfdata/original/<name>; null
  *  for any other path.  The folder's own are a soundtrack mod's uncensored versions. */
@@ -59,8 +60,13 @@ function gameFiles(files: DataFile[], language: string, packs: Packs): DataFile[
   const isOriginal = (p: string[]) => p.length === 3 && p[0] === 'pfdata' && p[1] === 'original';
   const original = packs.songs === 'original';
   const replaced = new Set(original ? files.map(parts).filter(isOriginal).map(p => `pfdata/${p[2]}`) : []);
+  const tunnel = ['tracks/l4ra.bun', 'tracks/streaml4ra.bun', 'tracks/routesl4ra/pathsfreeroam.bin'];
+  const names = new Set(files.map(f => parts(f).join('/')));
+  const tunnelOn = packs.openTunnel && tunnel.every(p => names.has(`modpacks/open-tunnel/${p}`));
   return files.filter(f => {
     const p = parts(f);
+    if (p[0] === 'modpacks') return !!tunnelOn && p[1] === 'open-tunnel' && tunnel.includes(p.slice(2).join('/'));
+    if (tunnelOn && tunnel.includes(p.join('/'))) return false;
     if (p[0] === 'texpacks') return p.length === 2 && packs.texpack.split(',').some(n => n && (p[1] === `${n}.pak` || p[1] === `${n}.tracks`));
     if (isOriginal(p)) return original;
     if (replaced.has(p.join('/'))) return false;

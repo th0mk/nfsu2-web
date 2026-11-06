@@ -1,0 +1,33 @@
+# Optional tunnel overlay in an existing free-roam career.
+# roam-pair: --page app --seed <career-save> --env NFSU2_OPEN_TUNNEL=1
+# Requires the MODPACKS/open-tunnel pack; original TRACKS must remain installed.
+0 bot on
++0 waitroam 6000
++0 bot off
++0 roam smsauto on
+# Start outside the north career gate; every subsequent movement uses keyboard input.
++180 trace 3 px=f:[[0x8900ac]+4]+0x60 py=f:[[0x8900ac]+4]+0x64 pz=f:[[0x8900ac]+4]+0x68 fx=f:[[0x8900ac]+4]+0x90 fy=f:[[0x8900ac]+4]+0x94
++0 roam teleport -184 140 25 49152
++180 log SHOT north_gate_outside
++0 log DRIVE_ROUTE tunnel-route
++0 waitexpr f:[[0x8900ac]+4]+0x64 < 80 2400
++0 expect f:[[0x8900ac]+4]+0x64 < 80
++0 log SHOT north_gate_crossed
++0 waitexpr f:[[0x8900ac]+4]+0x64 < -200 6000
++0 expect f:[[0x8900ac]+4]+0x64 < -200
++0 log SHOT north_approach
++0 waitexpr f:[[0x8900ac]+4]+0x64 < -430 6000
++0 expect f:[[0x8900ac]+4]+0x64 < -430
++0 log SHOT tunnel_entry
++0 waitexpr f:[[0x8900ac]+4]+0x64 < -600 6000
++0 expect f:[[0x8900ac]+4]+0x64 < -600
++0 expect f:[[0x8900ac]+4]+0x68 > -15
++0 log SHOT tunnel_middle
++0 waitexpr f:[[0x8900ac]+4]+0x64 < -850 6000
++0 expect f:[[0x8900ac]+4]+0x64 < -850
++0 log SHOT tunnel_exit
++0 waitexpr f:[[0x8900ac]+4]+0x64 < -1100 6000
++0 expect f:[[0x8900ac]+4]+0x64 < -1100
++0 expect f:[[0x8900ac]+4]+0x68 > 10
++0 log SHOT south_gate_crossed
++60 quit

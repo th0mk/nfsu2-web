@@ -20,6 +20,8 @@
 //                    without the race lobby's panel (tests/scripts/mprace_shots_a/b.txt); `log MENU <item>` opens
 //                    the page menu (F9), clicks that item (its data-act, e.g. solid) and goes back to the game;
 //                    `log PRESS <selector>` clicks there with the mouse (photo mode's tabs: tests/scripts/photo_panel_a.txt);
+//                    `log DRIVE_ROUTE <name>` follows tests/scripts/<name>.json using trace positions and keyboard input;
+//                    `log KEYDOWN <code>` / `log KEYUP <code>` holds/releases a key;
 //                    `log KEY <code> ...` presses those keys on the page as the player does (KeyboardEvent.code: the
 //                    script's own keys reach only the game, never the page), `log STICK <x> <y>` moves the right
 //                    stick there for the page and `log CLICK` presses it in (quick chat's picker:
@@ -88,6 +90,7 @@
 // [expect] FAIL, a script wait that ran out, a page error ...; the stall watchdog's report is only counted, as several
 // games loading in one browser trip it), or one of this tool's page steps failed (log SHOT, MENU, KEY, TAP, HOLD ...).
 // The run fails when our own server ended by itself, or roam_compare.py failed.
+import { driveRoute } from './drive-route.mjs';
 import { chromium } from 'playwright';
 import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
@@ -142,7 +145,7 @@ const FINGER = ['TAP', 'HOLD', 'SCROLL'];
 for (const [name, script] of SPECS) {
   let txt = '';
   try { txt = fs.readFileSync(path.join(REPO, 'tests/scripts', script), 'utf8'); } catch { continue; }
-  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CLICK|CREW|FRIENDS|INVITE(?:-NO)?|RENAME|PRESS|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
+  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|DRIVE_ROUTE|KEYDOWN|KEYUP|KEY|STICK|CLICK|CREW|FRIENDS|INVITE(?:-NO)?|RENAME|PRESS|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
     .filter(c => !APP || (FINGER.includes(c) && !TOUCH));
   if (app.length) console.log(`roam-pair: warning: ${name}'s ${script} has log ${app.join(', ')}, which only --page app${app.some(c => FINGER.includes(c)) ? ' --touch' : ''} does`);
 }
@@ -227,10 +230,14 @@ async function start(i, name, script, own) {
     ...(TOUCH ? { hasTouch: true } : {}), ...(DOWNLOAD_LOG ? { acceptDownloads: true } : {}) });
   const page = await ctx.newPage();
   const log = fs.createWriteStream(path.join(OUT, `${name}.log`));
+  let routeTrace = () => {};
   let invites = 0;                                      // (the page's invite links so far: log INVITE)
   const w = (s) => log.write(`${((Date.now() - t0) / 1000).toFixed(3)} ${s}\n`);
   page.on('console', m => {
     w(m.text());
+    const route = APP && /LOG DRIVE_ROUTE ([\w-]+)\b/.exec(m.text());
+    if (route) routeTrace = driveRoute(page, JSON.parse(fs.readFileSync(path.join(REPO, 'tests/scripts', `${route[1]}.json`), 'utf8')), w);
+    routeTrace(m.text());
     // the app page as the player sees it, at a script's `log SHOT <name>` (clean_*: without the lobby's panel)
     const k = APP && /LOG SHOT (\S+)/.exec(m.text());
     if (k) void (k[1].startsWith('clean') ? page.evaluate(() => { for (const id of ['lobby', 'lobby-cover']) document.getElementById(id).hidden = true; }) : Promise.resolve())
@@ -244,6 +251,9 @@ async function start(i, name, script, own) {
       .then(() => w(`[menu] ${mk[1]}`), e => w(`[menu] ${mk[1]} failed: ${e}`));
     // keys pressed on the page, and the right stick as the page reads it, at a script's `log KEY <code> ...` and
     // `log STICK <x> <y>`
+    const heldKey = APP && /LOG KEY(DOWN|UP) (\w+)/.exec(m.text());
+    if (heldKey) void page.keyboard[heldKey[1] === 'DOWN' ? 'down' : 'up'](heldKey[2])
+      .then(() => w(`[key${heldKey[1].toLowerCase()}] ${heldKey[2]}`), e => w(`[key] failed: ${e}`));
     const kk = APP && /LOG KEY ([\w ]+)/.exec(m.text());
     if (kk) void kk[1].trim().split(/\s+/).reduce((p, c) => p.then(() => page.keyboard.press(c)), Promise.resolve())
       .then(() => w(`[key] ${kk[1].trim()}`), e => w(`[key] ${kk[1]} failed: ${e}`));
@@ -493,7 +503,8 @@ inst.forEach((x, i) => {
   if (res[i] === 'done' && exit !== '0') why.push(`exit=${exit ?? 'none'}`);
   if (res[i] === 'done' && !L.includes('quit at guest frame')) why.push('no-quit');
   why.push(...logWhy(L, { allow: ['freeze'] }));
-  if (/^\[(shot|menu|key|stick|tap|hold|scroll|crew|invite)\] .*failed: /m.test(L)) why.push('page-step-failed');
+  if (/^\[(shot|menu|key|route|stick|tap|hold|scroll|crew|invite)\] .*failed: /m.test(L)) why.push('page-step-failed');
+  if (/LOG DRIVE_ROUTE /.test(L) && !/\[route\] reached (\d+)\/\1\b/.test(L)) why.push('route-incomplete');
   summary[x.name].why = why;
   summary[x.name].freezes = (L.match(/^(?:\[\d+!?\] )?\[watchdog\] no Present for/gm) ?? []).length;
   summary.why.push(...why.map(w => `${x.name}:${w}`));
