@@ -41,11 +41,13 @@ web/start.sh --data "/path/to/Need for Speed Underground 2"
 
 Open **http://localhost:8080/** in Chrome or Firefox and press **Play**. The start page has the settings, your saves
 and the controls. The player's guide is [docs/web/PLAYING.md](docs/web/PLAYING.md). The game plays in any of its
-thirteen languages, in Brazilian Portuguese, in Polish, in Turkish, in Hungarian, in Ukrainian, in Czech, in Slovak or in Greek; the
+thirteen languages, in Brazilian Portuguese, in Polish, in Turkish, in Hungarian, in Ukrainian, in Czech, in Slovak, in Greek or in Lithuanian; the
 dubbed voices and movies and the Portuguese, Polish, Hungarian, Ukrainian, Czech and Slovak text come from mods (Czech's
 with this repository's own texts for what it left in German or empty, `tools/lang/czech.json`), the Turkish text is this repository's own translation
 (`tools/lang/turkish.json`, with a mod's fonts), the Greek text a contributor's (`tools/lang/greek.json`, with Greek
-letters drawn into the game's fonts by `tools/greekfont`), as language packs. The menus and HUD can be redrawn at four times
+letters drawn into the game's fonts by `tools/greekfont`), the Lithuanian text this repository's own
+(`tools/lang/lithuanian.json`, with its letters put together from the game's fonts' own by `tools/lithuanianfont`), as
+language packs. The menus and HUD can be redrawn at four times
 their size, from a mod as a texture pack.
 
 To play with friends, run the server behind HTTPS (other PCs need a secure context): `web/deploy/` has a Docker setup.

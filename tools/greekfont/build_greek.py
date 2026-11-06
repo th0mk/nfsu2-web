@@ -321,6 +321,24 @@ class GameFont:
             dx, dy = round(left/4*xscale), baseline+round(top/4)
             check(gw <= 255 and gh <= 255 and -128 <= dx <= 127 and -128 <= dy <= 127, 'Glyph metrics overflow')
             rendered[ch] = (glyph, gw, gh, dx, dy, advance)
+        result, parsed, image = self.add_glyphs(tex, original, rendered, wanted)
+        for ch in GREEK:
+            check(ord(ch) in parsed.records and GREEK_BYTES[ch] in parsed.records, 'Missing Greek glyph')
+            r=GLYPH.unpack(parsed.records[GREEK_BYTES[ch]])
+            check(image.getchannel('A').crop((r[3],r[4],r[3]+r[1],r[4]+r[2])).getbbox() is not None, 'Empty Greek glyph')
+        tex.replace_image(image, original.size[1])
+        return result, {'name':self.name,'original_glyphs':len(self.records),'output_glyphs':len(parsed.records),
+                        'original_size':list(original.size),'output_size':list(image.size), 'original_ascii_unchanged':True,
+                        'greek_coverage':len(GREEK),'font_file_used':path.name}
+
+    def add_glyphs(self, tex: Texture, original, rendered: dict, wanted: dict[int, object]):
+        """the font with glyphs added (tools/lithuanianfont uses it too): rendered {key: (image, w, h, dx, dy,
+        advance)} drawn into new rows below the atlas `original` (tex's image), and a record for each code of
+        wanted {code: key}.  The atlas keeps its width; its old pixels and ASCII records stay as they were.  Returns
+        the font chunk's body, it read back, and the new atlas, which the caller puts into tex (replace_image)."""
+        from PIL import Image
+        ow, oh = original.size
+        recs = dict(self.records)
         placements = {}; x, y, row_height = 1, oh+2, 0
         for ch, (im, gw, gh, dx, dy, adv) in rendered.items():
             check(gw+2 <= ow, f'{self.name}: glyph exceeds atlas width')
@@ -360,15 +378,8 @@ class GameFont:
         for c,r in parsed.records.items():
             _c,gw,gh,gx,gy,*_=GLYPH.unpack(r)
             check(gx+gw<=ow and gy+gh<=nh, f'{self.name}: glyph outside atlas')
-        for ch in GREEK:
-            check(ord(ch) in parsed.records and GREEK_BYTES[ch] in parsed.records, 'Missing Greek glyph')
-            r=GLYPH.unpack(parsed.records[GREEK_BYTES[ch]])
-            check(image.getchannel('A').crop((r[3],r[4],r[3]+r[1],r[4]+r[2])).getbbox() is not None, 'Empty Greek glyph')
         check(original.tobytes()==image.crop((0,0,ow,oh)).tobytes(), 'Original atlas pixels changed')
-        tex.replace_image(image, oh)
-        return result, {'name':self.name,'original_glyphs':len(self.records),'output_glyphs':len(recs),
-                        'original_size':[ow,oh],'output_size':[ow,nh], 'original_ascii_unchanged':True,
-                        'greek_coverage':len(GREEK),'font_file_used':path.name}
+        return result, parsed, image
 
 def encode(s: str) -> bytes:
     s=unicodedata.normalize('NFC',s); out=bytearray()

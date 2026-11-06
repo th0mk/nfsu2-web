@@ -76,7 +76,7 @@ const LABELS = ['Saves', 'Online', 'Friends & crews', 'Game', 'Display', 'Mods',
   'Controller', 'More controller settings', 'Hotplug', 'Off', 'Rumble', 'Trigger full press',
   'Delete game data'];
 const LANG_FILES = { pt: 'portuguese', es: 'spanish', pl: 'polish', ru: 'russian', tr: 'turkish', hu: 'hungarian', uk: 'ukrainian',
-  cs: 'czech', sk: 'slovak', el: 'greek', fr: 'french', de: 'german', it: 'italian', nl: 'dutch', sv: 'swedish', da: 'danish',
+  cs: 'czech', sk: 'slovak', el: 'greek', lt: 'lithuanian', fr: 'french', de: 'german', it: 'italian', nl: 'dutch', sv: 'swedish', da: 'danish',
   zh: 'chinese', ja: 'japanese', ko: 'korean', th: 'thai' };
 
 function cut(s, n = MAX_OUT) {

@@ -5,13 +5,15 @@ TraduMix's and MixMods' Brazilian Portuguese translation, from PLProjekt's
 Polish one, from VileStuff's English subtitles, from muntazam's Turkish
 translation (its fonts, with tools/lang/turkish.json's text), from GameHunter's
 Hungarian one, from Clark X.'s Ukrainian one, from ROXOR's and PINĎA & syn's Czech one
-(with tools/lang/czech.json's texts), from MixerX's Slovak one and from the Greek pack
-tools/greekfont/build_greek.py makes (tools/lang/greek.json's texts).
+(with tools/lang/czech.json's texts), from MixerX's Slovak one, from the Greek pack
+tools/greekfont/build_greek.py makes (tools/lang/greek.json's texts) and from the
+Lithuanian one tools/lithuanianfont/build_lithuanian.py makes (tools/lang/lithuanian.json's).
 
     tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>]
                        [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]
                        [--hu <installer>] [--uk <translation folder>] [--cz <installer>]
                        [--sk <translation folder>] [--el <Greek pack folder>]
+                       [--lt <Lithuanian pack folder>]
 
 Each source builds its own languages' packs; the others are left as they are.
 
@@ -134,6 +136,9 @@ makes from the game's own files: its English.bin with tools/lang/greek.json's te
 the fonts' glyph records for the Greek letters, LanguageTextures.bin and GLOBALA.BUN with
 those letters drawn into the fonts' textures, and the memory-card texts.  Greek takes
 English's place as Polish does.
+<Lithuanian pack folder> (--lt) is the LANGPACKS/lithuanian that
+tools/lithuanianfont/build_lithuanian.py makes the same way, with tools/lang/lithuanian.json's
+texts and the Lithuanian letters put together from the fonts' own.
 Rerunning it copies only what changed, each as a new file (a copy of the game
 folder made of hard links keeps its own).  Prints what each pack holds.
 """
@@ -641,6 +646,17 @@ def el(src, game):
     done(p, 'greek')
 
 
+def lt(src, game):
+    """Lithuanian: tools/lithuanianfont/build_lithuanian.py's output, the same four files as Greek's"""
+    root = next((d for d, _, _ in os.walk(src) if all(find(d, s_) for s_, _ in EL)), None)
+    if not root: sys.exit(f'{src}: no ' + ', '.join(s_ for s_, _ in EL) + ' below it: run tools/lithuanianfont/build_lithuanian.py first')
+    p = Pack(game, 'lithuanian')
+    if p.same_as_game('LANGUAGES/English.bin', src=find(root, 'LANGUAGES/English.bin')):
+        sys.exit(f'{root}: its English.bin is the game\'s own, not a Lithuanian pack')
+    for s_, rel in EL: p.add_file(find(root, s_), rel)
+    done(p, 'lithuanian')
+
+
 STRINGS = 0x39000           # a language file's text: its chunk's id
 
 
@@ -735,7 +751,7 @@ def subs(src, game):
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>] [--hu <installer>] [--uk <translation folder>] [--cz <installer>] [--sk <translation folder>] [--el <Greek pack folder>]')
+    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>] [--hu <installer>] [--uk <translation folder>] [--cz <installer>] [--sk <translation folder>] [--el <Greek pack folder>] [--lt <Lithuanian pack folder>]')
     ap.add_argument('game')
     ap.add_argument('--multi13', metavar='MOD', help='the Multi 13 languages mod, every archive extracted')
     ap.add_argument('--ptbr', metavar='FOLDER', help='the Brazilian Portuguese translation, extracted')
@@ -747,8 +763,9 @@ def main():
     ap.add_argument('--cz', metavar='INSTALLER', help='the Czech translation\'s patch (nfsu2cz-v1.1.exe, its zip or folder), never run')
     ap.add_argument('--sk', metavar='FOLDER', help='the Slovak translation, its installer extracted (7z x), never run')
     ap.add_argument('--el', metavar='FOLDER', help='the Greek pack tools/greekfont/build_greek.py made (its LANGPACKS/greek)')
+    ap.add_argument('--lt', metavar='FOLDER', help='the Lithuanian pack tools/lithuanianfont/build_lithuanian.py made (its LANGPACKS/lithuanian)')
     a = ap.parse_args()
-    if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr or a.hu or a.uk or a.cz or a.sk or a.el): sys.exit(__doc__)
+    if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr or a.hu or a.uk or a.cz or a.sk or a.el or a.lt): sys.exit(__doc__)
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')
     if a.multi13: multi13(a.multi13, a.game)
     if a.ptbr: ptbr(a.ptbr, a.game)
@@ -760,6 +777,7 @@ def main():
     if a.cz: cz(a.cz, a.game)
     if a.sk: sk(a.sk, a.game)
     if a.el: el(a.el, a.game)
+    if a.lt: lt(a.lt, a.game)
 
 
 if __name__ == '__main__':

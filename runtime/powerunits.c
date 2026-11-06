@@ -106,7 +106,7 @@ static const char *label(void){
         { "spanish", "Unidades de potencia" }, { "dutch", "Eenheden vermogen" }, { "swedish", "Enhet f\xf6r effekt" },
         { "danish", "Ydelsesenhed" }, { "portuguese", "Unidades de Pot\xeancia" }, { "polish", "Jednostki mocy" },
         { "turkish", "G\xfc\xe7 Birimi" }, { "hungarian", "Teljes\xedtm\xe9nyegys\xe9g" },
-        { "czech", "Jednotky v\xfdkonu" }, { "slovak", "Jednotky v\xfdkonu" },
+        { "czech", "Jednotky v\xfdkonu" }, { "slovak", "Jednotky v\xfdkonu" }, { "lithuanian", "Galios vienetai" },
     };
     const char *l = language_name();
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) if (!strcmp(l, T[i].lang)) return T[i].text;
