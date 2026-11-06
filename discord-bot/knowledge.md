@@ -363,6 +363,24 @@ context lists the problems flagged for the developer, with the first thread of e
   plugging in a controller got a player past it. Also on 4 November in Firefox: the race results stop taking input
   after Alt+Tab and back, not every time (thread 1567493082470158336). No fix yet. Ask for the log while it is stuck
   (F9, Download log), and whether a controller gets past it.
+- The camera turning round by itself and not stopping, after a reload too: photo mode's Auto-turn (Camera tab), kept
+  from the last visit; Reset did not stop it, and its off is the slider's middle (fully left is the fastest turn).
+  Since 8963bd72 it starts off at each visit, Reset stops it, and the middle tenth of the slider is off. Until that is
+  live: in photo mode, double-click the Auto-turn slider (it goes to the middle, off).
+- Joining a race with others from free roam: loading for about 3 minutes, then back to the lobby, the host's race
+  gone, every time: the joiner's trip took another icon than Lobby in the LAN menu (the one picked last in the Online
+  menu: Options, Car Select). Fixed since 6df52f06; the log's `[mprace] ... UI_OLMAIN's Enter opened ...` shows a
+  detour backed out of. Until live: in the game's Online menu, leave the Lobby icon picked.
+- iPhone: two fingers no longer turned the car in the garage and shops. Since fce0e64a two fingers are the page's
+  (not Safari's pinch) and any two make the turn; the log's `[touch] a two-finger turn: ...` lines say how each ended.
+- Enter (or D-pad up) doing nothing at a marker while its prompt shows (a shop door, a race start, a cover shoot's
+  target), until a reload: since 8507c17e the game's "engaging" byte left set is cleared after 2 s (the log's
+  `[engage] ... cleared`), and an Enter that brings nothing up logs what the game tested (`[engage] Enter at marker
+  ... brought nothing up: ...`): ask for that log if it still happens.
+- Alt (nitrous) or Shift/Ctrl (gears) dead in Firefox while other keys work: since 2fe1aab6 a modifier counts however
+  the browser sends it; the log says `[key] ... first keydown came as a repeat` or `[input] a key with no code of
+  ours` when that is why. Ask for the browser (about:support), privacy.resistFingerprinting, keyboard tools
+  (AutoHotkey, layout switchers), and a test in Edge or Chrome.
 - iPhones and iPads: the picture freezes for about a second every 10 to 20 seconds (the sound goes on), worse the
   longer the page is open in a busy free roam; logs show `GPU done ... max` 500-1300 ms with `0 waited for the GPU`
   each minute. The page's copy of the log for a stopped game (every 10 s) took Safari that long with many players'
