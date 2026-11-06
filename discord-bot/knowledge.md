@@ -363,14 +363,26 @@ context lists the problems flagged for the developer, with the first thread of e
   plugging in a controller got a player past it. Also on 4 November in Firefox: the race results stop taking input
   after Alt+Tab and back, not every time (thread 1567493082470158336). No fix yet. Ask for the log while it is stuck
   (F9, Download log), and whether a controller gets past it.
+- iPhones and iPads: the picture freezes for about a second every 10 to 20 seconds (the sound goes on), worse the
+  longer the page is open in a busy free roam; logs show `GPU done ... max` 500-1300 ms with `0 waited for the GPU`
+  each minute. The page's copy of the log for a stopped game (every 10 s) took Safari that long with many players'
+  names. Fixed since 38c83a1c; until it is live, a reload of the page makes it short again for a while.
+- Career garage slots 6-10 locked and their cars gone ("5 cars, 5 of 10 slots open" in the log's `[garage]` line on a
+  career that had more, 100% saves too): a visit to Split Screen made slots 6-10 empty and locked, and the career's
+  next save kept them so. Fixed since ec2b5d69. Cars lost that way come back only from a backup or a cloud save made
+  before it (Saves, Restore; cloud saves' Go back).
+- Error 134 after the car lot on a profile whose career car is none of its cars (the pause menu's log line "no car of
+  the career's own yet" while it has cars): such a career drives its first car since c01f24e2.
 - Phones with Adreno 6xx graphics (Adreno 610 among them, often Android 10 or 11): `GPU-LOST` at the first frame, black
   screen, every Play; the log's `[gpu] device lost` line says `VK_ERROR_FORMAT_NOT_SUPPORTED` "While checking external
   image import support with TextureFormat::RGBA8Unorm". Chrome asks the phone's graphics driver whether it may use the
   picture it made for the page, the driver says no, and Chrome takes that for a lost device: no fix on the game's side,
   no setting or flag helps; a system update for the phone may. Since 3 November (583c516b, live) the page says so
   itself (`GPU-ANDROID-DRIVER`). Other Adreno 6xx phones play fine. First thread 1565320939904704613.
-- Phones with PowerVR BXM graphics (MediaTek Dimensity 7020/7025): the graphics stop within seconds in landscape
-  (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); portrait works for some.
+- Phones with PowerVR BXM graphics (MediaTek Dimensity 7020/7025; the log's `Graphics: img-tec b-series`): the graphics
+  stop within seconds in full screen, mostly in landscape (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); in the window
+  the game runs. Since 344b554c these phones start in the window (Full screen on Play off by default). A player who
+  turned it on: the start page's Game, Display, Full screen on Play off.
 - Black picture with sound on Intel graphics of the 9th generation (HD 510 and similar), in Chrome and Firefox: the
   log shows the game drawing with no WebGPU errors. No fix.
 - Free roam: error 134 after an hour or more among many players, with trips out of free roam and back (the crib,
@@ -449,6 +461,9 @@ context lists the problems flagged for the developer, with the first thread of e
   8BitDo's fix, from its poster (6 November): switch the controller to D-input, or set Trigger full press (start page,
   Controls, Controller, More controller settings) very low, about 0.07. For the Mac pad: ask for the log and what Controls,
   Controller shows when the trigger is pressed. Threads 1567258347940352072, 1566999852288843858.
+- Xbox controllers on Bluetooth (One S, Elite 2, Adaptive with the newer firmware: `045e` with `0b20`, `0b21`, `0b22`)
+  in Firefox: the triggers do nothing, LB brakes and RB drives. On a Mac fixed since 15e89f37. Firefox on Windows
+  gives such a pad no triggers at all: Chrome or Edge, or the controller on a USB cable, read it properly.
 - Horns (yours and other players') still sounding with the game's Master Volume at 0: horns had only their own slider,
   Horn Volume (the game's Options, Audio, also the pause menu's), 10 % to 100 %. Fixed on 4 November (47f8c0c6): horns
   follow Master Volume as the game's own sounds do, so Master Volume at 0 silences them too; Horn Volume stays 10 % to
@@ -545,7 +560,10 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   on overrides the game's Texture Filtering), since 7f34eaa8; C goes on from the game's four views to the drift
   races' camera in every drive, since 0c930f2f; the Graphics Shop's vinyls have a Special category after Sponsor
   with the game's promo vinyls (Snoop Dogg, Capone, Chingy, The Doors and others; free, no visual rating, stages 2
-  and 3), since 84c85172; Quick Race: laps 1 to 127 and up to 5 opponents (drags 3), Lap KO's laps and opponents
+  and 3), since 84c85172: D3, Shinestreet, Chingy and Capone on every car, the others made for a few cars each in
+  the game's data (Street Reaper: 3000GT, Celica, Escalade, G35, GTO, Mustang GT, RX-8, TT; Japan Tuning: G35; David
+  Choe: 350Z, Corolla; Snoop Dogg: Mustang GT; Snoop Dogg 2: Escalade; The Doors: GTO); picked on another car they
+  drew nothing, and since 0200cad9 Special lists only the ones the car has; Quick Race: laps 1 to 127 and up to 5 opponents (drags 3), Lap KO's laps and opponents
   changeable (it starts at 5 and 5), and a race of one lap shows Completed % in place of LAP 1/1, since 81fad175;
   headlights on G: a tap turns them off or back on, held is high beam (brighter, reaching farther) until let go, and
   friends in free roam see it; on a controller the look's stick straight up; another key, or none, in Controls,
