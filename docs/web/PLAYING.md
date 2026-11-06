@@ -115,7 +115,6 @@ While you drive:
 | Space | Handbrake |
 | Left Shift, left Ctrl | Gear up, gear down (manual gearbox) |
 | C, B | Camera (the game's four views, then the drift races' camera, in every drive), look back |
-| G | Headlights: a tap turns them off, or back on; held, high beam (brighter, reaching farther) until you let go. Friends in free roam see it, so you can flash your lights at them. On a controller the right stick straight up (see Controller below). Another key, or none, in Controls, Site |
 | R | Respawn |
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
@@ -138,12 +137,12 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Change the keys:** in the game, Options, Controls. It opens on Keyboard Configuration; Up to that title, then
   Right, is Joypad Configuration, the controller's buttons. The game lists a controller once it has seen it: press a
   button on it before opening Controls. A controller's buttons are kept with the profile (leaving Options saves them),
-  the keys for every profile. The site's own keys and buttons (drift mode, the trunk, the horn, the headlights, quick
-  chat's controller button, messages, friends, photo mode, the page menu, the next song, the counter) are set on the
-  start page, Controls, Site: click one, then press the new key or controller button, or pick Off (the page menu
-  always has a key, and Home). Keys the game itself uses can't be picked; one of the game's controls you put on one of
-  the site's keys in the game's Controls takes it: the site's control leaves it to the game, and Site says so. D-pad
-  down and the stick clicks with the game's own controls on them as it comes (Career Status, hydraulics) are shared as
+  the keys for every profile. The site's own keys and buttons (drift mode, the trunk, the horn, quick chat's
+  controller button, messages, friends, photo mode, the page menu, the next song, the counter) are set on the start
+  page, Controls, Site: click one, then press the new key or controller button, or pick Off (the page menu always has
+  a key, and Home). Keys the game itself uses can't be picked; one of the game's controls you put on one of the
+  site's keys in the game's Controls takes it: the site's control leaves it to the game, and Site says so. D-pad down
+  and the stick clicks with the game's own controls on them as it comes (Career Status, hydraulics) are shared as
   before: a short press, and a car with hydraulics, stay the game's. The touch controls' Drift and Horn work whatever
   keys those have.
 - **Drift mode (X):** in free roam, the car handles as in the game's drift races (their handling and drift assist,
@@ -159,7 +158,7 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   stands still, the HUD goes and the camera comes loose from the car. Orbit (the first) turns around a point at your
   car, which you can move up to 25 m from it, from up to 30 m away; Free flies up to 50 m from the car. Drag with the
   mouse (or the arrow keys) to turn, W A S D to move, Q and E for down and up, the wheel to come closer or go farther,
-  Z and X to zoom, C and V to tilt, Shift to go faster, Tab for orbit or free, R to start over, N for the names over
+  Z and X to zoom, C and V to tilt continuously through full rotations, Shift to go faster, Tab for orbit or free, R to start over, N for the names over
   other players' cars (free roam only; off at first), H to hide the panel. F12, Enter or Space takes the photo, Esc
   leaves. On a controller: the right stick turns, the left stick moves, LB and RB are down and up, the triggers closer
   and farther, the D-pad zooms and tilts, Y is orbit or free, X starts over, a click of the right stick is the names,
@@ -184,8 +183,6 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   game's own look back, as B (whatever button you bound to it). If you steer, accelerate or brake with the right
   stick (the game's Options, Controls, Joypad Configuration), the left stick looks round instead, as long as the game
   uses nothing of it (no steering or pedal, no direction bound to a control); if it does, neither stick looks round.
-  The stick that looks round, pushed straight up, is the headlights (G): a flick up turns them off or back on, held up
-  is high beam until you let go.
   In free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
   bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. With the
   right stick steering or on a pedal, its click stays the game's (bounce), and 1 to 4 open quick chat. In the

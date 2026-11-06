@@ -180,7 +180,8 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 #define TURN_DPS       100.f
 #define FOV_MIN        15.f
 #define FOV_MAX        110.f
-#define ROLL_MAX       45.f
+#define ROLL_HALF      180.f         /* keep tilt in one equivalent turn: [-180, 180) */
+#define ROLL_FULL      360.f
 #define RATE_DPS       30.f          /* the zoom and tilt keys */
 #define DEG            0.017453292f
 #define PI             3.14159265f
@@ -270,6 +271,15 @@ static void cstr(uint32_t a, char *o, int n){
     o[i] = 0;
 }
 static float clampf(float v, float lo, float hi){ return v < lo ? lo : v > hi ? hi : v; }
+
+/* Camera roll has no stop: C/V can keep rotating it in either direction.  Keep
+ * the stored angle in one equivalent revolution so it never grows without bound;
+ * crossing +180/-180 is the same orientation and therefore visually continuous. */
+static float wrap_roll(float v){
+    v = fmodf(v + ROLL_HALF, ROLL_FULL);
+    if (v < 0.f) v += ROLL_FULL;
+    return v - ROLL_HALF;
+}
 static float s16(int packed, int hi){ return (float)(int16_t)(hi ? (uint32_t)packed >> 16 : (uint32_t)packed & 0xffffu) / 32767.f; }
 static double now_s(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec + ts.tv_nsec * 1e-9; }
 
@@ -462,7 +472,7 @@ static void steer(uint32_t car, float dt){
     }
     float zr = (float)(!!(hold & HB_ZOUT) - !!(hold & HB_ZIN)), rr = (float)(!!(hold & HB_RR) - !!(hold & HB_RL));
     P.fov = clampf(fs != NONE_SET ? (float)fs / 100.f : P.fov + zr * RATE_DPS * dt, FOV_MIN, FOV_MAX);
-    P.roll = clampf(rs != NONE_SET ? (float)rs / 100.f : P.roll + rr * RATE_DPS * dt, -ROLL_MAX, ROLL_MAX);
+    P.roll = wrap_roll(rs != NONE_SET ? (float)rs / 100.f : P.roll + rr * RATE_DPS * dt);
     /* where from and at: the eye kept over the car's ground, then smoothed (a jerky drag or a key reads as a glide) */
     float e[3], l[3];
     if (!P.free){
@@ -773,12 +783,9 @@ void sub_006162e0(CPU *c){
     sub_006162e0_orig(c);
 }
 void sub_00615630_orig(CPU *c);
-void lightkey_flares(uint32_t ri);               /* lightkey.c: whose flares these are (high beam) */
 void sub_00615630(CPU *c){
     if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0x18u; return; }
-    lightkey_flares(c->ecx);
     sub_00615630_orig(c);
-    lightkey_flares(0);
 }
 
 /* the test script's "photo ..." (autotest.c): hello, on, off, orbit, free, other (Tab), reset, names [0|1], hold MASK,

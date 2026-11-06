@@ -32,7 +32,7 @@ const PH_HELLO = 0, PH_OPEN = 1, PH_HOLD = 2, PH_MOVE = 3, PH_TURN = 4, PH_DRAG 
   PH_FOV = 8, PH_ROLL = 9, PH_MODE = 10, PH_RESET = 11, PH_NAMES = 12, PH_FOCUS = 13, PH_BLUR = 14, PH_CARS = 15, PH_FREEZE = 16;
 const HB_FWD = 1, HB_BACK = 2, HB_LEFT = 4, HB_RIGHT = 8, HB_UP = 16, HB_DOWN = 32, HB_TL = 64, HB_TR = 128,
   HB_TU = 256, HB_TD = 512, HB_ZIN = 4096, HB_ZOUT = 8192, HB_RL = 16384, HB_RR = 32768, HB_FAST = 65536;
-const FOV_MIN = 15, FOV_MAX = 110, ROLL_MAX = 45;
+const FOV_MIN = 15, FOV_MAX = 110;
 /** the panel's choices kept between photo modes */
 interface Kept { filter: Filter; exposure: number; vignette: number; crop: string; grid: boolean; blur: number; cars: number; freeze: boolean }
 const KEPT_STORE = 'nfsu2-photo';
@@ -126,7 +126,7 @@ export class PhotoMode {
     p.innerHTML =
       '<div class="ph-head"><b class="ph-title"></b><span class="ph-mode"><button type="button" data-mode="0"></button>' +
       '<button type="button" data-mode="1"></button></span></div>' +
-      slider('ph-zoom', 0, 1000) + slider('ph-tilt', -450, 450, 5) + slider('ph-blur', 0, 1000) + slider('ph-focus', 0, 1000) +
+      slider('ph-zoom', 0, 1000) + slider('ph-tilt', -1800, 1800, 5) + slider('ph-blur', 0, 1000) + slider('ph-focus', 0, 1000) +
       slider('ph-exposure', -200, 200, 5) + slider('ph-vignette', 0, 1000) +
       pick('ph-filter') + pick('ph-crop') + pick('ph-cars') +
       '<label class="ph-check"><input type="checkbox" class="ph-grid"><span class="ph-grid-l"></span></label>' +
