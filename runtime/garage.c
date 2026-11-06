@@ -345,6 +345,8 @@ uint32_t garage_find(uint32_t db, uint32_t h){
 }
 
 /* --- new careers, stages --------------------------------------------------- */
+/* slots 6-10 as split screen found them (garage_split_keep, below) */
+static struct { int on; uint8_t cars[XN * SAVE_REC]; } g_split;
 /* thiscall cars: the 5 slots as a new profile's; ours too */
 void sub_0052a5d0_orig(CPU *c);
 void sub_0052a5d0(CPU *c){ sub_0052a5d0_orig(c); ensure(c); }
@@ -352,6 +354,7 @@ void sub_00516480_orig(CPU *c);
 void sub_00516480(CPU *c){
     uint32_t db = c->ecx;
     sub_00516480_orig(c);
+    if (MR32(G_GAMEMODE) != 4u) g_split.on = 0;
     if (player_of(db) >= 0 && ensure(c)) xinit(c, db);
 }
 /* thiscall Career (1): a new career, its first slot open; and the second */
@@ -388,7 +391,6 @@ void sub_00532cf0(CPU *c){ stages(c, sub_00532cf0_orig); }
  * was written): a career saved after split screen lost the cars in slots
  * 6-10 and those slots ("5 cars, 5 of 10 slots open" at the next load of a
  * career that had 8 cars and 10). */
-static struct { int on; uint8_t cars[XN * SAVE_REC]; } g_split;
 void garage_split_keep(CPU *c){
     if (!g_blk) return;
     xsave(c, CARS0, g_split.cars); g_split.on = 1;
@@ -583,6 +585,7 @@ void sub_00516850(CPU *c){
     if (p == 0) g_p1_loads++;
     if (p < 0 || !ensure(c)) return;
     if (!p) g_back.on = 0;
+    if (MR32(G_GAMEMODE) != 4u) g_split.on = 0;  /* (a load in split screen is undone at its end: kept) */
     xinit(c, db);
     char name[33] = "";
     uint64_t fp = fnv(in, CARS_PART);
