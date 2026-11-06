@@ -32,6 +32,9 @@ COPY web/tools/i18n-keys.mjs tools/
 COPY web/src src
 RUN node build.mjs && mkdir /state
 
+# The CI (.github/workflows/image-rs.yml) builds the binaries on runners of their own and puts a folder with them
+# (nfsu2-server-amd64, nfsu2-server-arm64) in place of this stage (--build-context server=<folder>): its zig,
+# cargo-zigbuild, targets and CARGO_PROFILE_RELEASE_DEBUG are this stage's, keep the two in step.
 FROM --platform=$BUILDPLATFORM rust:1-bookworm AS server
 ARG TARGETARCH
 ARG ZIG=0.14.1
@@ -50,20 +53,22 @@ COPY web/server-rs web/server-rs
 ENV CARGO_PROFILE_RELEASE_DEBUG=0
 # (the build folder goes once the binary is out: the layer, which the CI's cache keeps, holds 6 MB instead of 500)
 RUN cd web/server-rs && cargo zigbuild --release --locked -p nfsu2-server --target "$(cat /target)" \
- && cp "target/$(cat /target)/release/nfsu2-server" /nfsu2-server && rm -rf target
+ && cp "target/$(cat /target)/release/nfsu2-server" "/nfsu2-server-$TARGETARCH" && rm -rf target
 
 # the binary on its own, for a VPS without Docker (web/deploy/pack.sh):
 #   docker build -f web/server-rs/Dockerfile --platform linux/amd64 --target binary --output <dir> .
 FROM scratch AS binary
-COPY --from=server /nfsu2-server /nfsu2-server
+ARG TARGETARCH
+COPY --from=server /nfsu2-server-$TARGETARCH /nfsu2-server
 
 FROM alpine:3.22
+ARG TARGETARCH
 LABEL org.opencontainers.image.title="nfsu2-web-rs" \
       org.opencontainers.image.description="NFS Underground 2 in the browser: the server, in Rust (bring your own game)" \
       org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 COPY --from=page /src/web/dist web/dist
-COPY --from=server /nfsu2-server /app/nfsu2-server
+COPY --from=server /nfsu2-server-$TARGETARCH /app/nfsu2-server
 COPY --from=page --chown=1000:1000 --chmod=700 /state /state
 # NFSU2_REPO: where the server finds the page (web/dist); its own default is the checkout it was built in
 ENV NFSU2_REPO=/app \

@@ -1,8 +1,13 @@
 # The server's container image (web/server-rs/Dockerfile) -> ghcr.io/<owner>/<repo>-rs, for amd64 and arm64, tagged
-# latest (the default branch), <version> and <major>.<minor> (a v* tag), sha-<commit> (every push).  Pull requests
-# build it without pushing.  (ghcr.io/<owner>/<repo>, without -rs, was the Node server's image: its tags up to
-# 6076514 stay in the registry.)  The image never holds the game or the game module: the build sees only the page's
-# and the server's sources (web/server-rs/Dockerfile.dockerignore).
+# latest (the newest commit of the default branch), <version> and <major>.<minor> (a v* tag), sha-<commit> (every push).
+# Pull requests build it without pushing.  (ghcr.io/<owner>/<repo>, without -rs, was the Node server's image: its tags
+# up to 6076514 stay in the registry.)  The image never holds the game or the game module: the build sees only the
+# page's and the server's sources (web/server-rs/Dockerfile.dockerignore).
+#
+# The server is built first, on a runner of each platform side by side (its dependencies kept between runs), and its
+# binaries take the place of the Dockerfile's server stage; a push that changes nothing in web/server-rs takes the
+# binaries an earlier run built of the same sources.  Every push to main gets its image (web/deploy/release.sh pulls
+# sha-<commit>): a newer push does not stop the run of the one before.
 name: image-rs
 on:
   push:
@@ -16,16 +21,84 @@ on:
 permissions:
   contents: read
   packages: write
+# a newer push to a pull request stops its run; on main every push is built to the end
 concurrency:
-  group: image-rs-${{ github.ref }}
-  cancel-in-progress: true
+  group: image-rs-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# the Dockerfile's server stage builds with these: keep the two in step
+env:
+  ZIG: 0.14.1
+  ZIGBUILD: 0.23.4
 jobs:
-  image:
-    runs-on: ubuntu-latest
+  server:
+    name: server ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v5
-      # the page and the binary are built on the runner's platform (the binary cross-compiled), the image's own
-      # stage only copies and adds a user: no QEMU
+      # the binary of these sources (and this file's way of building it), if a run built it before
+      - id: bin
+        uses: actions/cache@v4
+        with:
+          path: bin
+          key: server-${{ matrix.arch }}-${{ hashFiles('web/server-rs/**', '.github/workflows/image-rs.yml') }}
+      - if: steps.bin.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: steps.bin.outputs.cache-hit != 'true'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG }}
+      - if: steps.bin.outputs.cache-hit != 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild@${{ env.ZIGBUILD }}
+      - if: steps.bin.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: web/server-rs
+          key: ${{ matrix.target }}
+      # static musl, as the Dockerfile's server stage builds it; no line tables (a third of its size), a panic still
+      # names its functions
+      - name: the server
+        if: steps.bin.outputs.cache-hit != 'true'
+        working-directory: web/server-rs
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+        run: |
+          cargo zigbuild --release --locked -p nfsu2-server --target ${{ matrix.target }}
+          mkdir -p ../../bin
+          cp target/${{ matrix.target }}/release/nfsu2-server ../../bin/nfsu2-server-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.arch }}
+          path: bin/nfsu2-server-${{ matrix.arch }}
+          retention-days: 1
+          if-no-files-found: error
+  image:
+    needs: server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      # both binaries in one folder, for the Dockerfile's server stage (an artifact loses the executable bit)
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: server-*
+          path: ${{ runner.temp }}/server
+          merge-multiple: true
+      - run: chmod 755 "$RUNNER_TEMP"/server/nfsu2-server-amd64 "$RUNNER_TEMP"/server/nfsu2-server-arm64
+      # the page is built on the runner's platform, the image's own stage only copies and adds a user: no QEMU
       - uses: docker/setup-buildx-action@v3
       - if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -33,12 +106,17 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # latest only while this commit is main's newest: the runs of several pushes go side by side, and the one of an
+      # older commit can end after a newer one's
+      - id: newest
+        if: github.ref == 'refs/heads/main'
+        run: echo "latest=$([ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}-rs
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ steps.newest.outputs.latest == 'true' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
@@ -46,6 +124,7 @@ jobs:
         with:
           context: .
           file: web/server-rs/Dockerfile
+          build-contexts: server=${{ runner.temp }}/server
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
