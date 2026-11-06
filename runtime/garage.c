@@ -638,6 +638,18 @@ void sub_005344d0(CPU *c){
     }
     not_empty(CAREER + K_CAR, "the career's car");
     not_empty(G_QR_CAR, "the Quick Race car");
+    /* a career past the prologue whose car is in none of the 10 slots, while it has cars: the first car you have.
+     * The game never leaves a career so (from the first car bought on it drives one of the slots': CAREER_SLOT_n),
+     * but a profile came so (2026-11-05: 10 cars, the career's car none of them): the car lot then took the missing
+     * car for one to trade (0x4ED9E0: Career::GetCar() 0x513C30, the slots' record of the handle, 0, called
+     * through) and built the new one at address 0, and the next world load ended in error 134, at every load of
+     * that profile.  Before the first car (the prologue, the first car lot) the career has none: left as it is. */
+    uint32_t h = MR32(CAREER + K_CAR), to;
+    if (MR32(CAREER + K_STAGE) >= 1u && slot_of(CARS0, garage_find(CARS0, h)) < 0 && (to = first_car(CARS0, SLOTS))){
+        gcall(c, FN_SET_CAR, CAREER, 1, &to);
+        fprintf(stderr, "[garage] the career's car 0x%08x was in none of the slots: now the one in slot %d (0x%08x)\n",
+                h, slot_of(CARS0, garage_find(CARS0, to)) + 1, MR32(CAREER + K_CAR));
+    }
 }
 
 /* The shop's buys (0x547570) add each part to the career car it finds among
