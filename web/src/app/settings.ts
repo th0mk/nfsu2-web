@@ -186,6 +186,11 @@ export const KEYS: readonly KeyDef[] = [
   // the career's visual rating set by the stage, not by the car's parts (runtime/visualrep.c).  Not in bundle.m's
   // table: there a lower-case key, so it reaches the runtime as NFSU2_VISUAL_REP_REMOVER all the same
   { key: 'visual_rep_remover', env: 'NFSU2_VISUAL_REP_REMOVER', kind: 'bool', scope: 'web' },
+  // the player's gearbox whine over the game's sound, as ropsli's UG2WhineGen (runtime/whine.c).  Not in bundle.m's
+  // table: there a lower-case key, so it reaches the runtime as NFSU2_GEARBOX_WHINE all the same
+  { key: 'gearbox_whine', env: 'NFSU2_GEARBOX_WHINE', kind: 'bool', scope: 'web' },
+  // ...and how loud, in % of the mod's own levels (runtime/whine.c)
+  { key: 'gearbox_whine_volume', env: 'NFSU2_GEARBOX_WHINE_VOLUME', kind: 'int', vals: '0..400', scope: 'web' },
   // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
   // pointTex).  Not in bundle.m's table
   { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
@@ -311,6 +316,16 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # off = the original game.
 # [NFSU2_VISUAL_REP_REMOVER]
 #visual_rep_remover = off
+
+# NFS Carbon's transmission whine on the player's car, as ropsli's
+# UG2WhineGen (github.com/ropi336/UG2WhineGen) has it: a whine rising with
+# the speed, quiet for a moment at each upshift, and its own in reverse,
+# by the game's Engine Volume.  off = the original game.
+# [NFSU2_GEARBOX_WHINE]
+#gearbox_whine = off
+# Its volume, in % of the mod's own (0 to 400; 165 by default, the mod's
+# own lost under the game's engine at speed).  [NFSU2_GEARBOX_WHINE_VOLUME]
+#gearbox_whine_volume = 165
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"
