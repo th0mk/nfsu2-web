@@ -104,11 +104,15 @@ function section(id: string, title: string, rows: HTMLElement[]): HTMLElement {
 export function modSections(settingRow: (key: string) => HTMLElement): HTMLElement[] {
   const mods = KINDS.flatMap(k => {
     const ms = MODS.filter(m => m.kind === k.kind && !m.row);
-    return ms.length ? [section(k.kind, k.title, ms.map(m => 'setting' in m.control ? settingRow(m.control.setting) : modRow(m)))] : [];
+    return ms.length ? [section(k.kind, k.title, ms.flatMap(m => 'setting' in m.control
+      ? [settingRow(m.control.setting), ...(m.control.more ?? []).map(k => subRow(settingRow(k)))] : [modRow(m)]))] : [];
   });
   return [...mods, section('ours', OURS.title, ADDED.map(g =>
     plainRow(g.id, t(g.title), t(LABELS.ours, { name: t(g.title) }), groupHelp(g.items))))];
 }
+
+/** a mod's own setting's row (Mod control more), set in under the mod's */
+function subRow(row: HTMLElement): HTMLElement { row.classList.add('set-sub'); return row; }
 
 /** a row with no control: its name with its (i) (named about), and its help line */
 function plainRow(id: string, name: string, about: string, help: (Node | string)[]): HTMLElement {

@@ -91,7 +91,8 @@ misread the log's numbers:
   buttons' layout, not the pad's name.
 - The mods' settings are on their rows in Mods, named by the mod (no "More" step): Upscaled HUD and Detailed Map
   (Original, Map only, Upscaled), English Subtitles Fixed (off: no movie subtitles in any language), Uncensored &
-  Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover. Music in drag
+  Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover,
+  Transmission Whine (ropsli's UG2WhineGen: NFS Carbon's gearbox whine on your car, off by default). Music in drag
   and drift races is the site's own setting: Game.
 - Resolution scale: 50%, 75%, 100%, 150%, 200%. 50% is the lowest (a quarter of the pixels); phones start at 75%.
 - Frame rate: Auto, 30, 60, 120, 240. Auto picks one of those from the screen's refresh rate (240 from 239 Hz, 120
