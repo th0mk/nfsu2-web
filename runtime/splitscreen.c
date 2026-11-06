@@ -2,6 +2,7 @@
  * Source: Copyright (c) 2026 mihaits, MIT (licenses/NFSU2-SplitScreen.txt).
  * Guest calls run through the lifted dispatcher, never native x86 pointers. */
 #include "cpu.h"
+void garage_split_keep(CPU *c);            /* garage.c: slots 6-10 aside for the mode */
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -1928,8 +1929,10 @@ int splitscreen_hook(CPU *c, uint32_t ip){
     if (ip == 0x4aeed8u){ split_add_menu(c, c->esi); return 1; }
     if (ip == 0x4fc06bu){
         if (split_entering){
-            /* PC mode 4 restores this backup on exit, so populate it FIRST. */
+            /* PC mode 4 restores this backup on exit, so populate it FIRST (and the career garage's slots 6-10,
+             * which the mode's exit puts back too: garage.c 0x515D70) */
             memcpy(g_mem + 0x83a9d0u + 0x1677cu, g_mem + 0x83a9d0u + 0x3c0u, 0x26f6u * 4);
+            garage_split_keep(c);
             MR32(0x83a9d0u + 0x20354u) = MR32(0x83a9d0u + 0xe8u);
             MR32(0x850078u) = 4;
             for (unsigned i = 0; i < 13; ++i) MR8(0x83aac4u + i * 0x14u) = 2;

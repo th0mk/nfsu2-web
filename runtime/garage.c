@@ -380,10 +380,29 @@ void sub_00551320_orig(CPU *c);
 void sub_00551320(CPU *c){ stages(c, sub_00551320_orig); }
 void sub_00532cf0_orig(CPU *c);
 void sub_00532cf0(CPU *c){ stages(c, sub_00532cf0_orig); }
-/* thiscall FEDatabase: Online's end puts player 1's cars back as its copy has
- * them (+0x1677C, as made); ours as made too */
+/* thiscall FEDatabase: the end of the game's split-screen mode (4: 0x4B2A00
+ * leaving it) puts player 1's cars back as its backup has them (+0x1677C,
+ * which splitscreen.c fills as the mode starts); slots 6-10 go back as they
+ * were then too (garage_split_keep), or stay as they are.  Until 2026-11-06
+ * they were made empty and locked here (the mode was out of reach when this
+ * was written): a career saved after split screen lost the cars in slots
+ * 6-10 and those slots ("5 cars, 5 of 10 slots open" at the next load of a
+ * career that had 8 cars and 10). */
+static struct { int on; uint8_t cars[XN * SAVE_REC]; } g_split;
+void garage_split_keep(CPU *c){
+    if (!g_blk) return;
+    xsave(c, CARS0, g_split.cars); g_split.on = 1;
+    fprintf(stderr, "[garage] split screen: slots 6-10 kept aside, %u cars of yours, %u of %u slots open\n",
+            owned_n(CARS0), open_n(CARS0), SLOTS);
+}
 void sub_00515d70_orig(CPU *c);
-void sub_00515d70(CPU *c){ sub_00515d70_orig(c); if (g_blk) xinit(c, CARS0); }
+void sub_00515d70(CPU *c){
+    sub_00515d70_orig(c);
+    if (!g_blk || !g_split.on) return;
+    xload(c, CARS0, g_split.cars); g_split.on = 0;
+    fprintf(stderr, "[garage] split screen's end: slots 6-10 as they were, %u cars of yours, %u of %u slots open\n",
+            owned_n(CARS0), open_n(CARS0), SLOTS);
+}
 
 /* --- the profile ------------------------------------------------------------ */
 /* What a profile's payload leaves to us: slots 6-10, and the cars driven when
