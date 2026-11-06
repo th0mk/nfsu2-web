@@ -39,6 +39,7 @@ import { HostKind } from '../host/abi';
 import { CODES, cp1252, isMeta, keyChars, keyVk, PAGE_CODES } from './keymap';
 import { PadPoller, type PadPage, type TouchPad } from './gamepad';
 import { SynthDriver } from './synth';
+import { AltGrCtrl } from './altgr';
 import {
   IEV_FOCUS, IEV_KEY_DOWN, IEV_KEY_TAP, IEV_KEY_UP, IEV_LOG, IEV_MOUSE_DOWN, IEV_MOUSE_MOVE, IEV_MOUSE_UP, IEV_QUIT, IEV_SMS,
   IEV_PHOTO, IEV_NAME, INAME_SEAT2, IEV_LOBBY, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
@@ -144,6 +145,10 @@ const detectMac = () => {
   const p = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? navigator.platform ?? '';
   return /mac/i.test(p);
 };
+const detectWindows = () => {
+  const p = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? navigator.platform ?? '';
+  return /^win/i.test(p);
+};
 interface KeyboardApi { lock?(codes?: string[]): Promise<void>; unlock?(): void; getLayoutMap?(): Promise<Map<string, string>>;
   addEventListener?(t: string, f: () => void): void }
 const keyboardApi = () => (navigator as unknown as { keyboard?: KeyboardApi }).keyboard;
@@ -153,6 +158,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
   const mac = opts.mac ?? detectMac();
   const kbTarget = opts.keyboardTarget ?? window;
   const pass = new Set(opts.passThrough ?? ['F11', 'F12']);
+  const altGr = new AltGrCtrl(!mac && detectWindows(), log);     // Windows' AltGr: its Left Ctrl kept from the game
   let h: Int32Array | null = null, u8: Uint8Array | null = null, i32: Int32Array | null = null, base = 0;
   let layout: Map<string, string> | null = null;
   let active: boolean | null = null;
@@ -218,6 +224,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
   function onKeyDown(e: KeyboardEvent) {
     if (detached || ignored(e) || e.isComposing || e.keyCode === 229) return;
     if (isMeta(e.code) || e.key === 'Meta') {
+      altGr.flush();
       if (!e.repeat) push(IEV_RELEASE_ALL, 0, 0, 0, [], 0, IREASON_META);
       return;
     }
@@ -231,7 +238,8 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     if (!pass.has(code)) e.preventDefault();
     if (mac && code === 'CapsLock') { push(IEV_KEY_TAP, k.dik, k.vk, flagsOf(e)); return; }
     const { chars, dead, sys } = charsOf(code, e);
-    push(IEV_KEY_DOWN, k.dik, vkOf(code, e, k.vk), flagsOf(e) | (e.repeat ? IKF_REPEAT : 0) | (dead ? IKF_DEAD : 0), chars, 0, sys);
+    const vk = vkOf(code, e, k.vk), flags = flagsOf(e) | (e.repeat ? IKF_REPEAT : 0) | (dead ? IKF_DEAD : 0);
+    altGr.key({ code, key: e.key, repeat: e.repeat }, true, () => push(IEV_KEY_DOWN, k.dik, vk, flags, chars, 0, sys));
   }
   function onKeyUp(e: KeyboardEvent) {
     // every release goes to the game, even one aimed at the page's own UI:
@@ -243,7 +251,8 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     if (!k) return;
     if (!pass.has(code) && !ignored(e)) e.preventDefault();   // also keeps Alt from opening a menu bar
     if (mac && code === 'CapsLock') { push(IEV_KEY_TAP, k.dik, k.vk, flagsOf(e)); return; }
-    push(IEV_KEY_UP, k.dik, k.vk, flagsOf(e));
+    const flags = flagsOf(e);
+    altGr.key({ code, key: e.key, repeat: e.repeat }, false, () => push(IEV_KEY_UP, k.dik, k.vk, flags));
   }
 
   // ---- mouse -------------------------------------------------------------------
@@ -531,7 +540,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
       push(IEV_RELEASE_ALL, 0, 0, 0, [], 0, IREASON_PAGE);
       api.viewRoll(0);
       if (h) Atomics.compareExchange(h, IM_ATTACHED, 1, 0);   // only our own claim (2 = the C ns* driver)
-      detached = true; quitPending = 0; cancelAnimationFrame(raf); clearInterval(timer);
+      detached = true; quitPending = 0; cancelAnimationFrame(raf); clearInterval(timer); altGr.cancel();
       pads?.dispose(); pads = null; synth = null;
       h = null; u8 = null; i32 = null; synF32 = null;     // no view of the old process's memory stays reachable
       kbTarget.removeEventListener('keydown', onKeyDown as EventListener, { capture: true });
