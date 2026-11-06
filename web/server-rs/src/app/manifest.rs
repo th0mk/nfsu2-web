@@ -26,7 +26,7 @@ use super::etag;
 use crate::options::within;
 
 /// what /data/ and /data-blocks/ serve: the top-level entries of the install folder that are the game's
-pub const GAME_ENTRIES: [&str; 19] = [
+pub const GAME_ENTRIES: [&str; 20] = [
     "speed2.exe",
     "server.dll",
     "server.cfg",
@@ -37,6 +37,7 @@ pub const GAME_ENTRIES: [&str; 19] = [
     "langpacks", // the language packs (tools/langpacks.py), if the folder has them
     "languages",
     "memcard",
+    "modpacks", // optional per-player map overlays (tools/open_tunnel.py)
     "movies",
     "nis",
     "pfdata",
@@ -246,6 +247,18 @@ mod tests {
     }
 
     #[test]
+    fn optional_mod_packs_are_game_data() {
+        let d = folder();
+        let rel = "MODPACKS/open-tunnel/TRACKS/L4RA.BUN";
+        let file = d.path().join(rel);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, "optional map").unwrap();
+        let m = build(&d.path().to_string_lossy(), "/nonexistent-state", &[0u8; 32]).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&m.body).unwrap();
+        assert!(v["files"].as_array().unwrap().iter().any(|f| f["p"] == rel));
+    }
+
+    #[test]
     fn only_the_games_entries_in_byte_order() {
         let d = folder();
         let root = d.path().to_string_lossy().into_owned();
@@ -295,7 +308,7 @@ mod tests {
         let script = r#"
 import fsp from 'node:fs/promises'; import path from 'node:path';
 const GAME_ENTRIES = ['speed2.exe', 'server.dll', 'server.cfg',
-  'cars', 'credits', 'frontend', 'global', 'langpacks', 'languages', 'memcard', 'movies', 'nis', 'pfdata', 'sound', 'speech', 'subtitles', 'tracks'];
+  'cars', 'credits', 'frontend', 'global', 'langpacks', 'languages', 'memcard', 'modpacks', 'movies', 'nis', 'pfdata', 'sound', 'speech', 'subtitles', 'tracks'];
 const GAME_TOP = new Set(GAME_ENTRIES);
 const gameEntry = name => GAME_TOP.has(name.toLowerCase());
 const within = (a, b) => { const x = a.toLowerCase(), y = b.toLowerCase(); return x === y || x.startsWith(y.endsWith(path.sep) ? y : y + path.sep); };

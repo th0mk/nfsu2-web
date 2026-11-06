@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Open the Construction Tunnel using the owner's original PC game assets.
 
-python3 tools/open_tunnel.py /path/to/game/TRACKS /path/to/new-output
+python3 tools/open_tunnel.py /path/to/original/TRACKS /path/to/game/MODPACKS/open-tunnel/TRACKS
 
 Writes L4RA.BUN, STREAML4RA.BUN and ROUTESL4RA/PathsFreeRoam.bin to a NEW
-output directory. Inputs are never modified. Install all three together in a backed-up game data folder and restart
-the game/server. No downloaded mod or redistributed game assets are required.
+output directory. Keep the original files in game/TRACKS: never overwrite them.
+Restart the server after installing the pack, then enable Open Construction Tunnel
+in the Mods tab (open_tunnel = on in settings.ini) and launch the game. It is off
+by default; missing pack files fall back to the original map. To migrate a prior
+installation, move its three patched files into MODPACKS/open-tunnel/TRACKS and
+restore all three original TRACKS files from the backup first.
+No downloaded mod or redistributed game assets are required.
 """
 
 from pathlib import Path

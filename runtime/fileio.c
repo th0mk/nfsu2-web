@@ -1,6 +1,7 @@
 /* Guest file I/O -> POSIX.  Maps Windows paths to the game folder and
  * resolves them case-insensitively.                                    */
 #include "cpu.h"
+#include "opentunnel.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -259,6 +260,8 @@ static int resolve(const char *win, char *out, size_t outsz){
         if (resolve_in(g_wroot, win, w, sizeof w) && strcmp(w, g_wroot) != 0){
             snprintf(out, outsz, "%s", w); return 1; }
     }
+    char rel[1024]; rel_of(win, rel, sizeof rel);
+    if (opentunnel_resolve(rel, out, outsz)) return 1;
     if (lpack_resolve(win, out, outsz)) return 1;
     return resolve_in(g_root, win, out, outsz);
 }

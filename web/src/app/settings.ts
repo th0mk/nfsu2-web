@@ -180,6 +180,8 @@ export const KEYS: readonly KeyDef[] = [
   // the players this one blocks in free roam, by name (the page's hello to the server: net/index.ts).  Not in bundle.m's
   // table: the Mac's free roam has no hub
   { key: 'roam_block', env: 'NFSU2_ROAM_BLOCK', kind: 'names', ic: true, scope: 'web' },
+  // Optional map overlay (runtime/opentunnel.h); the native app also maps this lower-case key.
+  { key: 'open_tunnel', env: 'NFSU2_OPEN_TUNNEL', kind: 'bool', scope: 'web' },
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
@@ -302,6 +304,10 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # original game: a hidden race shows only when you drive near it.
 # [NFSU2_SHOW_HIDDEN_RACES]
 #show_hidden_races = off
+
+# Open the Construction Tunnel. Allows access to later regions early.
+# Requires the server's optional tunnel pack; applies next launch. [NFSU2_OPEN_TUNNEL]
+#open_tunnel = off
 
 # The car's visual rating set by the career's stage, not by its parts, as
 # thelink2012's Visual Reputation Remover (github.com/thelink2012/novisualrep)

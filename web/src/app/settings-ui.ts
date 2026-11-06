@@ -74,6 +74,7 @@ export const MOD_CONTROLS: Record<string, Control> = {
   subtitles: { t: 'switch' },
   songs: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] },
   show_hidden_races: { t: 'switch' },
+  open_tunnel: { t: 'switch' },
   visual_rep_remover: { t: 'switch' },
 };
 /** the Mods tab's rows with a setting, in the catalogue's order (a shared row once: its first entry's) */
