@@ -1629,5 +1629,7 @@
   "{name} isn't in free roam now": "{name} зараз немає у вільній їзді",
   "invites you to crew \"{crew}\"": "запрошує вас до команди «{crew}»",
   "{name} invites you to crew \"{crew}\"": "{name} запрошує вас до команди «{crew}»",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ще немає команди? Домовтеся з друзями про назву й введіть її тут кожен, або відкрийте посилання-запрошення команди."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ще немає команди? Домовтеся з друзями про назву й введіть її тут кожен, або відкрийте посилання-запрошення команди.",
+  "Built for this project": "Розроблено для цього проєкту",
+  "Distance to your destination beneath the GPS arrow.": "Відстань до пункту призначення під стрілкою GPS."
 }

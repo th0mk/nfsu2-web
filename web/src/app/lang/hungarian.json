@@ -1490,5 +1490,7 @@
   "{name} isn't in free roam now": "{name} most nincs Felfedező módban",
   "invites you to crew \"{crew}\"": "meghív ebbe a csapatba: „{crew}”",
   "{name} invites you to crew \"{crew}\"": "{name} meghív ebbe a csapatba: „{crew}”",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Még nincs csapatod? Állapodjatok meg egy névben a barátaiddal, és mindenki írja be ide, vagy nyisd meg egy csapat meghívólinkjét."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Még nincs csapatod? Állapodjatok meg egy névben a barátaiddal, és mindenki írja be ide, vagy nyisd meg egy csapat meghívólinkjét.",
+  "Built for this project": "Ehhez a projekthez készült",
+  "Distance to your destination beneath the GPS arrow.": "Az úti cél távolsága a GPS-nyíl alatt."
 }

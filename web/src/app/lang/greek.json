@@ -1511,5 +1511,7 @@
   "{name} isn't in free roam now": "Ο παίκτης {name} δεν είναι τώρα σε ελεύθερη οδήγηση",
   "invites you to crew \"{crew}\"": "σε προσκαλεί στην ομάδα «{crew}»",
   "{name} invites you to crew \"{crew}\"": "Ο παίκτης {name} σε προσκαλεί στην ομάδα «{crew}»",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Δεν έχεις ομάδα ακόμα; Συμφωνήστε ένα όνομα με τους φίλους σου και πληκτρολογήστε το όλοι εδώ, ή άνοιξε τον σύνδεσμο πρόσκλησης μιας ομάδας."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Δεν έχεις ομάδα ακόμα; Συμφωνήστε ένα όνομα με τους φίλους σου και πληκτρολογήστε το όλοι εδώ, ή άνοιξε τον σύνδεσμο πρόσκλησης μιας ομάδας.",
+  "Built for this project": "Δημιουργήθηκε για αυτό το έργο",
+  "Distance to your destination beneath the GPS arrow.": "Απόσταση μέχρι τον προορισμό σας κάτω από το βέλος GPS."
 }

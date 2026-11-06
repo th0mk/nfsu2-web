@@ -1484,5 +1484,7 @@
   "{name} isn't in free roam now": "ตอนนี้ {name} ไม่ได้ขับอิสระอยู่",
   "invites you to crew \"{crew}\"": "เชิญคุณเข้าทีม \"{crew}\"",
   "{name} invites you to crew \"{crew}\"": "{name} เชิญคุณเข้าทีม \"{crew}\"",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "ยังไม่มีทีมใช่ไหม? ตกลงชื่อกับเพื่อนๆ แล้วให้ทุกคนพิมพ์ชื่อนั้นที่นี่ หรือเปิดลิงก์เชิญของทีม"
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "ยังไม่มีทีมใช่ไหม? ตกลงชื่อกับเพื่อนๆ แล้วให้ทุกคนพิมพ์ชื่อนั้นที่นี่ หรือเปิดลิงก์เชิญของทีม",
+  "Built for this project": "พัฒนาขึ้นสำหรับโปรเจกต์นี้",
+  "Distance to your destination beneath the GPS arrow.": "ระยะทางถึงจุดหมายใต้ลูกศร GPS"
 }

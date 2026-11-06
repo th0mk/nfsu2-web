@@ -1596,5 +1596,7 @@
   "{name} isn't in free roam now": "{name} ora non è in modalità Esplora",
   "invites you to crew \"{crew}\"": "ti invita nella crew «{crew}»",
   "{name} invites you to crew \"{crew}\"": "{name} ti invita nella crew «{crew}»",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Nessuna crew per ora? Scegli un nome con i tuoi amici e scrivetelo qui tutti, oppure apri il link di invito di una crew."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Nessuna crew per ora? Scegli un nome con i tuoi amici e scrivetelo qui tutti, oppure apri il link di invito di una crew.",
+  "Built for this project": "Creato per questo progetto",
+  "Distance to your destination beneath the GPS arrow.": "Distanza dalla destinazione sotto la freccia del GPS."
 }

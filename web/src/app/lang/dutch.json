@@ -1571,5 +1571,7 @@
   "{name} isn't in free roam now": "{name} is nu niet in Verkennen",
   "invites you to crew \"{crew}\"": "nodigt je uit voor crew \"{crew}\"",
   "{name} invites you to crew \"{crew}\"": "{name} nodigt je uit voor crew \"{crew}\"",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Nog geen crew? Spreek met je vrienden een naam af en typ die allemaal hier, of open de uitnodigingslink van een crew."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Nog geen crew? Spreek met je vrienden een naam af en typ die allemaal hier, of open de uitnodigingslink van een crew.",
+  "Built for this project": "Gemaakt voor dit project",
+  "Distance to your destination beneath the GPS arrow.": "Afstand tot je bestemming onder de GPS-pijl."
 }

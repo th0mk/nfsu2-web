@@ -1496,5 +1496,7 @@
   "{name} isn't in free roam now": "{name} şu an serbest sürüşte değil",
   "invites you to crew \"{crew}\"": "seni \"{crew}\" ekibine davet ediyor",
   "{name} invites you to crew \"{crew}\"": "{name} seni \"{crew}\" ekibine davet ediyor",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Henüz ekibin yok mu? Arkadaşlarınla bir ad belirleyin ve herkes buraya yazsın ya da bir ekibin davet bağlantısını aç."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Henüz ekibin yok mu? Arkadaşlarınla bir ad belirleyin ve herkes buraya yazsın ya da bir ekibin davet bağlantısını aç.",
+  "Built for this project": "Bu proje için geliştirildi",
+  "Distance to your destination beneath the GPS arrow.": "GPS okunun altında hedefinize olan mesafe."
 }

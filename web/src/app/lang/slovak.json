@@ -1629,5 +1629,7 @@
   "{name} isn't in free roam now": "{name} teraz nie je vo voľnej jazde",
   "invites you to crew \"{crew}\"": "ťa pozýva do partie „{crew}“",
   "{name} invites you to crew \"{crew}\"": "{name} ťa pozýva do partie „{crew}“",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ešte nemáš partiu? Dohodni sa s kamarátmi na názve, nech ho sem každý napíše, alebo otvor odkaz s pozvánkou do partie."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ešte nemáš partiu? Dohodni sa s kamarátmi na názve, nech ho sem každý napíše, alebo otvor odkaz s pozvánkou do partie.",
+  "Built for this project": "Vytvorené pre tento projekt",
+  "Distance to your destination beneath the GPS arrow.": "Vzdialenosť do cieľa pod šípkou GPS."
 }

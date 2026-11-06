@@ -1484,5 +1484,7 @@
   "{name} isn't in free roam now": "{name}は今フリーローム中ではありません",
   "invites you to crew \"{crew}\"": "からクルー「{crew}」への招待",
   "{name} invites you to crew \"{crew}\"": "{name}からクルー「{crew}」への招待",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "まだクルーがありませんか？友だちと名前を決めて全員がここに入力するか、クルーの招待リンクを開いてください。"
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "まだクルーがありませんか？友だちと名前を決めて全員がここに入力するか、クルーの招待リンクを開いてください。",
+  "Built for this project": "このプロジェクト向けに開発",
+  "Distance to your destination beneath the GPS arrow.": "GPSの矢印の下に目的地までの距離を表示。"
 }

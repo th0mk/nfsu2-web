@@ -1571,5 +1571,7 @@
   "{name} isn't in free roam now": "{name} är inte i läget Utforska nu",
   "invites you to crew \"{crew}\"": "bjuder in dig till crewen ”{crew}”",
   "{name} invites you to crew \"{crew}\"": "{name} bjuder in dig till crewen ”{crew}”",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ingen crew än? Kom överens om ett namn med dina vänner och skriv in det här var och en, eller öppna en crews inbjudningslänk."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Ingen crew än? Kom överens om ett namn med dina vänner och skriv in det här var och en, eller öppna en crews inbjudningslänk.",
+  "Built for this project": "Utvecklat för det här projektet",
+  "Distance to your destination beneath the GPS arrow.": "Avstånd till din destination under GPS-pilen."
 }

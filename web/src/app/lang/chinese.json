@@ -1484,5 +1484,7 @@
   "{name} isn't in free roam now": "{name} 目前不在自由漫遊中",
   "invites you to crew \"{crew}\"": "邀請你加入車隊「{crew}」",
   "{name} invites you to crew \"{crew}\"": "{name} 邀請你加入車隊「{crew}」",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "還沒有車隊？和朋友們約好一個名稱，各自在這裡輸入，或打開車隊的邀請連結。"
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "還沒有車隊？和朋友們約好一個名稱，各自在這裡輸入，或打開車隊的邀請連結。",
+  "Built for this project": "專為本專案開發",
+  "Distance to your destination beneath the GPS arrow.": "在 GPS 箭頭下方顯示到目的地的距離。"
 }

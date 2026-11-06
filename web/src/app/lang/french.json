@@ -1600,5 +1600,7 @@
   "{name} isn't in free roam now": "{name} n'est pas en mode Exploration pour l'instant",
   "invites you to crew \"{crew}\"": "vous invite dans l'équipe « {crew} »",
   "{name} invites you to crew \"{crew}\"": "{name} vous invite dans l'équipe « {crew} »",
-  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Pas encore d'équipe ? Choisissez un nom avec vos amis et saisissez-le chacun ici, ou ouvrez le lien d'invitation d'une équipe."
+  "No crew yet? Agree on a name with your friends and each type it here, or open a crew's invite link.": "Pas encore d'équipe ? Choisissez un nom avec vos amis et saisissez-le chacun ici, ou ouvrez le lien d'invitation d'une équipe.",
+  "Built for this project": "Créé pour ce projet",
+  "Distance to your destination beneath the GPS arrow.": "Distance jusqu’à votre destination sous la flèche GPS."
 }
