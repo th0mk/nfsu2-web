@@ -351,27 +351,30 @@
 </dialog>
 
 <dialog class="dlg menu" id="menu" aria-labelledby="menu-title">
-  <h2 id="menu-title" data-i18n>Menu</h2>
-  <p class="hint" data-i18n>The game keeps running.</p>
-  <p class="hint" id="menu-save"></p>
-  <div class="menu-actions">
-    <button type="button" class="btn selected" data-act="resume" data-i18n>Back to the game</button>
-    <button type="button" class="btn" data-act="fullscreen">Full screen</button>
-    <button type="button" class="btn" data-act="fps">Frame-rate counter: off</button>
-    <button type="button" class="btn" data-act="solid" data-i18n-attr="title" title="Off: collide with every car. Players: drive through other players' cars. Everything: through traffic and tuners too." hidden>Ghost mode: off</button>
-    <button type="button" class="btn" data-act="crews" aria-haspopup="dialog" hidden>Crews: none</button>
-    <button type="button" class="btn" data-act="friends" aria-haspopup="dialog" hidden data-i18n>Friends</button>
-    <button type="button" class="btn selected" data-act="friend" hidden></button>
-    <div class="menu-radio">
-      <button type="button" class="btn" data-act="radio" aria-pressed="false"><span id="radio-label">Radio: off</span></button>
-      <button type="button" class="icon" data-act="radio-folder" data-i18n-attr="aria-label title" aria-label="Music folder" title="Music folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg></button>
-      <button type="button" class="icon" data-act="playlist" data-i18n-attr="aria-label title" aria-label="Playlist" title="Playlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
-    </div>
-    <button type="button" class="btn" data-act="help" data-i18n>Controls</button>
-    <button type="button" class="btn" data-act="offline" hidden data-i18n>Stop waiting: play offline</button>
-    <button type="button" class="btn" data-act="log" data-i18n>Download log</button>
-    <button type="button" class="btn danger" data-act="quit">Quit game</button>
+  <div class="menu-head">
+    <h2 id="menu-title" data-i18n>Menu</h2>
+    <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
   </div>
+  <div class="menu-body">
+    <div class="menu-block">
+      <button type="button" class="menu-row go" data-act="offline" hidden data-i18n>Stop waiting: play offline</button>
+      <button type="button" class="menu-row go" data-act="friend" hidden></button>
+      <button type="button" class="menu-row" data-act="solid" data-i18n-attr="title" title="Off: collide with every car. Players: drive through other players' cars. Everything: through traffic and tuners too." hidden><span data-i18n>Ghost mode</span><span class="menu-val"></span></button>
+      <button type="button" class="menu-row" data-act="crews" aria-haspopup="dialog" hidden><span data-i18n>Crews</span><span class="menu-val"></span></button>
+      <button type="button" class="menu-row" data-act="friends" aria-haspopup="dialog" hidden><span data-i18n>Friends</span><span class="menu-val menu-dot"></span></button>
+    </div>
+    <div class="menu-block">
+      <div class="menu-radio">
+        <button type="button" class="menu-row" data-act="radio" aria-pressed="false"><span data-i18n>Radio</span><span class="menu-val" id="radio-label"></span></button>
+        <button type="button" class="icon" data-act="radio-folder" data-i18n-attr="aria-label title" aria-label="Music folder" title="Music folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg></button>
+        <button type="button" class="icon" data-act="playlist" data-i18n-attr="aria-label title" aria-label="Playlist" title="Playlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+      </div>
+      <button type="button" class="menu-row" data-act="fullscreen"><span data-i18n>Full screen</span><span class="menu-val"></span></button>
+      <button type="button" class="menu-row" data-act="help" data-i18n>Controls</button>
+      <button type="button" class="menu-row bad" data-act="quit">Quit game</button>
+    </div>
+  </div>
+  <p class="menu-foot"><span id="menu-save"></span><button type="button" class="text-btn" data-act="log" data-i18n>Download log</button></p>
 </dialog>
 
 <!-- the menu's Crews (a game in free roam), over the menu; after it in the page, so it is the top dialog (padnav.ts) -->

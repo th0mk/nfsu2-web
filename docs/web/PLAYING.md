@@ -133,7 +133,7 @@ While you drive:
 | F10 | Hide the HUD while you drive, and show it again: the names and quick chat lines over other players' cars go with it; the pause menu, the map, messages and a race's results still show. Free roam and races; off again at each Play; no touch button. Another key, or none, in Controls, Site |
 | **F7** | Next song: the game's next EA Trax song, or with Radio on the folder's next track (not while the game is paused) |
 | **F8** | Frame-rate counter: off, on, detailed |
-| **F9** | The page menu: when the game last saved, full screen, counter, ghost mode (off, players, everything) and crews (in free roam), radio, controls, log, **Quit game**, and Stop waiting: play offline while you wait in line; on a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
+| **F9** | The page menu, a list with each item's state on the right: Ghost mode (off, players, everything), Crews and Friends (in free roam; a lime dot on Friends while a request waits), Radio, Full screen, Controls and **Quit game**, and Stop waiting: play offline while you wait in line; at the bottom when the game last saved, and Download log. Esc, F9, Close or a controller's B close it. On a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
 | **Hold Esc** | Leave full screen (a short press still goes to the game) |
 
 The start page shows these keys under **Controls**, and F9, Controls shows them while you play.
@@ -275,7 +275,9 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Sound** starts with the Play click. If the browser still keeps it off, a note says so, and a click on the game or
   a key press turns it on. A controller button cannot: the browser does not count it.
 - **Firefox and Safari:** Esc leaves full screen at once (they have no keyboard lock); in full screen, pause with P.
-- **Quit** from the game's main menu, or with F9, Quit game. Both let the game save and close. If a loading screen
+- **Quit** from the game's main menu, or with F9, Quit game. Both let the game save and close. When the game saved
+  nothing in the last 10 minutes (or nothing yet in this game), F9's Quit game asks first and says how to save: stop
+  the car, press Esc and choose Save. If a loading screen
   ignores the request, the same menu item then reads "Close the game now". As a last resort it reads "Stop the
   game". Closing the tab asks first, because a save in progress could be cut short.
 

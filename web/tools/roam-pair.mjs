@@ -296,7 +296,7 @@ async function start(i, name, script, own) {
     if (rn) void page.fill('#rename-ask-name', rn[1], { timeout: 10_000 }).then(() => page.waitForTimeout(600))
       .then(() => page.click('#confirm-ok')).then(() => w(`[rename] ${rn[1]}`), e => w(`[rename] ${rn[1]} failed: ${e}`));
     // the menu's Crews popup as the player uses it, at a script's `log CREW <op> ...`: F9, Crews, the act in the popup,
-    // Done, Back to the game
+    // Done, Close
     const ck = APP && /LOG CREW (join|leave|colour|shot) (?:(\d+) )?(.+)$/.exec(m.text());
     if (ck) {
       const [, op, k, arg] = ck, pop = '#crews-pop', crew = () => page.locator(`${pop} li.crew`, { has: page.locator('.crew-name', { hasText: arg.trim() }) });
@@ -311,7 +311,7 @@ async function start(i, name, script, own) {
         .then(() => w(`[crew] ${op} ${k ?? ''} ${arg}`), e => w(`[crew] ${op} ${arg} failed: ${e}`));
     }
     // the menu's Friends popup as the player uses it, at a script's `log FRIENDS shot <name>` (F9, Friends, its
-    // picture once the server answered, what it says, Done, Back to the game) or `log FRIENDS join <friend>` (that
+    // picture once the server answered, what it says, Done, Close) or `log FRIENDS join <friend>` (that
     // friend's Join, which goes back to the game itself)
     const fk = APP && /LOG FRIENDS (shot|join) (\S+)/.exec(m.text());
     if (fk) {

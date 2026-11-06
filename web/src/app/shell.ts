@@ -1562,16 +1562,14 @@ function openMenu() {
   const m = $<HTMLDialogElement>('#menu');
   if (m.open) { $<HTMLDialogElement>('#playlist').close(); m.close(); return; }                // (its Crews popup too: the menu's close)
   const fsButton = m.querySelector<HTMLButtonElement>('[data-act="fullscreen"]')!;
-  fsButton.textContent = isFullscreen() ? t('Leave full screen') : t('Full screen');
+  menuValue('fullscreen', t(isFullscreen() ? N('On') : N('Off')));
   fsButton.hidden = !canFullscreen() && fromHomeScreen();         // from an iPhone's Home Screen: already without bars
-  m.querySelector<HTMLButtonElement>('[data-act="fps"]')!.textContent = fpsLabel(fps.mode);
-  const solid = m.querySelector<HTMLButtonElement>('[data-act="solid"]')!;
-  solid.hidden = roamCollide === null || !session?.net?.solid;
-  solid.textContent = ghostLabel();
-  const crews = m.querySelector<HTMLButtonElement>('[data-act="crews"]')!;
-  crews.hidden = roamCrews === null || !session?.net?.crews;
-  crews.textContent = crewsLabel();
+  m.querySelector<HTMLButtonElement>('[data-act="solid"]')!.hidden = roamCollide === null || !session?.net?.solid;
+  menuValue('solid', ghostWord());
+  m.querySelector<HTMLButtonElement>('[data-act="crews"]')!.hidden = roamCrews === null || !session?.net?.crews;
+  menuValue('crews', crewsCount());
   m.querySelector<HTMLButtonElement>('[data-act="friends"]')!.hidden = !friendPrompt.available();
+  menuValue('friends', friendPrompt.waiting() ? String(friendPrompt.waiting()) : '');   // (a lime dot: style.css .menu-dot)
   const fr = m.querySelector<HTMLButtonElement>('[data-act="friend"]')!, item = friendPrompt.menuItem();
   fr.hidden = !item;
   if (item) fr.textContent = item.label;
@@ -1588,12 +1586,18 @@ function openMenu() {
   $('#stage').classList.add('cursor');
   m.showModal();
 }
-/** the menu's frame-rate counter and Ghost mode buttons, with what they are at now */
+/** the frame-rate counter's state (F8's note), and in the menu (a list: what each item is, its state on the right) the
+ *  state of Ghost mode and the crews' count ('' none) */
 const fpsLabel = (mode: string) => t('Frame-rate counter: {mode}', { mode: t(mode === 'on' ? N('on') : mode === 'detailed' ? N('detailed') : N('off')) });
-const ghostLabel = () => roamCollide === 'none' ? t('Ghost mode: everything') : roamCollide === 'off' ? t('Ghost mode: players') : t('Ghost mode: off');
+const ghostWord = () => t(roamCollide === 'none' ? N('Everything') : roamCollide === 'off' ? N('Players') : N('Off'));
+/** a menu item's state, on its right ('' none) */
+function menuValue(act: string, text: string) {
+  const v = document.querySelector(`#menu [data-act="${act}"] .menu-val`);
+  if (v) v.textContent = text;
+}
 /** roam_collide's value from its variable (a test's page address may give 1 or 0; none set: on, the default) */
 const collideOf = (v: string | undefined): Collide => { const c = checkSetting('roam_collide', v ?? ''); return c?.ok ? c.value as Collide : 'on'; };
-const crewsLabel = () => roamCrews?.length ? t('Crews: {n}', { n: roamCrews.length }) : t('Crews: none');
+const crewsCount = () => roamCrews?.length ? String(roamCrews.length) : '';
 /** The menu's Crews popup (free roam only), over the menu: the Crews row's control, which changes the game's crews at
  *  once.  Done, Esc or a controller's B closes it, back to the menu on its Crews button; an Esc in a crew's palette
  *  closes only the palette. */
@@ -1636,7 +1640,7 @@ async function menuCrews(list: Crew[], focus: (root: HTMLElement) => Element | n
   session.net.crews(list.map(c => roomHash(c.name)), rgbWords(list));
   drawPopCrews(focus);
   void askPopCounts(1500);
-  $('#menu [data-act="crews"]').textContent = crewsLabel();
+  menuValue('crews', crewsCount());
   try {
     await editSettings(s => putKey(putKey(s, 'roam_crew', list.length ? crewsValue(list.map(c => c.name)) : null).text,
       'roam_crew_colours', list.length ? rgbsValue(list) : null).text);
@@ -1862,7 +1866,7 @@ function showRadio(m: HTMLElement) {
   m.querySelector<HTMLElement>('.menu-radio')!.hidden = !radioPort() || !canPickMusic();    // a game without the radio's words (an older build) has no Radio row
   button.classList.toggle('selected', on);
   button.setAttribute('aria-pressed', String(on));
-  $('#radio-label').textContent = t('Radio: {mode}', { mode: on ? t(N('on')) : t(N('off')) }) + (radio?.folder ? ` · ${radio.folder}` : '');
+  $('#radio-label').textContent = t(on ? N('On') : N('Off')) + (radio?.folder ? ` · ${radio.folder}` : '');
 }
 async function radioClick(act: 'radio' | 'radio-folder') {
   const r = theRadio();
@@ -1912,12 +1916,11 @@ async function menuAction(act: string) {
       m.close();
       toggleFullscreen();
       break;
-    case 'fps': fps.cycle(); m.querySelector<HTMLButtonElement>('[data-act="fps"]')!.textContent = fpsLabel(fps.mode); break;
     case 'solid': {
       if (roamCollide === null || !session?.net?.solid) break;
       roamCollide = roamCollide === 'on' ? 'off' : roamCollide === 'off' ? 'none' : 'on';     // off, players, everything, off
       session.net.solid(roamCollide);
-      m.querySelector<HTMLButtonElement>('[data-act="solid"]')!.textContent = ghostLabel();
+      menuValue('solid', ghostWord());
       // and in settings.ini for the next game, as Online, Ghost mode would
       const to = roamCollide;
       try { await editSettings(s => putKey(s, 'roam_collide', to).text); }
@@ -1944,6 +1947,7 @@ async function menuAction(act: string) {
       if (!s) break;
       const stage = quitStage(s);
       if (stage === 0) {
+        if (!await quitUnsaved(s)) break;
         if (s.requestQuit()) { quitAt = { s, t: performance.now(), forced: false }; toast(t('Quitting: the game saves and closes.'), 5000); break; }
       } else if (stage === 1) {
         // the game's own second-request rule: open save files are finished, then it exits
@@ -1970,6 +1974,17 @@ async function menuAction(act: string) {
 const FORCED_CLOSE_MAX_MS = 5000 + 2000;
 const STOP_AFTER_MS = FORCED_CLOSE_MAX_MS + 3000;
 let quitAt: { s: GameSession; t: number; forced: boolean } | null = null;
+/** Quit with nothing saved for this long (or nothing saved during this game): a warning first (quitUnsaved) */
+const UNSAVED_MS = 10 * 60_000;
+/** the menu's Quit game while nothing was saved for UNSAVED_MS: a question first, with when it saved last and how to
+ *  save (the game's pause menu: runtime/savegame.c); quitting asks the game to close, which does not save the career.
+ *  true: quit (also with no saves in this browser, where saving cannot help) */
+async function quitUnsaved(s: GameSession): Promise<boolean> {
+  if (noSave || (saved && Date.now() - saved.at < UNSAVED_MS)) return true;
+  const last = saved ? t('Last saved at {when} ({name}).', { when: when(saved.at), name: saved.name }) : t('Nothing saved during this game yet.');
+  log.add(`[app] quit: ${saved ? `last saved ${Math.round((Date.now() - saved.at) / 60_000)} min ago` : 'nothing saved during this game'}, warned first`);
+  return await confirmBox(t('Quit without saving?'), `${last} ${t('To save, stop the car, press Esc and choose Save.')}`, t('Quit game'), true, 'quit') && session === s;
+}
 function quitStage(s: GameSession): 0 | 1 | 2 {
   if (!s.canQuit()) return 2;
   if (!quitAt || quitAt.s !== s) return 0;
@@ -2326,7 +2341,7 @@ export async function boot() {
   $('#crews-pop').addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-act="crews-done"]')) $<HTMLDialogElement>('#crews-pop').close(); });
   $('#crews-pop').addEventListener('close', () => {
     const b = $<HTMLButtonElement>('#menu [data-act="crews"]');
-    b.textContent = crewsLabel();
+    menuValue('crews', crewsCount());
     if ($<HTMLDialogElement>('#menu').open) b.focus();
   });
   // ...and its Friends popup

@@ -389,6 +389,10 @@ export class FriendPrompt {
   available(): boolean {
     return this.on;
   }
+  /** the requests that wait for the player's answer (the page menu's Friends shows a dot) */
+  waiting(): number {
+    return this.on ? this.asks.length : 0;
+  }
 
   /** the game: the cars touch nose to nose for 3 s (on 1), or parted (NET_KIND_FRIEND: {"id","name","on"}) */
   bump(json: string) {

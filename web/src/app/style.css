@@ -1278,14 +1278,35 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .shot-foot .hint { margin: 0 auto 0 8px; font-variant-numeric: tabular-nums; }
 .dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .dlg-head h2 { margin: 0; }
-.menu-actions { display: grid; gap: 8px; }
-.menu-radio { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); }
-.menu-radio .btn { padding: 0 80px; overflow: hidden; }
-.menu-radio .btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-inline-end: 0.2em; }
-.menu-radio .icon { position: absolute; top: 50%; translate: 0 -50%; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: inherit; }
+/* the page menu (F9, shell.ts openMenu): a list in the cards' look (cards.ts .ov-*): one face, 16 and 14 px, two
+ * weights; blocks with a line between them (what is about free roam, then the rest); each item a row, what it is on
+ * the left and its state on the right, the row under the pointer, the keyboard or a controller lime.  Esc, F9 or a
+ * controller's B close it, and Close at the top; the last save and Download log at the bottom.  A block with nothing
+ * in it (no free roam) is not drawn. */
+.dlg.menu { width: min(352px, calc(100vw - 32px)); padding: 12px 0; }
+.dlg.menu h2 { margin: 0; font: 700 16px/24px var(--font); color: var(--lime); }
+.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 8px 16px; }
+.menu-head .text-btn { text-decoration: none; }
+.menu-block { display: grid; align-content: start; padding-block: 4px; box-shadow: inset 0 1px var(--line); }
+.menu-block:not(:has(> :not([hidden]))) { display: none; }
+.menu-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 40px; padding: 8px 16px;
+  border: 0; border-radius: 0; background: none; color: var(--text); font: 400 16px/24px var(--font); text-align: left; cursor: pointer;
+}
+.menu-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-row > span:first-child { flex: none; max-width: 100%; }
+.menu-row:hover, .menu-row:focus-visible, .dlg.menu[data-pad] .menu-row:focus { outline: none; box-shadow: none; background: var(--lime-fill); color: var(--lime); }
+.menu-val { color: var(--muted); }
+.menu-row.selected .menu-val { color: var(--lime); }
+.menu-row.go { font-weight: 700; color: var(--lime); }
+.menu-row.bad { color: var(--bad); }
+.menu-dot:not(:empty) { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--lime); font-size: 0; }
+.menu-radio { position: relative; display: grid; }
+.menu-radio .menu-row { padding-right: 88px; }
+.menu-radio .icon { position: absolute; top: 50%; translate: 0 -50%; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--muted); }
 .menu-radio .icon:hover { color: var(--lime); }
-.menu-radio [data-act="radio-folder"] { right: 40px; }
-.menu-radio [data-act="playlist"] { right: 8px; }
+.menu-radio [data-act="radio-folder"] { right: 48px; }
+.menu-radio [data-act="playlist"] { right: 12px; }
 .dlg.playlist { width: min(640px, calc(100vw - 32px)); }
 #playlist-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: calc(100dvh - 220px); overflow: hidden auto; }
 .track { display: flex; align-items: center; justify-content: space-between; gap: 12px; content-visibility: auto; contain-intrinsic-size: auto 44px; }
@@ -1294,8 +1315,11 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 #playlist-shuffle { margin-bottom: 8px; }
 .track-folder { color: var(--muted); font-size: 14px; line-height: 20px; padding-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-radio svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-#menu-save { margin-top: -12px; }
-#menu-save:empty { display: none; }
+.dlg .menu-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 8px 8px 0 16px;
+  box-shadow: inset 0 1px var(--line); color: var(--muted); font-size: 14px; line-height: 20px;
+}
+.menu-foot .text-btn { flex: none; }
 /* a conversation with a friend (messages.ts ChatDialog): the messages scrolling under the name and Close, newest at
  * the bottom, each with who and when; the field and Send under them; what became of a message, and the characters
  * left, under the field */
@@ -1364,28 +1388,11 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .tabs { gap: 16px; }
   html:not([data-touch]) .tabs { gap: 8px; }
 }
-/* a phone on its side (a short window): the page menu in as many columns as the dialog's width gives it, so no label is
- * cut (the fixed two columns cut "Contador de FPS: desactivad…", and the radio's 80 px of icons left it "R…"), and a
- * label too long for its button takes a second line as a row's button does on a narrow screen.  The radio and its two
- * icons keep a line of their own, and dense placement fills the cells the row before it leaves empty.  The dialog takes
- * the room the game's picture has there, and its margins tighten, so a landscape phone's menu (and Quit game) is in
- * sight without scrolling. */
+/* a phone on its side (a short window): the page menu's two blocks side by side, so all of it is in sight */
 @media (max-height: 479px) {
-  .dlg.menu { width: min(760px, calc(100vw - 32px)); padding: 16px; }
-  .dlg.menu h2 { margin-bottom: 4px; }
-  .dlg.menu .hint { margin-bottom: 8px; }
-  .dlg.menu #menu-save { margin-top: -8px; }
-  .menu-actions { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); grid-auto-flow: dense; gap: 4px; }
-  .menu-actions > .btn { height: auto; min-height: 40px; padding-block: 6px; white-space: normal; text-align: center; }
-  .menu-radio { grid-column: 1 / -1; }
-}
-/* the smallest phones: the radio's two icons take less of its button, so "Radio: desactivado" is whole too (its longest
-   word is 92 px, and 80 px each side left 72 on a 320 px screen) */
-@media (max-width: 399px) {
-  .menu-radio .btn { padding: 0 56px; }
-  .menu-radio .icon { width: 24px; height: 24px; }
-  .menu-radio [data-act="radio-folder"] { right: 32px; }
-  .menu-radio [data-act="playlist"] { right: 4px; }
+  .dlg.menu { width: min(640px, calc(100vw - 32px)); }
+  .menu-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .menu-body > .menu-block + .menu-block { box-shadow: inset 0 1px var(--line), inset 1px 0 var(--line); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
