@@ -11,7 +11,7 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-06 (de7aa2b)
+## 2026-11-06 (38fc8e5)
 
 - **Friends:** Friends in the page menu (F9) in every free roam with others: requests to accept or decline, your friends, and Add a player by name. A request sent from afar shows at the top while you drive (F accepts), and I writes to a friend who just came into your room.
 - **Page menu:** F9 is a short list showing each setting's state, without Back to the game and the frame-rate counter (F8 still shows it). Quit game warns when nothing was saved in the last 10 minutes and says how to save.
@@ -19,6 +19,12 @@ not guessed.
 - **Free roam:** new players driving off the airport with Ghost mode off are told where to turn it on, instead of "Please keep right".
 - **Start page:** a lime dot on Friends & crews while friend requests or messages wait.
 - **Loading screens:** nfsu2.xyz in the bottom right corner.
+- **Phones:** on iPhones and iPads the picture no longer stands still for a second every 10 to 20 seconds in a busy free roam.
+- **Garage:** a visit to Split Screen no longer empties and locks the career's slots 6 to 10 at the next save.
+- **Vinyls:** Special lists only the vinyls the car can wear: Street Reaper, Japan Tuning, David Choe, Snoop Dogg and The Doors were each made for a few cars and drew nothing on the others.
+- **Controllers:** Xbox controllers on Bluetooth drive with their triggers in Firefox on a Mac.
+- **Phones:** with PowerVR B-Series graphics (POCO M7 Pro and others) the game starts in the window, where it runs, instead of in full screen.
+- **Career:** a profile whose career car was none of its cars drives its first car, instead of an error 134 after the car lot.
 
 ## 2026-11-05 (0e56c9b)
 
