@@ -239,7 +239,9 @@ Checked against the guide or the code, and confirmed by players in threads:
      shops then show no Visual Rating box. Offer it as their choice, after the parts.
   3. Only then the original game's hidden races: they never show on the map or the radar, only a marker on the street
      when you drive near. Start page, Mods, Show Hidden Races Mod (off by default) puts them on the map
-     and the radar from the next Play.
+     and the radar from the next Play. It adds only the 33 hidden races (circuits, sprints, drags and the like,
+     runtime/hiddenraces.c), never a URL race, a sponsor's race or a DVD cover shoot: a missing URL race or cover is
+     steps 1 and 2.
   Saves (Saves, Download backup) and escalating only when all three are done and still nothing shows.
 - Wide body kits, the most asked question of all (how to get them, locked after finishing the game, more than one
   car): as in the original game, 11 outrun wins in stage 5 put a star on the map before the last URL race (S5_URL_9),
@@ -319,13 +321,25 @@ Checked against the guide or the code, and confirmed by players in threads:
   the browser's limit for the site.
 - A profile left out of a restore because "the name inside … is not one the game makes": since a530a5a0 (2 November,
   live that evening) it comes in renamed. Reload, then restore again.
+- Enter (Return on a Mac) doing nothing at a race's start in free roam, or an outrun that won't start, on a page from
+  3 to 5 November: another player's lobby there that keeps later stages out stopped the player opening their own
+  (85c39ac). Since fc56fdd (live 5 November, about 20:18 UTC) Enter there opens another lobby: reload the page. Near
+  four or more players no outrun starts at all, as before (the guide).
 
 ## Known open problems (as of 2026-11-04)
 
 The developer updates this list. Check the commits after that date before calling one open: a fix may have come. The
-context lists every problem the developer has a report on, with its first thread: point posters there, and set
+context lists the problems flagged for the developer, with the first thread of each: point posters there, and set
 `duplicate_of` to it, rather than searching for "the main thread". Where an entry names a thread, link that one.
 
+- Free roam, error 134 with `sub_00517e20 < dispatch_indirect < tags_update < roam_game_hud` at the top of the stack
+  (sub_00517ad0, sub_005178d0 or sub_00504640 first), often an hour or more into free roam with many players, right
+  after another player's car loaded; on the live version (5 November), Windows PCs with NVIDIA and AMD graphics. No fix
+  yet. The thread to link: 1567604844712304650. Not the 2 November crash in garages and car lots (sub_004380f0 <
+  sub_00438140, fixed), nor the hood and trunk freeze below, even when the same thread had those first.
+- Special vinyls (the Graphics Shop's Special category): Street Reaper, Japan Tuning, David Choe, Snoop Dogg, Snoop Dogg 2
+  and The Doors are listed for a car but not drawn on it, also after leaving the shop (5 November, live version). No
+  fix yet. The thread to link: 1567778264909611128.
 - Free roam freeze (`[watchdog] no Present`) or error 134 right after another player's car opened or closed its hood,
   trunk or doors (sub_00433ad0 < sub_00433d10): fixed on 3 November (bf4fe9f), live since 14:39 UTC that day. A log on
   an older version: reload the page (Ctrl+F5 on a PC). A newer log that stops there is new: escalate it. Thread
@@ -413,7 +427,7 @@ context lists every problem the developer has a report on, with its first thread
   the game's Joypad Configuration steers or brakes with no longer looks round; the left stick does when the game uses
   none of it. On an older version: reload. On a newer one the report is new. Threads 1567127501359153282,
   1567191097149497415 (also 1567230313292112002, "Option to change view stick on gamepad", which this answers).
-  Since 1c0af43d the look can be turned off: the start page's Controls, Site, Free look (a click on its Auto makes it Off): no stick
+  Free look is listed with the site's changes in the start page's Mods tab (its last part, Driving). Since 1c0af43d the look can be turned off: the start page's Controls, Site, Free look (a click on its Auto makes it Off): the camera is the game's own again, no stick
   looks round, straight back is no Look Back, and the stick straight up no longer switches the headlights (G still
   does); the answer to "make the 360 camera optional" (threads 1567427206119166022, 1567191097149497415).
 - Free roam, error 134 with `tlsf_alloc < gheap_alloc_c < gbuf_alloc` at the top of the stack while other players'
@@ -426,11 +440,15 @@ context lists every problem the developer has a report on, with its first thread
 - Linux PCs with NVIDIA graphics, Chrome or Brave: the picture stops within seconds of Play (`GPU-LOST`, or black with
   sound). Logs show `vkAllocateMemory failed with VK_ERROR_OUT_OF_DEVICE_MEMORY` or `Requested allocation size (…) is
   smaller than the image requires` on every frame: maybe not one problem. No fix. Ask for the `chrome://gpu` report.
-  Threads 1567135816499859456, 1567350752186470540.
+  Threads 1567135816499859456, 1567350752186470540. Another case: `chrome://gpu` names the NVIDIA driver, but Vulkan
+  lists only Mesa's `llvmpipe` (software), and the game is white or very slow: ask for `nvidia-smi`'s output. "Driver/library
+  version mismatch" there means the NVIDIA driver is half updated: reinstall the driver package and reboot (it fixed it
+  for a player on 5 November, thread 1567865750130004049). That is their system, not the game.
 - A controller whose gas does nothing while its other controls work: an original 8BitDo Ultimate 2.4G on Windows (RT
-  dead, LT reverse works; the Ultimate 2C works), and a wired pad on a Mac seen as `PS3 GamePad (054c:0268)`. No fix
-  yet. Ask for the log and what Controls, Controller shows when the trigger is pressed. Threads
-  1567258347940352072, 1566999852288843858.
+  dead, LT reverse works; the Ultimate 2C works), and a wired pad on a Mac seen as `PS3 GamePad (054c:0268)`. The
+  8BitDo's fix, from its poster (6 November): switch the controller to D-input, or set Trigger full press (start page,
+  Controls, Controller, More controller settings) very low, about 0.07. For the Mac pad: ask for the log and what Controls,
+  Controller shows when the trigger is pressed. Threads 1567258347940352072, 1566999852288843858.
 - Horns (yours and other players') still sounding with the game's Master Volume at 0: horns had only their own slider,
   Horn Volume (the game's Options, Audio, also the pause menu's), 10 % to 100 %. Fixed on 4 November (47f8c0c6): horns
   follow Master Volume as the game's own sounds do, so Master Volume at 0 silences them too; Horn Volume stays 10 % to
@@ -439,8 +457,9 @@ context lists every problem the developer has a report on, with its first thread
 - Ghost mode Everything: the camera jumped up for a moment as a traffic car, a van most of all, drove through the
   player's car, as if they had collided. Not a collision: the game's camera lifts itself over any car its eye is in,
   and the car that passed through went on through the camera behind; nothing else changed (no slow motion, the car's
-  speed kept). Fixed on 4 November (77d744ad): the camera goes through those cars too. Until that is live there is no
-  workaround but Ghost mode Players (traffic solid). Thread 1567227790888017980.
+  speed kept). Fixed on 4 November (77d744ad, live) for the views behind the car; in the hood and bumper views the camera
+  still hops on the live version (a log of 5 November): no fix yet, Ghost mode Players (traffic solid) avoids it. Thread
+  1567227790888017980.
 - Rebinding: the game's own controls are set in its Options, Controls (Keyboard Configuration, Joypad Configuration).
   The site's own keys and buttons (X drift mode, O trunk/hood/doors, N horn, I message, F add friend, 1-4 quick chat;
   a controller's D-pad down held, left stick click horn, right stick click quick chat) can't be changed there. Before
@@ -480,7 +499,7 @@ fixes of the original game's crashes and glitches. Changing its core gameplay me
 performance and tuning, AI and traffic, the career's progression, races and rewards, the economy. The Mods tab's mods
 that change the career (Show Hidden Races Mod, Visual Reputation Remover) are off by default: the player's choice.
 
-- A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
+- A suggestion of an addition or improvement: none, unless it exists already: then say where
   (Power Units in Options, Gameplay; Show Player Names there too since 31cc3384 (also in the pause menu's Options, Gameplay): Off
   hides the names over other players' cars, in free roam and LAN races; the Bank box in career free roam shows only
   for 20 s after the bank changes, 10 s when free roam starts and 8 s after the pause menu, the map or a shop, the

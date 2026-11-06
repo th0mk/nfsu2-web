@@ -113,23 +113,25 @@ pairs) is dropped, and so is a third ask. Someone answering the bot first gets a
 tools): "thanks, it works now" ends there, anything that may need an answer gets the full look. The look is told the
 thread the bot linked it to before, how often the bot replied and asked in it, and the poster's other threads of the
 week with the bot's last reply in each, so one problem gets one answer. When the poster disputes the bot, is upset
-with it, or the talk goes in circles, the look steps back (`handoff` in its verdict): at most one line that the
-developer will read the thread, the thread flagged, and no more looks in it unless staff mention the bot (a fix
-notice still goes out).
+with it, or the talk goes in circles, the look steps back (`handoff` in its verdict): nothing posted, the thread flagged, and no more looks in it unless
+staff mention the bot (a fix notice still goes out). Nothing is sent to the developer, so the bot never says it passed
+a report on. A reply in a script nobody in the thread writes (Cyrillic to an English post) is dropped.
 
 Every model call goes on a meter (`spend.mjs`, `state/spend.json`): looks, sorting, tags, translations, release checks,
 against `BOT_BUDGET` dollars a month (400, UTC months). Only the looks wait for money: each day they may spend what is
 left of the month over the days left in it, so a quiet day leaves more for the rest and a busy week can't spend the
 month. And the day's share comes as the UTC day goes: by any hour the looks may have spent that part of it, plus 6
 hours ahead (a quarter at midnight, all of it by 18:00), so the bot answers all day instead of until the morning. A look
-past that is skipped, not put off: nothing runs later (there was a catch-up at midnight until 2026-11-05). Staff's
+past that is skipped, not put off: nothing runs later (there was a catch-up at midnight until 2026-11-05). Someone
+talking to the bot (a follow-up, a log, a reply to it, a bump) goes ahead of the clock, up to twice the day's share,
+and what it spends over the share comes out of the days after: on 2026-11-05, 41 of them went unanswered. Staff's
 mentions and a release's notices (fix live, suggestion added) still get theirs at once, but no fix notice where staff
 wrote since the release. The bot's first log line says what the month and the day spent so far.
 
 ## How it works
 
 - `bot.mjs`: Discord (discord.js). It decides when to look, builds the thread's text, saves attachments, inlines
-  pictures (PNG, JPEG, GIF, WebP up to 10 MB, 4 a look) and posts. Each picture goes to the model at most 1,568
+  pictures (PNG, JPEG, GIF, WebP up to 10 MB, the newest 4 of a thread) and posts. Each picture goes to the model at most 1,568
   visual tokens big (`picture()` in `investigate.mjs`, with sharp), the size Claude read pictures at before Opus 4.7:
   a phone screenshot costs 1,456 tokens instead of 3,354, a 4K one 1,560 instead of 4,784.
 - `investigate.mjs`: one look. It sends Claude the rules (`system.md`), the maintainer's notes (`knowledge.md`),
@@ -288,7 +290,7 @@ and `state/verdicts.jsonl` has every look. When the replies look right, remove t
 | `BOT_WAIT_S` | `120` | quiet time after the poster's last message before the look (at most 10 minutes after the first) |
 | `BOT_MAX_REPLIES` | `2` | replies per thread on the bot's own (logs, bumps and staff's mentions get a look past it) |
 | `BOT_MAX_TALK` | `4` | replies per thread in all, answering people who reply to the bot or mention it |
-| `BOT_BUDGET` | `400` | dollars a month for every model call; looks past the day's share wait for the next day |
+| `BOT_BUDGET` | `400` | dollars a month for every model call; new posts past the day's share by the hour are skipped |
 | `BOT_ARCHIVE` | on | `0`: don't keep messages (the model then can't search other channels) |
 | `BOT_STATE` | `state` (`/state` in Docker) | where the clone, the archive, the thread list, the verdicts and the translations go |
 | `BOT_REPO`, `BOT_BRANCH` | this checkout, `main` | where the code comes from (in `compose.yml`: GitHub over SSH) |

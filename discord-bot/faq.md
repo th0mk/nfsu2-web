@@ -94,7 +94,7 @@ label: Wide body kits
 
 ### Can I unlock everything or get more money?
 label: Unlock everything
-There's no unlock-all: the career plays as in the original game. Cars and parts unlock as you win a stage's races, and money comes from races. A save you have goes in with Saves, **Restore** on the start page. In the game's Online mode every track is open, whatever your career has unlocked. Profiles changed by a save editor may crash the game or break the career.
+Cars and parts unlock as you win a stage's races, and money comes from races, as in the original game: there's no unlock-all or money cheat. A save you have goes in with Saves, **Restore** on the start page. Profiles changed by a save editor may crash the game or break the career.
 
 ### Do races with other players count in my career?
 label: Online wins in the career
@@ -121,9 +121,10 @@ label: Chat
 label: Controller
 <!-- for: problems -->
 - Press a button on it with the game's page in front: the browser shows a pad only after that.
-- On the start page, Controls, More controller settings: set **Controller** to **On** or **Hotplug** (not **Off**).
+- On the start page, Controls, **Controller**, More controller settings: **Controller** must be **On** (the default) or **Hotplug**, not **Off**.
 - Close Steam, DS4Windows and other pad software. Still nothing? Try Edge.
-- Steering wheels work too, without force feedback.
+- A Steam Controller or a Steam Deck: start page, Controls, **Controller**, **Connect a Steam Controller** (Chrome or Edge on a computer).
+- Steering wheels work too, without force feedback: start page, Controls, **Controller**, **Set up the wheel**.
 
 ### How do I change my controller's buttons?
 label: Controller buttons
@@ -134,7 +135,7 @@ In the game: **Options**, **Controls**. It opens on Keyboard Configuration: go *
 ### Which key does what?
 label: Keys
 - **R** respawn, **T** career status, **M** map, **X** drift mode, **N** horn
-- **O** open the trunk, hood and doors (parked; on a controller hold D-pad Down; the touch controls have no button for it), **H** / **J** hydraulics
+- **O** parked in free roam: the hood, pressed again the trunk, then the doors, then all of them (on a controller hold D-pad Down a second), **H** / **J** hydraulics
 - **F7** next song, **F12** photo mode, **F9** the page menu: log, radio, controls, full screen
 - The whole list: start page, **Controls**.
 
@@ -173,8 +174,13 @@ Someone else claimed or was using your name, so you play as it with four digits 
 ### How do I rename or delete a profile?
 label: Rename or delete a profile
 - **Rename:** start page, Saves, **Rename** beside the profile.
-- **Delete:** the game's main menu, Profile Manager, Delete.
+- **Delete:** start page, Saves, the bin beside the profile (or the game's main menu, Profile Manager, Delete).
 - **Start over:** a new profile, or Career, Start New Career.
+
+### I don't see other players in free roam
+label: No other players
+<!-- for: problems -->
+On the start page, Online: turn on **Free roam with others**, set **Your name** and leave **Room** empty (with a name in it you see only that room's players), then load your career and drive in its free roam.
 
 ### How do I turn off vibration?
 label: Vibration
