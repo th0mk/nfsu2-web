@@ -186,6 +186,10 @@ export const KEYS: readonly KeyDef[] = [
   // the career's visual rating set by the stage, not by the car's parts (runtime/visualrep.c).  Not in bundle.m's
   // table: there a lower-case key, so it reaches the runtime as NFSU2_VISUAL_REP_REMOVER all the same
   { key: 'visual_rep_remover', env: 'NFSU2_VISUAL_REP_REMOVER', kind: 'bool', scope: 'web' },
+  // the underground2.net mod's new rim brands in the rim shop (runtime/modpacks.c; everyone's game has them, so a
+  // friend's car shows them either way).  Not in bundle.m's table: there a lower-case key, so it reaches the runtime as
+  // NFSU2_UG2NET_PARTS all the same
+  { key: 'ug2net_parts', env: 'NFSU2_UG2NET_PARTS', kind: 'bool', scope: 'web' },
   // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
   // pointTex).  Not in bundle.m's table
   { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
@@ -311,6 +315,12 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # off = the original game.
 # [NFSU2_VISUAL_REP_REMOVER]
 #visual_rep_remover = off
+
+# The underground2.net mod's new rim brands (nfsmods.xyz/mod/2004) in the
+# rim shop: Blitz.  Everyone's game has their rims, so a friend's car with
+# them looks the same either way, and rims already on your car stay.
+# off = the shops offer only the original game's.  [NFSU2_UG2NET_PARTS]
+#ug2net_parts = off
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"

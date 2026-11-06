@@ -38,7 +38,10 @@
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
 void sub_00636be0(CPU *c);                     /* the lifted loader */
 uint32_t gheap_alloc(int heap, uint32_t n, int zero);
+void gheap_free(int heap, uint32_t p);
+static uint32_t g_raw;                         /* grown()'s allocation (its copy is aligned in it) */
 int fileio_vinyl_packs(void);
+uint32_t modpacks_grow(uint32_t chunk);
 
 #define FN_LOADER     0x00636be0u
 #define CHUNK_PARTS   0x80034602u
@@ -119,6 +122,7 @@ static uint32_t grown(uint32_t chunk){
     }
     uint32_t out = gheap_alloc(1, nsize + 8u + 16u, 1);
     if (!out){ fprintf(stderr, "[vinyls] no memory for the car part database's copy\n"); return 0; }
+    g_raw = out;
     out = (out + 15u) & ~15u;
     /* the copy: each sub-chunk, then what it gains */
     MR32(out) = CHUNK_PARTS; MR32(out + 4u) = nsize;
@@ -169,11 +173,15 @@ static uint32_t grown(uint32_t chunk){
 }
 
 /* the loader, cdecl (chunk): given a copy of the car part database's chunk (a new one each time: the loader turns
- * the copy's model names into pointers) */
+ * the copy's model names into pointers), with the mod packs' parts too */
 static void loader(CPU *c){
     uint32_t chunk = MR32(c->esp + 4u), copy = 0;
-    if (ok(chunk, 16u) && MR32(chunk) == CHUNK_PARTS && ok(chunk, MR32(chunk + 4u) + 8u) && fileio_vinyl_packs() > 0)
-        copy = grown(chunk);
+    if (ok(chunk, 16u) && MR32(chunk) == CHUNK_PARTS && ok(chunk, MR32(chunk + 4u) + 8u)){
+        if (fileio_vinyl_packs() > 0) copy = grown(chunk);
+        uint32_t m = modpacks_grow(copy ? copy : chunk);     /* the mods' parts at its end (runtime/modpacks.c) */
+        if (m && copy){ gheap_free(1, g_raw); g_raw = 0; }  /* (copied again: the loader keeps that one) */
+        if (m) copy = m;
+    }
     if (copy) MR32(c->esp + 4u) = copy;
     sub_00636be0(c);
     if (copy) MR32(c->esp) = chunk;                /* the caller's argument as it was (the loader's ret is behind esp) */

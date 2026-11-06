@@ -75,6 +75,7 @@ export const MOD_CONTROLS: Record<string, Control> = {
   songs: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] },
   show_hidden_races: { t: 'switch' },
   visual_rep_remover: { t: 'switch' },
+  ug2net_parts: { t: 'switch' },
 };
 /** the Mods tab's rows with a setting, in the catalogue's order (a shared row once: its first entry's) */
 const MOD_ITEMS: Item[] = MODS.flatMap(m => 'setting' in m.control && !m.row

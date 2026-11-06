@@ -1685,7 +1685,7 @@ void sub_00574670(CPU *restrict c){
 void sub_0061b980_orig(CPU *c);
 static struct { uint32_t key, prev, part; uint8_t type, slot, lvl, used; } g_pm[PARTMEMO_N];
 static uint32_t g_pm_n, g_pm_tabs[4];
-void sub_0061b980(CPU *restrict c){
+static void newgetcarpart(CPU *restrict c){
     static int mode = -1;
     if (mode < 0){ const char *e = getenv("NFSU2_PARTMEMO"); mode = e && *e == '0' ? 0 : e && *e == '2' ? 2 : 1; }
     uint32_t e = c->esp, db = c->ecx;
@@ -1713,6 +1713,25 @@ void sub_0061b980(CPU *restrict c){
     sub_0061b980_orig(c);
     g_pm[h].type = (uint8_t)type; g_pm[h].slot = (uint8_t)slot; g_pm[h].key = key; g_pm[h].prev = prev; g_pm[h].lvl = (uint8_t)lvl;
     g_pm[h].part = c->eax; g_pm[h].used = 1; g_pm_n++;
+}
+/* A saved car's ride (0x503880: its stock parts first (0x637040), then each of its 170 slots set to the part of its
+ * saved key, 0x631D20 -> RideInfo +0x590 + 4 x slot) whose key the part database does not have: a mod's part
+ * (runtime/modpacks.c) where the game has no MODPACKS.  The game set the slot to no part: a car without its rims, its
+ * brake discs only.  Here the slot keeps its stock part (the answer is not kept: it is this caller's).  The car
+ * written back (0x503950: each slot's part's key) then has the stock one's.  Profiles never hold a mod's part
+ * (modpacks.c keeps them in MODPARTS.DAT): this is for a record that has one all the same. */
+#define RET_RIDE_PART   0x005038fcu
+void sub_0061b980(CPU *restrict c){
+    uint32_t e = c->esp, ret = MR32(e), slot = MR32(e + 8u), key = MR32(e + 12u);
+    newgetcarpart(c);
+    if (ret != RET_RIDE_PART || c->eax || !key || slot >= 0xaau) return;
+    uint32_t ride = MR32(e + 0x30u);                   /* 0x503880's second argument ([esp+0x18] there) */
+    if (!ride || !mem_is_committed(ride + 0x590u + 4u * slot)) return;
+    c->eax = MR32(ride + 0x590u + 4u * slot);
+    static int said;
+    if (said++ < 8)
+        fprintf(stderr, "[parts] f=%ld a saved car's part %08x (slot 0x%x) is not in the part database: its stock part (%08x) instead\n",
+                autotest_frame(), key, slot, c->eax);
 }
 
 /* --- a car's shadow outline: sub_0060cee0(points, n, comparator), cdecl ----

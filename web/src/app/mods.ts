@@ -201,6 +201,14 @@ export const MODS: readonly Mod[] = [
     details: 'Designs only the Japanese release (Sha_Do) had, after Art Factory 27 on every car. The game\'s own vinyls stay as they are.',
     online: 'seen', files: ['runtime/vinylpacks.c', 'tools/vinylpacks.py'],
   },
+  {
+    id: 'ug2net-parts', name: 'underground2.net Rims', authors: [{ name: 'underground2.net Team & Contributors' }],
+    links: { page: 'https://nfsmods.xyz/mod/2004' },
+    kind: 'shared', uses: 'data', control: { setting: 'ug2net_parts' },
+    line: N('New rim brands in the rim shop.'),
+    details: 'Blitz, a brand of 24 rims, in the rim shop. Everyone\'s game has them, so a friend\'s car with them looks the same with this off. Off, the shop offers only the game\'s own brands; rims already on your car stay. Your saves still work in the original game: there the car has its stock rims.',
+    online: 'seen', sizeMB: 1, files: ['runtime/modpacks.c', 'tools/modpacks.py'],
+  },
 
   // ---- Game rules
   {
