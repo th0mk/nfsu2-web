@@ -11,6 +11,14 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
+## 2026-11-06 (7caf947)
+
+- **Friends:** Friends in the page menu (F9) in every free roam with others: requests to accept or decline, your friends, and Add a player by name. A request sent from afar shows at the top while you drive (F accepts), and I writes to a friend who just came into your room.
+- **Free roam:** the notes over the game share one look and sit under the game's outrun line; invites and friend requests have a lime border, the away warning an amber one. The log on the left is one size.
+- **Free roam:** new players driving off the airport with Ghost mode off are told where to turn it on, instead of "Please keep right".
+- **Start page:** a lime dot on Friends & crews while friend requests or messages wait.
+- **Loading screens:** nfsu2.xyz in the bottom right corner.
+
 ## 2026-11-05 (0e56c9b)
 
 - **Races:** several lobbies can wait at one start: E shows the next, B opens your own beside them, and the card starts on one a friend or crew-mate is in. Hosts can invite friends (Z), who join from wherever they are. Lobbies you can't join no longer show on the map or at the start.

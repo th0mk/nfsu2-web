@@ -105,7 +105,7 @@ Yes. In free roam, win a race of your stage you haven't won yet in a lobby, and 
 label: Play with others
 1. Start page, Online: turn on **Free roam with others**, and set **Your name**.
 2. Drive in your career's free roam: the other players are there. Alone there? Leave **Room** (start page, Online) empty: with a name in it, you see only the players in the same room.
-3. To find your friends: type the same crew name in Friends & crews, **Crews**. You always see each other.
+3. To find your friends: add them in the **F9** menu, **Friends** (by name; both need a claimed name), or type the same crew name in Friends & crews, **Crews**. You always see each other.
 4. To race: drive to a race's start, press **Enter** and pick **Multiplayer**. The others join your lobby.
 
 Cars in your way? **Ghost mode** (on the start page, Online, or in the **F9** menu): **Players** lets the other players' cars pass through yours, **Everything** also the traffic and the game's tuners in free roam.
