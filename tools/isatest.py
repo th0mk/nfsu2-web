@@ -506,6 +506,12 @@ if os.environ.get('JTSWITCH', '') == '1':
     for _v, _w, _c in ((0, 10, 0x1234), (1, 20, 0x1234), (2, 99, 0x77)):   # default: ja before the mov
         T(f"switch after push/mov (eax={_v})", _JT3, {'eax':_v, 'ebx':0, 'ecx':0x77, 'esi':0x1234}, mem=_JT3M, expect={'ebx':_w, 'ecx':_c, 'esi':0x1234})
 
+# cmpxchg whose flags are dead (the next cmp overwrites them), with ZF=0 before it: the store must still
+# happen, as it does on the CPU; the lift tested the stale c->zf when _fm() left ZF out
+T("cmpxchg store with dead flags",
+  [0x83,0xFA,0x01, 0x0F,0xB1,0x0D]+a32(0x00C00100)+[0x39,0xD8],
+  {'eax':5,'ecx':9,'ebx':5,'edx':0}, mem={0x00C00100:5}, expect={'eax':5,'zf':1}, fmem={0x00C00100:9})
+
 # =====================  GENERATOR / RUNNER  =====================
 BASE = 0x00401000
 def build():
