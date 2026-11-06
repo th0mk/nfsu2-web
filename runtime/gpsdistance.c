@@ -4,11 +4,12 @@
  * straight-line horizontal distance, in world metres, not road-route length. */
 #include "cpu.h"
 #include "splitscreen_mem.h"
+#include "gpsdistance_format.h"
 #include <math.h>
-#include <stdio.h>
 #include <string.h>
 
 void dispatch_indirect(CPU *, uint32_t);
+uint32_t roam_game_clone_hud_text(CPU *, uint32_t, uint32_t, const char *);
 
 static uint32_t call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *args){
     CPU saved = *c;
@@ -24,9 +25,13 @@ static uint32_t call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *
 static uint32_t one(CPU *c, uint32_t fn, uint32_t self, uint32_t arg){ return call(c, fn, self, 1, &arg); }
 
 void gpsdistance_hud(CPU *c){
-    /* GPS is shared in co-op, as is the game's direction arrow. */
-    uint32_t pl = MR32(SPLIT_PLAYERS_INDEX);
-    if (!pl || c->esi != pl) return;
+    /* The destination is shared; distance and arrow visibility belong to
+     * the Player whose HUD has just updated. Some HUDs have no GPS part. */
+    uint32_t pl = c->esi;
+    int local = 0;
+    for (unsigned i = 0; pl && i < SPLIT_PORT_CAPACITY; ++i)
+        if (MR32(SPLIT_PLAYERS_INDEX + i * 4u) == pl) { local = 1; break; }
+    if (!local) return;
     uint32_t hud = MR32(pl + 0x9a4u), car = MR32(pl + 4u);
     if (!hud) return;
     uint32_t pkg = MR32(hud + 0x10u), part = MR32(hud + 0x5cu);
@@ -62,21 +67,14 @@ void gpsdistance_hud(CPU *c){
         strcpy((char *)g_mem + scratch, "ONLINE_PLAYER_1");
         args[1] = one(c, 0x505450u, 0, scratch);
         uint32_t source = call(c, 0x537a10u, 0, 2, args);
-        uint32_t pack = one(c, 0x52cef0u, 0, pkg);
-        if (!source || !pack) return;
-        obj = one(c, MR32(MR32(source) + 4u), source, 1); /* FEString::Clone */
+        if (!source) return;
+        /* Use the same ownership-checked clone path as multiplayer HUD labels.
+         * GPS_SEARCH_Text belongs to the native error/search group and
+         * Distance_Number to outrun; neither is an unused navigation label. */
+        obj = roam_game_clone_hud_text(c, pkg, source, "GPS_DISTANCE");
         if (!obj) return;
-        uint32_t len = MR32(source + 0x30u), from = MR32(source + 0x2cu), to = MR32(obj + 0x2cu);
-        if (from && to && from != to && len <= 0x100u && len == MR32(obj + 0x30u))
-            memcpy(g_mem + to, g_mem + from, len);
-        MR32(obj + 0x58u) = 0; /* renderer makes this clone's render object */
-        MR32(obj + 0x10u) = hash;
         MR32(obj + 0x6cu) = (MR32(obj + 0x6cu) & ~0xfu) | 5u; /* centred */
         MR32(obj + 0x1cu) |= 0x100u;
-        uint32_t last = MR32(pack + 0x50u);
-        MR32(obj + 4u) = 0; MR32(obj + 8u) = last;
-        if (last) MR32(last + 4u) = obj; else MR32(pack + 0x4cu) = obj;
-        MR32(pack + 0x50u) = obj; MR32(pack + 0x48u) += 1;
         for (int i = 0; i < 4; ++i) MR32(scratch + 4u * i) = 255;
         uint32_t av[2] = {scratch, 0};
         call(c, 0x517e20u, obj, 2, av);
@@ -86,8 +84,8 @@ void gpsdistance_hud(CPU *c){
         call(c, 0x517db0u, obj, 2, av);
     }
     char text[32];
-    snprintf(text, sizeof text, "%.0f m", (double)distance);
-    /* FEString's setter only runs when the displayed integer changes. Its
+    gpsdistance_format(text, sizeof text, distance, MR8(0x83aa1au) == 1);
+    /* FEString's setter only runs when the displayed distance changes. Its
      * UTF-16 buffer is owned by the object, so no stale host-side cache. */
     uint32_t str = MR32(obj + 0x64u);
     int same = str != 0;
