@@ -4,12 +4,13 @@
 // the controller at rest meanwhile.
 //   D-pad or left stick  the focus to the next or previous button
 //   A                    presses it
-//   B, Start             closes the dialog, as Esc does
+//   B, Start             closes the dialog, as Esc does (B on the menu's Crews or
+//                        Friends: back to its list, as its ‹ does)
 
 import { PAD_A, PAD_B, PAD_DDOWN, PAD_DLEFT, PAD_DRIGHT, PAD_DUP, PAD_START } from '../input/proto';
 
-/** the open modal dialog of the page (of two, the one on top: the menu's Crews popup, which comes after the menu in the
- *  page), or null */
+/** the open modal dialog of the page (of two, the one on top: the one later in the page, as the playlist after the
+ *  menu), or null */
 export function pageDialog(): HTMLDialogElement | null {
   const open = document.querySelectorAll<HTMLDialogElement>('dialog[open]:modal');
   return open[open.length - 1] ?? null;
@@ -28,8 +29,14 @@ export function padPress(button: number) {
   const d = pageDialog();
   if (!d) return;
   markPad(d);
-  if (button === PAD_B || button === PAD_START) { closeLikeEsc(d); return; }
-  const items = [...d.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(e => e.checkVisibility?.() ?? e.offsetParent !== null);
+  const shown = (e: HTMLElement) => e.checkVisibility?.() ?? e.offsetParent !== null;
+  if (button === PAD_B || button === PAD_START) {
+    // (a page of the dialog in its place, the menu's Crews or Friends: its Back, data-act="back", shell.ts menuPage)
+    const back = button === PAD_B ? [...d.querySelectorAll<HTMLElement>('[data-act="back"]')].find(shown) : undefined;
+    if (back) back.click(); else closeLikeEsc(d);
+    return;
+  }
+  const items = [...d.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(shown);
   const at = items.indexOf(document.activeElement as HTMLElement);
   if (button === PAD_A) { if (at >= 0) items[at].click(); return; }
   const step = button === PAD_DUP || button === PAD_DLEFT ? -1 : button === PAD_DDOWN || button === PAD_DRIGHT ? 1 : 0;

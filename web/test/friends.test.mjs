@@ -7,13 +7,13 @@
 //   player has one of the game's controls on F (the game's status "keys": the line still takes a click)
 // - the room's name to the server once there are friends, and again when the room changes
 // - where the friends play, asked every minute while there are some: a notice when one comes into free roam (none for
-//   one just met here); the page menu's Friends popup: the ones in free roam with a Join (none in the player's own
+//   one just met here); the page menu's Friends: the ones in free roam with a Join (none in the player's own
 //   room), the others in a line
 // - the start page's Friends: a line each, the requests to answer, each friend where it plays with a Join in free roam
 //   (its room), the requests sent; Accept, Decline, Remove (asked first), Take back; a keyphrase without a claimed
 //   name; no keyphrase; a friend's Message, lime while messages wait to be read (the ones that waited come with the
 //   list); a friend's Discord icon copies its username, a toast at it says so (or shows the name where the browser
-//   would not copy), there and in the page menu's Friends popup
+//   would not copy), there and in the page menu's Friends
 // - the start page's Your Discord: the server's username in it; one typed is sent as Discord allows one (discordName),
 //   else refused on the page; what the server refused; none takes it away
 // - race invites: an Invite in the page menu's Friends for each friend in free roam in the player's room while the
@@ -171,7 +171,7 @@ test('a request from afar: on the line once the player drives, answered on /frie
   assert.ok(!(await sent(p)).some(m => m.op === 'add'), 'not on the link');
   assert.deepEqual(await toasts(p), ['You and New are friends now']);
   assert.equal(await line(p), null, 'answered: gone');
-  // a later list does not bring the older one back to the line (it waits in the Friends popup)
+  // a later list does not bring the older one back to the line (it waits in the menu's Friends)
   await server(p, { op: 'list', me: 'Al_', friends: ['New'], asks: ['Old'] });
   await raf(p);
   assert.equal(await line(p), null);
@@ -184,7 +184,7 @@ test('a request from afar: on the line once the player drives, answered on /frie
   assert.equal(await line(p), null);
   await set('driving', true);
   await raf(p);
-  assert.equal(await line(p), null, 'not again: it waits in the popup');
+  assert.equal(await line(p), null, 'not again: it waits in the menu\'s Friends');
   // a click on the line; no answer from the server: said, and the request still waits
   await server(p, { op: 'asks', name: 'Fay' });
   await raf(p);
@@ -195,7 +195,7 @@ test('a request from afar: on the line once the player drives, answered on /frie
   assert.deepEqual(await toasts(p), ['Not sent: try again in a moment']);
   const asks = await p.evaluate(() => { const box = document.createElement('div'); /** @type {any} */ (window).prompt.drawPlaced(box, () => {});
     return [...box.querySelectorAll('.fl li .fl-name')].map(e => e.firstChild.textContent); });
-  assert.deepEqual(asks, ['Old', 'Eve', 'Fay'], 'still in the popup');
+  assert.deepEqual(asks, ['Old', 'Eve', 'Fay'], 'still in the menu\'s Friends');
   // the other one's friendship takes its request off the line
   await set('apiLists', { me: 'Al_', friends: [], asks: [], sent: [], mail: [], done: 'friends' });
   await server(p, { op: 'asks', name: 'Gil' });
@@ -242,7 +242,7 @@ test('the page menu\'s Friends with no friends yet: how to add one, the requests
   await p.press('#pop .fl-add input', 'Enter');
   await p.evaluate(() => new Promise(r => setTimeout(r, 20)));
   assert.deepEqual((await pop()).lines, ['Claim your name on the start page to add friends'], 'its claim gone meanwhile');
-  // typing goes on over a redraw (the server's answers redraw the popup)
+  // typing goes on over a redraw (the server's answers redraw the menu's Friends)
   await server(p, { op: 'list', me: 'Al_', friends: [], asks: [] });
   await pop();
   await p.fill('#pop .fl-add input', 'Bo');
@@ -326,7 +326,7 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
   assert.equal(await p.evaluate(() => /** @type {any} */ (window).prompt.hasFriends()), false, 'no friends listed yet: no Friends in the menu');
   await server(p, { op: 'list', me: 'Al_', friends: ['Bo_', 'Cy_', 'Dee', 'Eve', 'Fox'], asks: [] });
   assert.equal(await p.evaluate(() => /** @type {any} */ (window).prompt.hasFriends()), true);
-  assert.equal(await p.evaluate(() => { const w = /** @type {any} */ (window), n = w.placed; w.placed = 0; return n; }), 1, 'the popup drawn again with the list');
+  assert.equal(await p.evaluate(() => { const w = /** @type {any} */ (window), n = w.placed; w.placed = 0; return n; }), 1, 'the menu\'s Friends drawn again with the list');
   await raf(p);
   assert.deepEqual((await sent(p)).filter(m => m.op === 'where'), [{ op: 'where' }], 'asked with the next frame once listed');
   await raf(p);
@@ -341,7 +341,7 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
     ['Cy_', 'Your friend Cy_ is in free roam', 'here'],
     ['Dee', 'Your friend Dee is in free roam, in no room: Join in the menu (F9)'],
   ], 'the ones in free roam, at the first answer too (a room as the game hashes it: case and blanks do not count)');
-  assert.equal(await p.evaluate(() => /** @type {any} */ (window).placed), 1, 'the popup drawn again');
+  assert.equal(await p.evaluate(() => /** @type {any} */ (window).placed), 1, 'the menu\'s Friends drawn again');
   await server(p, { op: 'where', friends: where });
   assert.deepEqual(await notices(p), [], 'still there: no notice again');
   // Eve comes into free roam; Bo leaves and comes back; Fox is befriended here first (no notice for one just met)
@@ -351,7 +351,7 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
   await server(p, { op: 'friends', name: 'Fox' });
   await server(p, { op: 'where', friends: [...where.slice(0, 4), { name: 'Fox', where: 'roam', room: 'night owls' }] });
   assert.deepEqual(await notices(p), [['Bo_', 'Your friend Bo_ is in free roam, room Blue Room: Join in the menu (F9)']]);
-  // the popup: in free roam, a Join for each one in another room, a Discord icon for one that gave its name (copied:
+  // the menu's Friends: in free roam (where: the room's name, or your room), a Join for each one in another room, a Discord icon for one that gave its name (copied:
   // a toast at it says so); the others in a line
   const pop = () => p.evaluate(async () => {
     const w = /** @type {any} */ (window), box = document.createElement('div');
@@ -368,8 +368,8 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
     return { rows, lines: [...box.querySelectorAll(':scope > p.hint')].map(e => e.textContent), joins: w.joins, copies: w.copies, toasts };
   });
   assert.deepEqual(await pop(), {
-    rows: [['Bo_', 'free roam · Blue Room', 'Join'], ['Cy_', 'free roam · your room', 'Copy Discord name cy.races'], ['Dee', 'free roam', 'Join'],
-      ['Fox', 'free roam · your room', '']],
+    rows: [['Bo_', 'Blue Room', 'Join'], ['Cy_', 'your room', 'Copy Discord name cy.races'], ['Dee', 'free roam', 'Join'],
+      ['Fox', 'your room', '']],
     lines: ['In the Online lobby: Eve.'], joins: ['Blue Room', ''], copies: ['cy.races'], toasts: ['Copied cy.races'],
   });
   await server(p, { op: 'where', friends: [{ name: 'Bo_', where: 'online' }, { name: 'Cy_', where: '' }, { name: 'Dee', where: '' }] });
@@ -377,7 +377,7 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
   assert.deepEqual(await pop(), {
     rows: [], lines: ['None of your friends is in free roam now.', 'In the Online lobby: Bo_. Offline: Cy_, Dee.'], joins: [], copies: [], toasts: [],
   }, 'the toast gone after a moment');
-  // asked again when the popup opens
+  // asked again when the menu's Friends opens
   await p.evaluate(() => /** @type {any} */ (window).prompt.askWhere());
   assert.deepEqual((await sent(p)).filter(m => m.op === 'where'), [{ op: 'where' }]);
   await p.close();
@@ -427,17 +427,17 @@ test('race invites: Invite in the menu\'s Friends while hosting, and a friend\'s
       [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]);
   });
   const done = () => p.evaluate(() => /** @type {any} */ (window).box.remove());
-  assert.deepEqual(await rows(), [['Bo_', 'free roam · your room', ''], ['Cy_', 'free roam · Blue Room', 'Join']], 'not hosting: no Invite');
+  assert.deepEqual(await rows(), [['Bo_', 'your room', ''], ['Cy_', 'Blue Room', 'Join']], 'not hosting: no Invite');
   await done();
   await p.evaluate(() => { /** @type {any} */ (window).hosted = { kind: 'sprint', stage: 2, n: 1, max: 6 }; });
-  assert.deepEqual(await rows(), [['Bo_', 'free roam · your room', 'Invite Bo_ to your race'], ['Cy_', 'free roam · Blue Room', 'Join']],
+  assert.deepEqual(await rows(), [['Bo_', 'your room', 'Invite Bo_ to your race'], ['Cy_', 'Blue Room', 'Join']],
     'hosting: an Invite for a friend in our room only');
   await p.evaluate(() => /** @type {any} */ (window).box.querySelector('.fl-invite').click());
   await done();
   assert.deepEqual((await sent(p)).filter(m => m.op !== 'where'), [{ op: 'invite', name: 'Bo_', kind: 'sprint', stage: 2 }]);
   await server(p, { op: 'invite', name: 'Bo_', done: 'sent' });
   assert.deepEqual(await toasts(p), ['Invite sent to Bo_']);
-  assert.deepEqual(await rows(), [['Bo_', 'free roam · your room · invited', ''], ['Cy_', 'free roam · Blue Room', 'Join']], 'invited: no Invite again for a while');
+  assert.deepEqual(await rows(), [['Bo_', 'your room · invited', ''], ['Cy_', 'Blue Room', 'Join']], 'invited: no Invite again for a while');
   await done();
   for (const [d, text] of [['away', 'Bo_ isn\'t in free roam in your room now'], ['full', 'Your race lobby is full'], ['nolobby', 'Open a race lobby first, then invite'],
     ['rate', 'Too many invites at once: try again in a moment'], ['none', 'Bo_ can\'t be invited now']]) {
@@ -471,7 +471,7 @@ test('crew invites: an icon on a friend in free roam, the crews to pick under it
   await server(p, { op: 'list', me: 'Al_', friends: ['Bo_', 'Cy_'], asks: [] });
   await server(p, { op: 'where', friends: [{ name: 'Bo_', where: 'roam', room: 'night owls' }, { name: 'Cy_', where: 'online' }] });
   await notices(p); await sent(p);
-  // the page menu's Friends popup, drawn again as the shell does when the prompt says so (placed)
+  // the page menu's Friends, drawn again as the shell does when the prompt says so (placed)
   const draw = () => p.evaluate(() => {
     const w = /** @type {any} */ (window);
     w.box?.remove();
@@ -483,10 +483,10 @@ test('crew invites: an icon on a friend in free roam, the crews to pick under it
     li.querySelector('.fl-st').textContent, [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]));
   const asked = () => p.evaluate(() => /** @type {any} */ (window).crewAsked.splice(0));
   await draw();
-  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'free roam · your room', '']], 'no crew: no icon');
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your room', '']], 'no crew: no icon');
   await p.evaluate(() => { /** @type {any} */ (window).crews = [{ name: 'JDM', rgb: '3cd2ff' }]; });
   await draw();
-  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'free roam · your room', 'Invite Bo_ to a crew']]);
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your room', 'Invite Bo_ to a crew']]);
   await p.click('.fl-crew');
   assert.deepEqual(await asked(), [['Bo_', 'JDM', 'Night Owls']], 'one crew: invited at once, in the game\'s room');
   assert.equal(await toastNow(p), 'Invited Bo_ to JDM');
@@ -502,13 +502,13 @@ test('crew invites: an icon on a friend in free roam, the crews to pick under it
   assert.deepEqual(await asked(), [], 'more crews: one to pick');
   assert.equal(await p.evaluate(() => /** @type {any} */ (window).placed), 1, 'drawn again');
   await draw();
-  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'free roam · your room', 'Invite Bo_ to a crew'], ['(under)', 'Invite Bo_ to', 'Invite Bo_ to crew JDM|Invite Bo_ to crew Wangan']]);
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your room', 'Invite Bo_ to a crew'], ['(under)', 'Invite Bo_ to', 'Invite Bo_ to crew JDM|Invite Bo_ to crew Wangan']]);
   assert.equal(await p.getAttribute('.fl-crew', 'aria-expanded'), 'true');
   assert.deepEqual(await p.$$eval('.crew-pick', bs => bs.map(b => [b.textContent, b.style.getPropertyValue('--crew')])), [['JDM', '#3cd2ff'], ['Wangan', '#ff50c8']], 'as the Crews row\'s chips');
   await p.click('.crew-pick >> nth=1');
   assert.deepEqual(await asked(), [['Bo_', 'Wangan', 'Night Owls']]);
   await draw();
-  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'free roam · your room', 'Invite Bo_ to a crew']], 'closed once sent');
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your room', 'Invite Bo_ to a crew']], 'closed once sent');
   assert.equal(await toastNow(p), 'Invited Bo_ to Wangan', 'at the icon');
   await p.evaluate(() => /** @type {any} */ (window).box.remove());
   // the start page's Friends: settings.ini's crews and room, on the friends in free roam only

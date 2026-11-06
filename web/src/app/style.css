@@ -897,8 +897,6 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 /* a request by name (friends.ts addField): the Crews row's box (its field's rules) under the list, a setting's 240 px
  * (the row's width on a phone), what the last one did under it */
 .fl-add { flex: none; width: 240px; }
-.friends-pop-box { margin-bottom: 16px; }
-.friends-pop-box .hint:last-child { margin-bottom: 0; }
 /* a copy button's toast (copy.ts copyToast): small, over the button (under it, .below, with no room above), in the top
  * layer as a popover (its own box and place, not the browser's), gone after a moment */
 .copy-toast {
@@ -1344,10 +1342,48 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .chat-msg.out .chat-head b { color: var(--text); }
 .chat-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
 #chat-left { margin-left: auto; font-variant-numeric: tabular-nums; }
-/* the menu's Crews popup (a game in free roam): the Crews row's control under the help, Done under it */
-.crews-pop-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-.dlg ul.crews { margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
+/* the menu's Crews and Friends (a game in free roam; shell.ts menuPage): the menu's list turns into one, ‹ and its name
+ * at the top (back to the list), its help under them, then its rows as the menu's: 40 px each, no lines between them,
+ * 16 px type, what it is on the left and its state and buttons on the right.  The Crews row's control (settings-ui.ts
+ * crewControl) and the friends' list (friends.ts) drawn into them, in the menu's look */
+.menu-back {
+  display: flex; align-items: center; gap: 4px; min-width: 0; height: 32px; margin-left: -8px; padding: 0 8px 0 4px;
+  border: 0; border-radius: 8px; background: none; color: var(--lime); font: 700 16px/24px var(--font); cursor: pointer;
+}
+.menu-back svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.menu-back span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-back:hover, .menu-back:focus-visible, .dlg.menu[data-pad] .menu-back:focus { outline: none; box-shadow: none; background: var(--lime-fill); }
+.dlg .menu-note { margin: 0; padding: 0 16px 8px; color: var(--muted); font-size: 14px; line-height: 20px; }
+.dlg ul.crews, .menu-block ul.fl { margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .dlg p.set-note { margin: 0; }
+.menu-block .set-note { padding: 4px 16px 0; }
+/* a crew: its colour (the palette's button), its name, how many are in free roam in it, its link and Leave; the box to
+ * join one under them, and the palette (opened by a colour) under the crews */
+.menu-crews .crew-line { display: grid; gap: 0; }
+.menu-crews .crews { display: grid; }
+.menu-crews .crew { height: 40px; padding: 4px 8px; border-radius: 0; background: none; }
+.menu-crews .crew-dot::before { box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--line); }
+.menu-crews .crew-dot:hover::before, .menu-crews .crew-dot[aria-expanded="true"]::before { box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--lime); }
+.menu-crews .crew-text { flex: 1; justify-content: space-between; padding-left: 4px; }
+.menu-crews .crew-name { font-style: normal; font-weight: 400; }
+.menu-crews .crew-count { margin-right: 4px; }
+.menu-crews .crew-add { flex: none; width: auto; max-width: none; margin: 4px 16px; }
+.menu-crews .crew-colours { margin: 0 16px 4px; }
+/* a friend: its name, where it plays (a request's words lime, as the list's offers), its buttons; a friend's crews to
+ * invite it to under its row; the others in a line under the list, the box to ask one by name under that */
+.menu-block .fl li { min-height: 40px; padding: 4px 8px 4px 16px; box-shadow: none; }
+.menu-block .fl-name { display: flex; align-items: baseline; gap: 8px; font-style: normal; font-weight: 400; }
+.menu-block .fl-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.menu-block .fl-st { flex: none; margin-left: auto; color: var(--muted); }
+.menu-block .fl li:has(.fl-yes) .fl-st { color: var(--lime); }
+.menu-block .fl li.fl-pick { padding: 0 16px 8px; }
+.menu-block .fl-pick .fl-st { margin-left: 0; }
+.menu-friends > .fl:not(:last-child) { padding-bottom: 4px; box-shadow: inset 0 -1px var(--line); }
+.menu-friends > p.hint { margin: 0; padding: 8px 16px 0; }
+.menu-friends > p.hint:first-child { padding-top: 4px; }
+.menu-friends > p.hint + p.hint { padding-top: 4px; }
+.menu-friends .fl-add { width: auto; margin: 8px 16px 4px; }
+.menu-friends > .fl + .fl-add { margin-top: 12px; }
 
 /* ---------------------------------------------------------------- narrow */
 /* no room for the buttons beside the title (the longest name is Português (Brasil), the title on two lines at most):

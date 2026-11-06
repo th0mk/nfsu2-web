@@ -135,7 +135,7 @@ let roamCrews: Crew[] | null = null;     // the running game's crews: as it star
 let roamRoom: string | null = null;      // the running game's room: as it started, then as an invite link changed it ('': none; null: no free roam)
 let crewDraft = '';                      // the crew name being typed in the menu
 let popCounts = new Map<number, number>();   // how many are in free roam in each of those crews, by hash (askPopCounts)
-let popAsk = 0;                          // the popup's questions so far: only the newest one's answer shows
+let popAsk = 0;                          // the Crews page's questions so far: only the newest one's answer shows
 let away: AwayCheck | null = null;
 let playTime: PlayTime | null = null;
 let renderCheck: RenderCheck | null = null;
@@ -1008,7 +1008,7 @@ function endStage() {
   radio?.stop('the game closed');
   radioLink = null; statusAt = null;
   lobbyPanel.clear();
-  for (const id of ['#crews-pop', '#friends-pop', '#menu']) { const d = $<HTMLDialogElement>(id); if (d.open) d.close(); }
+  const menu = $<HTMLDialogElement>('#menu'); if (menu.open) menu.close();
   // a Quit question still open belongs to the game that ended (its answer would
   // do nothing, and the open question would keep that game reachable)
   const ask = $<HTMLDialogElement>('#confirm'); if (ask.open && ask.dataset.about === 'quit') ask.close();
@@ -1243,7 +1243,7 @@ const CREW_COUNT_AFTER_MS = 4000;
 let crewCountTimer = 0;
 /** Free roam: the player's crews' counts, once a game, the first time it drives in free roam: in the log, a line a crew
  *  with others in free roam (the count as the Crews row's chips have it, the player in it), the crew's dot and name in
- *  its colour.  Asked of the server once (players.ts askCrews, as the menu's Crews popup asks). */
+ *  its colour.  Asked of the server once (players.ts askCrews, as the menu's Crews asks). */
 function crewCountsOnce() {
   clearInterval(crewCountTimer);
   if (!roamCrews?.length) return;
@@ -1601,7 +1601,7 @@ async function screenshot(photo = false) {
 // ----------------------------------------------------------- page menu --
 function openMenu() {
   const m = $<HTMLDialogElement>('#menu');
-  if (m.open) { $<HTMLDialogElement>('#playlist').close(); m.close(); return; }                // (its Crews popup too: the menu's close)
+  if (m.open) { $<HTMLDialogElement>('#playlist').close(); m.close(); return; }                // (on its Crews or Friends too)
   const fsButton = m.querySelector<HTMLButtonElement>('[data-act="fullscreen"]')!;
   menuValue('fullscreen', t(isFullscreen() ? N('On') : N('Off')));
   fsButton.hidden = !canFullscreen() && fromHomeScreen();         // from an iPhone's Home Screen: already without bars
@@ -1639,20 +1639,46 @@ function menuValue(act: string, text: string) {
 /** roam_collide's value from its variable (a test's page address may give 1 or 0; none set: on, the default) */
 const collideOf = (v: string | undefined): Collide => { const c = checkSetting('roam_collide', v ?? ''); return c?.ok ? c.value as Collide : 'on'; };
 const crewsCount = () => roamCrews?.length ? String(roamCrews.length) : '';
-/** The menu's Crews popup (free roam only), over the menu: the Crews row's control, which changes the game's crews at
- *  once.  Done, Esc or a controller's B closes it, back to the menu on its Crews button; an Esc in a crew's palette
- *  closes only the palette. */
+/** what the menu shows: its list, or in its place its Crews or Friends (a game in free roam) */
+type MenuPage = 'main' | 'crews' | 'friends';
+let menuAt: MenuPage = 'main';
+/** The menu on page p: the others hidden, the dialog named by p's title.  Back on the list from a page: the keyboard
+ *  (or controller) on that page's row, with its state as it is now. */
+function menuPage(p: MenuPage) {
+  const was = menuAt;
+  menuAt = p;
+  for (const id of ['main', 'crews', 'friends'] as const) $(`#menu-${id}`).hidden = id !== p;
+  $('#menu').setAttribute('aria-labelledby', p === 'main' ? 'menu-title' : `menu-${p}-title`);
+  if (p !== 'main' || was === 'main') return;
+  popAsk++;                                       // (a count asked for the Crews page: not drawn now)
+  menuValue('crews', crewsCount());
+  menuValue('friends', friendPrompt.waiting() ? String(friendPrompt.waiting()) : '');
+  if ($<HTMLDialogElement>('#menu').open) $<HTMLButtonElement>(`#menu [data-act="${was}"]`).focus();
+}
+/** whether the menu is open on page p */
+const menuOn = (p: MenuPage) => menuAt === p && $<HTMLDialogElement>('#menu').open;
+/** Esc, Backspace (not in a text field) or a controller's B on the menu's Crews or Friends: back to the list, the menu
+ *  stays open (padnav.ts: a page's Back); an Esc the palette of a crew took (settings-ui.ts) not */
+function menuPageKey(e: KeyboardEvent) {
+  if (menuAt === 'main' || e.defaultPrevented || e.isComposing) return;
+  const typing = (e.target as HTMLElement | null)?.closest?.('input, textarea, select');
+  if (e.key !== 'Escape' && !(e.key === 'Backspace' && !typing)) return;
+  e.preventDefault();                             // (no cancel: the menu stays open)
+  menuPage('main');
+}
+/** The menu's Crews (free roam only), in the menu's place: the Crews row's control, which changes the game's crews at
+ *  once (the menu opened first, if it isn't); the keyboard in its box, or on a crew's colour with 4 */
 function openCrews() {
-  const pop = $<HTMLDialogElement>('#crews-pop');
-  if (roamCrews === null || !session?.net?.crews || pop.open) return;
+  if (roamCrews === null || !session?.net?.crews) return;
+  if (!$<HTMLDialogElement>('#menu').open) openMenu();
   drawPopCrews();
-  pop.showModal();
-  ($('#crews-pop-box').querySelector<HTMLElement>('input:enabled') ?? $('#crews-pop-box').querySelector<HTMLElement>('.crew-dot'))?.focus();
+  menuPage('crews');
+  ($('#menu-crews-box').querySelector<HTMLElement>('input:enabled') ?? $('#menu-crews-box').querySelector<HTMLElement>('.crew-dot'))?.focus();
   void askPopCounts();
 }
-/** The popup's counts, asked of the server once (the page does not ask while a game runs), after ms: a Join reaches
- *  the server's hub with the game's next HELLO.  As the server counts them: the player too, once in free roam in that
- *  crew.  Shown while the popup is open; the newest question's only. */
+/** The Crews page's counts, asked of the server once (the page does not ask while a game runs), after ms: a Join
+ *  reaches the server's hub with the game's next HELLO.  As the server counts them: the player too, once in free roam
+ *  in that crew.  Shown while the page is open; the newest question's only. */
 async function askPopCounts(ms = 0) {
   const n = ++popAsk;
   if (ms) await new Promise(r => setTimeout(r, ms));
@@ -1660,23 +1686,23 @@ async function askPopCounts(ms = 0) {
   const counts = await askCrews(roamCrews.map(c => roomHash(c.name)), 5000);
   if (!counts || n !== popAsk) return;
   popCounts = counts;
-  if ($<HTMLDialogElement>('#crews-pop').open) showCrewCounts($('#crews-pop-box'), counts);
+  if (menuOn('crews')) showCrewCounts($('#menu-crews-box'), counts);
 }
-/** the popup's control, drawn again after each change; focus: where the keyboard (or controller) goes then, if it was
- *  in there */
+/** the Crews page's control, drawn again after each change; focus: where the keyboard (or controller) goes then, if
+ *  it was in there */
 function drawPopCrews(focus?: (root: HTMLElement) => Element | null | undefined) {
-  const box = $('#crews-pop-box'), had = box.contains(document.activeElement);
+  const box = $('#menu-crews-box'), had = box.contains(document.activeElement);
   // (friends' invites to their crews first: friends.ts)
   const asks = friendPrompt.drawCrewAsks();
   box.replaceChildren(...(asks ? [asks] : []));
-  crewControl({ list: roamCrews ?? [], id: 'crews-pop-input', labelId: 'crews-pop-title', placeholder: N('Crew name'), counts: popCounts, draft: crewDraft,
+  crewControl({ list: roamCrews ?? [], id: 'menu-crews-input', labelId: 'menu-crews-title', placeholder: N('Crew name'), counts: popCounts, draft: crewDraft,
     onDraft: v => { crewDraft = v; }, change: (list, f) => void menuCrews(list, f),
-    // with the room the game is in, if any (crew-mates meet within one room); what the copy did goes in the popup's note
-    link: name => inviteLink(location.origin, { crew: name, room: roamRoom ?? '' }) }, box).setAttribute('aria-labelledby', 'crews-pop-title');
+    // with the room the game is in, if any (crew-mates meet within one room); what the copy did goes in the page's note
+    link: name => inviteLink(location.origin, { crew: name, room: roamRoom ?? '' }) }, box).setAttribute('aria-labelledby', 'menu-crews-title');
   if (had && focus) ((focus(box) ?? box.querySelector('input:enabled')) as HTMLElement | null)?.focus({ focusVisible: true } as FocusOptions);
 }
-/** a Leave, Join or colour in the popup: the game takes the crews and their colours at once (its HELLO again to the
- *  hub), and settings.ini keeps them for the next game, as the Crews setting would */
+/** a Leave, Join or colour on the Crews page: the game takes the crews and their colours at once (its HELLO again to
+ *  the hub), and settings.ini keeps them for the next game, as the Crews setting would */
 async function menuCrews(list: Crew[], focus: (root: HTMLElement) => Element | null | undefined) {
   if (roamCrews === null || !session?.net?.crews) return;
   roamCrews = list;
@@ -1691,30 +1717,29 @@ async function menuCrews(list: Crew[], focus: (root: HTMLElement) => Element | n
   log.add(`[app] crews: ${list.length ? list.map(c => `${c.name} (${c.rgb})`).join(', ') : 'none'} (the page menu)`);
 }
 
-/** The menu's Friends popup (free roam with others, friends or not yet), over the menu: the requests to answer, the
- *  friends in free roam, a Join for each one in another room (the game switches to it at once, as an invite link's
- *  Join does), the others in a line; how to add one, a field to ask by name (friends.ts drawPlaced).  Asked of the
- *  server as it opens, drawn again with its answer; Done, Esc or a controller's B closes it, back on the menu's Friends
- *  button. */
+/** The menu's Friends (free roam with others, friends or not yet), in the menu's place (the menu opened first, if it
+ *  isn't): the requests to answer, the friends in free roam, a Join for each one in another room (the game switches
+ *  to it at once, as an invite link's Join does), the others in a line; how to add one, a field to ask by name
+ *  (friends.ts drawPlaced).  Asked of the server as it opens, drawn again with its answer. */
 function openFriends() {
-  const pop = $<HTMLDialogElement>('#friends-pop');
-  if (!friendPrompt.available() || pop.open) return;
+  if (!friendPrompt.available()) return;
+  if (!$<HTMLDialogElement>('#menu').open) openMenu();
   drawPopFriends();
-  pop.showModal();
+  menuPage('friends');
   popFriendsFocus();
   friendPrompt.askWhere();
 }
-/** the popup's first button that does something now (a request's Accept, a Join), else Done */
+/** the Friends page's first button that does something now (a request's Accept, a Join), else its ‹ */
 function popFriendsFocus() {
-  ($('#friends-pop-box').querySelector<HTMLElement>('button:not(:disabled)') ?? $('#friends-pop').querySelector<HTMLElement>('[data-act="friends-done"]'))?.focus();
+  ($('#menu-friends-box').querySelector<HTMLElement>('button:not(:disabled)') ?? $('#menu-friends').querySelector<HTMLElement>('[data-act="back"]'))?.focus();
 }
 function drawPopFriends() {
-  const box = $('#friends-pop-box'), had = box.contains(document.activeElement);
+  const box = $('#menu-friends-box'), had = box.contains(document.activeElement);
   // (the line on Join only where a friend has one)
-  $('#friends-pop-help').hidden = !friendPrompt.drawPlaced(box, room => void joinFriend(room));
+  $('#menu-friends-help').hidden = !friendPrompt.drawPlaced(box, room => void joinFriend(room));
   if (had && !box.contains(document.activeElement)) popFriendsFocus();   // (the field keeps it: friends.ts AskField)
 }
-/** the race lobby card's Invite (its key, a click or a tap): the menu's Friends popup, whose friends in this room each
+/** the race lobby card's Invite (its key, a click or a tap): the menu's Friends, whose friends in this room each
  *  get an Invite while the player hosts a lobby with room in it (with none yet, it says how to add one) */
 function inviteToRace() {
   openFriends();
@@ -1735,12 +1760,12 @@ function joinCrew(crew: string, room: string) {
   log.add('[app] a friend\'s crew invite: joining');
   void joinHere(tidyInvite({ crew, room })).then(() => {
     menuValue('crews', crewsCount());
-    if ($<HTMLDialogElement>('#crews-pop').open) { drawPopCrews(); void askPopCounts(1500); }
+    if (menuOn('crews')) { drawPopCrews(); void askPopCounts(1500); }
   });
 }
 /** a Join in the menu's Friends: that friend's room, at once, and back to the game */
 async function joinFriend(room: string) {
-  for (const id of ['#friends-pop', '#menu']) { const d = $<HTMLDialogElement>(id); if (d.open) d.close(); }
+  const m = $<HTMLDialogElement>('#menu'); if (m.open) m.close();
   // (the friend's page named the room: checked as a link's room is)
   const inv = tidyInvite({ room }), ok = checkInvite(inv);
   if (!ok.ok) {
@@ -1982,6 +2007,7 @@ async function menuAction(act: string) {
     }
     case 'crews': openCrews(); break;
     case 'friends': openFriends(); break;
+    case 'back': menuPage('main'); break;
     case 'friend': m.close(); friendPrompt.menuItem()?.act(); break;
     case 'radio-folder': case 'radio': await radioClick(act); showRadio(m); break;
     case 'playlist': openPlaylist(); break;
@@ -2387,20 +2413,12 @@ export async function boot() {
   $('#menu').addEventListener('click', e => { const a = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]'); if (a) void menuAction(a.dataset.act!); });
   $('#playlist-body').addEventListener('change', setTrackMode);
   $('#playlist-shuffle').addEventListener('change', setShuffle);
+  $('#menu').addEventListener('keydown', menuPageKey);
+  // closed on its Crews or Friends: the next open starts on the list
   $('#menu').addEventListener('close', () => {
-    for (const id of ['#crews-pop', '#friends-pop']) { const d = $<HTMLDialogElement>(id); if (d.open) d.close(); }   // the menu's Crews and Friends go with it
+    menuPage('main');
     $('#stage').classList.remove('cursor'); $('#stage').querySelector('canvas')?.focus();
   });
-  // the menu's Crews popup: Done closes it; back on the menu's Crews button, with its count as it is now
-  $('#crews-pop').addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-act="crews-done"]')) $<HTMLDialogElement>('#crews-pop').close(); });
-  $('#crews-pop').addEventListener('close', () => {
-    const b = $<HTMLButtonElement>('#menu [data-act="crews"]');
-    menuValue('crews', crewsCount());
-    if ($<HTMLDialogElement>('#menu').open) b.focus();
-  });
-  // ...and its Friends popup
-  $('#friends-pop').addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-act="friends-done"]')) $<HTMLDialogElement>('#friends-pop').close(); });
-  $('#friends-pop').addEventListener('close', () => { if ($<HTMLDialogElement>('#menu').open) $<HTMLButtonElement>('#menu [data-act="friends"]').focus(); });
 
   // F7 / F8 / F9 belong to the page while the game runs (the game binds none
   // of them, Chrome reserves none); caught first, so the game never sees them,
@@ -2465,10 +2483,10 @@ export async function boot() {
   friendPrompt = new FriendPrompt($('#stage'), {
     send: m => session?.net?.friend?.(m) ?? false, room: () => roamRoom ?? '', log: logLine, place: placeNotices,
     toast: (s, o) => toast(o?.name ? named(s, o.name) : s, 5000, false, o?.hot ? 'hot' : ''),
-    notice: friendNotice, menu: menuName, placed: () => { if ($<HTMLDialogElement>('#friends-pop').open) drawPopFriends(); },
+    notice: friendNotice, menu: menuName, placed: () => { if (menuOn('friends')) drawPopFriends(); },
     hosted: () => lobbyPanel.hosted(), joinLobby: (host, lobby, race) => session?.input?.lobby?.(LB_JOIN, host, lobby, race) ?? false,
     api: friendsApi, driving: () => quickChat.driving(),
-    crews: () => roamCrews ?? [], joinCrew, crewsChanged: () => { if ($<HTMLDialogElement>('#crews-pop').open) drawPopCrews(); },
+    crews: () => roamCrews ?? [], joinCrew, crewsChanged: () => { if (menuOn('crews')) drawPopCrews(); },
   });
   friendMessages = new FriendMessages($('#stage'), msgStore, {
     send: m => session?.net?.friend?.(m) ?? false, driving: () => quickChat.driving(), line: msgLine, hint: msgHint,

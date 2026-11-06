@@ -28,14 +28,14 @@
 //                    (tests/scripts/roam_say_touch.txt), `log HOLD <ms> <selector>` holds a finger there that long
 //                    (tests/scripts/roam_touch_status.txt)
 //                    `log CREW join <name>` / `log CREW leave <name>` / `log CREW colour <k> <name>` (the palette's
-//                    k-th colour, from 0) do that in the menu's Crews popup (F9, Crews) and go back (Done, Back to
-//                    the game), `log CREW shot <name>` saves the page with the popup open
+//                    k-th colour, from 0) do that in the menu's Crews (F9, Crews) and go back to the game (Close),
+//                    `log CREW shot <name>` saves the page with the menu's Crews open
 //                    (tests/scripts/roam_crew_menu.txt); `log INVITE <fragment>` opens that invite link in the page
 //                    as a link pasted into its address does (the fragment without its #, which starts a comment in a
 //                    script: room=Blue%20Room), saves the question as <out>/<instance>-invite-<k>.png (k from 1) and
 //                    presses Join; `log INVITE-NO <fragment>` presses Not now (tests/scripts/roam_invite.txt);
-//                    `log FRIENDS shot <name>` opens the menu's Friends popup (F9, Friends), saves the page and says
-//                    what the popup says, and goes back; `log FRIENDS join <friend>` presses that friend's Join there
+//                    `log FRIENDS shot <name>` opens the menu's Friends (F9, Friends), saves the page and says
+//                    what it says, and goes back; `log FRIENDS join <friend>` presses that friend's Join there
 //                    (tests/scripts/roam_friend_app_a.txt); `log FRIENDS crew <friend> [<crew>]` its crew icon (and
 //                    that crew among the player's, with several), what the toast at it says, and goes back
 //                    (tests/scripts/roam_crew_invite_a.txt); `log RENAME <name>` answers the box that asks for
@@ -237,10 +237,10 @@ async function start(i, name, script, own) {
       .then(() => page.screenshot({ path: path.join(OUT, `${name}-${k[1]}.png`) }))
       .then(() => w(`[shot] ${k[1]}`), e => w(`[shot] ${k[1]} failed: ${e}`));
     // the page menu as the player uses it, at a script's `log MENU <item>` (its data-act: solid, fps ...): F9, the
-    // item, back to the game
+    // item, back to the game (Close: the menu's, or the page's the item opened)
     const mk = APP && /LOG MENU (\S+)/.exec(m.text());
     if (mk) void page.keyboard.press('F9').then(() => page.click(`#menu [data-act="${mk[1]}"]`, { timeout: 5000 }))
-      .then(() => page.click('#menu [data-act="resume"]'))
+      .then(() => page.click('#menu .menu-page:not([hidden]) [data-act="resume"]'))   // (Crews, Friends: that page's Close)
       .then(() => w(`[menu] ${mk[1]}`), e => w(`[menu] ${mk[1]} failed: ${e}`));
     // keys pressed on the page, and the right stick as the page reads it, at a script's `log KEY <code> ...` and
     // `log STICK <x> <y>`
@@ -297,28 +297,27 @@ async function start(i, name, script, own) {
     const rn = APP && /LOG RENAME (\S+)/.exec(m.text());
     if (rn) void page.fill('#rename-ask-name', rn[1], { timeout: 10_000 }).then(() => page.waitForTimeout(600))
       .then(() => page.click('#confirm-ok')).then(() => w(`[rename] ${rn[1]}`), e => w(`[rename] ${rn[1]} failed: ${e}`));
-    // the menu's Crews popup as the player uses it, at a script's `log CREW <op> ...`: F9, Crews, the act in the popup,
-    // Done, Close
+    // the menu's Crews as the player uses it, at a script's `log CREW <op> ...`: F9, Crews, the act on that page,
+    // Close
     const ck = APP && /LOG CREW (join|leave|colour|shot) (?:(\d+) )?(.+)$/.exec(m.text());
     if (ck) {
-      const [, op, k, arg] = ck, pop = '#crews-pop', crew = () => page.locator(`${pop} li.crew`, { has: page.locator('.crew-name', { hasText: arg.trim() }) });
-      const act = op === 'join' ? () => page.fill('#crews-pop-input', arg.trim()).then(() => page.press('#crews-pop-input', 'Enter'))
+      const [, op, k, arg] = ck, pop = '#menu-crews', crew = () => page.locator(`${pop} li.crew`, { has: page.locator('.crew-name', { hasText: arg.trim() }) });
+      const act = op === 'join' ? () => page.fill('#menu-crews-input', arg.trim()).then(() => page.press('#menu-crews-input', 'Enter'))
         : op === 'leave' ? () => crew().locator('.crew-leave').click({ timeout: 5000 })
         : op === 'colour' ? () => crew().locator('.crew-dot').click({ timeout: 5000 }).then(() => page.locator(`${pop} .crew-colours .swatch`).nth(+k).click({ timeout: 5000 }))
         : () => page.waitForTimeout(300).then(() => page.screenshot({ path: path.join(OUT, `${name}-${arg.trim()}.png`) }));
       void page.keyboard.press('F9').then(() => page.click('#menu [data-act="crews"]', { timeout: 5000 }))
-        .then(() => page.waitForSelector(`${pop}[open]`, { timeout: 5000 })).then(act)
-        .then(() => page.waitForTimeout(200)).then(() => page.click(`${pop} [data-act="crews-done"]`))
-        .then(() => page.click('#menu [data-act="resume"]'))
+        .then(() => page.waitForSelector(`${pop}:not([hidden])`, { timeout: 5000 })).then(act)
+        .then(() => page.waitForTimeout(200)).then(() => page.click(`${pop} [data-act="resume"]`))
         .then(() => w(`[crew] ${op} ${k ?? ''} ${arg}`), e => w(`[crew] ${op} ${arg} failed: ${e}`));
     }
-    // the menu's Friends popup as the player uses it, at a script's `log FRIENDS shot <name>` (F9, Friends, its
-    // picture once the server answered, what it says, Done, Close), `log FRIENDS join <friend>` (that
+    // the menu's Friends as the player uses it, at a script's `log FRIENDS shot <name>` (F9, Friends, its
+    // picture once the server answered, what it says, Close), `log FRIENDS join <friend>` (that
     // friend's Join, which goes back to the game itself) or `log FRIENDS crew <friend> [<crew>]` (its crew icon, the
-    // crew under its line with several, the toast's words, Done, Close)
+    // crew under its line with several, the toast's words, Close)
     const fk = APP && /LOG FRIENDS (shot|join|crew) (\S+)(?: (.+?))?\s*$/.exec(m.text());
     if (fk) {
-      const [, op, arg, crewName] = fk, pop = '#friends-pop';
+      const [, op, arg, crewName] = fk, pop = '#menu-friends';
       const line = () => page.locator(`${pop} .fl li`, { has: page.locator('.fl-name', { hasText: arg }) });
       const act = op === 'join'
         ? () => page.waitForTimeout(800).then(() => line().locator('.fl-join').click({ timeout: 5000 }))
@@ -326,14 +325,12 @@ async function start(i, name, script, own) {
         ? () => page.waitForTimeout(800).then(() => line().locator('.fl-crew').click({ timeout: 5000 }))
           .then(() => crewName ? page.locator(`${pop} .crew-pick`, { hasText: crewName }).click({ timeout: 5000 }) : undefined)
           .then(() => page.waitForSelector('.copy-toast.on', { timeout: 5000 })).then(() => page.textContent('.copy-toast.on'))
-          .then(said => { w(`[friends] the crew invite: ${said}`); return page.click(`${pop} [data-act="friends-done"]`); })
-          .then(() => page.click('#menu [data-act="resume"]'))
+          .then(said => { w(`[friends] the crew invite: ${said}`); return page.click(`${pop} [data-act="resume"]`); })
         : () => page.waitForTimeout(800).then(() => page.screenshot({ path: path.join(OUT, `${name}-${arg}.png`) }))
-          .then(() => page.evaluate(() => document.getElementById('friends-pop-box').innerText.replace(/\s*\n+\s*/g, ' / ')))
-          .then(said => { w(`[friends] the popup: ${said}`); return page.click(`${pop} [data-act="friends-done"]`); })
-          .then(() => page.click('#menu [data-act="resume"]'));
+          .then(() => page.evaluate(() => document.getElementById('menu-friends-box').innerText.replace(/\s*\n+\s*/g, ' / ')))
+          .then(said => { w(`[friends] the menu: ${said}`); return page.click(`${pop} [data-act="resume"]`); });
       void page.keyboard.press('F9').then(() => page.click('#menu [data-act="friends"]', { timeout: 5000 }))
-        .then(() => page.waitForSelector(`${pop}[open]`, { timeout: 5000 })).then(act)
+        .then(() => page.waitForSelector(`${pop}:not([hidden])`, { timeout: 5000 })).then(act)
         .then(() => w(`[friends] ${op} ${arg}`), e => w(`[friends] ${op} ${arg} failed: ${e}`));
     }
     // an invite link opened in the page, at a script's `log INVITE <fragment>`: the question box, its picture and

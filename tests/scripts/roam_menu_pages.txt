@@ -1,0 +1,36 @@
+# The page menu's Crews in the menu's place (F9, Crews), alone in free roam: the list turns into the Crews page, Esc
+# goes back to the list with the menu still open, Esc again closes it; a crew joined there (roam-pair: F9, Crews, its
+# box, that page's Close) reaches the game; Crews opened and closed with that page's Close.  The SHOTs show each step.
+#   roam-pair --page app --solo --a "Ann:roam_menu_pages.txt:NFSU2_ROAM_CREW=Blue Room"
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++600  log SHOT start
++60   log KEY F9
++60   log PRESS [data-act="crews"]
++120  log SHOT crews                  # the Crews page, the menu's list gone
++60   log KEY Escape
++60   log SHOT back                   # the list again, the menu still open
++60   log KEY Escape
++60   log SHOT closed                 # the menu closed
++60   log CREW join Night Owls
++360  roam mp status                  # the game has both crews
++0    log CREW shot menu
++240  log MENU crews                  # Crews, then that page's Close
++120  log SHOT end
++60   quit

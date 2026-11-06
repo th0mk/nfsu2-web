@@ -10,7 +10,7 @@
 //   line for a while once the player drives, and the newest one that waited does at the game's start: its answer goes
 //   on /friends, as the start page's.  It also tells the server the room's name once the player has friends (their
 //   Join), asks where the friends play every minute ("where"), says in the notices when one comes into free roam, and
-//   fills the page menu's Friends popup, there in every game in free roam with others: the requests to answer, the
+//   fills the page menu's Friends, there in every game in free roam with others: the requests to answer, the
 //   friends in free roam (Join a friend's room, Invite to the player's race, Invite to a crew), how to add one, a field
 //   to ask by name.  A friend's invite to its crew (from its start page or its game's Friends) gets a card at the top
 //   as a race invite's (the race invite's key, a click or a tap joins, as an invite link would: the crew, in the
@@ -125,6 +125,12 @@ export function whereText(f: Friend, mine?: string): string {
   return f.where === 'online' ? t('Online lobby') : t('offline');
 }
 
+/** where a friend in free roam plays, in the page menu's Friends (all of them in free roam there): your room (`mine`, the
+ *  game's), its room's name, or free roam (the room of everyone) */
+function roomText(f: Friend, mine: string): string {
+  return inRoom(f, mine) ? t('your room') : f.room || t('free roam');
+}
+
 /** the signs of the friends' icons (24-unit boxes, as settings-ui.ts's) */
 const CHECK = 'M5 12.5l4.5 4.5L19 7.5', CROSS = 'M6 6l12 12M18 6L6 18';
 const JOIN = 'M10 17l5-5-5-5M15 12H3M14 4h6v16h-6', ENVELOPE = 'M3 6h18v12H3zM3 7l9 6 9-6', PLUS = 'M12 5v14M5 12h14';
@@ -153,10 +159,13 @@ function friendList(lines: Line[]): HTMLUListElement {
     if (l.off) li.className = 'off';
     const name = document.createElement('span');
     name.className = 'fl-name';
+    const who = document.createElement('span');
+    who.className = 'fl-who';
+    who.textContent = l.name;
     const st = document.createElement('span');
     st.className = l.ok ? 'fl-st ok' : 'fl-st';
     st.textContent = l.state;
-    name.append(l.name, st);
+    name.append(who, st);
     const acts = document.createElement('span');
     acts.className = 'fl-act';
     acts.append(...l.acts);
@@ -168,7 +177,7 @@ function friendList(lines: Line[]): HTMLUListElement {
 }
 
 /** the player's crews and the room it plays in ('' the room of everyone), for a friend's crew invite: the running
- *  game's in its Friends popup, settings.ini's on the start page */
+ *  game's in its menu's Friends, settings.ini's on the start page */
 export interface CrewsNow { crews: readonly Crew[]; room: string }
 
 /** A friend's crew invite (its friends both ways in free roam only, as the server tells only those): an icon on the
@@ -271,7 +280,7 @@ function askNote(r: FriendLists | null, name: string, claim: string): { text: st
   }
 }
 
-/** The field to ask a player by name (the start page's Friends, the page menu's Friends popup): the Crews row's box
+/** The field to ask a player by name (the start page's Friends, the page menu's Friends): the Crews row's box
  *  with a + in it, what the last request did under it.  One element over redraws, so a player typing in it keeps the
  *  keyboard and the caret (nodes() puts them back). */
 class AskField {
@@ -341,7 +350,7 @@ export interface FriendPromptDeps {
   notice(name: string, text: string, here: boolean): void;
   /** "the menu (F9)", with what opens it here (shell.ts menuName) */
   menu(): string;
-  /** where the friends play changed (the page menu's Friends popup is drawn again) */
+  /** where the friends play changed (the page menu's Friends is drawn again) */
   placed(): void;
   /** the race lobby the player hosts now, with room in it (lobby.ts: null none): its friends in free roam in its room
    *  get an Invite in the page menu's Friends */
@@ -356,7 +365,7 @@ export interface FriendPromptDeps {
   crews(): readonly Crew[];
   /** a friend's crew invite taken: the crew and room joined, as an invite link's Join (shell.ts) */
   joinCrew(crew: string, room: string): void;
-  /** the crew invites that wait changed (the page menu's Crews popup is drawn again) */
+  /** the crew invites that wait changed (the page menu's Crews is drawn again) */
   crewsChanged(): void;
   log(line: string): void;
 }
@@ -366,9 +375,9 @@ export interface CrewAsk { name: string; crew: string; room: string }
 /** the most crew invites that wait in the page menu's Crews (the newest kept) */
 const CREW_ASKS_MAX = 4;
 
-/** how long a friend shows "invited" in the Friends popup, and an invite's line shows, after it was sent (ms) */
+/** how long a friend shows "invited" in the menu's Friends, and an invite's line shows, after it was sent (ms) */
 const INVITED_MS = 60_000, INVITE_LINE_MS = 20_000;
-/** how long a request from afar shows on the line, once the player drives (ms): then it waits in the Friends popup */
+/** how long a request from afar shows on the line, once the player drives (ms): then it waits in the menu's Friends */
 const ASK_LINE_MS = 15_000;
 /** an invite from a friend that waits for the player's answer: who, its lobby (the host's id, the lobby's, its race's
  *  hash), what race, until when its line shows */
@@ -404,9 +413,9 @@ export class FriendPrompt {
   private firstList = false;
   /** a request to answer on the line while no cars touch: whose, and until when it shows (0: once the player drives) */
   private asking: { name: string; until: number } | null = null;
-  /** the page menu's Friends popup's field to ask a player by name */
+  /** the page menu's Friends's field to ask a player by name */
   private askField: AskField;
-  /** the page menu's Friends popup's crew icons */
+  /** the page menu's Friends's crew icons */
   private crewInvites: CrewInvites;
   /** friends' crew invites that wait for the player's answer (the page menu's Crews), the one whose card shows at the
    *  top, and the card */
@@ -467,7 +476,7 @@ export class FriendPrompt {
   }
 
   /** a request's line: up once the player drives (for ASK_LINE_MS), gone when it stops (the request waits in the
-   *  Friends popup) */
+   *  menu's Friends) */
   private askingTick(now: number) {
     const a = this.asking;
     if (!a || this.who) return;
@@ -495,7 +504,7 @@ export class FriendPrompt {
     if (this.deps.send({ t: 'room', name: room })) this.roomSent = room;
   }
 
-  /** where the friends play, asked now (and again in WHERE_MS): the page menu's Friends popup opened */
+  /** where the friends play, asked now (and again in WHERE_MS): the page menu's Friends opened */
   askWhere() {
     if (!this.on || !this.friends.length) return;
     this.whereAt = performance.now();
@@ -506,7 +515,7 @@ export class FriendPrompt {
   hasFriends(): boolean {
     return this.on && this.friends.length > 0;
   }
-  /** the page menu has its Friends button: free roam with others, friends or not yet (the popup says how to add one) */
+  /** the page menu has its Friends button: free roam with others, friends or not yet (which says how to add one) */
   available(): boolean {
     return this.on;
   }
@@ -570,7 +579,7 @@ export class FriendPrompt {
         break;
       case 'asks':
         // the other player pressed first, or asked from afar: answer here while the cars touch, else on the line for a
-        // while once the player drives, and in the Friends popup
+        // while once the player drives, and in the menu's Friends
         if (!name) return;
         if (!this.asks.some(n => sameName(n, name))) this.asks.push(name);
         if (mine && this.who) this.who = { name, st: 'asks' };
@@ -671,7 +680,7 @@ export class FriendPrompt {
     if (yes) this.deps.joinCrew(a.crew, a.room);
     this.deps.crewsChanged();
   }
-  /** The page menu's Crews popup's crew invites, above its crews: a line each, the friend and the crew, Join and
+  /** The page menu's Crews's crew invites, above its crews: a line each, the friend and the crew, Join and
    *  Decline (null: none waits) */
   drawCrewAsks(): HTMLUListElement | null {
     const asks = this.crewAsksNow();
@@ -707,7 +716,7 @@ export class FriendPrompt {
     this.deps.placed();
   }
 
-  /** an answer to `name`'s request, from the line or the Friends popup: on /friends, as the start page's, since the
+  /** an answer to `name`'s request, from the line or the menu's Friends: on /friends, as the start page's, since the
    *  request may be from afar (the game's "add" takes only a player its car touched) */
   private async answer(name: string, yes: boolean) {
     this.deps.log(`[friends] ${yes ? 'accepting' : 'declining'} ${name}'s request`);
@@ -722,7 +731,7 @@ export class FriendPrompt {
     else if (done === 'full') this.deps.toast(t('A friends list is full (50 at most)'));
     else if (!r) {
       this.deps.toast(t('Not sent: try again in a moment'));
-      if (!this.asks.some(n => sameName(n, name))) this.asks.push(name);   // (still waits: in the popup again)
+      if (!this.asks.some(n => sameName(n, name))) this.asks.push(name);   // (still waits: in the menu again)
     }
     this.tookLists(r);
   }
@@ -736,7 +745,7 @@ export class FriendPrompt {
   }
 
   /** the server's "where": a notice for each friend that came into free roam since the last one (or is there at the
-   *  first), the popup drawn again */
+   *  first), the menu's Friends drawn again */
   private placedNow(list: Friend[]) {
     const room = this.deps.room(), was = this.was;
     this.was = new Map(list.map(f => [f.name.toLowerCase(), f.where]));
@@ -751,10 +760,10 @@ export class FriendPrompt {
     this.deps.placed();
   }
 
-  /** The page menu's Friends popup, in box: the requests to answer (Accept, Decline), the friends in free roam, a Join
+  /** The page menu's Friends, in box: the requests to answer (Accept, Decline), the friends in free roam, a Join
    *  for each one in another room (join: the room's name, '' the room of everyone), a Discord icon for one that gave
    *  its Discord username; the others in a line; with no friends yet, how to add one; then the field to ask a player
-   *  by name.  Without a claimed name, only how to get one.  Returns whether a friend has a Join (the popup's line on
+   *  by name.  Without a claimed name, only how to get one.  Returns whether a friend has a Join (the menu's line on
    *  Join shows then). */
   drawPlaced(box: HTMLElement, join: (room: string) => void): boolean {
     const p = (text: string) => Object.assign(document.createElement('p'), { className: 'hint', textContent: text });
@@ -776,7 +785,7 @@ export class FriendPrompt {
         const there = f.room !== undefined && !inRoom(f, room);
         joins ||= there;
         lines.push({
-          name: f.name, state: sent ? `${whereText(f, room)} · ${t('invited')}` : whereText(f, room), ok: true,
+          name: f.name, state: sent ? `${roomText(f, room)} · ${t('invited')}` : roomText(f, room), ok: true,
           acts: [
             ...(f.contact ? [discordIcon(f.contact)] : []),
             ...(there ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : []),
