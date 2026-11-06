@@ -3,11 +3,18 @@
 # page's fast unit tests (web/tools/unit-tests.mjs --fast, and the LAN backend's lan-wasm: the tests that need the
 # game folder or mingw show as skipped here).  They do not hold back the image (image-rs.yml) yet: first some weeks of
 # runs, to see which tests are flaky on GitHub's runners.
+#
+# Three runners side by side, each building what its part needs: the LAN crate's tests (one at a time, as harness
+# serial() keeps them: they measure time and queues), the other crates' tests, and the page's tests with a server of
+# their own.  A push that changes only the bot, the changelog or the docs is not tested: no test reads them (the
+# changelog's form is checked by web/build.mjs, which the image's build runs on every push).
 name: tests
 on:
   push:
     branches: [main]
+    paths-ignore: ['discord-bot/**', CHANGELOG.md, 'docs/**', README.md]
   pull_request:
+    paths-ignore: ['discord-bot/**', CHANGELOG.md, 'docs/**', README.md]
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,8 +24,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   tests:
+    name: ${{ matrix.part }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      # a part that fails does not stop the others
+      fail-fast: false
+      matrix:
+        part: [server, lan, page]
     steps:
       - uses: actions/checkout@v5
       # node and the page's packages (ws, esbuild): the page's tests, the LAN crate's page tests, the Node comparisons.
@@ -42,21 +55,28 @@ jobs:
       - if: steps.wasi.outputs.cache-hit != 'true'
         run: mkdir -p deps && curl -sSfL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz | tar xz -C deps
       - uses: dtolnay/rust-toolchain@stable
-      # the build is kept also when a test failed (by default only a run that passed saves it)
+      # the build is kept also when a test failed (by default only a run that passed saves it); a cache per part, as
+      # each builds other crates
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: web/server-rs
+          key: ${{ matrix.part }}
           cache-on-failure: true
       # the release build's code without its slow link (Cargo.toml's profile.ci)
       - name: server tests
-        run: cargo test --profile ci --locked --workspace --no-fail-fast
+        if: matrix.part == 'server'
+        run: cargo test --profile ci --locked --workspace --exclude nfsu2-lan --no-fail-fast
+        working-directory: web/server-rs
+      - name: LAN tests
+        if: matrix.part == 'lan'
+        run: cargo test --profile ci --locked -p nfsu2-lan --no-fail-fast
         working-directory: web/server-rs
       - name: the server for the page's tests
-        if: ${{ !cancelled() }}
+        if: matrix.part == 'page'
         run: cargo build --profile ci --locked -p nfsu2-server
         working-directory: web/server-rs
       - name: page tests
-        if: ${{ !cancelled() }}
+        if: matrix.part == 'page'
         run: node tools/unit-tests.mjs --fast test/lan-wasm.test.mjs
         working-directory: web
         env:
