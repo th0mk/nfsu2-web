@@ -6812,6 +6812,7 @@ static void js_heats(MpJs *j){
     }
     js_raw(j, "]");
 }
+#define MP_GAUGE_EVEN   0.85f         /* the lobby card's speedometer counts this much of the race's evening out (js_players) */
 /* the lobby's players: names, the host first; me: our place (-1: none); max; counts: 1 a win counts in our career
  * (mp_counts); c: each player's (its own game's say, ours ours), fr: each one our friend (a friend's win counts for us
  * as ours does), cr: each one a crew-mate of ours, not a friend (counts the same) -- c, fr and cr only when some are */
@@ -6832,20 +6833,28 @@ static void js_players(MpJs *j, const MpLobby *l){
     js_raw(j, "]");
     js_int(j, "me", me); js_int(j, "max", l->max);
     if (mine && !trip) js_int(j, "counts", 1);
-    /* car: each player's car's type ("" not known); vs: the fastest other car's rating over ours (the card's
-     * speedometer: "Speed compared to your car"), with ours and one of theirs known; not on the trip (the players'
-     * links end in the menus) */
+    /* car: each player's car's type ("" not known); vs: the fastest other car's rating over ours with the engines
+     * evened out (mprace_even_ratings: ours with the lobby's, as if we joined; the card's speedometer, "Speed compared
+     * to your car"), MP_GAUGE_EVEN of the way the race takes them: the engine is not all of a car, and in the lobby
+     * races an upgraded car still placed ahead more often than its evened power says.  So a car rated 1.35 times
+     * ours shows as 1.07 times, 1.8 as 1.15, and from about 2.5 times (a stock car against a maxed one, the evening
+     * out at its limits) in the red; with ours and one of theirs known; not on the trip (the players' links end in
+     * the menus) */
     if (!trip){
-        float my = mp_rating(g_s.conf.self_id, 0), top = 0.f;
+        float r[RC_LOBBY_MAX + 1], top = 0.f; int n = 0, ours = -1;
         js_key(j, "car"); js_raw(j, "[");
         for (int i = 0; i < l->n && i < RC_LOBBY_MAX; i++){
-            const char *nm; float r = mp_rating(l->ids[i], &nm);
+            const char *nm; r[n] = mp_rating(l->ids[i], &nm);
+            if (l->ids[i] == g_s.conf.self_id) ours = n;
+            n++;
             if (i) js_raw(j, ",");
             js_val(j, nm);
-            if (l->ids[i] != g_s.conf.self_id && r > top) top = r;
         }
         js_raw(j, "]");
-        if (my > 0.f && top > 0.f){ char t[24]; snprintf(t, sizeof t, ",\"vs\":%.2f", (double)(top / my)); js_raw(j, t); }
+        if (ours < 0){ ours = n; r[n++] = mp_rating(g_s.conf.self_id, 0); }
+        if (l->race) mprace_even_ratings(r, n, race_net_mode(l->race), MP_GAUGE_EVEN);
+        for (int i = 0; i < n; i++) if (i != ours && r[i] > top) top = r[i];
+        if (r[ours] > 0.f && top > 0.f){ char t[24]; snprintf(t, sizeof t, ",\"vs\":%.2f", (double)(top / r[ours])); js_raw(j, t); }
     }
     static const char *const key[3] = { "c", "fr", "cr" };
     for (int pass = 0; pass < 3; pass++){

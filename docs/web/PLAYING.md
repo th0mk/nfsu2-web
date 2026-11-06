@@ -706,8 +706,10 @@ Good to know:
     "Lobby 3/6"), its stage, track and laps, and ★ when a win counts in your career; its players, the host first
     and marked, ★ beside each player a win counts for, friends and crew-mates in lime, you in bold, then its open
     places (6; drag 4, 3 on the three-lane track), and under them a small speedometer: the fastest other car against
-    yours (straight up: rated as yours; in the red from 1.25 times, where a car wins well over its share even with the
-    engines evened out); the host's settings (who can join, invite friends); then this lobby or the next (the keys,
+    yours with the engines evened out, counting most of what the race does (the engine is not all of a car: a car
+    rated 1.35 times yours shows as 1.07 times, 1.8 times as 1.15; straight up: as fast as yours; in the red from 1.25
+    times, from about 2.5 times rated, a stock car against a maxed one; Street X and drift races, not evened out, as
+    rated); the host's settings (who can join, invite friends); then this lobby or the next (the keys,
     what is going on, how to leave). The players near see "Ann's circuit (1/6)" over the start (from about 250 m;
     several lobbies at one start stack there, a line each, the fuller first, at most four and then "+2 more");
     everyone in free roam sees its race's icon on the world map (M), and the nearest four lobbies their words beside it

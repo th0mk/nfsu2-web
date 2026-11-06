@@ -51,8 +51,8 @@ interface LobbyState {
   who?: 'stage' | 'friends' | 'all'; upto?: number;
   /** join: its host is past the race's stage, we are not (the card says so) */
   hpast?: number;
-  /** each player's car's type ("SKYLINE"; "" not known); vs: the fastest other car's rating over ours (the speedometer
-   *  under the players; none: not known) */
+  /** each player's car's type ("SKYLINE"; "" not known); vs: the fastest other car's rating over ours with the
+   *  engines evened out (the speedometer under the players; none: not known) */
   car?: string[]; vs?: number;
 }
 /** the lobby the player hosts, as an invite tells a friend of it (friends.ts) */
@@ -123,9 +123,9 @@ function noteText(s: string): string {
   return game(s) + engine;
 }
 
-/** the speedometer under the players (the fastest other car against ours, vs): its needle straight up for a car rated
- *  as ours, at its ends for 1.6 times ours or more and as much less, in the red past 1.25 times, where a car won well
- *  over its share of lobby races with the engines evened out (2026-10-31 .. 11-05) */
+/** the speedometer under the players (the fastest other car against ours with the engines evened out, vs: runtime
+ *  roam_game.c js_players): its needle straight up for a car as fast as ours, at its ends for 1.6 times ours or more
+ *  and as much less, in the red past 1.25 times (rated about 2.5 times ours: a stock car against a maxed one) */
 const SVGNS = 'http://www.w3.org/2000/svg';
 function speedometer(vs: number): SVGSVGElement {
   const svg = document.createElementNS(SVGNS, 'svg'), cx = 12, cy = 12, r = 10;

@@ -653,7 +653,8 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   the host's V goes round "Stage 2 and below can join", "Friends & crew can join" and "Everyone can join" (a career
   lobby has no Everyone). At a start, B
   opens a new lobby beside the others and E goes to the next one; the card shows a speedometer of the fastest other
-  car against yours. On a controller: D-pad up joins, starts or opens; left held a second is a new lobby, who can
+  car against yours with the engines evened out (a little right of centre for an upgraded car; in the red only for a
+  gap the evening out can't close, like a stock car against a maxed one). On a controller: D-pad up joins, starts or opens; left held a second is a new lobby, who can
   join or leave; right held the next lobby; invites are in the menu's Friends. A
   URL event of 2 or 3 heats races them all in one trip, with the career's points. A race that does not count pays
   by the player's stage (1st what a normal race of the stage pays, at least $400; 2nd to 4th three quarters, half,
