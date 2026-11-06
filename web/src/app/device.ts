@@ -35,13 +35,22 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  5900X, a laptop's several times that, so no computer gets more up front: fast computers started at 48, then 40,
  *  until 2026-11-02, and lost a fifth of their frames on fast displays).  The
  *  world map's other players: 2048 on phones, the file's 4096 elsewhere (each marker costs the open map's frames,
- *  about 7 us a frame on a busy Ryzen 5900X, a phone's several times that). */
+ *  about 7 us a frame on a busy Ryzen 5900X, a phone's several times that).  Full screen stays off on phones with
+ *  PowerVR's B-Series graphics (fullScreenFails). */
 export function deviceDefaults(): Record<string, string> {
   const kind = deviceKind();
-  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off' };
+  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: fullScreenFails() ? 'off' : 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off' };
   if (kind === 'tablet') return { roam_max_cars: '24', coop: 'off' };
   return { roam_max_cars: 'auto' };
 }
+
+/** the graphics as the page's check named them (checks.ts checkGpu: "img-tec b-series ..."), '' until it has */
+let graphics = '';
+export function noteGraphics(info: string | undefined) { graphics = info ?? ''; }
+/** PowerVR's B-Series in Chrome (POCO M7 Pro, Honor 400 Lite and others, 2026-10/11): in full screen the graphics
+ *  stopped seconds after Play or a turn to landscape (vkBindImageMemory: VK_ERROR_OUT_OF_DEVICE_MEMORY, with the
+ *  canvas the whole screen), in the window the game ran (a player's: "without full screen game works nice") */
+export const fullScreenFails = (g = graphics) => /^img-tec b-series/i.test(g);
 
 /** the device as its defaults see it: a phone, a touch-first one that is not a phone (a tablet), or a computer */
 export function deviceKind(): 'phone' | 'tablet' | 'pc' {

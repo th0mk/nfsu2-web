@@ -10,7 +10,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const js = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/devicelog.ts')], bundle: true, format: 'esm', write: false })).outputFiles[0].text;
 const { browserBrief, deviceBrief } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 const djs = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/device.ts')], bundle: true, format: 'esm', write: false })).outputFiles[0].text;
-const { phoneScreen, deviceDefaults, heapWindow } = await import('data:text/javascript;base64,' + Buffer.from(djs).toString('base64'));
+const { phoneScreen, deviceDefaults, heapWindow, noteGraphics } = await import('data:text/javascript;base64,' + Buffer.from(djs).toString('base64'));
 
 test('iPhone and iPad are named as such, not macOS (their user agents say "like Mac OS X" or Macintosh)', () => {
   assert.equal(browserBrief('Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1', 5), 'Safari 26 on iOS');
@@ -113,4 +113,20 @@ test("the guest heap's window: computers only, not Safari, not under 8 GB where 
   assert.equal(heapWindow('pc', android, 8), false, 'an Android tablet with a mouse');
   assert.equal(heapWindow('pc', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36', 8, 'Android'), false, 'DeX: a desktop address, Android underneath');
   assert.equal(heapWindow('pc', chromeWin, 8, 'Windows'), true);
+});
+
+test('full screen on a phone, but not where PowerVR B-Series graphics stop in it (POCO M7 Pro: the window works)', () => {
+  Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'Mozilla/5.0 (Linux; Android 16; 2412DPC0AG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Mobile Safari/537.36', maxTouchPoints: 5, hardwareConcurrency: 8 }, configurable: true, writable: true });
+  globalThis.screen = { width: 393, height: 873 };
+  globalThis.matchMedia = () => ({ matches: true });
+  try {
+    noteGraphics(undefined);
+    assert.equal(deviceDefaults().fullscreen, 'on', 'before the graphics are known');
+    noteGraphics('img-tec b-series PowerVR B-Series BXM-8-256');
+    assert.equal(deviceDefaults().fullscreen, 'off');
+    noteGraphics('img-tec d-series');
+    assert.equal(deviceDefaults().fullscreen, 'on', 'the D-Series: full screen works');
+    noteGraphics('qualcomm adreno-7xx');
+    assert.equal(deviceDefaults().fullscreen, 'on');
+  } finally { noteGraphics(''); }
 });
