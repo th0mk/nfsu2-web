@@ -333,7 +333,30 @@ void sub_0054c940(CPU *c){
     if (s_msg){ if (dvd >= 0) sms(c, dvd); if (mag >= 0) sms(c, mag); }
 }
 
+/* 0x54CA30 is `jmp 0x54C940` alone, and the lift copies a jump's target into the function that jumps: without this
+ * its callers (0x54CA43 ...) would run the game's copy and never this file's race result */
+void sub_0054ca30_orig(CPU *c);
+void sub_0054ca30(CPU *c){ (void)sub_0054ca30_orig; sub_0054c940(c); }
+
 /* ---- 2. cover offered: Showcase_IsOffered -------------------------------- */
+void sub_00501150(CPU *c);
+/* thiscall (career, marker) -> al, ret 4: is a marker's event open (0x532A50).  With no challenge running ([ecx+0xC08] 0)
+ * it tail-jumps by the marker's kind: +4 a race (0x5007E0), +8 (0x513110), +0xC a cover shoot -> 0x501150 with
+ * ecx + 0x4210, +0x10 (0x5135A0).  The lift copies those targets into it, so its cover branch would run the game's
+ * own 0x501150, not this file's: that branch goes to ours here, as the jump does (the marker's +0xC as the argument),
+ * every other the game's own */
+void sub_00532a50_orig(CPU *c);
+void sub_00532a50(CPU *c){
+    uint32_t m = MR32(c->esp + 4u);
+    if (!MR32(c->ecx + 0xc08u) && m && ok(m, 0x10u) && MR32(m) && !MR32(m + 4u) && !MR32(m + 8u) && MR32(m + 0xcu)){
+        MR32(c->esp + 4u) = MR32(m + 0xcu);
+        c->ecx += 0x4210u;
+        sub_00501150(c);
+        return;
+    }
+    sub_00532a50_orig(c);
+}
+
 void sub_00501150_orig(CPU *c);
 void sub_00501150(CPU *c){
     settings();
