@@ -17,8 +17,12 @@ import {
 } from './proto';
 import { BLOCK, CACHE_DIR, av1Path, songsPath, blockRuns, cacheKey, cacheOpen, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
 import { movieClose, movieDecode, movieOpen } from './movie';
+import { allocMemory, type MemoryTry } from './memory';
 
-interface Init { memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig }
+// The memory, or the sizes to try for it where the page holds its buffer only (WebKit, memory.ts): then this worker
+// makes it, sends the page its buffer, hands the Memory to each game thread ({ t: 'give', port }) and tells the page
+// each new buffer as the memory grows (memGrew)
+interface Init { memory?: WebAssembly.Memory; tries?: MemoryTry[]; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig }
 
 const FT_DIR = 3, FT_FILE = 4;
 const td = new TextDecoder(), te = new TextEncoder();
@@ -946,11 +950,21 @@ function watch() {
     note(`[io] ${opName(r.op)} of ${r.what} unanswered for ${((now - r.t0) / 1000).toFixed(0)} s${at.length ? `; waiting: ${at.slice(0, 4).join('; ')}` : ''}`);
   }
 }
+// where the page holds the memory's buffer only: each new one as the memory grows, before the page needs it (a game
+// thread's read into the grown part comes through here; the renderer's readbacks wait for it: gpu/index.ts)
+let offPage = false, memSaid = 0;
+function memGrew() {
+  const b = memory.buffer;
+  if (b.byteLength <= memSaid) return;
+  memSaid = b.byteLength;
+  (self as unknown as Worker).postMessage({ t: 'mem', buf: b });
+}
 async function serve() {
   let seen = Atomics.load(ctl, CTL_IO_DOORBELL);
   setInterval(watch, 5000);
   for (;;) {
     Atomics.add(ctl, CTL_IO_BEAT, 1);
+    if (offPage) memGrew();
     for (let s = 0; s < MAX_THREADS; s++) {
       const b = s * (RPC_SLOT / 4);
       if (Atomics.compareExchange(rpcI32, b, RPC_POSTED, RPC_TAKEN) !== RPC_POSTED) continue;
@@ -969,9 +983,27 @@ async function serve() {
   }
 }
 
-onmessage = async (e: MessageEvent<Init | { t: 'save-ready' }>) => {
-  if ('t' in e.data) { if (e.data.t === 'save-ready') saveAnswered?.(); return; }
-  ({ memory, cfg } = e.data);
+onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; port: MessagePort }>) => {
+  if ('t' in e.data) {
+    if (e.data.t === 'save-ready') saveAnswered?.();
+    // the Memory for a game thread, on the port the page gave it
+    else if (e.data.t === 'give') { e.data.port.postMessage(memory); e.data.port.close(); }
+    return;
+  }
+  cfg = e.data.cfg;
+  if (e.data.memory) memory = e.data.memory;
+  else {
+    try {
+      const got = allocMemory(e.data.tries!);
+      memory = got.memory; offPage = true;
+      (self as unknown as Worker).postMessage({ t: 'memory', buf: memory.buffer, note: got.note });
+    } catch (err) {
+      (self as unknown as Worker).postMessage({ t: 'io-error', msg: err instanceof Error ? err.message : String(err),
+        range: err instanceof RangeError, note: (err as { note?: string } | null)?.note });
+      return;
+    }
+  }
+  memSaid = memory.buffer.byteLength;
   ctl = new Int32Array(e.data.ctl); rpcI32 = new Int32Array(e.data.rpc); rpcI64 = new BigInt64Array(e.data.rpc);
   try {
     if (inMemory()) {

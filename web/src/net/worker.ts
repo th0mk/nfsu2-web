@@ -8,6 +8,7 @@
 // time than the game's threads (index.ts Endpoint.clock, which the link takes from the stamps themselves).
 import { Link, type NetOptions, type NetProcess } from './index';
 import type { FromNet, NetNow, ToNet } from './remote';
+import { MemoryBuffer } from '../host/memory';
 
 /** this worker's global (a test's stand-in has one of its own: web/test/net-worker.test.mjs) */
 const me = self as unknown as DedicatedWorkerGlobalScope;
@@ -34,6 +35,8 @@ if (!me.crossOriginIsolated) throw new Error('the worker is not cross-origin iso
 if (typeof (Atomics as { waitAsync?: unknown }).waitAsync !== 'function') throw new Error('no Atomics.waitAsync in a worker');
 
 let link: Link | null = null;
+/** the memory's buffer where the page holds only that (WebKit: host/memory.ts) */
+let memBuf: MemoryBuffer | null = null;
 let exited: (code: number) => void = () => {};
 const regs = new Map<number, { ptr: number; size: number }>();
 const waiting = new Map<number, ((r: { ptr: number; size: number }) => void)[]>();
@@ -76,8 +79,9 @@ me.onmessage = (e: MessageEvent<ToNet>) => {
   const m = e.data;
   if (m.t === 'init') {
     if (link) return;
+    if (m.memory instanceof SharedArrayBuffer) memBuf = new MemoryBuffer(m.memory);
     const proc: NetProcess = {
-      memory: m.memory,
+      memory: m.memory instanceof WebAssembly.Memory ? m.memory : memBuf!,
       exited: new Promise<number>(r => (exited = r)),
       registered(kind: number) {
         const r = regs.get(kind);
@@ -110,6 +114,8 @@ me.onmessage = (e: MessageEvent<ToNet>) => {
     timers.push(setInterval(() => tell(true), LOOK_MS), setInterval(() => tell(), STATS_MS));
     post({ t: 'ready' });
     tell();
+  } else if (m.t === 'mem') {
+    memBuf?.grew(m.buf);
   } else if (m.t === 'reg') {
     const r = { ptr: m.ptr, size: m.size };
     regs.set(m.kind, r);

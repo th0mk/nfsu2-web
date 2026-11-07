@@ -1,6 +1,7 @@
 // The one place that knows the layout of the radio's words after the status table (HostStatusRadio in
 // runtime/web/radio_proto.h, same order): the page writes the switch, the tags and the sound, the runtime (runtime/radio.c)
 // reads them.  RadioLink.open() gives a link only to a game whose block has the radio's magic and version.
+import type { GameMemory } from '../host/memory';
 const WORDS = ['radio_magic', 'radio_version', 'on', 'tag_seq', 'places', 'req_seq', 'req_index', 'ready_seq', 'failed_seq', 'total', 'written', 'ring', 'ring_frames', 'read', 'skip',
   'listen', 'song_seq', 'song_kind', 'song_ms', 'song_end'] as const;
 type Word = typeof WORDS[number];
@@ -25,10 +26,10 @@ const ascii = (s: string, to: Uint8Array) => {
 };
 
 export class RadioLink {
-  constructor(private memory: WebAssembly.Memory, private ptr: number) {}
+  constructor(private memory: GameMemory, private ptr: number) {}
 
   /** The link to the radio's words at the status block, or null: the block is too short, or it is another build's (an older game in the cache). */
-  static open(memory: WebAssembly.Memory, ptr: number): RadioLink | null {
+  static open(memory: GameMemory, ptr: number): RadioLink | null {
     const end = ptr + CTL + TEXT + (PLACES + 1) * 3 * TAG;
     if (!Number.isInteger(ptr) || ptr < 0 || end > memory.buffer.byteLength || (ptr + CTL) % 4) return null;
     const w = new Int32Array(memory.buffer, ptr + CTL, 2);

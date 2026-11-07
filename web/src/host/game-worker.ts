@@ -8,7 +8,8 @@ import {
   MAX_THREADS, Op, opName, POOL_IDLE, POOL_NONE, POOL_RUN_MAIN, RPC_DONE, RPC_IDLE, RPC_POSTED, RPC_SLOT, type BootConfig, type ToPage,
 } from './proto';
 
-interface Init { mod: WebAssembly.Module; memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer;
+// the memory itself, or (WebKit: host/memory.ts) a port it comes on
+interface Init { mod: WebAssembly.Module; memory?: WebAssembly.Memory; memPort?: MessagePort; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer;
   slot: number; pool: number; cfg: BootConfig; extraImports?: string[] }
 
 class ProcExit { constructor(public code: number) {} }
@@ -21,6 +22,12 @@ let tid = 0;
 // the guest thread's busy time (runtime/win32_ext.c, [status] gcpu)
 let blockedMs = 0;
 const post = (m: ToPage) => (self as unknown as Worker).postMessage(m);
+
+// (WebKit, host/memory.ts) the Memory comes on a port the I/O worker posts it on, not from the page
+const memoryFrom = (p: MessagePort) => new Promise<WebAssembly.Memory>((res, rej) => {
+  p.onmessage = (e) => { p.close(); if (e.data instanceof WebAssembly.Memory) res(e.data); else rej(new Error('no memory on the port')); };
+  p.onmessageerror = () => { p.close(); rej(new Error('the game\'s memory could not reach this thread')); };
+});
 
 const u8 = () => new Uint8Array(memory.buffer);
 const dv = () => new DataView(memory.buffer);
@@ -279,7 +286,9 @@ function hostImports(): Record<string, (...a: any[]) => any> {
 
 onmessage = async (e: MessageEvent<Init>) => {
   const m = e.data;
-  memory = m.memory; ctl = new Int32Array(m.ctl); slot = m.slot; POOL = m.pool; cfg = m.cfg;
+  ctl = new Int32Array(m.ctl); slot = m.slot; POOL = m.pool; cfg = m.cfg;
+  try { memory = m.memory ?? await memoryFrom(m.memPort!); }
+  catch (x) { post({ t: 'trap', tid: 0, msg: `pool worker ${slot}: ${x instanceof Error ? x.message : String(x)}` }); return; }
   rpcI32 = new Int32Array(m.rpc); rpcI64 = new BigInt64Array(m.rpc);
   const imports: WebAssembly.Imports = {
     env: { memory },

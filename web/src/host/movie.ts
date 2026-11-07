@@ -7,6 +7,7 @@
 // Where a browser decodes AV1, the page plays MOVIES/AV1/<name>.vp6 in place of MOVIES/<name>.vp6 (io-worker.ts
 // dataFile, datacache.ts av1Path); elsewhere the VP6 movies play as they always have.  NFSU2_MOVIE_CODEC = vp6 (a
 // settings.ini line, or &env= on the test pages) keeps the VP6 ones in any browser.
+import type { GameMemory } from './memory';
 
 /** profile 0, level 3.0 (768x512 at 30 fps, the game's movies), 8 bits */
 export const AV1_CODEC = 'av01.0.04M.08';
@@ -79,7 +80,7 @@ export function movieClose(id: number) {
 
 /** One AV1 frame (the chunk's payload: 'AV01', flags, 3 bytes, the temporal unit) into the planes y, u, v of the
  *  game's memory (strides ys, uvs).  0: the picture is there; 1: none came (the last one stays). */
-export async function movieDecode(memory: WebAssembly.Memory, id: number, payload: number, len: number,
+export async function movieDecode(memory: GameMemory, id: number, payload: number, len: number,
     y: number, u: number, v: number, ys: number, uvs: number, log: (s: string) => void): Promise<number> {
   const m = movies.get(id);
   if (!m || len < 8) return 1;
@@ -114,7 +115,7 @@ export async function movieDecode(memory: WebAssembly.Memory, id: number, payloa
   finally { f.close(); }
 }
 
-async function put(memory: WebAssembly.Memory, m: Movie, f: VideoFrame, y: number, u: number, v: number, ys: number, uvs: number) {
+async function put(memory: GameMemory, m: Movie, f: VideoFrame, y: number, u: number, v: number, ys: number, uvs: number) {
   const w = Math.min(m.w, f.visibleRect?.width ?? m.w) & ~1, h = Math.min(m.h, f.visibleRect?.height ?? m.h) & ~1;
   const rect = { x: f.visibleRect?.x ?? 0, y: f.visibleRect?.y ?? 0, width: w, height: h };
   const span = v - y + uvs * (h / 2);

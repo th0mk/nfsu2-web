@@ -78,6 +78,7 @@ import { RenderCheck, RENDER_CHECK_TIMES, type RenderCheckTimes } from './render
 import { moviesKept, Predownload } from './predownload';
 import { movieCodec } from '../host/movie';
 import type { Packs } from '../host/datacache';
+import type { GameMemory } from '../host/memory';
 import { texSplit } from '../gpu/index';
 import { copyText, copyToast } from './copy';
 
@@ -154,7 +155,7 @@ let gpuGone = false;
 // the Android version for the log's browser line (devicelog.ts androidMajor), asked once as the page loads
 const androidVersion = androidMajor();
 let fps: FpsOverlay;
-let statusAt: { memory: WebAssembly.Memory; ptr: number } | null = null;   // the running game's status block
+let statusAt: { memory: GameMemory; ptr: number } | null = null;   // the running game's status block
 let radioLink: RadioLink | null = null;  // the radio's words of the running game, once the game says it has them
 const radioPort = () => radioLink ??= statusAt ? RadioLink.open(statusAt.memory, statusAt.ptr) : null;
 let radio: Radio | null = null;          // made at the first click on Radio: a player who never uses it runs none of it

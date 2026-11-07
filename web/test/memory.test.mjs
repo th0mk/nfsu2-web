@@ -10,7 +10,7 @@ import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const js = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/host/memory.ts')], bundle: true, format: 'esm', write: false })).outputFiles[0].text;
-const { memoryTries, allocMemory } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const { memoryTries, allocMemory, memoryOffPage, MemoryBuffer } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 
 const GB = 16384;                       // pages: the build's size (game.json "pages")
 const tries = memoryTries(GB);
@@ -84,4 +84,28 @@ test('the real constructor makes a shared memory of the size tried', () => {
   const { memory } = allocMemory(memoryTries(32));
   assert.ok(memory.buffer instanceof SharedArrayBuffer);
   assert.equal(memory.buffer.byteLength, 32 * 65536);
+});
+
+// WebKit's page holds the memory's buffer only (memory.ts: a live WebAssembly.Memory keeps JavaScriptCore from collecting)
+test('the page holds the buffer only in WebKit: Safari and every browser on an iPhone, not Chrome or Firefox', () => {
+  const safari = 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1';
+  const crios = 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/150.0 Mobile/15E148 Safari/604.1';
+  const macSafari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15';
+  const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
+  const firefox = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:159.0) Gecko/20100101 Firefox/159.0';
+  assert.deepEqual([safari, crios, macSafari, chrome, firefox].map(u => memoryOffPage(u)), [true, true, true, false, false]);
+});
+
+test('the buffer as the memory grows: a longer one is taken, a wait ends with it or after its time', async () => {
+  const mem = new WebAssembly.Memory({ initial: 1, maximum: 4, shared: true });
+  const view = new MemoryBuffer(mem.buffer);
+  assert.equal(await view.until(65536), true);
+  const waited = view.until(3 * 65536, 2000), late = view.until(5 * 65536, 50);
+  assert.equal(view.grew(mem.buffer), false);
+  mem.grow(2);
+  assert.equal(view.grew(mem.buffer), true);
+  assert.equal(view.buffer.byteLength, 3 * 65536);
+  assert.equal(view.grew(new SharedArrayBuffer(65536)), false);
+  assert.equal(await waited, true);
+  assert.equal(await late, false);
 });
