@@ -2,8 +2,7 @@
  * it (NFS Carbon's transmission whine on Underground 2: nfsmods.xyz,
  * source https://github.com/ropi336/UG2WhineGen, "No Rights Reserved").
  * gearbox_whine = on (NFSU2_GEARBOX_WHINE=1); off by default, the original
- * game.  gearbox_whine_volume (NFSU2_GEARBOX_WHINE_VOLUME, 0 to 400, 165
- * by default) scales all of it, in % of the mod's own levels (its Volume).
+ * game.  As loud as the game's Master and Engine Volume make it, times LEVEL.
  *
  * The mod's sounds are not in the game build: tools/whinepack.py puts the
  * three of its 1.0.2 release (its snd folder: 16-bit mono 44.1 kHz WAVs) in
@@ -37,8 +36,24 @@
  *     to half a second; here the 0.3 s alone), and m jumps to its new gear's
  *     value.
  * Not here: the mod's car list (CarList: the whine on every car, as its
- * default ALL), its F1 switch and its chimes (the page's setting instead),
- * and its lowering to 0.4 during a phone call or cutscene.
+ * default ALL), its Volume (LEVEL instead), its F1 switch and its chimes
+ * (the page's setting instead), and its lowering to 0.4 during a phone call
+ * or cutscene.
+ *
+ * LEVEL: the mod plays its sounds through an audio engine of its own beside
+ * the game's, both at full scale into the system's mix; the mixers here play
+ * the game's sound buffers at their DirectSound volumes and nothing more
+ * (audio_web.c, audio.m), so the mod's own gains keep its balance against
+ * the game: the whine 11 to 13 dB under the engine alone while driving, lost
+ * under it at speed.  Here it plays at 165 % of that.  Measured in a quick
+ * race at 60 fps with every volume but Master and Engine at 0
+ * (tests/scripts/whine_engine.txt, SNDDUMP): the whine about -32 dBFS (its
+ * gains, its sounds' level and LEVEL; on minus off within 1 dB of that at
+ * the start line), the engine alone -24 to -27 dBFS while driving and -22
+ * at the line: the whine about 8 dB under the engine up to 90 km/h, 5 to 6
+ * dB at 90 to 120 km/h, 10 dB at the line.  Its peak is at most 0.11 of
+ * full scale (330 km/h), so it brings no clipping of its own: in a race with
+ * every volume at 100 % the game's own sound reaches full scale without it.
  *
  * Threads: the game thread writes the targets, one word each; the mixer
  * smooths every change (so a word of the frame before beside one of this
@@ -61,6 +76,7 @@
 #define CAR_SPEED  0x430u             /* Car: speed (m/s) */
 #define CAR_GEAR   0x434u             /* ...gear: 0 reverse, 1 neutral, 2 first .. */
 #define STALE_MS   250u
+#define LEVEL      1.65f              /* 165 % of the mod's Volume (above: why, and measured) */
 #define MAX_BYTES  (4u << 20)         /* a sound file bigger than this is not the mod's */
 
 int fileio_mod_pack(const char *rel, char *out, size_t outsz);   /* fileio.c: MODPACKS/<rel>'s host path */
@@ -104,7 +120,6 @@ static float bitsf(uint32_t u){ float f; memcpy(&f, &u, 4); return f; }
 static struct { uint32_t gain, pitch; } g_in[W_N];
 static uint32_t g_stamp, g_level;     /* the targets' time (ms); the level (Master x Engine, 0 paused) */
 static int g_on = -1;                 /* the setting (game thread; the mixer reads it once it is set) */
-static float g_volume = 1.65f;        /* gearbox_whine_volume / 100 (set before g_on) */
 
 static uint32_t now_ms(void){
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -141,11 +156,6 @@ static void whine_init(void){
     /* the page writes 1 or 0; the Mac app passes the line's own on/off */
     const char *e = getenv("NFSU2_GEARBOX_WHINE");
     int on = e && *e && *e != '0' && strcasecmp(e, "off") && strcasecmp(e, "no") && strcasecmp(e, "false");
-    const char *v = getenv("NFSU2_GEARBOX_WHINE_VOLUME");
-    if (v && *v){
-        double pc = atof(v);
-        g_volume = (float)(pc < 0 ? 0 : pc > 400 ? 400 : pc) / 100.f;
-    }
     __atomic_store_n(&g_on, on, __ATOMIC_RELEASE);
     if (!on) return;
     int have = 1;
@@ -155,7 +165,7 @@ static void whine_init(void){
         __atomic_store_n(&g_ready, -1, __ATOMIC_RELEASE);
         return;
     }
-    fprintf(stderr, "[whine] gearbox whine on (UG2WhineGen), volume %.0f %%: reading its sounds\n", (double)g_volume * 100.0);
+    fprintf(stderr, "[whine] gearbox whine on: reading its sounds\n");
     pthread_t t; pthread_attr_t a; pthread_attr_init(&a); pthread_attr_setdetachstate(&a, PTHREAD_CREATE_DETACHED);
     if (pthread_create(&t, &a, load_main, 0)) load_main(0);
     pthread_attr_destroy(&a);
@@ -239,7 +249,7 @@ void whine_mix(float *acc, unsigned frames, unsigned rate){
     float k_lvl = 1.f - expf(-1.f / (0.070f * fs)), k_gain = 1.f - expf(-1.f / (0.035f * fs)), k_pitch = 1.f - expf(-1.f / (0.020f * fs));
     float lvl_t = stale ? 0.f : bitsf(GET(g_level));
     if (!(lvl_t >= 0.f && lvl_t <= 1.f)) lvl_t = 0.f;
-    lvl_t *= g_volume;
+    lvl_t *= LEVEL;
     float gt[W_N], pt[W_N];
     for (int w = 0; w < W_N; w++){
         gt[w] = bitsf(GET(g_in[w].gain)); pt[w] = bitsf(GET(g_in[w].pitch));

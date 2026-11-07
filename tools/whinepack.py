@@ -23,7 +23,7 @@ Each sound is checked: a 16-bit mono PCM WAV; and the 1.0.2 release's own
 import argparse, hashlib, os, struct, sys, zipfile
 
 NAMES = ('car_whine.wav', 'car_whine_2.wav', 'car_whine_reverse.wav')
-# the 1.0.2 release's sounds (runtime/whine.c's levels are the mod's for these)
+# the 1.0.2 release's sounds (runtime/whine.c's gains are the mod's for these)
 SHA256 = {
     'car_whine.wav': 'c03885fa49022e18973767d1140afd9ef8a2c447c0096aa576c4e94390e9b5ab',
     'car_whine_2.wav': 'a85d8782a92ed1aa0b0a9caac90a98e8c387b1d6776b75d9059868197e7cb7c3',

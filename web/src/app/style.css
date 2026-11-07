@@ -279,11 +279,6 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .set-control { grid-area: ctl; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .val { color: var(--lime); font-size: 14px; line-height: 20px; min-width: 24px; }
 .unit { color: var(--muted); font-size: 14px; line-height: 20px; }
-/* a slider (settings-ui.ts range): its value on its left; a mod's own setting's row set in under the mod's */
-.set input[type="range"] { width: 160px; margin: 0; accent-color: var(--lime); }
-.set input[type="range"] + .val, .set-control output.val { min-width: 44px; text-align: right; }
-.set-sub { padding-left: 24px; }
-.set-sub .set-label { font-size: 14px; }
 
 /* a choice: the game's value box, the chosen value selected; a value whose words take two lines makes its option (and
  * the others on its line) taller, 20 px a line */

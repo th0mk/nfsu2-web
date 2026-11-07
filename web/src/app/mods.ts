@@ -21,11 +21,10 @@ export type Online = 'mine' | 'you' | 'seen' | 'career' | 'offline';
  *  own source (original: no link) */
 export type Uses = 'original' | 'data' | 'code' | 'findings';
 
-/** setting: a settings.ini key (settings.ts KEYS) and the values that turn the mod on (none: a switch, on), more: settings
- *  of its own, each a row under the mod's (settings-ui.ts MOD_MORE: its volume, say); always: no
+/** setting: a settings.ini key (settings.ts KEYS) and the values that turn the mod on (none: a switch, on); always: no
  *  setting on the page; elsewhere: settings of its own elsewhere on the page (keys); menu: in the game's own menus */
 export type ModControl =
-  | { setting: string; values?: readonly string[]; more?: readonly string[] }
+  | { setting: string; values?: readonly string[] }
   | { always: true }
   | { elsewhere: Place; keys: readonly string[] }
   | { menu: Place };
@@ -186,9 +185,9 @@ export const MODS: readonly Mod[] = [
   {
     id: 'gearbox-whine', name: 'Transmission Whine', mod: 'UG2WhineGen', authors: [{ name: 'ropsli' }],
     links: { source: 'https://github.com/ropi336/UG2WhineGen' },
-    kind: 'screen', uses: 'data', control: { setting: 'gearbox_whine', more: ['gearbox_whine_volume'] },
+    kind: 'screen', uses: 'data', control: { setting: 'gearbox_whine' },
     line: N('NFS Carbon\'s gearbox whine on your car.'),
-    details: 'The mod\'s own sounds over the game\'s: a whine rising with your speed and its gear, a second layer louder the faster you go, a pause at each upshift and a whine of its own in reverse. As loud as the game\'s Engine Volume makes it. Its volume is a row of its own: 165% at first, 100% the mod\'s. Every car has it, as the mod\'s default; its F1 key is this switch.',
+    details: 'The mod\'s own sounds over the game\'s: a whine rising with your speed and its gear, a second layer louder the faster you go, a pause at each upshift and a whine of its own in reverse. As loud as the game\'s Engine Volume makes it. Every car has it, as the mod\'s default; its F1 key is this switch.',
     online: 'you', sizeMB: 0.5, files: ['runtime/whine.c', 'runtime/whine.h', 'tools/whinepack.py'],
   },
 
