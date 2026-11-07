@@ -106,7 +106,7 @@ Yes. In free roam, win a race of your stage you haven't won yet in a lobby, and 
 ### How do I play with other players?
 label: Play with others
 1. Start page, Online: turn on **Free roam with others**, and set **Your name**.
-2. Drive in your career's free roam: the other players are there. Alone there? Leave **Room** (start page, Online) empty: with a name in it, you see only the players in the same room.
+2. Drive in your career's free roam: the other players are there. Alone there? Pick **Main world** under **World** (start page, Online, or the **F9** menu; on an older page leave **Room** empty): you see only the players in your world.
 3. To find your friends: add them in the **F9** menu, **Friends** (by name; both need a claimed name), or type the same crew name in Friends & crews, **Crews**. You always see each other. A friend in free roam can be invited to your crew from their line in Friends (the two-people icon); they press **Z** to join.
 4. To race: drive to a race's start, press **Enter** and pick **Multiplayer**. The others join your lobby.
 
@@ -182,7 +182,7 @@ label: Rename or delete a profile
 ### I don't see other players in free roam
 label: No other players
 <!-- for: problems -->
-On the start page, Online: turn on **Free roam with others**, set **Your name** and leave **Room** empty (with a name in it you see only that room's players), then load your career and drive in its free roam. Quick Race's Free Run has no other players. Still alone in your career? Post in #bug-reports with the log (F9, **Download log**).
+On the start page, Online: turn on **Free roam with others**, set **Your name** and pick **Main world** under **World** (on an older page leave **Room** empty: you see only your world's players), then load your career and drive in its free roam. Quick Race's Free Run has no other players. Still alone in your career? Post in #bug-reports with the log (F9, **Download log**).
 
 ### How do I turn off vibration?
 label: Vibration
@@ -217,3 +217,8 @@ Drag with the mouse's middle button (the wheel) held. On a touch screen, drag tw
 label: Stars short
 <!-- for: problems -->
 Add visual parts: body kits, paint, vinyls, rims, neons, tint, hydraulics or audio; Career Status (**T**) shows the stars needed. Or on the start page, Mods, **Visual Reputation Remover** (off by default) gives your car the stage's rating.
+
+### Free roam is too busy. Is there a quieter one?
+label: Quieter free roam
+<!-- for: problems -->
+Yes: in the **F9** menu, **World**, pick **World 1** to **World 4**; each shows how many play there, one tap switches at once, and **Main world** takes you back. In **World 4** nobody can use Ghost mode. The start page has the same list (Online, **World**). Friends and crews meet only in the same world. Your page still shows **Room** instead? Worlds come with the next update.

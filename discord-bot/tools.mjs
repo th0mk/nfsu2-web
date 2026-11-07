@@ -71,7 +71,7 @@ export const TOOL_DEFS = [
 // texts, too many to read for a few, and replies in Spanish, Hungarian and Portuguese named them in English
 const LABELS = ['Saves', 'Online', 'Friends & crews', 'Game', 'Display', 'Mods', 'Controls', 'Play', 'Quit game', 'Download log',
   'Cloud saves', 'Turn on', 'Load', 'Stop syncing', "Keep this browser's", 'Put back', 'Download backup', 'Restore', 'Screenshots',
-  'Free roam with others', 'Your name', 'Claim', 'Room', 'Ghost mode', "Players' cars shown", 'Frame rate', 'Auto',
+  'Free roam with others', 'Your name', 'Claim', 'World', 'Main world', 'Ghost mode', "Players' cars shown", 'Frame rate', 'Auto',
   'Resolution scale', 'Full screen on Play', 'More display settings', 'More game settings',
   'Controller', 'More controller settings', 'Hotplug', 'Off', 'Rumble', 'Trigger full press',
   'Delete game data'];

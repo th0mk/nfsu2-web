@@ -330,8 +330,12 @@ Checked against the guide or the code, and confirmed by players in threads:
   friends see the claimed name). Saves, Cloud saves shows "This passphrase also holds your claim on X": that is the
   name others can add. To play as the typed name: Change name (once a week; "You can change it on <date>" says when).
   Changing moves the friends along (the start page or the Online menu, whichever comes first).
-- Races only with friends, career races too: everyone sets the same uncommon Room (start page, Online) before Play;
-  lobbies stay within the room. It is not private. Alone in free roam often means a Room left set: clear it.
+- Free roam split into worlds (commit 41737add; before it is live the page has a Room name box, empty = main world):
+  Main world (everyone, default), World 1 to 4 (quieter; World 4 holds Ghost mode Off for all), or Own name. Picked in
+  F9, World (counts shown, switches at once) or start page, Online, World. "Too busy / crowded" -> World 1 to 4.
+- Races only with friends, career races too: everyone picks the same uncommon Own name world (Room on an older page)
+  before Play; lobbies stay within the world. It is not private. Alone in free roam often means another world picked
+  (or a Room left set on an older page): pick Main world.
 - A career without other players: start page, Online, Free roam with others off, then Play. The page menu's "Stop
   waiting: play offline" shows only while the page waits in line for a full server, never during a game.
 - Manual or automatic gears: the game's pause menu, Options, Player, Transmission (Quick Race and the Online menu ask
