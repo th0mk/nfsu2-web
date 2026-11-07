@@ -1,0 +1,43 @@
+# Transmission Whine (runtime/whine.c) in a quick race, the same driving at any frame rate (in-race input timed in
+# game-world ms, as hfr_drive.txt): Circuit, Resort Loop; the autopilot drives up through the gears, Engine Volume
+# goes to 0 for 3 s, then the car brakes and reverses, the pause menu stands the world for 3 s, and the pause menu's
+# Replay plays the race back.  The "[trace]" lines: the car's speed (m/s, +0x430) and gear (+0x434), the world step
+# and the Engine Volume.  Its sound, with the music muted (on and off, each frame rate):
+#   NFSU2_SAVE_SEED= node web/tools/run-suite.mjs --script whine_drive.txt --marker whine_done --save-out <dir>
+#        --env NFSU2_GEARBOX_WHINE=1 --env SNDDUMP=/save/snd.raw --env MUTEFILE=MusicSFx.mus [--env NFSU2_FPS=120]
+0       waitfng UG_LS_Splash.fng 12000                  # title
++1000ms tapuntil RETURN MC_Background.fng 120 3000      # title -> profile prompt
++600ms  tapuntil RETURN GarageMain.fng 120 3000         # "No" -> main menu
++1500ms tapuntil RETURN UI_QRModeSelect.fng 240 3000    # Quick Race
++800ms  tapuntil RETURN UI_QRTrackSelect.fng 240 3000   # Circuit
++800ms  tapuntil RETURN UI_QRModeOptions.fng 240 3000   # Resort Loop
++800ms  tapuntil RETURN UI_QRCarSelect.fng 240 3000     # options
++800ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000 # car -> transmission
++800ms  tapuntil RETURN PC_Loading.fng 240 3000         # transmission -> loading
++0      waitmem 0x8654a4 6 6000
++0      wzero
++0      log race_loaded
++0      trace 30 spd=f:[[0x8900ac]+4]+0x430 gear=i:[[0x8900ac]+4]+0x434 step=f:0x865154 eng=f:0x83aa3c
+7000wms  autopilot on
+7000wms  log accelerate
+28000wms log engine_volume_0
+28000wms poke 0x83aa3c 0
+31000wms poke 0x83aa3c 0x3f800000
+31000wms log engine_volume_1
+36000wms autopilot off
+36000wms log brake_reverse
+36000wms down DOWN
+48000wms up DOWN
+48000wms log reverse_end
+49000wms tapuntil ESCAPE UI_Pause.fng 60 600
++0       log paused
++3000ms  tap RIGHT                                     # Restart
++40      tap RIGHT                                     # Options
++40      tap RIGHT                                     # Replay
++40      tap RETURN
++0       waitfng UI_ReplayControl.fng 600
++0       log replay
++10000ms tapuntil ESCAPE UI_Pause.fng 60 900
++0       log whine_done
++0       untrace
++10      quit

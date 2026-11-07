@@ -1,0 +1,44 @@
+# Transmission Whine (runtime/whine.c) in split screen: two players on one keyboard (split_keyboard_two.txt's way in),
+# player 2 (WASD) drives off while player 1 stands, then player 1 follows.  Each car has a whine of its own: the log's
+# "[whine] player N's car" lines, and in the sound dump player 2's whine rises with its speed while player 1's stays at
+# the standing pitch (every volume but Master and Engine at 0, as whine_engine.txt: the engines alone and the whines).
+# The "[trace]" lines: both cars' speed (m/s) and gear.
+#   node web/tools/run-suite.mjs --script /tests/web/scripts/whine_split.txt --marker whine_split_done
+#        --env NFSU2_GEARBOX_WHINE=1 --env SNDDUMP=/save/snd.raw --save-out <dir>
+0 tapuntil RETURN MC_Background.fng 120 4000
++200 tap RETURN
++0 waitfng GarageMain.fng 3000
++300 tap RIGHT
++200 tap RETURN
++200 tap RETURN
++0 waitfng UI_QRModeSelect.fng 2000
++100 tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++100 tapuntil RETURN UI_QRModeOptions.fng 150 1500
++100 tapuntil RETURN 2P_PressStart.fng 150 1500
++150 down RETURN
++20 up RETURN
++150 tap RETURN
++200 tap RETURN
++200 down SPACE
++20 up SPACE
++150 tap RIGHT
++150 tap RETURN
++150 tap RETURN
++0 waitmem 0x8654a4 6 6000
++0 poke 0x83aa2c 0
++0 poke 0x83aa30 0
++0 poke 0x83aa34 0
++0 poke 0x83aa38 0
++0 poke 0x83aa40 0
++0 trace 30 spd1=f:[[0x8900ac]+4]+0x430 gear1=i:[[0x8900ac]+4]+0x434 spd2=f:[[0x8900b0]+4]+0x430 gear2=i:[[0x8900b0]+4]+0x434
++700 expect i:0xd00030 == 2
++0 log p2_drives
++0 down W
++900 log p1_drives
++0 down UP
++600 up W
++0 up UP
++0 log stop
++120 untrace
++0 status whine_split_done
++60 quit

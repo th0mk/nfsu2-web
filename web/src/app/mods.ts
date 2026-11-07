@@ -187,7 +187,7 @@ export const MODS: readonly Mod[] = [
     links: { source: 'https://github.com/ropi336/UG2WhineGen' },
     kind: 'screen', uses: 'data', control: { setting: 'gearbox_whine' },
     line: N('NFS Carbon\'s gearbox whine on your car.'),
-    details: 'The mod\'s own sounds over the game\'s: a whine rising with your speed and its gear, a second layer louder the faster you go, a pause at each upshift and a whine of its own in reverse. As loud as the game\'s Engine Volume makes it. Every car has it, as the mod\'s default; its F1 key is this switch.',
+    details: 'The mod\'s own sounds over the game\'s: a whine rising with your speed and its gear, a second layer louder the faster you go, a pause at each upshift and a whine of its own in reverse. As loud as the game\'s Engine Volume makes it. Every car has it, as the mod\'s default (in split screen and co-op each player\'s), and its sounds download once it is on.',
     online: 'you', sizeMB: 0.5, files: ['runtime/whine.c', 'runtime/whine.h', 'tools/whinepack.py'],
   },
 
