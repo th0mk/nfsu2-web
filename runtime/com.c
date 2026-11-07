@@ -4893,7 +4893,7 @@ void com_report(void){
 }
 
 static void fill_caps(uint32_t p){
-    mem_commit(p,0x150); memset(g_mem+p,0,0x150);
+    mem_commit(p,0x130); memset(g_mem+p,0,0x130);     /* sizeof(D3DCAPS9): 304 bytes, the last field at 0x12C */
     MR32(p+0x00)=1; MR32(p+0x08)=0x00020000; MR32(p+0x0C)=0x00000002;
     MR32(p+0x10)=0x00000020; MR32(p+0x14)=0x80000001; MR32(p+0x18)=1;
     MR32(p+0x1C)=0x001BBEF0; MR32(p+0x20)=0x0000033F; MR32(p+0x24)=0x0F730191;
