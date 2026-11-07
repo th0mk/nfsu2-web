@@ -61,6 +61,8 @@ const NOT_THE_TABS = {
 };
 /** other names the runtime gives a mod: the mod's name (as an entry's mod or name has it) */
 const ALIASES = { ExtraOptions: 'NFSU2 Extra Options', WidescreenFix: 'Widescreen Fixes Pack' };
+/** a mod's page: its nfsmods.xyz page, or the one its author put it on */
+const PAGES = [/^https:\/\/nfsmods\.xyz\/mod\/\d+$/, /^https:\/\/streetsmodz\.com\.br\/mods\/[\w-]+\/[\w-]+$/];
 /** licences/ files that are not a mod's: the flags' pictures (flags.ts) */
 const NOT_MOD_LICENCES = ['licenses/flag-icons.txt'];
 /** a licence as a source names it, and its text's first line */
@@ -175,7 +177,7 @@ test('the credits: authors, links and licences of their own kinds', () => {
     for (const a of m.authors) if (a.url && m.links.source && linkOf(m.links.source).startsWith(`${linkOf(a.url)}/`))
       assert.ok(!a.port, `${m.id}: ${a.name} owns ${m.links.source}: the mod's author, not a port's`);
     assert.ok(Object.hasOwn(M.USES, m.uses), `${m.id}: uses ${m.uses}`);
-    if (m.links.page) assert.match(m.links.page, /^https:\/\/nfsmods\.xyz\/mod\/\d+$/, m.id);
+    if (m.links.page) assert.ok(PAGES.some(re => re.test(m.links.page)), `${m.id}: ${m.links.page}`);
     if (m.links.source) assert.match(m.links.source, /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/, m.id);
     for (const a of m.authors) if (a.url) assert.match(a.url, /^https:\/\//, `${m.id}: ${a.name}`);
     // a link, but for a mod made for this port (its source is this repo's)
@@ -298,7 +300,9 @@ test('the files: there, one mod\'s each, and a ported mod\'s licence with it', (
       if (!m.pending) assert.ok(exists(f), `${m.id}: ${f}`);
       owners.set(f, [...(owners.get(f) ?? []), m]);
     }
-    if (m.uses === 'code') assert.ok(m.files.some(f => f.startsWith('licenses/') && exists(f)), `${m.id}: its licence in licenses/`);
+    // a ported mod's code with its licence, but where its own author ported it here (ownPort: his commits)
+    if (m.uses === 'code' && !m.ownPort) assert.ok(m.files.some(f => f.startsWith('licenses/') && exists(f)), `${m.id}: its licence in licenses/`);
+    if (m.ownPort) assert.ok(m.uses === 'code' && !m.licence && m.authors.every(a => !a.port), `${m.id}: its own author's port`);
     for (const f of m.files.filter(x => x.startsWith('licenses/') && exists(x))) {
       assert.ok(m.licence, `${m.id}: ${f} without a licence`);
       assert.match(fs.readFileSync(path.join(ROOT, f), 'utf8').trimStart(), LICENCES[m.licence][1], `${m.id}: ${f} is ${m.licence}`);

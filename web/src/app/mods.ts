@@ -39,7 +39,7 @@ export interface Mod {
   mod?: string;
   /** the mod's authors as its page names them */
   authors: readonly Author[];
-  /** page: its nfsmods.xyz page; source: its source code */
+  /** page: its page (nfsmods.xyz, or the site its author put it on); source: its source code */
   links: { page?: string; source?: string };
   kind: ModKind;
   uses?: Uses;
@@ -58,6 +58,8 @@ export interface Mod {
   parts?: readonly { name: string; text: string; online: Online }[];
   /** the mod's licence, where it states one */
   licence?: 'MIT' | 'GPL-3.0';
+  /** its code ported by the mod's own author, in this repo's history (his commits): no licence file of its own */
+  ownPort?: true;
   /** about how much the mod's own files add to the download (a shared row's: each its own, so they add up) */
   sizeMB?: number;
   /** another default on phones (device.ts deviceDefaults) */
@@ -201,6 +203,15 @@ export const MODS: readonly Mod[] = [
         text: 'Up to 127 laps, and up to 5 opponents in every race but drags, which keep 3; Lap KO no longer fixes them.' },
     ],
     online: 'seen', files: ['runtime/cameras.c', 'runtime/lightkey.c', 'runtime/regional.c', 'runtime/vinylcat.c', 'runtime/quickrace.c'],
+  },
+  {
+    id: 'crash-damage', name: 'Crash Damage', mod: 'Crashing Foreign Cars', authors: [{ name: 'Chrystian Farias (FRS Mods)' }],
+    links: { page: 'https://streetsmodz.com.br/mods/underground-2/crashing-foreign-cars' },
+    kind: 'shared', uses: 'code', ownPort: true, control: { setting: 'crash_damage' },
+    line: N('Dents, loose parts and scratches.'),
+    details: 'The racers\' cars, yours and the AI\'s, dent where they are hit, scratch, break their lights and lose their bumpers, mirrors, hood, trunk lid and doors, which lie on the road for a while. Only what is seen: the car drives as in the original game. In free roam, friends who have it on see your car\'s damage. The game\'s own repair, at a race\'s start or in the garage, takes it away.',
+    online: 'seen', files: ['runtime/damage.c', 'runtime/damagecore.cpp', 'runtime/damage/Dent.h', 'runtime/damage/Tessellate.h',
+      'runtime/damage/scratches.tpk', 'runtime/damage_none.c'],
   },
   // The rims are out for now (with settings.ts's mod_rims and others_mod_parts, settings-ui.ts's rows and
   // runtime/modpacks.c's shop switch); back with their makers' names and link:
