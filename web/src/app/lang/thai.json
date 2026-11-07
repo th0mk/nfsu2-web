@@ -1504,5 +1504,10 @@
   "Own name…": "ตั้งชื่อเอง…",
   "Own name": "ตั้งชื่อเอง",
   "\"{name}\"": "“{name}”",
-  "Nobody else is in {world} now. Main world is in the menu.": "ตอนนี้ไม่มีใครอื่นอยู่ใน{world} ไปโลกหลักได้จากเมนู"
+  "Nobody else is in {world} now. Main world is in the menu.": "ตอนนี้ไม่มีใครอื่นอยู่ใน{world} ไปโลกหลักได้จากเมนู",
+  "License plate": "ป้ายทะเบียน",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "บนรถของคุณ ผู้เล่นคนอื่นก็เห็นขณะขับอิสระ: ตัวอักษร A–Z และตัวเลข ไม่เกิน 8 ตัว",
+  "Original plate": "ป้ายทะเบียนเดิม",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "“{value}” ใช้เป็นป้ายทะเบียนไม่ได้ (ตัวอักษร A ถึง Z และตัวเลข ไม่เกิน 8 ตัว)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "“{value}” ใช้เป็นป้ายทะเบียนไม่ได้ (อ่านแล้วเป็นคำดูหมิ่น)"
 }

@@ -1504,5 +1504,10 @@
   "Own name…": "직접 입력…",
   "Own name": "직접 입력",
   "\"{name}\"": "'{name}'",
-  "Nobody else is in {world} now. Main world is in the menu.": "지금 {world}에는 다른 사람이 없어요. 메뉴에서 메인 월드로 갈 수 있어요."
+  "Nobody else is in {world} now. Main world is in the menu.": "지금 {world}에는 다른 사람이 없어요. 메뉴에서 메인 월드로 갈 수 있어요.",
+  "License plate": "번호판",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "내 차에 표시되고, 자유 주행에서는 다른 플레이어도 봐요: 영문자와 숫자 최대 8자.",
+  "Original plate": "기본 번호판",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "'{value}': 번호판으로 쓸 수 없음(A~Z 영문자와 숫자, 최대 8자)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "'{value}': 번호판으로 쓸 수 없음(비하 표현으로 읽힘)"
 }

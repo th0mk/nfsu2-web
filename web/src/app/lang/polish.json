@@ -1649,5 +1649,10 @@
   "Own name…": "Własna nazwa…",
   "Own name": "Własna nazwa",
   "\"{name}\"": "„{name}”",
-  "Nobody else is in {world} now. Main world is in the menu.": "{world}: nie ma tu teraz nikogo poza tobą. Główny świat znajdziesz w menu."
+  "Nobody else is in {world} now. Main world is in the menu.": "{world}: nie ma tu teraz nikogo poza tobą. Główny świat znajdziesz w menu.",
+  "License plate": "Tablica rejestracyjna",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "Na twoim samochodzie, na przejażdżce widoczna też dla innych graczy: do 8 liter i cyfr.",
+  "Original plate": "Oryginalna tablica",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "„{value}” to nie tablica rejestracyjna (litery od A do Z i cyfry, najwyżej 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}” to nie tablica rejestracyjna (brzmi jak obelga)"
 }

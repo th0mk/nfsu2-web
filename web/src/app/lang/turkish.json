@@ -1516,5 +1516,10 @@
   "Own name…": "Özel ad…",
   "Own name": "Özel ad",
   "\"{name}\"": "\"{name}\"",
-  "Nobody else is in {world} now. Main world is in the menu.": "{world} içinde şu an senden başka kimse yok. Ana dünya menüde."
+  "Nobody else is in {world} now. Main world is in the menu.": "{world} içinde şu an senden başka kimse yok. Ana dünya menüde.",
+  "License plate": "Plaka",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "Arabanda, serbest sürüşte diğer oyuncular da görür: en fazla 8 harf ve rakam.",
+  "Original plate": "Orijinal plaka",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" bir plaka olamaz (A'dan Z'ye harfler ve rakamlar, en fazla 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" bir plaka olamaz (hakaret gibi okunuyor)"
 }

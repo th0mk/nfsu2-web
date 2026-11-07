@@ -1620,5 +1620,10 @@
   "Own name…": "Nom personnalisé…",
   "Own name": "Nom personnalisé",
   "\"{name}\"": "« {name} »",
-  "Nobody else is in {world} now. Main world is in the menu.": "Personne d'autre n'est dans {world} pour l'instant. Le Monde principal est dans le menu."
+  "Nobody else is in {world} now. Main world is in the menu.": "Personne d'autre n'est dans {world} pour l'instant. Le Monde principal est dans le menu.",
+  "License plate": "Plaque d'immatriculation",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "Sur votre voiture, visible aussi des autres joueurs en mode Exploration : jusqu'à 8 lettres et chiffres.",
+  "Original plate": "Plaque d'origine",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "« {value} » n'est pas une plaque (lettres de A à Z et chiffres, 8 au plus)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "« {value} » n'est pas une plaque (elle ressemble à une insulte)"
 }

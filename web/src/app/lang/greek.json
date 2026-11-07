@@ -1531,5 +1531,10 @@
   "Own name…": "Δικό σου όνομα…",
   "Own name": "Δικό σου όνομα",
   "\"{name}\"": "«{name}»",
-  "Nobody else is in {world} now. Main world is in the menu.": "Κανείς άλλος δεν είναι τώρα εδώ: {world}. Ο Κύριος κόσμος είναι στο μενού."
+  "Nobody else is in {world} now. Main world is in the menu.": "Κανείς άλλος δεν είναι τώρα εδώ: {world}. Ο Κύριος κόσμος είναι στο μενού.",
+  "License plate": "Πινακίδα",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "Στο αυτοκίνητό σου, και για τους άλλους παίκτες στην ελεύθερη οδήγηση: έως 8 γράμματα A–Z και ψηφία.",
+  "Original plate": "Αρχική πινακίδα",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "Το «{value}» δεν είναι πινακίδα (γράμματα A έως Z και ψηφία, έως 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "Το «{value}» δεν είναι αποδεκτή πινακίδα (εκλαμβάνεται ως προσβλητικός χαρακτηρισμός)"
 }

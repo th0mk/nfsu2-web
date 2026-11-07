@@ -19,16 +19,18 @@ import { onlineName } from './claim';
 import { crewsOk, rgbsOk } from './crews';
 import { groupsOk, phrasesOk } from './phrases';
 import { flagCode } from './flags';
+import { plateUpper, plateValid } from './plates';
 import { fill, LANGUAGES, N, type Vars } from './i18n';
 export { LANGUAGES };
 
 /** bundle.m's K_* kinds, and the browser's own crews (a list of names: crews.ts), blocked players (names: a list of
  *  players' names) and flag (one of flags.ts's codes).  ic: K_IC, "value ; comment" (the free-roam keys).  room:
  *  K_ROOM, text that does not read as a slur (names.mjs, as a player's name).  key: one of our controls' key, the
- *  browser's name of it (KeyboardEvent.code: sitekeys.ts), or off. */
+ *  browser's name of it (KeyboardEvent.code: sitekeys.ts), or off.  plate: a license plate's text (plates.ts), small
+ *  letters as capitals, none that reads as a slur. */
 export type Kind = 'raw' | 'bool' | 'boolInv' | 'enum' | 'num' | 'id' | 'token' | 'int' | 'name' | 'peers'
   | 'path' | 'text' | 'room' | 'wxh' | 'fixes' | 'ifname' | 'ipv4' | 'mac' | 'host' | 'parts' | 'dump' | 'crews' | 'rgbs'
-  | 'phrases' | 'sayGroups' | 'names' | 'key' | 'flag';
+  | 'phrases' | 'sayGroups' | 'names' | 'key' | 'flag' | 'plate';
 
 export interface KeyDef {
   key: string;
@@ -116,6 +118,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_name', env: 'NFSU2_ROAM_NAME', kind: 'name', ic: true, scope: 'web' },
   // the flag before the name (flags.ts; runtime/roam_game.c flag_*): the page has the list, so not in bundle.m's table
   { key: 'roam_flag', env: 'NFSU2_ROAM_FLAG', kind: 'flag', ic: true, scope: 'web' },
+  // the license plate on the player's car (runtime/plates.c; the game checks it too)
+  { key: 'license_plate', env: 'NFSU2_LICENSE_PLATE', kind: 'plate', ic: true, scope: 'web' },
   { key: 'roam_port', env: 'NFSU2_ROAM_PORT', kind: 'int', vals: '1024..65535', ic: true, scope: 'mac' },
   { key: 'roam_peers', env: 'NFSU2_ROAM_PEERS', kind: 'peers', ic: true, scope: 'mac' },
   { key: 'roam_discovery', env: 'NFSU2_ROAM_DISCOVERY', kind: 'bool', ic: true, scope: 'web' },
@@ -567,6 +571,11 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # [NFSU2_ROAM_FLAG]
 #roam_flag =
 
+# Your license plate, on your car: up to 8 letters A to Z and digits (other
+# players see it in free roam).  Empty = the game's own plate.
+# [NFSU2_LICENSE_PLATE]
+#license_plate =
+
 # Your horn (key_horn and button_horn: N and the left stick click), in free roam and in
 # Online and LAN races; the other players hear the one you pick: dual (two
 # tones), single (one higher tone), truck (an air horn), train (five
@@ -929,6 +938,11 @@ export function checkSetting(key: string, val: string): Checked | Refused | null
       if (blockedName(val)) return refuse(N('"{value}" is not a name (it reads as a slur)'), val);
       break;
     }
+    case 'plate':
+      out = plateUpper(val);
+      if (!plateValid(out)) return refuse(N('"{value}" is not a license plate (letters A to Z and digits, at most 8)'), val);
+      if (blockedName(out)) return refuse(N('"{value}" is not a license plate (it reads as a slur)'), val);
+      break;
     case 'room':
       if (!valueOk('text', val)) return refuse(N('"{value}" is not {kind}'), val, { kind: KIND_TEXT.text! });
       if (blockedName(val)) return refuse(N('"{value}" is not a world name (it reads as a slur)'), val);

@@ -1616,5 +1616,10 @@
   "Own name…": "Nome a scelta…",
   "Own name": "Nome a scelta",
   "\"{name}\"": "\"{name}\"",
-  "Nobody else is in {world} now. Main world is in the menu.": "Ora non c'è nessun altro in {world}. Il Mondo principale è nel menu."
+  "Nobody else is in {world} now. Main world is in the menu.": "Ora non c'è nessun altro in {world}. Il Mondo principale è nel menu.",
+  "License plate": "Targa",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "Sulla tua auto, anche per gli altri giocatori in modalità Esplora: fino a 8 lettere e cifre.",
+  "Original plate": "Targa originale",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" non è una targa (lettere dalla A alla Z e cifre, al massimo 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" non è una targa (sembra un insulto)"
 }

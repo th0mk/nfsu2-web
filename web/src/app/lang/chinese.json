@@ -1504,5 +1504,10 @@
   "Own name…": "自訂名稱…",
   "Own name": "自訂名稱",
   "\"{name}\"": "「{name}」",
-  "Nobody else is in {world} now. Main world is in the menu.": "{world}目前沒有其他人。可從選單前往主世界。"
+  "Nobody else is in {world} now. Main world is in the menu.": "{world}目前沒有其他人。可從選單前往主世界。",
+  "License plate": "車牌",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "顯示在你的車上，自由漫遊中其他玩家也看得到：最多 8 個字母和數字。",
+  "Original plate": "原廠車牌",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "「{value}」不能當作車牌（只能用 A 到 Z 的字母和數字，最多 8 個）",
+  "\"{value}\" is not a license plate (it reads as a slur)": "「{value}」不能當作車牌（含有歧視性字眼）"
 }

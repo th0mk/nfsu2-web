@@ -1649,5 +1649,10 @@
   "Own name…": "Vlastný názov…",
   "Own name": "Vlastný názov",
   "\"{name}\"": "„{name}“",
-  "Nobody else is in {world} now. Main world is in the menu.": "{world}: okrem teba tu teraz nikto nie je. Hlavný svet nájdeš v ponuke."
+  "Nobody else is in {world} now. Main world is in the menu.": "{world}: okrem teba tu teraz nikto nie je. Hlavný svet nájdeš v ponuke.",
+  "License plate": "Evidenčné číslo",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "Na tvojom aute, vo voľnej jazde aj pre ostatných hráčov: najviac 8 písmen a číslic.",
+  "Original plate": "Pôvodné číslo",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "„{value}“ nie je evidenčné číslo (písmená A až Z a číslice, najviac 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}“ nie je evidenčné číslo (znie ako nadávka)"
 }

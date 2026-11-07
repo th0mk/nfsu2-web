@@ -1591,5 +1591,10 @@
   "Own name…": "Eget namn…",
   "Own name": "Eget namn",
   "\"{name}\"": "\"{name}\"",
-  "Nobody else is in {world} now. Main world is in the menu.": "Ingen annan är i {world} nu. Huvudvärlden finns i menyn."
+  "Nobody else is in {world} now. Main world is in the menu.": "Ingen annan är i {world} nu. Huvudvärlden finns i menyn.",
+  "License plate": "Registreringsskylt",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "På din bil, i läget Utforska även för andra spelare: upp till 8 bokstäver och siffror.",
+  "Original plate": "Originalskylt",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" är ingen registreringsskylt (bokstäverna A till Z och siffror, högst 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" är ingen registreringsskylt (det läses som ett glåpord)"
 }

@@ -1591,5 +1591,10 @@
   "Own name…": "Eigen naam…",
   "Own name": "Eigen naam",
   "\"{name}\"": "“{name}”",
-  "Nobody else is in {world} now. Main world is in the menu.": "Er is nu niemand anders in {world}. Hoofdwereld staat in het menu."
+  "Nobody else is in {world} now. Main world is in the menu.": "Er is nu niemand anders in {world}. Hoofdwereld staat in het menu.",
+  "License plate": "Kenteken",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "Op je wagen, ook voor andere spelers in Verkennen: tot 8 letters en cijfers.",
+  "Original plate": "Oorspronkelijk kenteken",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "“{value}” is geen kenteken (letters A tot Z en cijfers, hooguit 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "“{value}” is geen kenteken (het leest als een scheldwoord)"
 }

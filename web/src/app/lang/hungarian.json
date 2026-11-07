@@ -1510,5 +1510,10 @@
   "Own name…": "Saját név…",
   "Own name": "Saját név",
   "\"{name}\"": "„{name}”",
-  "Nobody else is in {world} now. Main world is in the menu.": "Most senki más nincs ebben a világban: {world}. A Fő világ a menüben érhető el."
+  "Nobody else is in {world} now. Main world is in the menu.": "Most senki más nincs ebben a világban: {world}. A Fő világ a menüben érhető el.",
+  "License plate": "Rendszám",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "Az autódon, Felfedező módban más játékosoknak is: legfeljebb 8 betű és szám.",
+  "Original plate": "Eredeti rendszám",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "„{value}” nem lehet rendszám (A–Z betűk és számjegyek, legfeljebb 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}” nem lehet rendszám (sértésnek tűnik)"
 }

@@ -1591,5 +1591,10 @@
   "Own name…": "Eigener Name…",
   "Own name": "Eigener Name",
   "\"{name}\"": "„{name}“",
-  "Nobody else is in {world} now. Main world is in the menu.": "Niemand sonst ist gerade in {world}. Die Hauptwelt findest du im Menü."
+  "Nobody else is in {world} now. Main world is in the menu.": "Niemand sonst ist gerade in {world}. Die Hauptwelt findest du im Menü.",
+  "License plate": "Kennzeichen",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "An deinem Wagen, in der freien Fahrt auch für andere Spieler: bis zu 8 Buchstaben und Ziffern.",
+  "Original plate": "Originalkennzeichen",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "„{value}“ ist kein Kennzeichen (Buchstaben A bis Z und Ziffern, höchstens 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}“ ist kein Kennzeichen (es liest sich wie eine Beleidigung)"
 }

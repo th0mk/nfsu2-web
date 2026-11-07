@@ -1620,5 +1620,10 @@
   "Own name…": "Nombre propio…",
   "Own name": "Nombre propio",
   "\"{name}\"": "\"{name}\"",
-  "Nobody else is in {world} now. Main world is in the menu.": "Ahora no hay nadie más en {world}. El Mundo principal está en el menú."
+  "Nobody else is in {world} now. Main world is in the menu.": "Ahora no hay nadie más en {world}. El Mundo principal está en el menú.",
+  "License plate": "Matrícula",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "En tu coche, también para otros jugadores en la circulación libre: hasta 8 letras y números.",
+  "Original plate": "Matrícula original",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" no es una matrícula válida (letras de la A a la Z y números, 8 como mucho)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" no es una matrícula válida (se lee como un insulto)"
 }

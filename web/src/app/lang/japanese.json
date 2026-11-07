@@ -1504,5 +1504,10 @@
   "Own name…": "独自の名前…",
   "Own name": "独自の名前",
   "\"{name}\"": "「{name}」",
-  "Nobody else is in {world} now. Main world is in the menu.": "今、{world}にはほかに誰もいません。メインワールドにはメニューから移れます。"
+  "Nobody else is in {world} now. Main world is in the menu.": "今、{world}にはほかに誰もいません。メインワールドにはメニューから移れます。",
+  "License plate": "ナンバープレート",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "あなたの車に表示され、フリーロームでは他のプレイヤーにも見えます: 英字と数字で 8 文字まで。",
+  "Original plate": "元のナンバープレート",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "「{value}」はナンバープレートとして使えません（A〜Z の英字と数字、8 文字まで）",
+  "\"{value}\" is not a license plate (it reads as a slur)": "「{value}」はナンバープレートとして使えません（差別的な言葉として読めます）"
 }

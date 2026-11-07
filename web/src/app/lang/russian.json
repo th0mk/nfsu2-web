@@ -1649,5 +1649,10 @@
   "Own name…": "Своё название…",
   "Own name": "Своё название",
   "\"{name}\"": "«{name}»",
-  "Nobody else is in {world} now. Main world is in the menu.": "{world}: кроме вас, здесь сейчас никого нет. Основной мир — в меню."
+  "Nobody else is in {world} now. Main world is in the menu.": "{world}: кроме вас, здесь сейчас никого нет. Основной мир — в меню.",
+  "License plate": "Номерной знак",
+  "On your car, also for other players in free roam: up to 8 letters and digits.": "На вашей машине, в свободной езде его видят и другие игроки: до 8 букв A–Z и цифр.",
+  "Original plate": "Оригинальный номер",
+  "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "«{value}» — не номер (буквы от A до Z и цифры, не больше 8)",
+  "\"{value}\" is not a license plate (it reads as a slur)": "«{value}» — не номер (читается как оскорбление)"
 }

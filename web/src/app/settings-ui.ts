@@ -12,6 +12,7 @@
 
 import { checkSetting, DEFAULTS, keyDef, resolveEnv, settingsPut, TEMPLATE, type Resolved } from './settings';
 import { NO_SAVE, readText, UNREADABLE, writeFile, writesAreOff } from './savefs';
+import { plateInput, plateUpper } from './plates';
 import { playHorn, stopHorn } from './horn-preview';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
 import { countText, roomHash } from './players';
@@ -98,6 +99,8 @@ const GROUPS: Group[] = [
     { key: 'roam', label: N('Free roam with others'), help: N('See other players\' cars in career free roam, and they see yours.'), c: { t: 'switch' } },
     { key: 'roam_name', label: N('Your name'), help: N('Shown over your car and in the Online menu: 3 to 15 letters, digits, - or _.'), c: { t: 'text', placeholder: N('profile name') } },
     { key: 'roam_flag', label: N('Your flag'), help: N('Shown before your name over your car in free roam.'), c: { t: 'flag' } },
+    { key: 'license_plate', label: N('License plate'), help: N('On your car, also for other players in free roam: up to 8 letters and digits.'),
+      c: { t: 'text', placeholder: N('Original plate') } },
     { key: 'horn', label: N('Your horn'), help: N('With other players. Its key and button: Controls, Site.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')], ['dixie', N('Dixie horn')],
@@ -404,9 +407,9 @@ export function putKey(text: string, key: string, value: string | null): { text:
   return { text: next, removed };
 }
 
-/** What "Reset all settings" keeps: the name and flag the other players know you by, your crews, and the language (this
- *  page's too). */
-const RESET_KEEPS = ['roam_name', 'roam_flag', 'roam_crew', 'roam_crew_colours', 'language'];
+/** What "Reset all settings" keeps: the name, flag and license plate the other players know you by, your crews, and the
+ *  language (this page's too). */
+const RESET_KEEPS = ['roam_name', 'roam_flag', 'license_plate', 'roam_crew', 'roam_crew_colours', 'language'];
 
 /** "Reset all settings": the template, with the kept settings as the file has them (by their own key, also where
  *  the file sets the variable by its name, if the key reads the value the same).  One the file does not set, or
@@ -817,11 +820,13 @@ export class SettingsPanel {
       inp.type = c.t === 'num' ? 'number' : 'text';
       if (c.t === 'num') { if (c.min !== undefined) inp.min = String(c.min); if (c.max !== undefined) inp.max = String(c.max); if (c.step !== undefined) inp.step = String(c.step); }
       else if (c.placeholder) inp.placeholder = t(c.placeholder);
+      if (it.key === 'license_plate') plateInput(inp);
       inp.value = cur;
       inp.onchange = () => {
         let v = inp.value.trim();
-        // Your name in the form the Online menu and free roam both use (claim.ts)
+        // Your name in the form the Online menu and free roam both use (claim.ts); a plate in capitals (plates.ts)
         if (it.key === 'roam_name' && v) v = onlineName(v) ?? v;
+        if (it.key === 'license_plate') inp.value = v = plateUpper(v);
         if (v === this.current(it.key) && (v !== '' || !this.resolved.file[it.key]?.raw)) return;   // unchanged (a late change event)
         if (v === '') { void this.put(it.key, null); return; }
         const chk = checkSetting(it.key, v);
