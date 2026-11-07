@@ -1,6 +1,6 @@
 # Maintainer's notes
 
-The player's guide (below these notes) is the reference for what the page and the game do. These notes add what the
+The player's guide (above these notes) is the reference for what the page and the game do. These notes add what the
 guide does not say: how the project runs, what a useful report needs, the answers that keep coming up, and what is
 known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
 
@@ -51,6 +51,17 @@ The log is the most useful thing in a bug report. Say exactly how:
 - What it contains, if they ask: browser and system, graphics chip, the time zone's UTC offset. Names (theirs, other
   players', crews, rooms) and addresses are replaced by stand-ins such as `you` and `player-…` since 26 October (logs
   from older pages still have them). No passwords, no passphrase.
+
+Reading a log (the thread shows each log's gist; these are the lines that were misread, 6-7 November):
+
+- `display N Hz`, `rAF median`, `[gpu] display N Hz` and `[hfr] … display N Hz` are the screen's refresh rate, not
+  the game's frame rate. The game's own rate is `fps=` in its `[status]` lines (and the `GPU done` times); `[hfr] …
+  content rate N` is the rate it aims for.
+- A log holds every game since the page loaded: count each game's end (the gist lists them) before giving numbers
+  ("two of three games").
+- A start page that shows the player counts and the last game's note has its script running: nothing blocks the page.
+- The world map's labels like "Sprint 1/6" are other players' race lobbies (players in it / its places), not career
+  races. A 100% save has every race won, and a won race leaves the map.
 
 ## What a report needs, by problem
 
@@ -111,6 +122,17 @@ misread the log's numbers:
 ## Answers that keep coming up
 
 Checked against the guide or the code, and confirmed by players in threads:
+
+- No other players in free roam, and the log says `still no switch` or `hub switch not reachable` in every game (the
+  page's connection to the server's switch never opens, while the game and its downloads work): something on the
+  network or in the browser blocks that one connection. A VPN (Firefox's own counts), mobile data or another network
+  fixed it for the players who tried (since 4d158a79 the page says so too). Never tell them to turn a VPN off for this.
+- Restore says `nfsu2-passphrase.txt cannot be restored`: that file is the cloud saves passphrase, not a backup. Start
+  page, Saves, Cloud saves: paste the passphrase in the box and press **Load**.
+- Name claims refused with "full" on 6 November, about 18:50 to 19:20 UTC: the server's list of claimed names was
+  full; since d740043f (live that evening) it has room for 5 million. Claim again now.
+- Underground2.net's Blitz rims (live 6 November) were taken out again the same evening (b3be4d14); Art Factory 28 to
+  34 stay. Don't promise when the rims come back.
 
 - "It worked yesterday, today it won't start" or a crash on an older version (the log's `game <rev>` is not the live
   one): reload the page, Ctrl+F5 on a PC; when a fix for it is live, say when it was fixed and since when it is live.
@@ -331,6 +353,13 @@ Checked against the guide or the code, and confirmed by players in threads:
 The developer updates this list. Check the commits after that date before calling one open: a fix may have come. The
 context lists the problems flagged for the developer, with the first thread of each: point posters there, and set
 `duplicate_of` to it, rather than searching for "the main thread". Where an entry names a thread, link that one.
+
+Matching a thread to one of these: controllers by the pad's id (`045e:0b13`, from the log's pad line), the system and
+the browser; a Windows Xbox pad and an Android one are different problems. Sound: link the choppy-sound thread
+(1564348705572917298) only when the log has `the AudioWorklet stopped consuming`; underruns in the first seconds after
+Play alone are not it. The iPhone and iPad memory problem in two sentences (the browser closes the game for memory,
+no setting fixes it yet, the thread to follow); ask for the log in the poster's own thread, never in the main one, and
+in the main thread itself (1564554732649971802) never tell its reader to follow it.
 
 - Free roam, error 134 with `sub_00517e20 < dispatch_indirect < tags_update < roam_game_hud` at the top of the stack
   (sub_00517ad0, sub_005178d0 or sub_00504640 first), often an hour or more into free roam with many players, right

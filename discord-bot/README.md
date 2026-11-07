@@ -19,7 +19,8 @@ and it says something only when it is worth it:
 
 - **when a fix goes live**, in a thread whose problem one of the release's commits fixes: that a fix may have solved
   it, what the fix changes (one plain sentence, no internals), to reload the page, and to post a new log if it still
-  happens. Only when a full look at the thread is sure; at most once a thread, at most 15 threads a release (short,
+  happens. Only when a full look at the thread is sure; at most once a thread, at most 15 threads a release (the
+  threads the bot linked to a matched one as the same problem among them, at most 5; short,
   low-effort looks), threads of the last 14 days, also threads staff wrote in (one the bot never looked at is matched
   by its title and first post). The thread's record keeps what went live (`fix`).
 
@@ -94,7 +95,8 @@ and it says something only when it is worth it:
 Otherwise it says nothing. It reads every channel it can see, but posts only in forum threads, those replies in the
 general channels and #help, and the FAQ it was asked to post. It
 stays out of a thread once staff wrote in it (the server owner, `BOT_STAFF`, anyone who can manage threads), and replies
-at most twice in a thread on its own. Someone answering it gets a look past that, up to `BOT_MAX_TALK` replies (4):
+at most twice in a thread on its own. Someone answering it gets a look past that, up to `BOT_MAX_TALK` replies (4;
+someone still writing to it after those gets the thread flagged once, with what they wrote, for the archive's reader):
 after it asked for something, the poster's next post, which always gets a reply (a fix, or what their log shows and
 that the developer has it), so nobody who did what it asked hears nothing; and the poster writing right after its
 message, with Discord's reply or without ("that didn't work", "where is that setting?"). A bare thanks or okay gets no
@@ -121,8 +123,11 @@ Every model call goes on a meter (`spend.mjs`, `state/spend.json`): looks, sorti
 against `BOT_BUDGET` dollars a month (400, UTC months). Only the looks wait for money: each day they may spend what is
 left of the month over the days left in it, so a quiet day leaves more for the rest and a busy week can't spend the
 month. And the day's share comes as the UTC day goes: by any hour the looks may have spent that part of it, plus 6
-hours ahead (a quarter at midnight, all of it by 18:00), so the bot answers all day instead of until the morning. A look
-past that is skipped, not put off: nothing runs later (there was a catch-up at midnight until 2026-11-05). Someone
+hours ahead (a quarter at midnight, all of it by 18:00), so the bot answers all day instead of until the morning. A new
+post past that gets a quick pass instead of a look (`firstPass()` with `budget`: Haiku, no tools, a fraction of a cent),
+which posts only an ask for what is missing or an answer at high confidence, and flags and links nothing (on
+2026-11-06 about 40 bug threads posted after 12:30 UTC never heard from the bot). Nothing runs later (there was a
+catch-up at midnight until 2026-11-05). Someone
 talking to the bot (a follow-up, a log, a reply to it, a bump) goes ahead of the clock, up to twice the day's share,
 and what it spends over the share comes out of the days after: on 2026-11-05, 41 of them went unanswered. Staff's
 mentions and a release's notices (fix live, suggestion added) still get theirs at once, but no fix notice where staff
@@ -138,7 +143,11 @@ wrote since the release. The bot's first log line says what the month and the da
   `docs/web/PLAYING.md` as of the live version, the live version, recent commits, recent threads and the problems
   flagged for the developer (each one's first thread, the threads linked to it, a fix that went live; what it points
   posters to and links duplicates to), and the thread with the files it can read named at its top. `sigs.mjs`
-  reads the top three functions of each log's crash (`TRAP`) or freeze (watchdog) stack; the look is told the open
+  reads the top three functions of each log's crash (`TRAP`) or freeze (watchdog) stack, and `logs.mjs` writes each of
+  the thread's newest 4 page logs' gist under it in the thread (each game's version, browser, device, the settings
+  changed, how it ended, the lines that say something went wrong with their line numbers and counts, its last lines),
+  so a look starts from what it searched every log for (on 2026-11-05, looks that ran their 8 turns, nearly all of
+  them reading logs, were 15% of the looks and 43% of the money); the look is told the open
   threads opened for a crash or freeze in the same place (two functions in common; the oldest first), so threads link
   by the bug, not by the exit code. A thread keeps the crash it was opened for (the verdict's `crash`, `st.crash`, the
   first one a look names): its later logs, or another game's crash in its log, never make it match other bugs.
@@ -146,7 +155,9 @@ wrote since the release. The bot's first log line says what the month and the da
   next release, or a change to the rules or the notes) are kept an hour in the prompt cache, so a look reads them for
   a tenth of the price instead of sending them again; the newest commits, which change more often, go with the
   thread. Claude reads what it needs through the tools, several calls a turn, at most 8 turns, then returns a verdict
-  as JSON: none, ask or answer, and whether to tell the developer. `vet()` drops weak answers and replies that paste code. A new post in a suggestion forum first
+  as JSON: none, ask or answer, and whether to tell the developer. `vet()` drops weak answers and replies that paste code.
+  A reply that links the thread itself, a newer thread or a closed one goes back to the model once, in one more turn
+  without tools, to be written without it (`badLink()`; the thread lists mark closed threads). A new post in a suggestion forum first
   gets a quick pass with Haiku and no tools (`firstPass()`): when it finds nothing for the bot to say, its summary,
   category and tags stand and there is no full look; anything else gets the full look, which writes the reply.
 - `tools.mjs`: what Claude can do. It can search and read the code, read the thread's attachments, look at the git
@@ -290,7 +301,7 @@ and `state/verdicts.jsonl` has every look. When the replies look right, remove t
 | `BOT_WAIT_S` | `120` | quiet time after the poster's last message before the look (at most 10 minutes after the first) |
 | `BOT_MAX_REPLIES` | `2` | replies per thread on the bot's own (logs, bumps and staff's mentions get a look past it) |
 | `BOT_MAX_TALK` | `4` | replies per thread in all, answering people who reply to the bot or mention it |
-| `BOT_BUDGET` | `400` | dollars a month for every model call; new posts past the day's share by the hour are skipped |
+| `BOT_BUDGET` | `400` | dollars a month for every model call; new posts past the day's share by the hour get a quick pass only |
 | `BOT_ARCHIVE` | on | `0`: don't keep messages (the model then can't search other channels) |
 | `BOT_STATE` | `state` (`/state` in Docker) | where the clone, the archive, the thread list, the verdicts and the translations go |
 | `BOT_REPO`, `BOT_BRANCH` | this checkout, `main` | where the code comes from (in `compose.yml`: GitHub over SSH) |

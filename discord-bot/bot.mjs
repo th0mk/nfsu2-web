@@ -18,6 +18,7 @@ import { Help } from './help.mjs';
 import { COMMAND as FAQ, Faq, PREFIX as FAQ_BUTTON } from './faq.mjs';
 import { blocks, firstPass, investigate, newClient, overlap, picture, replyPass, vet } from './investigate.mjs';
 import { Repo, defaultSource } from './repo.mjs';
+import { logGist } from './logs.mjs';
 import { crashOf, folderTops, samePlace } from './sigs.mjs';
 import { Spend, metered } from './spend.mjs';
 import { Tags } from './tags.mjs';
@@ -50,6 +51,7 @@ if (!CFG.token) { console.error('DISCORD_TOKEN is not set (README.md)'); process
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const MAX_TEXT = 10 << 20, MAX_IMAGE = 10 << 20, MAX_IMAGES = 4;   // pictures are shrunk for the model (picture())
 const SAVES_ZIP = /^nfsu2-saves-.*\.zip$/i;      // Saves, Download backup: not for the model
+const GIST_LOGS = 4;                             // the newest logs of a thread that get a gist (logs.mjs) in its transcript
 const LOG_FILE = /\.(log|txt)$/i;                // F9, Download log; a long paste comes as message.txt
 const hasLog = m => [...m.attachments.values()].some(a => LOG_FILE.test(a.name));
 /** a message that mentions the bot or replies to one of its messages (also with the reply's ping turned off) */
@@ -63,6 +65,7 @@ const STARTUP_MS = 48 * 3600_000;                // at start, the forums' posts 
 const RELEASE_CHECK_MS = 5 * 60_000;             // how often the bot checks whether a new version went live
 const FIX_DAYS = 14, FIX_MAX = 15;               // a release is checked against threads of the last 14 days, 15 looks at most
 const FIX_EFFORT = 'low', FIX_TURNS = 8;          // a fix check reads one commit against one thread: a short look
+const LINKED_MAX = 5;                            // threads linked to a fixed one that get its 'fix live' look too, a release
 const FEATURE_MAX = 5;                           // a release is checked against every open suggestion, 5 looks at most
 const SUGGESTIONS = /suggest/i;                  // the suggestion forums, by name
 const SUGGESTION_INDEX = 500;                    // a release reads the newest 500 archived threads of each of them
@@ -197,7 +200,19 @@ async function look(threadId, why, extra) {
   if (why === 'implemented' && Tags.decided(thread)) return say('skipped: the suggestion is Complete or Denied already');
   // the bot stepped back for a person: only staff bring it back (a fix notice still goes out)
   if (st.handoff && !byStaff && !fix) return say('skipped: the bot left the thread to staff');
-  if (talk && st.replies >= CFG.maxTalk) return say(`skipped: ${st.replies} replies already, the most for answering replies`);
+  if (talk && st.replies >= CFG.maxTalk) {
+    // the bot is out of replies here and they still talk to it: flagged once with what they wrote, so the thread shows
+    // among the flagged ones in the archive (a Mac poster answered the bot's question and pinged it twice, unanswered)
+    if (!st.capped) {
+      const last = [...(await thread.messages.fetch({ limit: 5 }).catch(() => new Map())).values()]
+        .find(m => m.author.id !== client.user.id && !m.author.bot);
+      st.capped = new Date().toISOString();
+      keep(st, threadId, { escalate: true, notes: `Past the bot's ${st.replies} replies, ${last?.author.id === thread.ownerId ? 'the poster' : 'a member'} ` +
+        `still writes to it: "${(last?.content ?? '').replace(/\s+/g, ' ').slice(0, 400)}"` }, why, []);
+      save();
+    }
+    return say(`skipped: ${st.replies} replies already, the most for answering replies${st.capped ? ' (flagged)' : ''}`);
+  }
   if (!anyway && st.status === 'staff') return say('skipped: staff are in the thread');
   if (!anyway && st.replies >= CFG.maxReplies) return say(`skipped: ${st.replies} replies already`);
   // staff asked, or a release's notice (a few cents each, at most FIX_MAX + FEATURE_MAX a release): a look past the
@@ -208,9 +223,13 @@ async function look(threadId, why, extra) {
   if (!byStaff && !fix && (bumped || logged || talk) && !spend.underCap()) {
     return say(`skipped: $${spend.today.toFixed(2)} spent today, the most a day may spend on answers to the bot`);
   }
-  if (!byStaff && !fix && !(bumped || logged || talk) && !spend.allows()) {
+  // a new post past what the day may have spent by now: a quick pass with the cheapest model and no tools
+  // (investigate.mjs BUDGET_PASS) instead of nothing, under the same guard as the answers to the bot
+  const cheap = !byStaff && !fix && !(bumped || logged || talk) && !spend.allows();
+  if (cheap && (why !== 'new post' || !spend.underCap())) {
     return say(`skipped: $${spend.today.toFixed(2)} spent today, $${spend.allowance().toFixed(2)} of today's $${spend.share().toFixed(2)} allowed by now`);
   }
+  if (cheap) say(`$${spend.today.toFixed(2)} spent today, $${spend.allowance().toFixed(2)} allowed by now: a quick pass only`);
 
   const msgs = [...(await thread.messages.fetch({ limit: 100 })).values()].reverse();
   const starter = await thread.fetchStarterMessage().catch(() => null);
@@ -244,6 +263,12 @@ async function look(threadId, why, extra) {
   const context = { repo, guild: thread.guildId, thread: text, images, threads: recentThreads(threadId), reports: flaggedList(threadId),
     places: placesOf(tops, threadId) };
   let res = null, first = null;
+  if (cheap) {
+    first = await firstPass({ client: anthropic, ...context, budget: true }).catch(e => { say(`quick pass failed: ${e.message}`); return null; });
+    if (!first) return done();
+    say(`quick pass: ${first.verdict?.action ?? 'no verdict'} (${first.verdict?.confidence ?? '-'})${first.cost != null ? ` ($${first.cost.toFixed(4)})` : ''}`);
+    res = { verdict: first.verdict, turns: 1, cost: first.cost, usage: first.usage, log: ['quick pass only: the day\'s full looks were spent'] };
+  }
   // someone answering the bot: a quick pass first (investigate.mjs replyPass), no full look for "thanks, works now"
   if (talk) {
     const pass = await replyPass({ client: anthropic, thread: text }).catch(e => { say(`reply pass failed: ${e.message}`); return null; });
@@ -256,7 +281,7 @@ async function look(threadId, why, extra) {
     }
   }
   // a new suggestion: a quick pass first (investigate.mjs firstPass), and a full look only when it sees something to say
-  if (why === 'new post' && SUGGESTIONS.test(st.forum ?? '')) {
+  if (!res && why === 'new post' && SUGGESTIONS.test(st.forum ?? '')) {
     first = await firstPass({ client: anthropic, ...context }).catch(e => { say(`first pass failed: ${e.message}`); return null; });
     if (first) say(`first pass: ${first.verdict?.action ?? 'no verdict'}${first.cost != null ? ` ($${first.cost.toFixed(4)})` : ''}, ` +
       `${first.quiet ? 'nothing to say, no full look' : 'a full look'}`);
@@ -265,7 +290,7 @@ async function look(threadId, why, extra) {
   if (!res) try {
     res = await investigate({
       client: anthropic, model: CFG.model, effort: fix ? FIX_EFFORT : CFG.effort, maxTurns: fix ? FIX_TURNS : undefined, ...context,
-      archive, workDir, threadIndex: () => threadIndex(threadId), step: say,
+      archive, workDir, threadIndex: () => threadIndex(threadId), check: v => badLink(v.reply ?? '', threadId), step: say,
     });
     if (first) res.cost = res.cost == null || first.cost == null ? null : res.cost + first.cost;
   } catch (e) {
@@ -274,9 +299,13 @@ async function look(threadId, why, extra) {
     say(`failed: ${e.message}`);
   }
   const v = res.verdict;
+  // a quick pass flags nothing and steps back from nothing (a full look decides that), and its link to an earlier
+  // thread counts only in a reply that sends the poster there
+  if (cheap && v) Object.assign(v, { escalate: false, handoff: false,
+    duplicate_of: v.duplicate_of && v.action !== 'none' && (v.reply ?? '').includes(v.duplicate_of) ? v.duplicate_of : '' });
   // a poster who brought what the bot asked for, or who bumped, always hears back
   let { post, why: outcome } = fix && v?.action !== 'answer' ? { post: null, why: v?.action ?? 'no verdict' }
-    : vet(v, { minConfidence: fix ? 'high' : byStaff || bumped || why === 'follow-up' || v?.handoff ? 'low' : CFG.minConfidence });
+    : vet(v, { minConfidence: fix || cheap ? 'high' : byStaff || bumped || why === 'follow-up' || v?.handoff ? 'low' : CFG.minConfidence });
   // a reply that says again what the bot said in the thread before: the rules ask for none, this catches the near copies
   const said = msgs.filter(m => m.author.id === client.user.id).map(m => m.content).join('\n');
   const repeat = post && !byStaff && !fix && said ? overlap(post, said) : 0;
@@ -286,6 +315,9 @@ async function look(threadId, why, extra) {
   const foreign = post ? scriptsOf(post.replace(/`[^`]*`|https?:\/\/\S+/g, ''))
     .filter(k => !scriptsOf([thread.name, ...msgs.filter(m => m.author.id !== client.user.id).map(m => m.content)].join('\n')).includes(k)) : [];
   if (foreign.length) { post = null; outcome = `a reply in ${foreign.join(', ')}, which nobody in the thread writes`; }
+  // a quick pass can't be sent back to write it again (investigate's check): a bad link drops its reply
+  const linkWrong = cheap && post && badLink(post, threadId);
+  if (linkWrong) { post = null; outcome = `a quick pass's reply with a bad link: ${linkWrong}`; }
   // the bot asks twice in a thread at most (system.md "Decide"); the look is told how often it did (standingOf)
   if (post && v.action === 'ask' && !byStaff && (st.asks ?? 0) >= MAX_ASKS) { post = null; outcome = `a third ask (${st.asks} before)`; }
   // stepping back is silent: no last word, never another round of the argument (nothing is passed on to anyone)
@@ -411,6 +443,7 @@ async function transcript(thread, msgs, workDir, why, extra, facts = []) {
   const pics = msgs.flatMap(m => [...m.attachments.values()])
     .filter(a => IMAGE_TYPES.includes((a.contentType ?? '').split(';')[0]) && a.size <= MAX_IMAGE);
   const seen = new Set(pics.slice(-MAX_IMAGES).map(a => a.id));
+  const gists = new Set(msgs.flatMap(m => [...m.attachments.values()]).filter(a => LOG_FILE.test(a.name)).slice(-GIST_LOGS).map(a => a.id));
   let n = 0;
   const who = m => m.author.id === client.user.id ? 'this bot' : m.author.id === thread.ownerId ? 'the poster'
     : isStaff(m.member, thread) ? 'staff' : 'another member';
@@ -439,6 +472,9 @@ async function transcript(thread, msgs, workDir, why, extra, facts = []) {
           fs.writeFileSync(path.join(workDir, name), data);
           lines.push(`  [attachment: attachments/${name}, ${kb}]`);
           readable.push(`attachments/${name} (${kb})`);
+          // a page log: its gist under it (logs.mjs), for the thread's newest GIST_LOGS logs
+          const gist = gists.has(a.id) ? logGist(data.toString('utf8')) : [];
+          if (gist.length) lines.push(`  [its gist, made by the bot's code from the whole log:]`, ...gist.map(l => `    ${l}`));
           continue;
         }
       }
@@ -526,7 +562,15 @@ async function checkRelease() {
     `${features.matches.length} suggestion(s) may be carried out or get a step toward them${list(features.matches)}`);
   // whole suggestions first; a step toward one only where the bot told none before
   const wished = features.matches.filter(m => !m.part || !threads[m.thread]?.partly).sort((a, b) => a.part - b.part);
-  for (const [ms, max, why] of [[fixes.matches, FIX_MAX, 'fix live'], [wished, FEATURE_MAX, 'implemented']]) {
+  // the threads the bot linked to a fixed one as the same problem get the look too, after the shortlist's: a poster
+  // the bot told "a fix comes with an update" heard nothing when it went live (6 November: split screen, the freeze)
+  const matched = new Set(fixes.matches.map(m => m.thread)), rootOf = id => threads[id]?.sameAs ?? id;
+  const linked = fixes.matches.flatMap(m => reports
+    .filter(([id, t]) => !matched.has(id) && (rootOf(id) === rootOf(m.thread) || t.links?.includes(m.thread)))
+    .map(([id]) => ({ thread: id, commit: m.commit, why: `the bot linked it to ${m.thread} as the same problem; that one: ${m.why}` })))
+    .filter((m, i, all) => all.findIndex(x => x.thread === m.thread) === i).slice(0, LINKED_MAX);
+  if (linked.length) console.log(`[release] ${linked.length} thread(s) linked to them: ${linked.map(m => m.thread).join(', ')}`);
+  for (const [ms, max, why] of [[[...fixes.matches, ...linked], FIX_MAX, 'fix live'], [wished, FEATURE_MAX, 'implemented']]) {
     for (const m of ms.slice(0, max)) {
       const what = why === 'fix live' ? "this thread's problem"
         : m.part ? 'a step toward what this suggestion asks for, not all of it' : 'what this suggestion asks for';
@@ -593,9 +637,24 @@ async function download(url) {
 function threadLine([id, t], max = Infinity, link = true) {
   const what = (t.summary || (t.snippet ? `first post: ${t.snippet}` : '')).slice(0, max);
   return `- ${id}${link ? ` https://discord.com/channels/${t.guild}/${id}` : ''} #${t.forum}, ${(t.active ?? t.created).slice(0, 10)} ` +
-    `[${[t.category, t.status, (t.flagged || t.staffMsg) && 'flagged for the developer'].filter(Boolean).join(', ')}] ${t.title}${what ? `: ${what}` : ''}`;
+    `[${[t.category, t.status, (t.flagged || t.staffMsg) && 'flagged for the developer', t.closed && 'closed',
+      t.solved && 'the poster says it works now', t.fix && !t.fix.part && !t.fix.added && 'its fix is live'].filter(Boolean).join(', ')}] ` +
+    `${t.title}${what ? `: ${what}` : ''}`;
 }
 const byActivity = (a, b) => (b[1].active ?? b[1].created).localeCompare(a[1].active ?? a[1].created);
+/** what is wrong with the forum threads a reply links, or '': the thread itself, one newer than it (the bot sends
+ *  posters to the older thread, never away from it), or a closed one (6 of the 12 wrong replies of 6-7 November) */
+function badLink(reply, threadId, known = threads) {
+  const ids = [...reply.matchAll(/discord\.com\/channels\/\d+\/(\d+)|<#(\d+)>/g)].map(m => m[1] ?? m[2]);
+  for (const id of new Set(ids)) {
+    if (id === threadId) return `Your reply links this very thread (${id}): they are in it.`;
+    const t = known[id];
+    if (!t) continue;                            // a channel, or a thread the bot doesn't know: nothing to say about it
+    if (BigInt(id) > BigInt(threadId)) return `Your reply links thread ${id}, which is newer than this one: point a newer thread to the older, never the other way.`;
+    if (t.closed) return `Your reply links thread ${id}, which is closed (${t.title}).`;
+  }
+  return '';
+}
 /** the threads active last, for the context */
 function recentThreads(except) {
   return Object.entries(threads).filter(([id]) => id !== except).sort(byActivity).slice(0, 30).map(e => threadLine(e, 160, false)).join('\n');

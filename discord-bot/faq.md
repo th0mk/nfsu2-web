@@ -27,10 +27,12 @@ label: Devices and browsers
 label: It won't start
 <!-- for: problems -->
 The start page says what is wrong, with a code. The most common:
-- `GPU-ACCEL-OFF`: turn on "Use graphics acceleration when available" in `chrome://settings/system`, then restart Chrome.
+- `GPU-ACCEL-OFF`: turn on "Use graphics acceleration when available" in `chrome://settings/system`, then restart Chrome. It was on already? Update the graphics driver.
 - `PAGE-NOT-ISOLATED`: an extension changes the page. Try a guest window; if it starts there, turn your extensions off one by one.
 - `GPU-ADAPTER-WIN`: your graphics have no Direct3D 12 driver. Update the graphics driver; older graphics (Intel HD 4000, 4400, 4600 and older) can't run it.
 - `GPU-ADAPTER-ANDROID`: update Android and Chrome. Then turn on `chrome://flags/#enable-unsafe-webgpu` and restart Chrome.
+- `GPU-ADAPTER-FIREFOX`: update the graphics driver and Firefox, or play in Chrome or Edge.
+- `STORAGE-NONE`: a private or guest window can't keep saves. Open the page in a normal window.
 - `Error code 1` right after Play: on the start page, Game, **Delete game data** (at the tab's end), then reload and Play. Your saves stay.
 - `MODULE-LOAD` with "Wasm SIMD unsupported": the processor is too old (no SSE4.1, such as an AMD Phenom II). No browser can run the game on it.
 It worked yesterday? Reload the page (Ctrl+F5 on a PC). Something else: post a screenshot of the message in #bug-reports.
@@ -51,9 +53,9 @@ Reload the page: since 4 November the game plays its sound in Silent mode too. O
 ### The game runs slowly
 label: Low frame rate
 <!-- for: problems -->
+- Keep the game's tab in front, and close other heavy tabs.
 - **Laptop with a graphics card:** Windows Settings, System, Display, Graphics: set Chrome to **High performance**, then quit Chrome completely and start it again.
 - **Phone that stutters:** on the start page, Game, Display, **Frame rate** 30 is the steady choice.
-- Keep the game's tab in front, and close other heavy tabs.
 
 ## Saves
 ### Where are my saves? How do I play on another device?
@@ -134,9 +136,9 @@ In the game: **Options**, **Controls**. It opens on Keyboard Configuration: go *
 
 ### Which key does what?
 label: Keys
-- **R** respawn, **T** career status, **M** map, **X** drift mode, **N** horn
+- **Alt** nitrous, **B** look back, **R** respawn, **T** career status, **M** map, **X** drift mode, **N** horn
 - **O** parked in free roam: the hood, pressed again the trunk, then the doors, then all of them (on a controller hold D-pad Down a second), **H** / **J** hydraulics
-- **F7** next song, **F12** photo mode, **F9** the page menu: log, radio, controls, full screen
+- **F7** next song, **F8** frame-rate counter, **F10** hides the HUD (and the names over cars), **F12** photo mode, **F9** the page menu: log, radio, controls, full screen
 - The whole list: start page, **Controls**.
 
 ## More
@@ -180,7 +182,7 @@ label: Rename or delete a profile
 ### I don't see other players in free roam
 label: No other players
 <!-- for: problems -->
-On the start page, Online: turn on **Free roam with others**, set **Your name** and leave **Room** empty (with a name in it you see only that room's players), then load your career and drive in its free roam.
+On the start page, Online: turn on **Free roam with others**, set **Your name** and leave **Room** empty (with a name in it you see only that room's players), then load your career and drive in its free roam. Quick Race's Free Run has no other players. Still alone in your career? Post in #bug-reports with the log (F9, **Download log**).
 
 ### How do I turn off vibration?
 label: Vibration
@@ -201,3 +203,17 @@ A controller's right stick looks round the car while you drive. A keyboard and t
 ### The game's data doesn't fit on my drive
 label: Game data space
 The browser keeps the game's data in its own folder, so it can't go on another drive. Preloading is optional: the game loads what it needs as you play. Start page, Game, **Delete game data** (at the tab's end) frees the space; your saves stay.
+
+### How do I hide the names over the cars, or the HUD?
+label: Hide names or HUD
+- **The names:** the game's Options, Gameplay, **Show Player Names** Off.
+- **The whole HUD:** **F10** while you drive, again to show it; the names go with it.
+
+### How do I turn my car in the garage or a shop?
+label: Turn the car
+Drag with the mouse's middle button (the wheel) held. On a touch screen, drag two fingers sideways; on a controller, the right stick.
+
+### My stars are short of what the stage needs
+label: Stars short
+<!-- for: problems -->
+Add visual parts: body kits, paint, vinyls, rims, neons, tint, hydraulics or audio; Career Status (**T**) shows the stars needed. Or on the start page, Mods, **Visual Reputation Remover** (off by default) gives your car the stage's rating.

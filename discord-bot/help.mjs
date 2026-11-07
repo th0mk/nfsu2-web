@@ -23,6 +23,7 @@ const MIN_CHARS = 10;                            // "up", "ty", "hello": no ques
 const DAY_MS = 86400_000, PER_DAY = 5, CHANNEL_MAX_PER_HOUR = 60;   // spam limits: a call costs ~0.05 cents
 const MAX_REPLY = 280;                           // a reply longer than this is no one-liner: none
 const MAX_TRANSLATED = MAX_REPLY * 1.5;          // the same line in another language runs longer, never this long
+const GAP_MS = 5 * 60_000;                       // a person's next answer this soon only when they reply to the bot's
 const FOLLOW_MS = 20 * 60_000;                   // their lines this soon after the bot answered them may go on from it
 const SAME_MAX = 2;                              // the same answer to a person a day: a follow-up's other part of it
 const REPEAT = 0.5;                              // a reply with this much of a line they had (word pairs) says it again
@@ -170,6 +171,14 @@ export class Help {
     const m = p.msgs.at(-1), now = this.now();
     const today = (this.saved.answered[author] ?? []).filter(([at]) => now - at < DAY_MS);   // [ms, answer id, line]
     const recent = today.filter(([at]) => now - at < FOLLOW_MS);       // what they say now may go on from these
+    // lines that are Discord replies to another member are their talk, not a question to the bot (it answered a
+    // member's "why does he need to preload?")
+    const to = x => x.mentions?.repliedUser?.id;
+    const bot = this.client?.user?.id;
+    if (p.msgs.every(x => to(x) && to(x) !== author && to(x) !== bot)) return console.log(`[help] ${m.id} ${name(m)}: a reply to another member`);
+    // a second answer this soon only to someone who replies to the bot's (two answers to one asker in a minute)
+    if (recent.length && now - recent.at(-1)[0] < GAP_MS && !p.msgs.some(x => bot && to(x) === bot))
+      return console.log(`[help] ${m.id} ${name(m)}: answered ${Math.round((now - recent.at(-1)[0]) / 1000)} s ago`);
     if (today.length >= PER_DAY) return console.log(`[help] ${m.id} ${name(m)}: ${PER_DAY} answers today already`);
     if (this.full(m.channelId)) return console.log(`[help] ${m.id} ${name(m)}: ${CHANNEL_MAX_PER_HOUR} answers this hour already`);
     // general.mjs's fix or pointer, or staff's or a member's, went to them today: no FAQ line on top (the same fix came

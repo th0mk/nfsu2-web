@@ -30,6 +30,7 @@ const KEEP_MS = 30 * 60_000, MAX_LINES = 150;    // the recent messages kept a c
 const MAX_PICTURES = 2, CALL_PICTURES = 8;       // pictures a sorted author, and a call (each ~1,500 tokens)
 const MAX_IMAGE = 10 << 20;
 const USER_COOLDOWN_MS = 7 * 86400_000;          // one pointer a person a week
+const HELPED_MS = 3600_000;                      // no pointer this long after #help's answer to them (help.mjs)
 const CHANNEL_MAX_PER_HOUR = 6;
 
 // a problem in any of the server's languages; how-to questions pass too and the model sorts them out
@@ -139,8 +140,25 @@ const FIXES = {
   'iphone-sound': {
     when: 'no sound at all in the game on an iPhone or iPad',
     words: true,
-    re: /\b(iphone|ipad|ios)\b/i,
+    // an iPhone and a word for sound in their words: "iPhone keeps closing" got this one (7 November)
+    re: /^(?=[\s\S]*\b(iphone|ipad|ios)\b)(?=[\s\S]*(sound|audio|\bsom\b|sonido|\bsuono|\bson\b|\bton\b|geluid|звук|\bses\b|dźwięk|silent|mute))/i,
     en: 'Reload the page: since 4 November the game plays its sound in Silent mode too (other apps\' music pauses while it plays).',
+  },
+  'iphone-closes': {
+    when: 'the game closes, crashes or goes back to the start page by itself on an iPhone or iPad, after some minutes or after a race or a shop (the start page then says the last game stopped without warning, or GPU-LOST)',
+    words: true,
+    re: /^(?=[\s\S]*\b(iphone|ipad|ios)\b)(?=[\s\S]*(clos|crash|kick|bounc|exit|quit|back to|start page|stop|GPU-LOST|fech|cierr|sale|cae|вылет|выкид|закр|виліт|çök|kapan|wywal|zamyk|crush))/i,
+    en: 'On iPhone and iPad the browser closes the game when it runs short of memory, and the start page comes back. No setting fixes it yet: follow it in <#1564554732649971802>, and post your log there (start page, Download log, before you press Play again).',
+  },
+  'storage-none': {
+    when: 'STORAGE-NONE: "This browser window cannot store files" (a private, incognito or guest window)',
+    re: /STORAGE-NONE|cannot store|can't store|private|incognito|guest/i,
+    en: 'A private, incognito or guest window can\'t keep saves: open nfsu2.xyz in a normal window.',
+  },
+  'gpu-adapter-firefox': {
+    when: 'GPU-ADAPTER-FIREFOX: Firefox on a computer would not use the graphics (not Firefox for Android)',
+    re: /GPU-ADAPTER-FIREFOX/i,
+    en: 'Firefox would not use this computer\'s graphics: update the graphics driver and Firefox, or play in Chrome or Edge.',
   },
   'iphone-full-screen': {
     when: 'they say full screen does not work on an iPhone (Safari\'s bars stay); the page\'s yellow iPhone note in a screenshot is not this',
@@ -246,6 +264,7 @@ export class General {
     this.now ??= Date.now;
     this.file = path.join(o.state, 'general.json');
     this.pending = new Map();                   // author id -> { msgs: [Message], first, last }
+    this.helped = new Map();                    // author id -> ms help.mjs answered them last
     this.recent = new Map();                    // channel id -> the last KEEP_MS of messages, for the chat around one
     this.sent = [];                             // { at, ch } of pointers, for the hourly cap
     this.conversing = new Map();                // author id -> ms they were last in a conversation about their problem
@@ -267,7 +286,8 @@ export class General {
   static isHelp(ch) { return ch?.type === ChannelType.GuildText && HELP.test(ch.name ?? ''); }
 
   /** someone help.mjs answered: no pointer on top of it for the same messages */
-  skip(id) { this.pending.delete(id); }
+  /** help.mjs answered them: no pointer now, nor for HELPED_MS (a pointer came on top of two answers 13 minutes apart) */
+  skip(id) { this.pending.delete(id); this.helped.set(id, this.now()); }
 
   onMessage(m) {
     if (!General.isGeneral(m.channel)) return;
@@ -341,7 +361,8 @@ export class General {
     const due = [...this.pending].filter(([, p]) => now - p.last >= WAIT_MS || now - p.first >= LATE_MS);
     for (const [id] of due) this.pending.delete(id);
     for (const [id, t] of this.conversing) if (now - t > TALKING_MS) this.conversing.delete(id);
-    const ready = due.filter(([id, p]) => now - (this.saved.nudged[id] ?? 0) > USER_COOLDOWN_MS && now - p.first < LATE_MS);
+    for (const [id, t] of this.helped) if (now - t > HELPED_MS) this.helped.delete(id);
+    const ready = due.filter(([id, p]) => now - (this.saved.nudged[id] ?? 0) > USER_COOLDOWN_MS && now - p.first < LATE_MS && !this.helped.has(id));
     // a channel at a time, with its chat; a channel that had its pointers this hour sends its people to no model:
     // they would get no reply
     for (const [ch, list] of Map.groupBy(ready, ([, p]) => p.msgs[0].channelId)) {
