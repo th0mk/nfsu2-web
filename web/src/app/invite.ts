@@ -29,7 +29,7 @@ export type RoomCheck = { ok: true; name: string } | { ok: false; why: string | 
 export function checkRoom(typed: string): RoomCheck {
   const name = tidyName(typed);
   if (!roomHash(name)) return { ok: false, why: null };
-  if (/(^|[ \t])[#;]/.test(name)) return { ok: false, why: N('no # or ; after a space in a room name') };
+  if (/(^|[ \t])[#;]/.test(name)) return { ok: false, why: N('no # or ; after a space in a world name') };
   const c = checkSetting('roam_room', name);
   if (c && !c.ok) return { ok: false, why: c.why, v: c.v };
   return { ok: true, name };

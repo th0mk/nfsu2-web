@@ -14,14 +14,15 @@ import { checkSetting, DEFAULTS, keyDef, resolveEnv, settingsPut, TEMPLATE, type
 import { NO_SAVE, readText, UNREADABLE, writeFile, writesAreOff } from './savefs';
 import { playHorn, stopHorn } from './horn-preview';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
-import { roomHash } from './players';
+import { countText, roomHash } from './players';
+import { isMain, isOwn, noGhost, WORLDS, worldName, worldNamed, worldOf } from './worlds';
 import { checkRoom, inviteLink } from './invite';
 import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
 import { FLAG_CODES, FLAG_H, FLAG_SHEET_COLS, FLAG_W, flagAt, flagCode, flagName, flagsByName, type FlagCode } from './flags';
 /** Your flag's picture: /flags.png's 48x36 flags drawn at 32x24 (style.css .flag-pic) */
 const FLAG_SHOWN = 2 / 3;
-import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
+import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg, type Vars } from './i18n';
 import { SITE_KEYS } from './sitekeys';
 import { copyText, copyToast } from './copy';
 import { MODS } from './mods';
@@ -34,8 +35,10 @@ type Control =
    *  value chosen (the promise ends when it has played), stop ends that early */
   | { t: 'select'; opts: [value: string, label: string][]; preview?: { play(value: string): Promise<void>; stop(): void } }
   | { t: 'num'; min?: number; max?: number; step?: number; unit?: string }
-  /** invite: the Room's box, with a button in it that copies an invite link to the room typed (invite.ts) */
-  | { t: 'text'; placeholder?: string; invite?: boolean }
+  | { t: 'text'; placeholder?: string }
+  /** the worlds (worlds.ts): a drop-down list of the main world, World 1 to 4 and Own name, each with how many are in
+   *  free roam there; Own name opens a box for the name, with a button in it that copies an invite link (invite.ts) */
+  | { t: 'world'; placeholder: string }
   /** the crews (crews.ts): a line per crew with Leave, and a box with Join for one more */
   | { t: 'crews'; placeholder: string }
   /** quick chat's sixteen (phrases.ts): under "Choose phrases", four columns of a name and four phrases, each a
@@ -97,7 +100,7 @@ const GROUPS: Group[] = [
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')], ['dixie', N('Dixie horn')],
       ['oldcar', N('Old car horn')], ['broken', N('Broken horn')], ['sputter', N('Sputtering horn')], ['thecar', N('The Car (1977)')],
       ['thecar_long', N('The Car, long blast')]], preview: { play: playHorn, stop: stopHorn } } },
-    { key: 'roam_room', label: N('Room'), help: N('With a name, free roam shows only players in the same room.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
+    { key: 'roam_room', label: N('World'), help: N('Free roam shows only the players in the same world.'), c: { t: 'world', placeholder: N('World name') } },
     { key: 'roam_block', label: N('Blocked players'), help: N('Names, separated by commas: you never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not a tuner you race in an outrun.'),
       c: { t: 'seg', opts: [['on', N('Off')], ['off', N('Players')], ['none', N('Everything')]] } },
@@ -145,6 +148,20 @@ const GROUPS: Group[] = [
   ] },
   { title: N('Mods'), more: '', own: true, at: 'mods-body', mods: true, items: [/* OTHERS_ITEM, */ ...MOD_ITEMS] },
 ];
+
+/** the World list's Own name (no room's name: one cannot start with #, invite.ts checkRoom) */
+const OWN_WORLD = '#own';
+/** the World list's words: each world's name and how many are in free roam there (where the server says), Own name with
+ *  its world's count while the file names one (cur: the Room setting) */
+function worldOptions(sel: HTMLSelectElement, cur: string, counts: Map<number, number>) {
+  for (const o of sel.options) {
+    const own = o.value === OWN_WORLD;
+    if (own && !isOwn(cur)) { o.textContent = t('Own name…'); continue; }
+    const n = counts.get(roomHash(own ? cur : o.value));
+    const name = own ? t('Own name') : worldName(o.value);
+    o.textContent = n === undefined ? name : `${name} · ${countText(n)}`;
+  }
+}
 
 /** a row's second key, which its control writes with its own and its Reset resets too (not listed under "Other
  *  settings in this file"): the Crews row's colours */
@@ -447,7 +464,8 @@ export class SettingsPanel {
   private fileOnly!: Resolved;
   private saves = 0;                       // writes so far (tests wait on data-saved)
   private openMore = new Set<string>();    // "More ... settings" kept open across re-renders
-  private roomLine: Msg = () => '';        // the Room row's line about who is there (setRoomLine)
+  private worldCounts = new Map<number, number>();  // how many are in free roam in each world, by its room's hash (setWorldCounts)
+  private worldOwn = false;                // Own name picked in the World list, its name not typed yet
   private crewCounts = new Map<number, number>();   // how many are in free roam in each crew, by hash (setCrewCounts)
   private crewDraft = '';                  // the crew name being typed, kept across re-renders
   private phrasesOpen = false;             // Your phrases' Choose phrases open, kept across re-renders
@@ -520,8 +538,9 @@ export class SettingsPanel {
     // (our controls' rows are the Site tab's, which draws them again itself: sitekeys.ts)
     const site = SITE_KEYS.includes(key);
     if (removed) this.render(); else { if (!site) this.rerow(key); this.syncRaw(); }
-    // (the Room and Crews rows say whether free roam is on)
+    // (the World and Crews rows say whether free roam is on; Ghost mode whether the world keeps it off)
     if (key === 'roam' && !removed) for (const k of ROAM_ROWS) this.rerow(k);
+    if ((key === 'roam' || key === 'roam_room') && !removed) this.rerow('roam_collide');
     this.root.dataset.saved = String(++this.saves);
     const it = ITEMS.get(key), cur = this.current(key);
     if (!site && !this.deps.quietSave?.(key, value)) this.deps.say?.(() => {
@@ -553,12 +572,12 @@ export class SettingsPanel {
   /** an element of the panel (the Online tab is in it) */
   private find<T extends Element>(sel: string): T | null { return this.root.querySelector<T>(sel) ?? this.online.querySelector<T>(sel); }
 
-  /** The Room row's line about who is in the room (players.ts roomLine; '' hides it); kept across re-renders, and drawn
-   *  again in the page's language when that changes. */
-  setRoomLine(line: Msg) {
-    this.roomLine = line;
-    const p = this.find<HTMLElement>('#set-roam_room-count');
-    if (p) { live(p, line); p.hidden = !p.textContent; }
+  /** How many are in free roam in each world now, by its room's hash (players.ts worldCounts; 0 the main world; a world
+   *  it lacks: not known), in the World list; kept across re-renders. */
+  setWorldCounts(counts: Map<number, number>) {
+    this.worldCounts = counts;
+    const sel = this.find<HTMLSelectElement>('#set-roam_room');
+    if (sel) worldOptions(sel, this.current('roam_room'), counts);
   }
 
   /** How many are in free roam in each crew now, by its hash (players.ts crewCounts; a crew it lacks: not known),
@@ -784,6 +803,8 @@ export class SettingsPanel {
         draft: this.crewDraft, onDraft: v => { this.crewDraft = v; }, change: (list, focus) => void this.setCrews(list, focus),
         // with the room this file sets, if any: crew-mates meet within one room
         link: name => inviteLink(location.origin, { crew: name, room: this.current('roam_room') }), said: msg => this.deps.say?.(msg) }, ctl);
+    } else if (c.t === 'world') {
+      described = this.worldControl(ctl, row, id, it.key, cur, t(c.placeholder));
     } else if (c.t === 'phrases') {
       row.classList.add('set-list');
       described = this.phraseControl(ctl, id, phrasesOf(cur), groupsOf(this.current('quick_chat_groups')),
@@ -798,16 +819,6 @@ export class SettingsPanel {
         let v = inp.value.trim();
         // Your name in the form the Online menu and free roam both use (claim.ts)
         if (it.key === 'roam_name' && v) v = onlineName(v) ?? v;
-        // a Room as an invite link takes one (invite.ts): tidied, and refused where settings.ini would cut it short
-        if (c.t === 'text' && c.invite && v) {
-          const r = checkRoom(v);
-          if (!r.ok && r.why) {
-            const msg = t('Not saved: {key} = {why}.', { key: it.key, why: tvars(r.why, r.v ?? {}) });
-            this.state(row, msg, 'bad'); this.describe(inp, row); this.deps.say?.(msg);
-            return;
-          }
-          v = r.ok ? r.name : '';
-        }
         if (v === this.current(it.key) && (v !== '' || !this.resolved.file[it.key]?.raw)) return;   // unchanged (a late change event)
         if (v === '') { void this.put(it.key, null); return; }
         const chk = checkSetting(it.key, v);
@@ -818,27 +829,13 @@ export class SettingsPanel {
         }
         void this.put(it.key, v);
       };
-      if (c.t === 'text' && c.invite) {
-        // the value box with the link button in it, as the cloud saves' passphrase box has its own (index.html .keybox):
-        // the link is to the name in the box (also before it is saved), shown while it holds one
-        const box = document.createElement('div'); box.className = 'keybox linkbox';
-        const share = iconButton('room-link', t('Copy an invite link to this room'), LINK);
-        const showLink = () => { share.hidden = !inp.value.trim(); };
-        inp.addEventListener('input', showLink); showLink();
-        share.onclick = async () => {
-          const r = checkRoom(inp.value);
-          if (!r.ok) { if (r.why) this.deps.say?.(t('Not saved: {key} = {why}.', { key: it.key, why: tvars(r.why, r.v ?? {}) })); return; }
-          const said = await copyLink(inviteLink(location.origin, { room: r.name }), share);
-          if (said !== null) this.deps.say?.(said);
-        };
-        box.append(inp, share);
-        ctl.append(box);
-      } else ctl.append(inp);
+      ctl.append(inp);
       if (c.t === 'num' && c.unit) { const u = document.createElement('span'); u.className = 'unit'; u.textContent = c.unit; ctl.append(u); }
       described = inp;
     }
-    if (setInFile && c.t !== 'crews' && c.t !== 'phrases') {   // (the Crews row has none: each crew's x leaves it; Your
-                                                               // phrases has its own, beside Choose phrases)
+    if (setInFile && c.t !== 'crews' && c.t !== 'phrases' && c.t !== 'world') {   // (the Crews row has none: each crew's x
+                                                               // leaves it; Your phrases has its own, beside Choose
+                                                               // phrases; World's list has the main world)
       const r = iconButton('reset-btn', t('Reset {label}', { label: labelOf(it) }), RESET);
       r.title = t('Back to the default ({value})', { value: shown(it, DEFAULTS.get(it.key) ?? '') });
       r.onclick = () => void this.put(it.key, null, comp ? [[comp, null]] : []);
@@ -854,19 +851,64 @@ export class SettingsPanel {
     if (by && keyDef(by.key)?.key !== it.key) this.state(row, t('settings.ini line {line} sets {env} = {value} by its own name: that is what applies.', { line: by.phys, env: def.env, value: this.fileOnly.env[def.env] }), 'env');
     const envName = def.env;
     if (envName in this.deps.environment) this.state(row, t('The page address sets {env}={value}, which wins over this setting.', { env: envName, value: this.deps.environment[envName] }), 'env');
+    // Ghost mode in World 4: off whatever it says (worlds.ts NO_GHOST)
+    if (it.key === 'roam_collide' && this.current('roam') === 'on' && noGhost(this.current('roam_room')))
+      this.state(row, t('Ghost mode stays off in {world}.', { world: worldNamed(this.current('roam_room')) }), 'env');
     // a room or crews with free roam off do nothing: players who had it off saw nobody in the room their friends named
     if (ROAM_ROWS.includes(it.key) && cur && this.current('roam') !== 'on')
       this.state(row, it.key === 'roam_crew' ? t('Needs Free roam with others (Online).') : t('Needs Free roam with others (above).'), 'env');
-    // who is in the room now (setRoomLine), while free roam is on in one
-    if (it.key === 'roam_room') {
-      const p = document.createElement('p'); p.className = 'set-state free'; p.id = 'set-roam_room-count';
-      live(p, this.roomLine); p.hidden = !p.textContent;
-      row.append(p);
-    }
     this.describe(described, row);
     // (a link copies what is there, and a mod's (i) shows it: read only or not)
     if (this.ro()) for (const el of row.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button:not(.room-link):not(.crew-link):not(.mod-about), input, select')) el.disabled = true;
     return row;
+  }
+
+  /** The World row's control into ctl (worlds.ts): the list of the main world, World 1 to 4 and Own name, each with how
+   *  many are in free roam there now (setWorldCounts); Own name opens a box under it for the name, with the link button
+   *  in it (an invite link to that world, as the cloud saves' passphrase box has its eye), shown while it holds a name.
+   *  The list saves a pick at once (the main world: the line out of the file), the box its name once typed. */
+  private worldControl(ctl: HTMLElement, row: HTMLElement, id: string, key: string, cur: string, placeholder: string): HTMLSelectElement {
+    row.classList.add('set-world');
+    const own = isOwn(cur) || this.worldOwn;
+    const sel = document.createElement('select'); sel.id = id;
+    for (const v of ['', ...WORLDS, OWN_WORLD]) { const o = document.createElement('option'); o.value = v; sel.append(o); }
+    sel.value = own ? OWN_WORLD : isMain(cur) ? '' : WORLDS[worldOf(cur) - 1];
+    worldOptions(sel, cur, this.worldCounts);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.id = `${id}-own`; inp.placeholder = placeholder;
+    inp.setAttribute('aria-label', placeholder);
+    inp.value = isOwn(cur) ? cur : '';
+    const box = document.createElement('div'); box.className = 'keybox linkbox'; box.hidden = !own;
+    const share = iconButton('room-link', t('Copy an invite link to this world'), LINK);
+    const showLink = () => { share.hidden = !inp.value.trim(); };
+    inp.addEventListener('input', showLink); showLink();
+    const refused = (why: string, v?: Vars) => {
+      const msg = t('Not saved: {key} = {why}.', { key, why: tvars(why, v ?? {}) });
+      this.state(row, msg, 'bad'); this.describe(inp, row); this.deps.say?.(msg);
+    };
+    share.onclick = async () => {
+      const r = checkRoom(inp.value);
+      if (!r.ok) { if (r.why) refused(r.why, r.v); return; }
+      const said = await copyLink(inviteLink(location.origin, { room: r.name }), share);
+      if (said !== null) this.deps.say?.(said);
+    };
+    box.append(inp, share);
+    sel.onchange = () => {
+      if (sel.value === OWN_WORLD) { this.worldOwn = true; box.hidden = false; inp.focus(); return; }
+      this.worldOwn = false;
+      void this.put(key, sel.value || null);
+    };
+    // a name as an invite link takes one (invite.ts): tidied, and refused where settings.ini would cut it short; World 2
+    // typed is World 2, none the main world
+    inp.onchange = () => {
+      const r = checkRoom(inp.value);
+      if (!r.ok && r.why) { refused(r.why, r.v); return; }
+      const v = r.ok ? r.name : '';
+      this.worldOwn = false;
+      if (v === this.current(key) && (v !== '' || !this.resolved.file[key]?.raw)) return;   // unchanged (a late change event)
+      void this.put(key, v || null);
+    };
+    ctl.append(sel, box);
+    return sel;
   }
 
   /**

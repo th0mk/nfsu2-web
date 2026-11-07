@@ -1,4 +1,4 @@
-// The Controls sheet: the start page's (#keys), and its copy in the menu's Controls dialog (shell.ts openHelp).
+// The Controls sheet: the start page's (#keys), and its copy on the menu's Controls page (shell.ts openHelp).
 // Three tabs: the keyboard (on a touch screen: touch), the controller and this site.  The controller's tab is a
 // drawing of a pad with what each button the game uses does beside it, the buttons named as Xbox or PlayStation
 // names them (the switch under it; a PlayStation controller connecting, or taking over in the game, picks those

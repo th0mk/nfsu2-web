@@ -130,7 +130,7 @@ test('/players with --max-peers 1: full while one plays, the next game of before
 
 test('the page\'s numbers and lines', async () => {
   const out = await esbuild.build({ entryPoints: [path.join(HERE, '../src/app/players.ts')], bundle: true, write: false, format: 'esm', platform: 'neutral' });
-  const { countText, fullLine, queueText, roomHash, roomFold, roomLine } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
+  const { countText, fullLine, queueText, roomHash, roomFold, worldCounts } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
   // the room's hash as roam_core.c makes it (tests/roam_unit.c checks the same names): capitals, blanks and invisible
   // characters do not count
   assert.equal(roomHash('blueroom'), 0x160fba32);
@@ -158,12 +158,11 @@ test('the page\'s numbers and lines', async () => {
   }
   assert.equal(sum.toString(16), '198373d3');
   // the Playing now panel's numbers (grouped as the page's language writes them; '–' for one the server does not give),
-  // the Room row's line and the line under the numbers while the server is full
+  // the World list's counts by hash and the line under the numbers while the server is full
   assert.deepEqual([7592, 0, 3, null, undefined, -1, 1.5].map(countText), ['7,592', '0', '3', '–', '–', '–', '–']);
-  assert.equal(roomLine({ players: 3, online: 1, roam: 2, room: 0 }, ' Blue '), 'You are in room "Blue": nobody in free roam there.');
-  assert.equal(roomLine({ players: 3, online: 1, roam: 2, room: 2 }, 'Blue'), 'You are in room "Blue": 2 in free roam there.');
-  assert.equal(roomLine({ players: 3, online: 1, roam: 2 }, 'Blue'), 'You are in room "Blue".', 'an older server: no count');
-  assert.equal(roomLine({ players: 3, online: 1, roam: 2, room: 2 }, ' '), '', 'no room');
+  assert.deepEqual([...worldCounts({ players: 3, online: 1, roam: 2, rooms: [1, 0, 1] }, [0, 7, 9])], [[0, 1], [7, 0], [9, 1]]);
+  assert.deepEqual([...worldCounts({ players: 3, online: 1, roam: 2, rooms: [1, -1] }, [0, 7])], [[0, 1]], 'only counts');
+  assert.deepEqual([...worldCounts({ players: 3, online: 1, roam: 2 }, [0, 7])], [], 'an older server: no counts');
   assert.equal(fullLine({ players: 3, online: 1, full: false }), '');
   assert.equal(fullLine({ players: 3, online: 1 }), '');
   assert.equal(fullLine({ players: 128, online: 9, roam: 100, full: true }), 'The server is full: multiplayer starts when a place frees up.');

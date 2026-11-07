@@ -339,9 +339,9 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
   ];
   await server(p, { op: 'where', friends: where });
   assert.deepEqual(await notices(p), [
-    ['Bo_', 'Your friend Bo_ is in free roam, room Blue Room: Join in the menu (F9)'],
+    ['Bo_', 'Your friend Bo_ is in free roam in "Blue Room": Join in the menu (F9)'],
     ['Cy_', 'Your friend Cy_ is in free roam', 'here'],
-    ['Dee', 'Your friend Dee is in free roam, in no room: Join in the menu (F9)'],
+    ['Dee', 'Your friend Dee is in free roam in Main world: Join in the menu (F9)'],
   ], 'the ones in free roam, at the first answer too (a room as the game hashes it: case and blanks do not count)');
   assert.equal(await p.evaluate(() => /** @type {any} */ (window).placed), 1, 'the menu\'s Friends drawn again');
   await server(p, { op: 'where', friends: where });
@@ -352,8 +352,8 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
   await server(p, { op: 'where', friends: [{ name: 'Bo_', where: 'online' }, where[1], where[2], where[3], where[4]] });
   await server(p, { op: 'friends', name: 'Fox' });
   await server(p, { op: 'where', friends: [...where.slice(0, 4), { name: 'Fox', where: 'roam', room: 'night owls' }] });
-  assert.deepEqual(await notices(p), [['Bo_', 'Your friend Bo_ is in free roam, room Blue Room: Join in the menu (F9)']]);
-  // the menu's Friends: in free roam (where: the room's name, or your room), a Join for each one in another room, a Discord icon for one that gave its name (copied:
+  assert.deepEqual(await notices(p), [['Bo_', 'Your friend Bo_ is in free roam in "Blue Room": Join in the menu (F9)']]);
+  // the menu's Friends: in free roam (where: the world's name, or your world), a Join for each one in another room, a Discord icon for one that gave its name (copied:
   // a toast at it says so); the others in a line
   const pop = () => p.evaluate(async () => {
     const w = /** @type {any} */ (window), box = document.createElement('div');
@@ -370,8 +370,8 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
     return { rows, lines: [...box.querySelectorAll(':scope > p.hint')].map(e => e.textContent), joins: w.joins, copies: w.copies, toasts };
   });
   assert.deepEqual(await pop(), {
-    rows: [['Bo_', 'Blue Room', 'Join'], ['Cy_', 'your room', 'Copy Discord name cy.races'], ['Dee', 'free roam', 'Join'],
-      ['Fox', 'your room', '']],
+    rows: [['Bo_', 'Blue Room', 'Join'], ['Cy_', 'your world', 'Copy Discord name cy.races'], ['Dee', 'Main world', 'Join'],
+      ['Fox', 'your world', '']],
     lines: ['In the Online lobby: Eve.'], joins: ['Blue Room', ''], copies: ['cy.races'], toasts: ['Copied cy.races'],
   });
   await server(p, { op: 'where', friends: [{ name: 'Bo_', where: 'online' }, { name: 'Cy_', where: '' }, { name: 'Dee', where: '' }] });
@@ -429,19 +429,19 @@ test('race invites: Invite in the menu\'s Friends while hosting, and a friend\'s
       [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]);
   });
   const done = () => p.evaluate(() => /** @type {any} */ (window).box.remove());
-  assert.deepEqual(await rows(), [['Bo_', 'your room', ''], ['Cy_', 'Blue Room', 'Join']], 'not hosting: no Invite');
+  assert.deepEqual(await rows(), [['Bo_', 'your world', ''], ['Cy_', 'Blue Room', 'Join']], 'not hosting: no Invite');
   await done();
   await p.evaluate(() => { /** @type {any} */ (window).hosted = { kind: 'sprint', stage: 2, n: 1, max: 6 }; });
-  assert.deepEqual(await rows(), [['Bo_', 'your room', 'Invite Bo_ to your race'], ['Cy_', 'Blue Room', 'Join']],
+  assert.deepEqual(await rows(), [['Bo_', 'your world', 'Invite Bo_ to your race'], ['Cy_', 'Blue Room', 'Join']],
     'hosting: an Invite for a friend in our room only');
   await p.evaluate(() => /** @type {any} */ (window).box.querySelector('.fl-invite').click());
   await done();
   assert.deepEqual((await sent(p)).filter(m => m.op !== 'where'), [{ op: 'invite', name: 'Bo_', kind: 'sprint', stage: 2 }]);
   await server(p, { op: 'invite', name: 'Bo_', done: 'sent' });
   assert.deepEqual(await toasts(p), ['Invite sent to Bo_']);
-  assert.deepEqual(await rows(), [['Bo_', 'your room · invited', ''], ['Cy_', 'Blue Room', 'Join']], 'invited: no Invite again for a while');
+  assert.deepEqual(await rows(), [['Bo_', 'your world · invited', ''], ['Cy_', 'Blue Room', 'Join']], 'invited: no Invite again for a while');
   await done();
-  for (const [d, text] of [['away', 'Bo_ isn\'t in free roam in your room now'], ['full', 'Your race lobby is full'], ['nolobby', 'Open a race lobby first, then invite'],
+  for (const [d, text] of [['away', 'Bo_ isn\'t in free roam in your world now'], ['full', 'Your race lobby is full'], ['nolobby', 'Open a race lobby first, then invite'],
     ['rate', 'Too many invites at once: try again in a moment'], ['none', 'Bo_ can\'t be invited now']]) {
     await server(p, { op: 'invite', name: 'Bo_', done: d });
     assert.deepEqual(await toasts(p), [text], d);
@@ -485,10 +485,10 @@ test('crew invites: an icon on a friend in free roam, the crews to pick under it
     li.querySelector('.fl-st').textContent, [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]));
   const asked = () => p.evaluate(() => /** @type {any} */ (window).crewAsked.splice(0));
   await draw();
-  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your room', '']], 'no crew: no icon');
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your world', '']], 'no crew: no icon');
   await p.evaluate(() => { /** @type {any} */ (window).crews = [{ name: 'JDM', rgb: '3cd2ff' }]; });
   await draw();
-  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your room', 'Invite Bo_ to a crew']]);
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your world', 'Invite Bo_ to a crew']]);
   await p.click('.fl-crew');
   assert.deepEqual(await asked(), [['Bo_', 'JDM', 'Night Owls']], 'one crew: invited at once, in the game\'s room');
   assert.equal(await toastNow(p), 'Invited Bo_ to JDM');
@@ -504,13 +504,13 @@ test('crew invites: an icon on a friend in free roam, the crews to pick under it
   assert.deepEqual(await asked(), [], 'more crews: one to pick');
   assert.equal(await p.evaluate(() => /** @type {any} */ (window).placed), 1, 'drawn again');
   await draw();
-  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your room', 'Invite Bo_ to a crew'], ['(under)', 'Invite Bo_ to', 'Invite Bo_ to crew JDM|Invite Bo_ to crew Wangan']]);
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your world', 'Invite Bo_ to a crew'], ['(under)', 'Invite Bo_ to', 'Invite Bo_ to crew JDM|Invite Bo_ to crew Wangan']]);
   assert.equal(await p.getAttribute('.fl-crew', 'aria-expanded'), 'true');
   assert.deepEqual(await p.$$eval('.crew-pick', bs => bs.map(b => [b.textContent, b.style.getPropertyValue('--crew')])), [['JDM', '#3cd2ff'], ['Wangan', '#ff50c8']], 'as the Crews row\'s chips');
   await p.click('.crew-pick >> nth=1');
   assert.deepEqual(await asked(), [['Bo_', 'Wangan', 'Night Owls']]);
   await draw();
-  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your room', 'Invite Bo_ to a crew']], 'closed once sent');
+  assert.deepEqual(await rowsOf('body > div .fl li'), [['Bo_', 'your world', 'Invite Bo_ to a crew']], 'closed once sent');
   assert.equal(await toastNow(p), 'Invited Bo_ to Wangan', 'at the icon');
   await p.evaluate(() => /** @type {any} */ (window).box.remove());
   // the start page's Friends: settings.ini's crews and room, on the friends in free roam only

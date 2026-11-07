@@ -43,10 +43,11 @@ import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolve
 import { checkSaves, exists, filesOf, listProfiles, NO_SAVE, PROFILES_DIR, readText, removeSaveDir, SavesOff, setWritesOff, settleStaged, UNREADABLE, writeFile, type SavesCheck } from './savefs';
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
-import { askCrews, PlayersPanel, queueText, roomHash, roomLine, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
+import { askCrews, askWorlds, countText, PlayersPanel, queueText, roomHash, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
+import { isMain, isOwn, noGhost, WORLDS, worldName, worldNamed, worldRooms } from './worlds';
 import { panelTabs, refitTabs, type PanelTabs } from './tabs';
 import { CREW_MAX, crewList, crewsOf, crewsValue, freeColour, rgbsValue, rgbWords, type Crew } from './crews';
-import { checkInvite, inviteLink, readInvite, sameName, tidyInvite, type Invite } from './invite';
+import { checkInvite, checkRoom, inviteLink, readInvite, sameName, tidyInvite, type Invite } from './invite';
 import { privacy, SCRUB_NOTE } from './privacy';
 import { oneWriter, SavesPanel, snapshotFile, snapshotSaves, type FileIn } from './saves-ui';
 import { zip } from './zip';
@@ -132,6 +133,7 @@ let hudWide = true;                      // the running game's HUD is edge-ancho
 /** Ghost mode as roam_collide has it: on (Ghost mode off), off (Players), none (Everything) */
 type Collide = 'on' | 'off' | 'none';
 let roamCollide: Collide | null = null;  // the running game's free roam's Ghost mode: as it started, then as the menu changed it (null: no free roam)
+let collideOwn: Collide = 'on';          // the player's own Ghost mode (settings.ini, the menu), where its world lets it (worlds.ts noGhost)
 let roamCrews: Crew[] | null = null;     // the running game's crews: as it started, then as the menu changed them (null: no free roam)
 let roamRoom: string | null = null;      // the running game's room: as it started, then as an invite link changed it ('': none; null: no free roam)
 let crewDraft = '';                      // the crew name being typed in the menu
@@ -659,10 +661,13 @@ async function startGame() {
   if (!('NFSU2_HEAP_WINDOW' in r.env) && heapWindow()) r.env.NFSU2_HEAP_WINDOW = '1';
   // the room and crews in Unicode's composed form, as the page hashes them (players.ts roomText): one "é" whichever way
   for (const k of ['NFSU2_ROAM_ROOM', 'NFSU2_ROAM_CREW'] as const) if (r.env[k]) r.env[k] = roomText(r.env[k]);
+  // Ghost mode: the player's own, but off in World 4 (worlds.ts NO_GHOST)
+  collideOwn = collideOf(r.env.NFSU2_ROAM_COLLIDE);
+  if (r.env.NFSU2_ROAM === '1' && noGhost(r.env.NFSU2_ROAM_ROOM ?? '')) r.env.NFSU2_ROAM_COLLIDE = 'on';
   // the names this game goes by, for the log as it leaves the browser (privacy.ts)
   privacy.name(r.env.NFSU2_ROAM_NAME, 'you');
   for (const c of crewList(r.env.NFSU2_ROAM_CREW ?? '')) privacy.name(c, 'crew');
-  privacy.name(r.env.NFSU2_ROAM_ROOM, 'room');
+  if (isOwn(r.env.NFSU2_ROAM_ROOM ?? '')) privacy.name(r.env.NFSU2_ROAM_ROOM, 'room');   // (World 1 to 4: nobody's words)
   for (const p of profiles) privacy.name(p.name, 'profile');
   if (firstName) privacy.name(firstName, 'profile');
   // offline mode: the server does not answer.  The movies stream from it, so unless every one of them is in this
@@ -797,6 +802,7 @@ async function startGame() {
   photo.start(session);
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
   crewCountsOnce();
+  worldLineSoon(false);
   friendMessages.start(session, net && r.env.NFSU2_ROAM === '1');
   // (the races' between players free roam on or not; free roam's only with it on: the career's free roam alone keeps
   // 1-4, Esc and the right stick's click for the game)
@@ -1175,8 +1181,11 @@ function siteKeysNow() {
   siteView?.render();
   keySheet?.relabel();                    // (the controller's drawing names the sticks' clicks of ours)
 }
+/** The menu's Controls, in the menu's place (the menu opened first, if it isn't): the start page's sheet, copied once
+ *  (again after a language change), on tab or the start page's tab */
 function openHelp(tab?: Tab) {
   const body = $('#help-body');
+  if (!$<HTMLDialogElement>('#menu').open) openMenu();
   if (!helpSheet) {
     body.append(...[...$('#keys').childNodes].map(n => n.cloneNode(true)));
     for (const k of body.querySelectorAll('[data-keep]')) k.remove();   // (the start page's Controller settings: Play reads them)
@@ -1185,9 +1194,10 @@ function openHelp(tab?: Tab) {
     helpSiteView.render(body.querySelector<HTMLElement>('.site-box')!, false);
   }
   siteKeyList(body);
+  menuPage('controls');
   helpSheet.show(tab ?? keySheet.tab);
   helpSheet.family(keySheet.fam);
-  $<HTMLDialogElement>('#help').showModal();
+  $('#menu-controls').querySelector<HTMLElement>('[data-act="back"]')!.focus();
 }
 
 /** a line for the player from the network (also in the log): the page's own (net/index.ts: the server full, a place
@@ -1199,6 +1209,9 @@ function notice(text: string, who?: string) {
   if (!who && text.startsWith('\x1e')) { hint(text.slice(1)); return; }
   privacy.name(who, 'player');
   log.add(`[notice] ${text}`);
+  // (the game's line on a world of nobody else, roam_game.c room_alone: in the worlds' words)
+  const alone = !who && /^Nobody else is in free roam in room "(.*)"\. /.exec(text);
+  if (alone) { toast(t('Nobody else is in {world} now. Main world is in the menu.', { world: worldNamed(alone[1]) }), 6000); return; }
   if (!who) { toast(t(text), 6000); return; }     // English in the log
   if (!FRIEND_NOTICES) return;
   const box = $('#notices'), b = document.createElement('b');
@@ -1214,7 +1227,7 @@ function notice(text: string, who?: string) {
  *  menu's line, pausehint.ts), for 15 s */
 function hint(id: string) {
   log.add(`[notice] hint: ${id}`);
-  if (id !== 'ghost') return;
+  if (id !== 'ghost' || (roamRoom !== null && noGhost(roamRoom))) return;   // (none where Ghost mode stays off)
   const line = document.createElement('span');
   for (const k of [touchFirst() ? '☰' : keyName(siteKey('menu') ?? 'F9'), ...(padSeen() ? ['Home'] : [])])
     line.append(Object.assign(document.createElement('kbd'), { textContent: k }));
@@ -1266,6 +1279,36 @@ function crewCountsOnce() {
     });
   }, 500);
 }
+/** Free roam in a world (worlds.ts): a line in the log with its name and how many are in free roam there, once the
+ *  server's hub counts the player there (CREW_COUNT_AFTER_MS of free roam): at a game's first free roam outside the
+ *  main world, and after each change of world in the menu (any: always) */
+let worldTimer = 0;
+function worldLineSoon(any: boolean) {
+  clearInterval(worldTimer);
+  if (roamRoom === null || (!any && isMain(roamRoom))) return;
+  let since = 0;
+  worldTimer = window.setInterval(() => {
+    if (!session || roamRoom === null) { clearInterval(worldTimer); return; }
+    if (!quickChat.roaming()) { since = 0; return; }
+    since ||= performance.now();
+    if (performance.now() - since < CREW_COUNT_AFTER_MS) return;
+    clearInterval(worldTimer);
+    const room = roamRoom, game = session;
+    if (offline) return;
+    void askWorlds(worldRooms(room), 5000).then(counts => {
+      if (!counts || session !== game || roamRoom === null || !sameName(room, roamRoom)) return;
+      worldCountsNow = counts;
+      const n = counts.get(roomHash(room));
+      if (n === undefined) return;
+      log.add(`[notice] world ${worldName(room)}: ${n} in free roam`);
+      const b = document.createElement('b');
+      b.textContent = worldName(room);
+      placeNotices();
+      iconLine('chat world-in', GLOBE, [b, ` ${n <= 1 ? t('nobody else in free roam') : t('{n} in free roam', { n })}`]);
+    });
+  }, 500);
+}
+const GLOBE = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3C9.5 5.6 8.2 8.6 8.2 12s1.3 6.4 3.8 9"/></svg>';
 /** a dot in the crew's colour (style.css .notices .crew-in) */
 const CREW_DOT = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/></svg>';
 function crewCountLine(c: Crew, n: number) {
@@ -1602,10 +1645,12 @@ async function screenshot(photo = false) {
 // ----------------------------------------------------------- page menu --
 function openMenu() {
   const m = $<HTMLDialogElement>('#menu');
-  if (m.open) { $<HTMLDialogElement>('#playlist').close(); m.close(); return; }                // (on its Crews or Friends too)
+  if (m.open) { $<HTMLDialogElement>('#playlist').close(); m.close(); return; }                // (on its Crews, Friends or Controls too)
   const fsButton = m.querySelector<HTMLButtonElement>('[data-act="fullscreen"]')!;
   menuValue('fullscreen', t(isFullscreen() ? N('On') : N('Off')));
   fsButton.hidden = !canFullscreen() && fromHomeScreen();         // from an iPhone's Home Screen: already without bars
+  m.querySelector<HTMLButtonElement>('[data-act="worlds"]')!.hidden = roamRoom === null || !session?.net?.room;
+  menuValue('worlds', roamRoom === null ? '' : worldName(roamRoom));
   m.querySelector<HTMLButtonElement>('[data-act="solid"]')!.hidden = roamCollide === null || !session?.net?.solid;
   menuValue('solid', ghostWord());
   m.querySelector<HTMLButtonElement>('[data-act="crews"]')!.hidden = roamCrews === null || !session?.net?.crews;
@@ -1640,32 +1685,111 @@ function menuValue(act: string, text: string) {
 /** roam_collide's value from its variable (a test's page address may give 1 or 0; none set: on, the default) */
 const collideOf = (v: string | undefined): Collide => { const c = checkSetting('roam_collide', v ?? ''); return c?.ok ? c.value as Collide : 'on'; };
 const crewsCount = () => roamCrews?.length ? String(roamCrews.length) : '';
-/** what the menu shows: its list, or in its place its Crews or Friends (a game in free roam) */
-type MenuPage = 'main' | 'crews' | 'friends';
+/** what the menu shows: its list, or in its place its World, Crews or Friends (a game in free roam) or its Controls */
+type MenuPage = 'main' | 'worlds' | 'crews' | 'friends' | 'controls';
+/** each page's row on the list */
+const MENU_ROW: Record<Exclude<MenuPage, 'main'>, string> = { worlds: 'worlds', crews: 'crews', friends: 'friends', controls: 'help' };
 let menuAt: MenuPage = 'main';
 /** The menu on page p: the others hidden, the dialog named by p's title.  Back on the list from a page: the keyboard
  *  (or controller) on that page's row, with its state as it is now. */
 function menuPage(p: MenuPage) {
   const was = menuAt;
   menuAt = p;
-  for (const id of ['main', 'crews', 'friends'] as const) $(`#menu-${id}`).hidden = id !== p;
+  for (const id of ['main', 'worlds', 'crews', 'friends', 'controls'] as const) $(`#menu-${id}`).hidden = id !== p;
   $('#menu').setAttribute('aria-labelledby', p === 'main' ? 'menu-title' : `menu-${p}-title`);
   if (p !== 'main' || was === 'main') return;
   popAsk++;                                       // (a count asked for the Crews page: not drawn now)
   menuValue('crews', crewsCount());
   menuValue('friends', friendPrompt.waiting() ? String(friendPrompt.waiting()) : '');
-  if ($<HTMLDialogElement>('#menu').open) $<HTMLButtonElement>(`#menu [data-act="${was}"]`).focus();
+  if ($<HTMLDialogElement>('#menu').open) $<HTMLButtonElement>(`#menu [data-act="${MENU_ROW[was]}"]`).focus();
 }
 /** whether the menu is open on page p */
 const menuOn = (p: MenuPage) => menuAt === p && $<HTMLDialogElement>('#menu').open;
-/** Esc, Backspace (not in a text field) or a controller's B on the menu's Crews or Friends: back to the list, the menu
- *  stays open (padnav.ts: a page's Back); an Esc the palette of a crew took (settings-ui.ts) not */
+/** Esc, Backspace (not in a text field) or a controller's B on the menu's World, Crews, Friends or Controls: back to the list,
+ *  the menu stays open (padnav.ts: a page's Back); an Esc the palette of a crew or a key's wait took (settings-ui.ts,
+ *  sitekeys.ts) not */
 function menuPageKey(e: KeyboardEvent) {
   if (menuAt === 'main' || e.defaultPrevented || e.isComposing) return;
   const typing = (e.target as HTMLElement | null)?.closest?.('input, textarea, select');
   if (e.key !== 'Escape' && !(e.key === 'Backspace' && !typing)) return;
   e.preventDefault();                             // (no cancel: the menu stays open)
   menuPage('main');
+}
+/** how many were in free roam in each world when the menu's World or the world's line last asked, by the room's hash
+ *  (0 the main world) */
+let worldCountsNow = new Map<number, number>();
+let worldAsk = 0;
+/** The menu's World (free roam with others, a game that changes its room at once), in the menu's place (the menu
+ *  opened first, if it isn't): the main world, World 1 to 4 and the game's own world if it is in one, each with how
+ *  many are in free roam there (asked of the server once as it opens), the game's own marked; Own name… turns into a
+ *  field for a world's name.  A world picked: the game is in it at once, and settings.ini has it for the next Play. */
+function openWorlds() {
+  if (roamRoom === null || !session?.net?.room) return;
+  if (!$<HTMLDialogElement>('#menu').open) openMenu();
+  drawWorlds();
+  menuPage('worlds');
+  $('#menu-worlds-box').querySelector<HTMLElement>('[aria-current="true"]')?.focus();
+  const n = ++worldAsk, game = session, room = roamRoom;
+  if (offline) return;
+  void askWorlds(worldRooms(room), 5000).then(counts => {
+    if (!counts || n !== worldAsk || session !== game || !menuOn('worlds')) return;
+    worldCountsNow = counts;
+    const had = $('#menu-worlds-box').contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.room : undefined;
+    drawWorlds();
+    if (had !== undefined) $('#menu-worlds-box').querySelector<HTMLElement>(`[data-room="${CSS.escape(had)}"]`)?.focus();
+  });
+}
+/** an element with these properties */
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, string>): HTMLElementTagNameMap[K] => Object.assign(document.createElement(tag), props);
+const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+function drawWorlds() {
+  const now = roamRoom ?? '', rows: HTMLElement[] = [];
+  for (const room of ['', ...WORLDS, ...(isOwn(now) ? [now] : [])]) {
+    const b = el('button', { type: 'button', className: 'menu-row' });
+    b.dataset.room = room;
+    const here = sameName(room, now), n = worldCountsNow.get(roomHash(room));
+    if (here) { b.classList.add('selected'); b.setAttribute('aria-current', 'true'); }
+    const end = el('span', { className: 'menu-end' });
+    end.append(el('span', { className: 'menu-val', textContent: n === undefined ? '' : countText(n) }));
+    end.insertAdjacentHTML('beforeend', CHECK);
+    b.append(el('span', { textContent: worldName(room) }), end);
+    b.onclick = () => void switchWorld(room);
+    rows.push(b);
+  }
+  const own = el('button', { type: 'button', className: 'menu-row', textContent: t('Own name…') });
+  own.dataset.own = '';
+  own.onclick = () => {
+    const f = el('input', { type: 'text', className: 'menu-field', placeholder: t('World name'), enterKeyHint: 'go' });
+    f.setAttribute('aria-label', t('World name'));
+    f.maxLength = 63;
+    f.onkeydown = e => {
+      if (e.key !== 'Enter' || e.isComposing) return;
+      e.preventDefault();
+      const r = checkRoom(f.value);
+      if (!r.ok) { if (r.why) tell(t('Not saved: {key} = {why}.', { key: 'roam_room', why: tvars(r.why, r.v ?? {}) })); return; }
+      void switchWorld(r.name);
+    };
+    own.replaceWith(f);
+    f.focus();
+  };
+  $('#menu-worlds-box').replaceChildren(...rows, own);
+}
+/** Ghost mode as the game's world has it now (a change of world): off in World 4 (worlds.ts NO_GHOST), else the
+ *  player's own */
+function ghostFollow() {
+  if (roamCollide === null || roamRoom === null || !session?.net?.solid) return;
+  const want: Collide = noGhost(roamRoom) ? 'on' : collideOwn;
+  if (want === roamCollide) return;
+  roamCollide = want;
+  session.net.solid(want);
+  log.add(`[app] roam_collide = ${want} (${noGhost(roamRoom) ? 'Ghost mode stays off in this world' : 'the player\'s own, out of World 4'})`);
+}
+/** a world picked in the menu's World: the game in it at once (as a friend's Join), back to the game, its line soon */
+async function switchWorld(room: string) {
+  const m = $<HTMLDialogElement>('#menu'); if (m.open) m.close();
+  if (roamRoom === null || sameName(room, roamRoom)) return;
+  log.add(`[app] the menu's World: ${isOwn(room) ? 'a world of the player\'s own' : worldName(room)}`);
+  await joinHere({ room }, true);
 }
 /** The menu's Crews (free roam only), in the menu's place: the Crews row's control, which changes the game's crews at
  *  once (the menu opened first, if it isn't); the keyboard in its box, or on a crew's colour with 4 */
@@ -1837,7 +1961,8 @@ async function applyInvite(given: Invite): Promise<Joined> {
     settingsText = text; void settings.refresh(); players?.now(); vault?.changed(); friendsPanel?.render();
   }
   // (the names, for the log as it leaves the browser: privacy.ts)
-  privacy.name(inv.room, 'room'); if (inv.crew) privacy.name(inv.crew, 'crew');
+  if (isOwn(inv.room ?? '')) privacy.name(inv.room, 'room');
+  if (inv.crew) privacy.name(inv.crew, 'crew');
   const live = inviteLive();
   if (live && session?.net && roamCrews && inv.crew && !roamCrews.some(c => sameName(c.name, inv.crew!)) && roamCrews.length < CREW_MAX) {
     roamCrews = [...roamCrews, { name: inv.crew, rgb: freeColour(roamCrews) }];
@@ -1846,14 +1971,16 @@ async function applyInvite(given: Invite): Promise<Joined> {
   if (live && inv.room !== undefined && !sameName(inv.room, roamRoom ?? '') && session?.net?.room?.(roomText(inv.room))) {
     roamRoom = inv.room;
     friendPrompt.roomChanged();
+    ghostFollow();
+    worldLineSoon(true);
   }
   log.add(`[app] invite link: joined${d.room ? ` room "${inv.room}"` : ''}${d.crew ? ` crew "${inv.crew}"` : ''}${d.roam ? ', free roam on' : ''}` +
     ` (${live ? 'the game takes it now' : 'from the next Play'})`);
   return live ? 'live' : 'next';
 }
 /** applyInvite, and what it did said to the player (a settings.ini that did not read or write: that, nothing joined) */
-async function joinHere(inv: Invite): Promise<{ how: Joined } | { error: string }> {
-  try { const how = await applyInvite(inv); tell(joinedText(how)); return { how }; }
+async function joinHere(inv: Invite, quietLive = false): Promise<{ how: Joined } | { error: string }> {
+  try { const how = await applyInvite(inv); if (!quietLive || how !== 'live') tell(joinedText(how)); return { how }; }
   catch (e) {
     log.add(`[app] invite link: not joined, settings.ini did not read or write (${e})`);
     tell(e instanceof SavesOff ? t(NO_SAVE) : t(UNREADABLE, { error: String(e) }));
@@ -1904,19 +2031,19 @@ async function offerInvite(given: Invite) {
   }
   const owner = instance.owner;
   const now = inviteNow(owner ? settingsText : await readText(SAVE, 'settings.ini').catch(() => null)), d = inviteDiff(inv, now);
-  const v = { room: inv.room ?? '', crew: inv.crew ?? '', old: now.room };
+  const v = { world: worldNamed(inv.room ?? ''), crew: inv.crew ?? '', old: worldNamed(now.room) };
   // (as the player's own settings spell it)
   if (inviteNone(d)) {
     tell(inv.crew ? t('You are in crew "{crew}" already.', { crew: now.crews.find(c => sameName(c.name, inv.crew!))?.name ?? inv.crew })
-      : t('You are in room "{room}" already.', { room: now.room || inv.room! }));
+      : t('You are in {world} already.', { world: worldNamed(now.room || inv.room!) }));
     return;
   }
-  const title = !inv.crew ? t('Join room "{room}"?', v) : inv.room ? t('Join crew "{crew}" in room "{room}"?', v) : t('Join crew "{crew}"?', v);
+  const title = !inv.crew ? t('Join {world}?', v) : inv.room ? t('Join crew "{crew}" in {world}?', v) : t('Join crew "{crew}"?', v);
   const body = document.createElement('div');
   const p = (text: string, cls = '') => { body.append(Object.assign(document.createElement('p'), { textContent: text, className: cls })); };
   if (d.full) { p(t(CREWS_FULL)); await choiceBox(title, body, t('OK'), ''); return; }
-  if (inv.room) p(t('Free roam then shows only the players in room "{room}".', v) + (d.room && now.room ? ' ' + t('You leave room "{old}".', v) : ''));
-  else if (d.room) p(t('You leave room "{old}", so free roam shows everyone again.', v));
+  if (inv.room) p(t('Free roam then shows only the players in {world}.', v) + (d.room && now.room ? ' ' + t('You leave {old}.', v) : ''));
+  else if (d.room) p(t('You leave {old} for Main world.', v));
   if (inv.crew) p(t('Crew-mates always see each other in free roam, with names and map arrows in the crew\'s colour.'));
   if (d.roam) p(t('This turns on Free roam with others: everyone on this server sees your name, and whether you\'re driving or in the menus.'));
   p(!owner ? t('The game is open in another tab of this browser: it joins there.') : t(inviteLive() ? JOINED_NOW : JOINED_NEXT), 'hint');
@@ -1996,7 +2123,9 @@ async function menuAction(act: string) {
       break;
     case 'solid': {
       if (roamCollide === null || !session?.net?.solid) break;
-      roamCollide = roamCollide === 'on' ? 'off' : roamCollide === 'off' ? 'none' : 'on';     // off, players, everything, off
+      // (World 4: at the row, over the menu)
+      if (roamRoom !== null && noGhost(roamRoom)) { copyToast($('#menu [data-act="solid"]'), t('Ghost mode stays off in {world}.', { world: worldNamed(roamRoom) }), 2500); break; }
+      roamCollide = collideOwn = roamCollide === 'on' ? 'off' : roamCollide === 'off' ? 'none' : 'on';     // off, players, everything, off
       session.net.solid(roamCollide);
       menuValue('solid', ghostWord());
       // and in settings.ini for the next game, as Online, Ghost mode would
@@ -2006,13 +2135,14 @@ async function menuAction(act: string) {
       log.add(`[app] roam_collide = ${roamCollide} (the page menu)`);
       break;
     }
+    case 'worlds': openWorlds(); break;
     case 'crews': openCrews(); break;
     case 'friends': openFriends(); break;
     case 'back': menuPage('main'); break;
     case 'friend': m.close(); friendPrompt.menuItem()?.act(); break;
     case 'radio-folder': case 'radio': await radioClick(act); showRadio(m); break;
     case 'playlist': openPlaylist(); break;
-    case 'help': m.close(); openHelp(); break;
+    case 'help': openHelp(); break;
     case 'offline':
       m.close();
       if (!inLine || !session?.net?.offline) break;
@@ -2366,13 +2496,13 @@ export async function boot() {
   // Changelog at the top: CHANGELOG.md's releases in a popup
   changelog($('#changelog-btn'), $<HTMLDialogElement>('#changelog'), $('#changelog-body'));
   fitTop(); onLanguage(fitTop); window.addEventListener('resize', fitTop); void document.fonts.ready.then(fitTop);
-  // who plays on this server now (Playing now): only while no game runs here; with free roam on in a room, how many
-  // are in that room (on the Room row's line), and in crews (free roam on or not: the row shows them either way), how
-  // many are in each (on the Crews row's lines)
+  // who plays on this server now (Playing now): only while no game runs here; how many are in each world (in the World
+  // row's list), and in crews (free roam on or not: the row shows them either way), how many are in each (on the Crews
+  // row's lines)
   playersPanel = new PlayersPanel($('#players'));
-  players = watchPlayers((c, room, crews) => { playersPanel.show(c); settings.setRoomLine(c ? () => roomLine(c, room) : () => ''); settings.setCrewCounts(crews); },
+  players = watchPlayers((c, worlds, crews) => { playersPanel.show(c); settings.setWorldCounts(worlds); settings.setCrewCounts(crews); },
     () => !session && !starting, setReach,
-    () => { const e = resolved().env; return e.NFSU2_ROAM === '1' ? e.NFSU2_ROAM_ROOM ?? '' : ''; },
+    () => worldRooms(resolved().env.NFSU2_ROAM_ROOM ?? ''),
     () => crewList(resolved().env.NFSU2_ROAM_CREW ?? '').map(roomHash));
   window.addEventListener('online', () => players?.now());
   window.addEventListener('resize', placeNotices);
@@ -2415,7 +2545,7 @@ export async function boot() {
   $('#playlist-body').addEventListener('change', setTrackMode);
   $('#playlist-shuffle').addEventListener('change', setShuffle);
   $('#menu').addEventListener('keydown', menuPageKey);
-  // closed on its Crews or Friends: the next open starts on the list
+  // closed on its Crews, Friends or Controls: the next open starts on the list
   $('#menu').addEventListener('close', () => {
     menuPage('main');
     $('#stage').classList.remove('cursor'); $('#stage').querySelector('canvas')?.focus();
@@ -2469,6 +2599,7 @@ export async function boot() {
     renderProblems(); evaluate(); settings.render(); void saves.refresh(); vault.refresh(); keySheet.relabel(); lobbyPanel.redraw(); touch.relabel();
     friendsPanel.render(); siteView.render();
     helpSheet = null; helpSiteView = null; $('#help-body').replaceChildren();
+    if (menuOn('controls')) openHelp();
     syncPicker();
   });
   const stageMenu = $<HTMLButtonElement>('#stage-menu');

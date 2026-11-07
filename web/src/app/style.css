@@ -315,6 +315,11 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .set .linkbox { flex: none; width: 240px; }
 .set .linkbox input[type="text"] { flex: 1; min-width: 0; width: auto; height: 100%; border: 0; background: none; outline: none; box-shadow: none; }
 .set .linkbox:has(.room-link:not([hidden])) input[type="text"] { padding-right: 4px; }
+/* the World row (settings-ui.ts worldControl): the list, Own name's box under it */
+.set-world .set-control { flex-direction: column; align-items: flex-end; }
+/* (with the box the control is taller than the name and help: they stay together at the top, as the list) */
+.set-world:has(.linkbox:not([hidden])) { grid-template-rows: auto 1fr; align-items: start; }
+.set-world .linkbox[hidden] { display: none; }
 /* a choice of many: the same value box, with a chevron */
 .set select {
   appearance: none; width: 240px; height: 40px; padding: 0 36px 0 12px; border: 2px solid var(--edge); border-radius: 8px;
@@ -995,6 +1000,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .notices .msg-hint kbd { margin-right: 0.5em; text-shadow: none; }   /* (the cards' key cap, .ov-act kbd) */
 /* a crew's count as free roam starts (shell.ts crewCountLine): its dot and name in the crew's colour */
 .notices div.crew-in .ic svg { fill: var(--crew); }
+.notices div.world-in .ic svg { fill: none; stroke: var(--lime); stroke-width: 2.4; }
 .notices div.crew-in b { color: var(--crew); }
 /* free roam: quick chat over the cars (quickchat.ts): the phrase in lime after a speech balloon, over the name the
  * game draws, sized with the HUD (--u, 16 units at the nearest) and scaled with the name by the line's transform
@@ -1264,8 +1270,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .dlg:has(.row.end[hidden]) #confirm-body > :last-child { margin-bottom: 0; }
 .dlg-field { display: flex; align-items: center; gap: 12px; }
 .dlg-field input[type="text"] { flex: 1; min-width: 0; }
-.dlg.help { width: min(560px, calc(100vw - 32px)); }
-/* the changelog (changelog.ts): the help sheet's width, the releases scrolling under the title and Close */
+/* the changelog (changelog.ts): the Controls sheet's width, the releases scrolling under the title and Close */
 .dlg.changelog { width: min(560px, calc(100vw - 32px)); }
 .dlg.changelog[open] { display: flex; flex-direction: column; overflow: hidden; }
 #changelog-body { min-height: 0; overflow: hidden auto; }
@@ -1364,9 +1369,18 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .menu-back span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-back:hover, .menu-back:focus-visible, .dlg.menu[data-pad] .menu-back:focus { outline: none; box-shadow: none; background: var(--lime-fill); }
 .dlg .menu-note { margin: 0; padding: 0 16px 8px; color: var(--muted); font-size: 14px; line-height: 20px; }
+/* the menu's Controls: the start page's sheet, as wide as it needs there, under its ‹ */
+.dlg.menu:has(#menu-controls:not([hidden])) { width: min(560px, calc(100vw - 32px)); }
+.menu-sheet { padding: 8px 16px 12px; box-shadow: inset 0 1px var(--line); }
 .dlg ul.crews, .menu-block ul.fl { margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .dlg p.set-note { margin: 0; }
 .menu-block .set-note { padding: 4px 16px 0; }
+/* a world: its name, how many are in free roam there, a check on the game's own (the room for one on every row, so the
+ * counts line up); Own name… turns into a field for a world's name */
+.menu-row .menu-end { display: flex; align-items: center; gap: 8px; flex: none; }
+.menu-end svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--lime); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; visibility: hidden; }
+.menu-row.selected .menu-end svg { visibility: visible; }
+.dlg .menu-field { display: block; width: auto; margin: 4px 16px; }
 /* a crew: its colour (the palette's button), its name, how many are in free roam in it, its link and Leave; the box to
  * join one under them, and the palette (opened by a colour) under the crews */
 .menu-crews .crew-line { display: grid; gap: 0; }
@@ -1433,6 +1447,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .set-control > select, .set-control > input[type="text"], .set-control > input[type="number"], .set-control > .linkbox,
   .set-control .crew-add { flex: 1 1 160px; width: auto; min-width: 0; max-width: none; }
   .set-control .fl-add { flex: none; width: 100%; }
+  .set-world .set-control { align-items: stretch; }
+  .set-world .set-control > select, .set-world .set-control > .linkbox { flex: none; width: 100%; }
   .fl-foot > .fl-add { flex: 1 1 auto; width: auto; min-width: 0; }   /* (the rest of the line, beside the pages) */
   /* (Filter under the help, the row's width, as a value box here) */
   .set-list.fl-paged { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "help" "find" "ctl"; }

@@ -342,15 +342,7 @@
 
 <div class="page-toast" id="page-toast" role="status" aria-live="polite"></div>
 
-<dialog class="dlg help" id="help" aria-labelledby="help-title">
-  <form method="dialog" class="dlg-head">
-    <h2 id="help-title" data-i18n>Controls</h2>
-    <button class="btn" value="close" data-i18n>Close</button>
-  </form>
-  <div id="help-body"></div>
-</dialog>
-
-<!-- the page menu (F9): its list, or in its place its Crews or Friends (a game in free roam; shell.ts menuPage) -->
+<!-- the page menu (F9): its list, or in its place its World, Crews or Friends (a game in free roam) or its Controls (shell.ts menuPage) -->
 <dialog class="dlg menu" id="menu" aria-labelledby="menu-title">
   <div class="menu-page" id="menu-main">
     <div class="menu-head">
@@ -361,6 +353,7 @@
       <div class="menu-block">
         <button type="button" class="menu-row go" data-act="offline" hidden data-i18n>Stop waiting: play offline</button>
         <button type="button" class="menu-row go" data-act="friend" hidden></button>
+        <button type="button" class="menu-row" data-act="worlds" hidden><span data-i18n>World</span><span class="menu-val"></span></button>
         <button type="button" class="menu-row" data-act="solid" data-i18n-attr="title" title="Off: collide with every car. Players: drive through other players' cars. Everything: through traffic and tuners too." hidden><span data-i18n>Ghost mode</span><span class="menu-val"></span></button>
         <button type="button" class="menu-row" data-act="crews" hidden><span data-i18n>Crews</span><span class="menu-val"></span></button>
         <button type="button" class="menu-row" data-act="friends" hidden><span data-i18n>Friends</span><span class="menu-val menu-dot"></span></button>
@@ -378,6 +371,14 @@
     </div>
     <p class="menu-foot"><span id="menu-save"></span><button type="button" class="text-btn" data-act="log" data-i18n>Download log</button></p>
   </div>
+  <!-- the worlds, each with how many are in free roam there: one picked, the game is in it at once (shell.ts openWorlds) -->
+  <div class="menu-page" id="menu-worlds" hidden>
+    <div class="menu-head">
+      <button type="button" class="menu-back" data-act="back" data-i18n-attr="aria-label title" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span id="menu-worlds-title" data-i18n>World</span></button>
+      <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
+    </div>
+    <div class="menu-block menu-worlds" id="menu-worlds-box"></div>
+  </div>
   <!-- the Crews row's control, which changes the game's crews at once; ‹ back to the list -->
   <div class="menu-page" id="menu-crews" hidden>
     <div class="menu-head">
@@ -393,8 +394,16 @@
       <button type="button" class="menu-back" data-act="back" data-i18n-attr="aria-label title" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span id="menu-friends-title" data-i18n>Friends</span></button>
       <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
     </div>
-    <p class="menu-note" id="menu-friends-help" data-i18n>Join a friend's room: free roam shows its players from now on.</p>
+    <p class="menu-note" id="menu-friends-help" data-i18n>Join a friend's world: free roam shows its players from now on.</p>
     <div class="menu-block menu-friends" id="menu-friends-box"></div>
+  </div>
+  <!-- the start page's Controls sheet, copied (shell.ts openHelp) -->
+  <div class="menu-page" id="menu-controls" hidden>
+    <div class="menu-head">
+      <button type="button" class="menu-back" data-act="back" data-i18n-attr="aria-label title" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span id="menu-controls-title" data-i18n>Controls</span></button>
+      <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
+    </div>
+    <div class="menu-sheet" id="help-body"></div>
   </div>
 </dialog>
 

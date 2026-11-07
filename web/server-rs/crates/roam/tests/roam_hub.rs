@@ -514,7 +514,7 @@ fn in_free_roam_driving_or_paused_each_browser_once() {
     assert_eq!(k.hub.in_roam(), 1, "left the switch");
 }
 
-// /players' room: in free roam by room, for the rooms with a name (room 0, none, is not counted), each browser once
+// /players' room and rooms: in free roam by room (room 0, none, the main world, too), each browser once
 #[test]
 fn in_free_roam_by_room() {
     let mut k = Kit::new(RoamOptions::default());
@@ -526,7 +526,7 @@ fn in_free_roam_by_room() {
     k.from(V(5), &hello(605));
     k.hub.frame(V(1), &frame_ports(V(1), &hello_with(606, &HelloOpts { room: blue, ..Default::default() }), 47211, 47210));
     let rooms = k.hub.in_rooms();
-    assert_eq!((rooms.get(&blue), rooms.get(&red), rooms.len()), (Some(&2), Some(&1), 2), "driving or paused, a browser once: {rooms:?}");
+    assert_eq!((rooms.get(&blue), rooms.get(&red), rooms.get(&0), rooms.len()), (Some(&2), Some(&1), Some(&1), 3), "driving or paused, a browser once: {rooms:?}");
     assert_eq!(k.hub.in_roam(), 4);
 }
 

@@ -445,8 +445,8 @@ impl RoamHub {
         self.in_roam.load(Ordering::Relaxed)
     }
 
-    /// the hub's `in_rooms()` of one room: how many browsers of the room (roam_core's rc_room_hash, not 0) drive in
-    /// free roam, or are paused there (as of the hub's last tick)
+    /// the hub's `in_rooms()` of one room: how many browsers of the room (roam_core's rc_room_hash; 0 the main world)
+    /// drive in free roam, or are paused there (as of the hub's last tick)
     pub fn in_room(&self, room: u32) -> usize {
         self.in_rooms.lock().map_or(0, |m| m.get(&room).copied().unwrap_or(0))
     }

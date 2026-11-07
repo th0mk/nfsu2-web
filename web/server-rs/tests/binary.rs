@@ -567,6 +567,10 @@ async fn players_counts_free_roams_crews() {
     let head = r#"{"players":2,"online":0,"roam":2,"full":false,"queue":0,"roamBusy":false"#;
     assert_eq!(until("/players?room=5&crews=8,x,7,0,9,10,11", 2).await, format!(r#"{head},"room":1,"crews":[2,1,0,0]}}"#));
     assert_eq!(srv.get("/players?crews=7").await.1, format!(r#"{head},"crews":[1]}}"#));
+    // the worlds: 0 the main world (Bob), Ann's room 5, a room of nobody; numbers only, at most 8, a room asked twice counted twice
+    assert_eq!(srv.get("/players?rooms=0,5,9").await.1, format!(r#"{head},"rooms":[1,1,0]}}"#));
+    assert_eq!(srv.get("/players?rooms=5,x,,5,1,2,3,4,6,7,8").await.1, format!(r#"{head},"rooms":[1,1,0,0,0,0,0,0]}}"#));
+    assert_eq!(srv.get("/players?rooms=x").await.1, format!("{head}}}"), "none asked: no rooms");
     assert_eq!(srv.get("/players?crews=8%2C7&room=5").await.1, format!(r#"{head},"room":1,"crews":[2,1]}}"#), "as URLSearchParams asks");
     // (a + in a query is a space, as URLSearchParams reads it)
     assert_eq!(srv.get("/players?crews=4294967296,-8,8.0,+8,08").await.1, format!(r#"{head},"crews":[2]}}"#), "decimal u32s only: 08 is 8");

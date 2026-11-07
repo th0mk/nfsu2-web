@@ -1,0 +1,55 @@
+# The worlds (F9, World): alone in the main world with 6 players in World 2 (roam-crowd --room World2), the menu's World
+# lists the main world (the player, checked), World 1 to 4 with their counts and Own name…; World 2 picked: the game is
+# in it at once (the 6 cars come), its line in the log ("World 2 6 ... in free roam"), the menu's row says World 2;
+# Main world picked: back, the cars gone; World 4: Ghost mode off (the menu's row says so), the player's own (Players)
+# back in the main world; Own name… typed: a world of nobody else.  The SHOTs show each step.
+#   roam-pair --page app --solo --crowd 6 --crowd-args "--room World2 --links 64" --a "Ann:roam_worlds.txt:NFSU2_ROAM_COLLIDE=off"
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++600  log SHOT main                   # the main world: nobody else
++60   log KEY F9
++60   log SHOT menu                   # the menu's World row: Main world
++60   log PRESS [data-act="worlds"]
++180  log SHOT worlds                 # the worlds and their counts, Main world checked
++60   log PRESS [data-room="World 2"]
++330  log SHOT line2                  # in World 2: its line in the log
++570  log SHOT world2                 # its cars
++0    roam mp status
++60   log KEY F9
++60   log PRESS [data-act="worlds"]
++180  log SHOT worlds2                # World 2 checked
++60   log PRESS [data-room=""]
++900  log SHOT back                   # the main world again: the cars gone, its line
++0    roam mp status                  # Ghost mode: the player's own (Players)
++60   log KEY F9
++60   log PRESS [data-act="worlds"]
++120  log PRESS [data-room="World 4"]
++600  roam mp status                  # World 4: Ghost mode off
++0    log KEY F9
++60   log PRESS [data-act="solid"]
++30   log SHOT ghost4                 # the menu's Ghost mode: stays off, says so
++60   log PRESS [data-act="worlds"]
++120  log PRESS [data-room=""]
++600  roam mp status                  # the main world: Players again
++60   log KEY F9
++60   log PRESS [data-act="worlds"]
++120  log PRESS [data-own]
++60   log KEY q u i e t Enter
++900  log SHOT own                    # a world of nobody else
++60   quit

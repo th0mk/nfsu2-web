@@ -557,8 +557,9 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # see.  For these options a ';' or '#' after a blank starts a comment.
 # [NFSU2_ROAM]
 #roam = on
-# Empty: you drive with everyone.  With a name, free roam shows only the
-# players who set the same name (capitals and spaces do not count).  Not
+# Your world: free roam shows only the players in the same one.  Empty: the
+# main world, with everyone.  World 1 to World 4: quieter ones anyone picks.
+# Any other name: a world of your own (capitals and spaces do not count).  Not
 # private: everyone on the server still sees your name.  [NFSU2_ROAM_ROOM]
 #roam_room =
 # Players you block, by the name over their car, separated by commas (up to
@@ -892,7 +893,7 @@ export function checkSetting(key: string, val: string): Checked | Refused | null
     }
     case 'room':
       if (!valueOk('text', val)) return refuse(N('"{value}" is not {kind}'), val, { kind: KIND_TEXT.text! });
-      if (blockedName(val)) return refuse(N('"{value}" is not a room name (it reads as a slur)'), val);
+      if (blockedName(val)) return refuse(N('"{value}" is not a world name (it reads as a slur)'), val);
       break;
     case 'peers': {
       const bad = peersBad(val);

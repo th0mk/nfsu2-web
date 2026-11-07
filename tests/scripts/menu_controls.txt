@@ -1,0 +1,17 @@
+# The page menu's Controls in the menu's place (F9, Controls), at the title screen: the list turns into the Controls
+# page (‹ Controls, Close, the start page's sheet), Esc goes back to the list with the menu still open, the page's ‹
+# does the same, Esc on the list closes the menu.  The SHOTs show each step.
+#   roam-pair --page app --solo --a "Ann:menu_controls.txt"
+0     tapuntil RETURN MC_Background.fng 120 4000
++240  log SHOT start
++60   log KEY F9
++60   log PRESS [data-act="help"]
++120  log SHOT controls               # the Controls page, the menu's list gone
++60   log KEY Escape
++60   log SHOT back                   # the list again, the menu still open, on Controls
++60   log PRESS [data-act="help"]
++120  log PRESS .menu-page:not([hidden]) [data-act="back"]
++60   log SHOT back2                  # the page's ‹: the list again
++60   log KEY Escape
++60   log SHOT closed                 # the menu closed
++60   quit

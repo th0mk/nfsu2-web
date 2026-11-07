@@ -32,6 +32,7 @@ import { keyName, siteKey } from './sitekeys';
 import { pageDialog } from './padnav';
 import { onlineName } from './claim';
 import { roomHash } from './players';
+import { worldName, worldNamed } from './worlds';
 import { iconButton, TRASH } from './settings-ui';
 import { named } from './cards';
 import { copyText, copyToast, READ_MS } from './copy';
@@ -115,20 +116,20 @@ function inRoom(f: Friend, mine: string): boolean {
   return f.where === 'roam' && f.room !== undefined && roomHash(f.room) === roomHash(mine);
 }
 
-/** where a friend plays, after its name: free roam (and its room; `mine`: the game's own room, in the game), the
- *  Online lobby, offline */
+/** where a friend plays, after its name: free roam (and its world, but the main world; `mine`: the game's own room, in
+ *  the game: your world), the Online lobby, offline */
 export function whereText(f: Friend, mine?: string): string {
   if (f.where === 'roam') {
-    if (mine !== undefined && inRoom(f, mine)) return t('free roam · your room');
-    return f.room ? t('free roam · {room}', { room: f.room }) : t('free roam');
+    if (mine !== undefined && inRoom(f, mine)) return t('free roam · your world');
+    return f.room ? t('free roam · {world}', { world: worldName(f.room) }) : t('free roam');
   }
   return f.where === 'online' ? t('Online lobby') : t('offline');
 }
 
-/** where a friend in free roam plays, in the page menu's Friends (all of them in free roam there): your room (`mine`, the
- *  game's), its room's name, or free roam (the room of everyone) */
+/** where a friend in free roam plays, in the page menu's Friends (all of them in free roam there): your world (`mine`,
+ *  the game's room), its world (worlds.ts), or free roam (its page did not say) */
 function roomText(f: Friend, mine: string): string {
-  return inRoom(f, mine) ? t('your room') : f.room || t('free roam');
+  return inRoom(f, mine) ? t('your world') : f.room !== undefined ? worldName(f.room) : t('free roam');
 }
 
 /** the signs of the friends' icons (24-unit boxes, as settings-ui.ts's) */
@@ -659,7 +660,7 @@ export class FriendPrompt {
     this.deps.log(`[friends] the invite to ${name}: ${done}`);
     switch (done) {
       case 'sent': this.invited.set(name.toLowerCase(), performance.now()); this.deps.toast(t('Invite sent to {name}', { name }), { name }); break;
-      case 'away': this.deps.toast(t('{name} isn\'t in free roam in your room now', { name }), { name }); break;
+      case 'away': this.deps.toast(t('{name} isn\'t in free roam in your world now', { name }), { name }); break;
       case 'nolobby': this.deps.toast(t('Open a race lobby first, then invite')); break;
       case 'full': this.deps.toast(t('Your race lobby is full')); break;
       case 'claim': this.deps.toast(t('Claim your name on the start page to invite friends')); break;
@@ -802,8 +803,7 @@ export class FriendPrompt {
       if (f.where !== 'roam' || was.get(f.name.toLowerCase()) === 'roam') continue;
       const name = f.name, menu = this.deps.menu(), here = f.room === undefined || inRoom(f, room);
       this.deps.notice(name, here ? t('Your friend {name} is in free roam', { name })
-        : f.room ? t('Your friend {name} is in free roam, room {room}: Join in {menu}', { name, room: f.room, menu })
-        : t('Your friend {name} is in free roam, in no room: Join in {menu}', { name, menu }), here);
+        : t('Your friend {name} is in free roam in {world}: Join in {menu}', { name, world: worldNamed(f.room ?? ''), menu }), here);
     }
     this.deps.placed();
   }
