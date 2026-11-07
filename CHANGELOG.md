@@ -11,7 +11,7 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-08 (73292f0)
+## 2026-11-08 (038d2f7)
 
 - **Mods:** Crash Damage, Chrystian Farias's Crashing Foreign Cars: the racers' cars dent where they are hit, scratch, break their lights and lose loose parts. Only the looks change; in free roam, players who have it on see each other's damage (off by default).
 - **Mods:** Transmission Whine, ropi's mod: NFS Carbon's gearbox whine over your car's engine, for each player's car in split screen (off by default).
