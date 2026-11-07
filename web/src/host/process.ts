@@ -93,7 +93,7 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   let resolveExit!: (c: number) => void;
   const exited = new Promise<number>(r => (resolveExit = r));
   const workers: Worker[] = [];
-  const onMsg = (e: MessageEvent<ToPage | { t: 'register'; kind: number; ptr: number; size: number }>) => {
+  const onMsg = (e: MessageEvent<ToPage | { t: 'register'; kind: number; ptr: number; size: number; bytes?: number }>) => {
     const m = e.data;
     if (m.t === 'log') o.onLog?.(m.s, m.fd, m.tid);
     else if (m.t === 'trap') o.onLog?.(`TRAP in thread ${m.tid}: ${m.msg}\n${m.stack ?? ''}`, 2, m.tid);
@@ -103,10 +103,21 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
       o.onExit?.(m.code); resolveExit(m.code);
     }
     else if (m.t === 'register') {
-      regs.set(m.kind, { ptr: m.ptr, size: m.size });
-      for (const w of regWaiters.get(m.kind) ?? []) w({ ptr: m.ptr, size: m.size });
-      regWaiters.delete(m.kind);
-      o.onRegister?.(m.kind, m.ptr, m.size);
+      const done = () => {
+        regs.set(m.kind, { ptr: m.ptr, size: m.size });
+        for (const w of regWaiters.get(m.kind) ?? []) w({ ptr: m.ptr, size: m.size });
+        regWaiters.delete(m.kind);
+        o.onRegister?.(m.kind, m.ptr, m.size);
+      };
+      // a structure (and what its subsystem made before it) in memory grown since the page's buffer: once the I/O worker
+      // sent the new buffer (memory.ts), not before, or the page reads past its buffer
+      const need = m.bytes ?? 0;
+      const buf = memory;
+      if (buf instanceof MemoryBuffer && need > buf.buffer.byteLength) void buf.until(need).then(ok => {
+        if (!ok) o.onNote?.(`[memory] a grown memory's buffer did not come in time (${Math.round(need / 1048576)} MB)`);
+        done();
+      });
+      else done();
     }
   };
 

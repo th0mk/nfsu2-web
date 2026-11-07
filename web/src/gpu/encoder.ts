@@ -227,6 +227,8 @@ export class Encoder {
     const c = this.ctlW, u32 = this.u32;
     const cap = u32[c + P.C.rqCap], base = u32[c + P.C.rqPtr];
     let tail = u32[c + P.C.rqTail];
+    // the queue past this page's buffer of a memory that grew (host/memory.ts): left as it is until the new buffer came
+    if (!(base + cap <= this.u8.length)) return tail;
     let n = 0;
     while (((limit - tail) | 0) > 0) {
       const p = base + (tail & (cap - 1)), w = p >>> 2;

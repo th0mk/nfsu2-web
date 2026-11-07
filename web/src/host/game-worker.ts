@@ -278,7 +278,8 @@ function stackFrames(): number {
 function hostImports(): Record<string, (...a: any[]) => any> {
   return {
     // nfsu2_host_register(kind, ptr, size): tells the page where a shared structure lives
-    register: (kind: number, ptr: number, size: number) => { (self as unknown as Worker).postMessage({ t: 'register', kind, ptr, size }); return 0; },
+    // (with the memory's size now: a page that holds a buffer of a smaller one waits for the grown one, host/process.ts)
+    register: (kind: number, ptr: number, size: number) => { (self as unknown as Worker).postMessage({ t: 'register', kind, ptr, size, bytes: memory.buffer.byteLength }); return 0; },
     // milliseconds since the page's time origin (same clock in every worker)
     now_ms: () => T0MS + performance.now(),
     // ms this thread has spent blocked in host waits (I/O, sleeps) so far
