@@ -24,7 +24,9 @@ let blockedMs = 0;
 const post = (m: ToPage) => (self as unknown as Worker).postMessage(m);
 
 // (WebKit, host/memory.ts) the Memory comes on a port the I/O worker posts it on, not from the page
+// (or through the page, { t: 'memory' }, where the I/O worker could not post it on the port)
 const memoryFrom = (p: MessagePort) => new Promise<WebAssembly.Memory>((res, rej) => {
+  self.addEventListener('message', (e: MessageEvent) => { if (e.data?.t === 'memory' && e.data.memory instanceof WebAssembly.Memory) res(e.data.memory); });
   p.onmessage = (e) => { p.close(); if (e.data instanceof WebAssembly.Memory) res(e.data); else rej(new Error('no memory on the port')); };
   p.onmessageerror = () => { p.close(); rej(new Error('the game\'s memory could not reach this thread')); };
 });
@@ -293,7 +295,8 @@ function hostImports(): Record<string, (...a: any[]) => any> {
   };
 }
 
-onmessage = async (e: MessageEvent<Init>) => {
+onmessage = async (e: MessageEvent<Init | { t: 'memory' }>) => {
+  if ('t' in e.data) return;                 // the Memory through the page (memoryFrom)
   const m = e.data;
   ctl = new Int32Array(m.ctl); slot = m.slot; POOL = m.pool; cfg = m.cfg;
   try { memory = m.memory ?? await memoryFrom(m.memPort!); }

@@ -153,6 +153,8 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     else if (e.data.t === 'lost') o.onLost?.(e.data.path);
     else if (e.data.t === 'save-trouble') o.onSaveTrouble?.(e.data.error);
     else if (e.data.t === 'log') o.onNote?.(e.data.s);
+    // the Memory for a game thread where the I/O worker could not post it on a port (withMemoryPort)
+    else if (e.data.t === 'give-here') bySlot.get(e.data.slot)?.postMessage({ t: 'memory', memory: e.data.memory });
     // the memory grew: its new buffer (where the page holds the buffer only)
     else if (e.data.t === 'mem') {
       if (memory instanceof MemoryBuffer && memory.grew(e.data.buf)) {
@@ -166,11 +168,12 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   };
 
   // the port first to the worker, then its other end to the I/O worker, which posts the Memory on it
-  const withMemoryPort = (send: (port: MessagePort) => void) => {
+  const withMemoryPort = (slot: number, send: (port: MessagePort) => void) => {
     const ch = new MessageChannel();
     send(ch.port2);
-    io.postMessage({ t: 'give', port: ch.port1 }, [ch.port1]);
+    io.postMessage({ t: 'give', port: ch.port1, slot }, [ch.port1]);
   };
+  const bySlot = new Map<number, Worker>();
   for (let s = 0; s < pool; s++) ctl[CTL_POOL + 4 * s] = POOL_NONE;   // each worker makes its slot idle when ready
   let started = 0, starting = 0, mostBusy = 0;
   const startWorker = () => {
@@ -180,7 +183,8 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
       w.onmessage = (e) => { if (e.data.t === 'ready') { starting--; w.onmessage = onMsg; res(); } else onMsg(e); };
     });
     w.onerror = (e) => o.onNote?.(`[pool] game worker ${s}: ${e.message}`);
-    if (offPage) withMemoryPort(port => w.postMessage({ mod: o.module, memPort: port, ctl: ctlBuf, rpc, slot: s, pool, cfg }, [port]));
+    bySlot.set(s, w);
+    if (offPage) withMemoryPort(s, port => w.postMessage({ mod: o.module, memPort: port, ctl: ctlBuf, rpc, slot: s, pool, cfg }, [port]));
     else w.postMessage({ mod: o.module, memory: kept, ctl: ctlBuf, rpc, slot: s, pool, cfg });
     workers.push(w);
     return ready;

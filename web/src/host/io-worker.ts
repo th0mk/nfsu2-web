@@ -1013,11 +1013,20 @@ async function serve() {
   }
 }
 
-onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; port: MessagePort }>) => {
+let gaveHere = false;
+onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; port: MessagePort; slot: number }>) => {
   if ('t' in e.data) {
     if (e.data.t === 'save-ready') saveAnswered?.();
     // the Memory for a game thread, on the port the page gave it
-    else if (e.data.t === 'give') { e.data.port.postMessage(memory); e.data.port.close(); }
+    else if (e.data.t === 'give') {
+      // (a browser that will not post a shared memory on a port: through the page, which then holds it a moment)
+      try { e.data.port.postMessage(memory); }
+      catch (x) {
+        if (!gaveHere) { gaveHere = true; note(`[memory] the game threads get the memory through the page (${x instanceof Error ? x.message : x})`); }
+        (self as unknown as Worker).postMessage({ t: 'give-here', slot: e.data.slot, memory });
+      }
+      e.data.port.close();
+    }
     return;
   }
   cfg = e.data.cfg;
