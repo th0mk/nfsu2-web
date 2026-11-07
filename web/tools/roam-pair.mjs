@@ -7,7 +7,9 @@
 //        [--a Alice:roam_mp_drive.txt] [--b Bob:roam_mp_watch.txt] [--c Carol:<script>] [--d Dave:<script>] [--solo]
 //        [--env K=V ...] [--headed]
 //        (an instance's own settings after its script: --a Alice:roam_mp_ram_a.txt:NFSU2_ROAM_COLLIDE=0,K=V; a comma
-//        not followed by a K= stays in the value: NFSU2_ROAM_CREW=Blue Room, Night Owls)
+//        not followed by a K= stays in the value: NFSU2_ROAM_CREW=Blue Room, Night Owls; on the test pages
+//        PAGE_WASM=<path> runs that instance on another module the server serves, e.g. an older one copied under
+//        tests/ (a game of before beside this one), and PAGE_PAGES=<n> sets its memory's first size)
 //        [--base http://localhost:8616]   (use a server that is already running instead)
 //        [--https]   the pages load from https://localhost:<port> (the switch over wss://): our own server
 //                    gets a test certificate (web/test/cf-sim.mjs makeTestCerts, --tls-cert), whose
@@ -160,6 +162,8 @@ for (const kv of opts('env')) COMMON[kv.slice(0, kv.indexOf('='))] = kv.slice(kv
 function url(i, name, script, own) {
   const env = { ...COMMON, NFSU2_ROAM_NAME: name, ROAM_PROFILE: name };
   for (const kv of own ? own.split(/,(?=[A-Za-z0-9_]+=)/) : []) env[kv.slice(0, kv.indexOf('='))] = kv.slice(kv.indexOf('=') + 1);
+  const wasm = env.PAGE_WASM, pages = env.PAGE_PAGES;
+  delete env.PAGE_WASM; delete env.PAGE_PAGES;
   if (MODE === 'vlan') env.NFSU2_ROAM_WEBTEST = 'vlan';
   else {
     env.NFSU2_ROAM_PORT = String(47300 + i);
@@ -169,6 +173,8 @@ function url(i, name, script, own) {
     ? new URLSearchParams({ reg: '/tests/web/seed/registry_perf4_native.txt', script: `/tests/scripts/${script}`, save: `roam-${name}` })
     : new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: '/data/SPEED2.EXE',
       reg: '/tests/web/seed/registry_perf4_native.txt', script: `/tests/scripts/${script}`, save: `roam-${name}`, net: name });
+  if (!APP && wasm) q.set('wasm', wasm);
+  if (!APP && pages) q.set('pages', pages);
   const play = PLAY && (!PLAY_ONLY || PLAY_ONLY === name);
   if (play) { q.set('w', String(SIZE[0])); q.set('h', String(SIZE[1])); q.set('artifacts', `/artifacts/${name}-`); q.set('dumpscale', '1'); }
   for (const [k, v] of Object.entries(env)) if (!(APP && (k === 'NFSU2_SAVEDIR'))) q.append('env', `${k}=${v}`);

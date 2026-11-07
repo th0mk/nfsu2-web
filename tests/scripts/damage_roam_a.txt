@@ -1,4 +1,4 @@
-# Crash damage in free roam (runtime/damage.c, RC_EXT_DAMAGE), instance A (crashes): new career -> prologue free
+# Crash damage in free roam (runtime/damage.c, RC_MSG_DENTS), instance A (crashes): new career -> prologue free
 # roam; A jumps to the car lot's door and drives full throttle into the wall at the street's end (~47 m), backs off
 # and hits it again, then stands while B (damage_roam_b.txt, play page) looks at A's car.
 #   node web/tools/roam-pair.mjs --page play --play-only Bo --a Al:damage_roam_a.txt --b Bo:damage_roam_b.txt \

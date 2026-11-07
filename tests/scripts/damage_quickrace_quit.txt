@@ -1,0 +1,66 @@
+# Crash damage (runtime/damage.c) and the race's world going: Quick Race, Circuit, Resort Loop, the swerves of
+# damage_quickrace.txt (dents, a lamp broken), then Quit to Main Menu from the pause menu (the world is unloaded) and the
+# front end drawn for a while.  Nothing of the race's cars may be written after the world went: "[damage] the world
+# changed: N cars' damage let go"; the run must end with quit.
+#   node web/tools/roam-pair.mjs --solo --page play --a Al:damage_quickrace_quit.txt --env NFSU2_DAMAGE=1 \
+#        --env NFSU2_DAMAGE_LOG=1 --env NFSU2_HFR_LOCKSTEP=1
+0       waitfng UG_LS_Splash.fng 12000                  # title
++1000ms tapuntil RETURN MC_Background.fng 120 3000      # title -> profile prompt
++600ms  tapuntil RETURN GarageMain.fng 120 3000         # "No" -> main menu
++1500ms tapuntil RETURN UI_QRModeSelect.fng 240 3000    # Quick Race
++800ms  tapuntil RETURN UI_QRTrackSelect.fng 240 3000   # Circuit
++800ms  tapuntil RETURN UI_QRModeOptions.fng 240 3000   # Resort Loop
++800ms  tapuntil RETURN UI_QRCarSelect.fng 240 3000     # options
++800ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000 # car -> transmission
++800ms  tapuntil RETURN PC_Loading.fng 240 3000         # transmission -> loading
++0    waitmem 0x8654a4 6 6000
++0    wzero
++0    log race_loaded
++0    photo hello
+6500wms dump grid
+7000wms autopilot on
+7000wms trace 60 spd=f:[[0xd00000]+4]+0x42c
+30000wms dump drive_30s
+30000wms autopilot off
+30000wms down UP
+30000wms down RIGHT
+31300wms up RIGHT
+31300wms dump swerve1
+33000wms dump swerve1_after
+33000wms autopilot on
+42000wms dump drive_42s
+42000wms autopilot off
+42000wms down UP
+42000wms down LEFT
+43300wms up LEFT
+43300wms dump swerve2
+45000wms dump swerve2_after
+45000wms autopilot on
+52000wms dump drive_52s
+52000wms autopilot off
+52000wms down UP
+52000wms down RIGHT
+53300wms up RIGHT
+53300wms dump swerve3
+55000wms up UP
+55000wms down DOWN
+56500wms up DOWN
+57000wms untrace
+57000wms dump after
+57000wms status after
++60   tap ESCAPE
++0    waitfe UI_pause.fng 600
++120  tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++60   tap RETURN                      # Quit to Main Menu
++0    waitfe UI_InGameDialog.fng 600
++60   tap LEFT
++30   tap RETURN                      # Yes
++600  status front_end
++0    dump front_end
++1200 status front_end_later
++0    dump front_end_later
++30   quit

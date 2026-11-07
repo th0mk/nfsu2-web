@@ -1,6 +1,6 @@
 # Crash damage in free roam, instance B (watches, play page): waits for A's car (damage_roam_a.txt), follows it while
 # A crashes, then goes into photo mode on A's car and dumps it from all round, near and from above: A's dents come
-# to B through A's car record ("free roam: friend's car ... dents ... made" in B's log).  How to run:
+# to B in A's DENTS messages ("free roam: friend's car ... dents ... made" in B's log).  How to run:
 # damage_roam_a.txt; without NFSU2_DAMAGE for the A/B (the same crash, the car undamaged).
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT

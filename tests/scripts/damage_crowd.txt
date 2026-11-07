@@ -1,0 +1,33 @@
+# Crash damage's cost among many players (runtime/damage.c): one player at the new career's start among a crowd
+# (web/tools/roam-crowd.mjs), waits until CROWD_CARS friends' cars are shown, then a [status] line every 600 frames
+# (gp= the game thread's busy time per frame p50/p95/p99/max; the guest heap) for 6 windows.  A/B: the module without
+# the damage, NFSU2_DAMAGE off and on, the crowd's cars with dents or without (roam-crowd.mjs --dents 1, 2 or 3).
+#   node web/tools/roam-crowd.mjs --base <server> --n 40 --links 64 --cars all --seconds 1200 [--dents 1]
+#   node web/tools/roam-pair.mjs --solo --page play --base <server> --a Viewer:damage_crowd.txt
+#        --env NFSU2_ROAM_MAX_CARS=32 --env CROWD_CARS=32 [--env NFSU2_DAMAGE=1]
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers ${CROWD_CARS} 6000
++0    roam mp waitcars ${CROWD_CARS} 6000
++600  status settle
++0    loop 6
++600  status w
++0    endloop
++0    roam mp status
++10   quit
