@@ -427,6 +427,16 @@ class Endpoint {
 export type NetProcess = Pick<GameProcess, 'memory' | 'exited' | 'registered'>;
 /** how often, while the link is up, the thread it runs on is asked how late its tasks run (NetStats.loopLagMeanMs) */
 const LOOP_LAG_MS = 250;
+/** the switch's connection failed this many times in a row before it opened: the page asks the server why (`check`) */
+const CHECK_AFTER = 3;
+/** a link that sent this many pings and heard no answer to any before it went had gone quiet (the network stopped
+ *  carrying it: the switch cuts a link it hears nothing from for a keepalive, 25 to 50 s); this many such in a row and
+ *  the player is told */
+const QUIET_PINGS = 2, QUIET_LINKS = 3;
+/** what the player is told of the way to the switch (`check`; the quiet links: connect's onclose) */
+const BUSY_TEXT = N('Too many players are connected from your network: playing with others waits for a free place, or use another network.');
+const BLOCKED_TEXT = N('Your antivirus or network is probably blocking the connection to other players. Allow this site in it, or try another network or a VPN.');
+const QUIET_TEXT = N('Your connection to other players keeps dropping. Your network may be limiting it: try another network or a VPN.');
 
 export class Link implements NetLink {
   state: NetState = 'waiting';
@@ -455,6 +465,8 @@ export class Link implements NetLink {
   private lanSent = false;
   /** the UDP ports the switch last heard (lanPorts), 0 none said */
   private udpSent = 0;
+  /** whether LAN play was open at the last checkWant, whether the switch heard it or not */
+  private lanWas = false;
   /** the last body of each source's free-roam datagrams of each type in this connection's compact bundles (the
    *  switch's deltas are made against them: proto.ts unpackCompact) */
   private refs = new Map<number, Uint8Array>();
@@ -485,6 +497,21 @@ export class Link implements NetLink {
   /** the race ban this player is under now (onRaces), and the name taken away the switch named before its close */
   private races: NetRaces | null = null;
   private renaming: NetRename | null = null;
+  /** connections in a row that failed before they opened, and whether this run of them asked the server why yet
+   *  (`check`: a browser says nothing of why, a 429 and a network that blocks the WebSocket are the same 1006) */
+  private unopened = 0;
+  private checked = false;
+  /** the server's check said it would take this page, as connections still failed: the next that fails too says
+   *  something on the way stops them (not the moment a restarting server came back, as for a deploy) */
+  private suspect = false;
+  /** the open connection's pings sent, and whether one was answered (`quiet`) */
+  private pinged = 0;
+  private ponged = false;
+  /** links in a row that went quiet: welcomed, QUIET_PINGS pings and no answer to any, then gone */
+  private quiet = 0;
+  /** what is wrong with the way to the switch, as the player was told it (`trouble`): again when LAN play opens */
+  private problem: string | null = null;
+  private told = new Set<string>();
   /** off the switch for a name taken away (and nothing since that keeps it off): rename brings it back */
   private offForName = false;
   /** the roam mailbox's solid word (setSolid): 0 not switched, 1 off, 2 on, 3 none */
@@ -612,6 +639,9 @@ export class Link implements NetLink {
       if (lan && !this.lanSent && this.races) this.o.onRaces?.(this.races);
       this.lanSent = lan; this.udpSent = udp;
     }
+    // the LAN or Online screens opened while the switch is still not there for what `trouble` found: told again there
+    if (lan && !this.lanWas && this.problem && this.state !== 'online') this.o.onNotice?.(this.problem);
+    this.lanWas = lan;
   }
   /** nothing wanted the switch for idleMs: its place goes back (the switch frees the address at once) */
   private goIdle() {
@@ -639,6 +669,7 @@ export class Link implements NetLink {
     if (ws) { ws.onopen = null; ws.onmessage = null; ws.onerror = null; ws.onclose = null; ws.close(1000, 'idle'); }
     this.pings.clear();
     this.state = to; this.token = ''; this.full = false; this.backoff = 250; this.failed = 0;
+    this.unopened = 0; this.checked = false; this.suspect = false; this.quiet = 0;
     // (a page in line leaves it: its close is 1000 "idle")
     if (this.ticket || this.queuedAt) { this.ticket = ''; this.queuedAt = 0; this.o.onQueue?.(null); }
     this.setPage(P.NET_PAGE_IDLE);
@@ -760,7 +791,9 @@ export class Link implements NetLink {
     const ws = new WebSocket(u.href);
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
+    let opened = false;
     ws.onopen = () => {
+      opened = true; this.pinged = 0; this.ponged = false;
       // lan: LAN play is open, so it takes LAN broadcasts and the peer list (nfsu2-lan); bundle, compact: this page takes compact bundles; delta: and in those
       // a free-roam datagram as what changed since its source's last one (proto.ts unpackCompact; `refs`, kept for this
       // connection); fpred: and a friend's car state by its fields, rounded (proto.ts fpredTake; `fp`); ldelta: and
@@ -818,8 +851,25 @@ export class Link implements NetLink {
       if (was === 'online' || was === 'queued' || t - this.lastDownLog > 30000) {
         this.log(was === 'online' ? `lost the switch (${e.code}${e.reason ? ' ' + e.reason : ''}); reconnecting`
           : was === 'queued' ? `lost the switch while in line (${e.code}); reconnecting to the same place in line (kept a minute)`
-          : `still no switch (${this.failed} attempts); reconnecting every ${this.backoff / 1000} s`);
+          : `still no switch (${this.failed} attempts, the last ${opened ? `closed with ${e.code} once open` : 'never open'}); reconnecting every ${this.backoff / 1000} s`);
         this.lastDownLog = t;
+      }
+      // why, as far as the page can tell: connections that never open (a browser says no more of them: the server
+      // is asked, `check`), and links that go quiet (up, pinging, no answer to any ping, gone)
+      if (!opened) {
+        if (this.suspect) {
+          this.suspect = false;
+          this.log('the next connection to the switch never opened either, though the server would take it: something on the way ' +
+            'stops them (the network, an antivirus or a browser add-on)');
+          this.trouble('blocked', BLOCKED_TEXT);
+        }
+        if (++this.unopened >= CHECK_AFTER && !this.checked) { this.checked = true; void this.check(); }
+      } else { this.unopened = 0; this.suspect = false; }
+      if (was === 'online' && this.ponged) this.quiet = 0;
+      else if (was === 'online' && this.pinged >= QUIET_PINGS && ++this.quiet === QUIET_LINKS) {
+        this.log(`the last ${QUIET_LINKS} links to the switch went quiet: each was up and sent its pings, and no answer to any came ` +
+          'before it went (the network stopped carrying them)');
+        this.trouble('quiet', QUIET_TEXT);
       }
       this.failed++;
       this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this.st.reconnects++; this.connect(); }, this.backoff);
@@ -834,6 +884,7 @@ export class Link implements NetLink {
       this.vipNum = vip; this.vip = P.ipStr(vip); this.netmask = mask; this.generation++;
       this.token = typeof m.token === 'string' ? m.token : '';
       this.state = 'online'; this.backoff = 250; this.failed = 0; this.st.connections++;
+      this.unopened = 0; this.checked = false; this.suspect = false; this.problem = null;
       for (const ep of this.eps()) { this.publishPeers(ep); this.publishOnline(ep); }
       this.log(`on the virtual LAN as ${this.vip}${this.st.connections > 1 ? (again ? ' (the same address again)' : ' (a new address)') : ''}`);
       if (this.queuedAt) {
@@ -889,6 +940,7 @@ export class Link implements NetLink {
     } else if (m.t === 'friend') {
       this.o.onFriend?.(m);
     } else if (m.t === 'pong' && typeof m.id === 'number') {
+      this.ponged = true;
       const t0 = this.pings.get(m.id);
       if (t0 === undefined) return;
       this.pings.delete(m.id);
@@ -921,6 +973,50 @@ export class Link implements NetLink {
     this.pings.set(id, now());
     if (this.pings.size > 16) this.pings.delete(this.pings.keys().next().value!);
     this.ws.send(JSON.stringify({ t: 'ping', id }));
+    this.pinged++;
+  }
+
+  /** CHECK_AFTER connections in a row failed before they opened, and the browser says nothing more of why: the server
+   *  says whether it would take one now (a plain GET /lan?check: server-rs src/app/lan.rs send_lan_check), so the log
+   *  and the player know whether the server turns this page away (too many connections from this network's address
+   *  already: a phone network's, a school's, a VPN's; it keeps trying) or something on the way stops it (the network,
+   *  an antivirus, a browser add-on).  The check goes the way the page's other requests go (over HTTP/3 where the
+   *  browser has it), the WebSocket over TCP on its own: the log says which this one took. */
+  private async check() {
+    const u = new URL(this.o.url ?? '/lan', location.href);
+    u.protocol = u.protocol === 'wss:' ? 'https:' : u.protocol === 'ws:' ? 'http:' : u.protocol;
+    u.search = '?check';
+    const n = `${this.unopened} connections to the switch in a row never opened`;
+    let r: Response;
+    try {
+      r = await fetch(u.href, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+    } catch {
+      this.log(`${n}, and a plain request to the server got no answer either`);
+      return;
+    }
+    let v = '';
+    try { v = String(((await r.json()) as { lan?: unknown }).lan ?? ''); } catch { /* not the server's answer */ }
+    if (this.closed || this.state === 'online') return;
+    const via = protocolOf(u.href), cf = r.headers.get('cf-mitigated');
+    if (v === 'busy') {
+      this.log(`${n}: the server turns them away, too many from this network's address already (a phone network's, a school's, a VPN's); trying again until one goes`);
+      this.trouble('busy', BUSY_TEXT);
+    } else if (v === 'ok') {
+      this.log(`${n}, but the server would take one now${via ? ` (the check went over ${via})` : ''}`);
+      this.suspect = true;
+    } else if (v === 'fast') {
+      this.log(`${n}: the server turns them away for a while, they came too fast`);
+    } else {
+      this.log(`${n}; the server's check: ${v ? `"${v}"` : `${r.status}${cf ? ` (Cloudflare: ${cf})` : ''}`}`);
+    }
+  }
+  /** what is wrong with the way to the switch, for the player: each once a game, and again when the LAN or Online
+   *  screens open while the switch is still not there (checkWant) */
+  private trouble(kind: 'busy' | 'blocked' | 'quiet', text: string) {
+    this.problem = text;
+    if (this.told.has(kind)) return;
+    this.told.add(kind);
+    this.o.onNotice?.(text);
   }
 
   // ---- C -> switch ----
@@ -1195,6 +1291,13 @@ export class Link implements NetLink {
 }
 
 const now = () => performance.timeOrigin + performance.now();   // the runtime's monotonic clock
+/** the protocol a request of this thread's went over ("h3", "h2", "http/1.1"), as its timing entry names it; "" unknown */
+function protocolOf(url: string): string {
+  try {
+    const e = performance.getEntriesByName(url).at(-1) as PerformanceResourceTiming | undefined;
+    return e?.nextHopProtocol ?? '';
+  } catch { return ''; }
+}
 // Atomics.waitAsync (ES2024; the project's TypeScript lib is ES2023)
 const waitAsync = (Atomics as unknown as { waitAsync(a: Int32Array, i: number, v: number, t?: number):
   { async: false; value: 'not-equal' | 'timed-out' } | { async: true; value: Promise<'ok' | 'timed-out'> } }).waitAsync;
