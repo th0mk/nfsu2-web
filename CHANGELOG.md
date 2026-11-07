@@ -11,12 +11,15 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-07 (8473add)
+## 2026-11-07 (9a92545)
 
+- **iPhone:** performance and stability improvements.
 - **Free roam:** a "memory access out of bounds" crash as other players' cars with Art Factory vinyls came in is fixed.
 - **Free roam:** other players' engines show under an open hood.
 - **Free roam:** when other players can't be reached, the game says why: a blocked connection, one that keeps dropping, or too many players on your network.
 - **Controllers:** the Xbox One S pad with its 2016 firmware works in Chrome on Android.
+- **Car Specialties:** Stock gauges can be picked again, and the gauge list opens on the ones fitted.
+- **Car Specialties:** leaving Trunk Audio keeps your place in the list.
 
 ## 2026-11-06 (b3be4d1)
 
