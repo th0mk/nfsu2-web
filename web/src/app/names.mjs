@@ -17,42 +17,56 @@
 //  - whole: a short one that other words have inside them ("Mustafa GS", "raccoon", "spicy", "Pakize"), only as
 //    a part of the name on its own, and plural: the parts are split where a character is no letter and where a
 //    capital follows a small letter, digits and signs read as letters between them or not ("f4g_42", "XxCoonXx",
-//    "Big1Fag"); the name's letters together count as one too ("F A G").  "Dyke" after "Van" is the surname.
+//    "Big1Fag"); the name's letters together count as one too ("F A G").  "Dyke" after "Van" is the surname; a
+//    name of WHOLE_OK is none ("Nazli")
 //  - edge: a word that starts or ends a part (or the name's letters together), plural too ("nigabro", "biggniga"),
 //    but not where a part starts or ends with a word of EDGE_OK ("Nigar", "Minigame" ends no part with it,
 //    "Zuniga", "Hoonigan" is "hooniga" when cut to 7 letters)
-// The other offensive names go the same way (picked from the live server's names, 2026-10-26, 11-02 and 11-05): Nazi
-// ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it (the
-// neo-Nazi code); and hate aimed at a group as a phrase (HATE: a verb, a word between or none, the group).  A swear
-// word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an
-// English word that ends in "pid" (rapid, cupid, stupid), or after a vowel when it runs into the next part
-// ("TopiDrift"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
+// The other offensive names go the same way (picked from the live server's names, 2026-10-26, 11-02, 11-05 and
+// 11-07): Nazi ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it
+// (the neo-Nazi code), spaces, _ or - between its digits or not ("14_88"); and hate aimed at a group as a phrase
+// (HATE: a verb, a word between or none, the group).  A swear word is no such name.  A "pid" word (pidor, pidar,
+// pidr) right after the start of an English word that ends in "pid" (rapid, cupid, stupid), or after a vowel when it
+// runs into the next part ("TopiDrift"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
 export const SLURS = Object.freeze({
   anywhere: Object.freeze(['nigg', 'niqq', 'faggot', 'tranny', 'trannie', 'retard', 'ibne', 'wetback', 'beaner',
     'raghead', 'towelhead', 'chingchong', 'jigaboo', 'porchmonkey', 'junglebunny',
     'nibba', 'nigus', 'nygga', 'kneegro', 'wigga', 'meganiga', 'czarnuch', 'czarnuh', 'churka',
     'pidor', 'pidar', 'pidr', 'gomosek', 'cwel', 'baitola', 'maricon', 'gotveren', 'gotoglani', 'mongoloid',
-    'hitler', 'gitler', 'zitler', 'adolfh', 'himler', 'fuhrer', 'fuehrer', 'siegheil', 'zighael', 'goebbels',
+    'hitler', 'gitler', 'zitler', 'adolfh', 'himler', 'fuhrer', 'fuehrer', 'siegheil', 'zighael', 'goebbel',
     'mengele', 'mussolini', 'jewhunt', 'jewshunt', 'nigahunt', 'zenciav', 'natehig', 'binladen', 'benladen',
     'rapist', 'molester',
     'niger', 'higger', 'figger', 'chigga', 'negroid', 'zencigot', 'kacap', 'rusnya', 'pideras', 'frocio', 'pretomacaco',
     'kitler', 'fitler', 'ritler', 'sitler', 'xitler', 'heitler', 'nitler', 'neonazi', 'nazist', 'uncleadolf',
-    'austrianartist', 'austrianpainter', 'pintoraustria', 'zyklonb', 'kristalnacht', 'ovendodger',
-    'jewkill', 'jewslay', 'jewdestroy', 'jebaczyd', 'zydzidopieca', 'osamabin', 'alqaeda', 'pedophil', 'pedofil',
+    'austrianartist', 'austrianpaint', 'pintoraustria', 'zyklonb', 'kristalnacht', 'ovendodger',
+    'jewkil', 'jewslay', 'jewdestroy', 'jebaczyd', 'zydzidopieca', 'osamabin', 'alqaeda', 'pedophil', 'pedofil',
     'wigger', 'niglet', 'nignog', 'nibber', 'iggernay', 'neegr', 'nigoger', 'nigrigg', 'nigler', 'nigcer', 'nigwer',
-    'poofter', 'binladin', 'htler', 'hitlr', 'hitlur', 'gasthejuice', 'goyim', 'goyslop', 'rapegod', 'rapedog', 'rapeloli', 'biraped']),
+    'poofter', 'binladin', 'htler', 'hitlr', 'hitlur', 'gasthejuice', 'goyim', 'goyslop', 'rapegod', 'rapedog', 'rapeloli', 'biraped',
+    'sigheil', 'seigheil', 'zigheil', 'ziegheil', 'zeigheil', 'sieghail', 'seighail', 'sighail', 'heilnaz', 'heiluncle',
+    'hitl8r', 'hitteru', 'reltih', 'furher', 'austriandraw', 'ausartreject', 'wehrmacht', 'gestapo', 'waffenss',
+    'dasreich', 'thirdreich', 'drittesreich', 'goering', 'meinkampf', 'auschwitz', 'holohoax', 'hakenkreuz',
+    'whitepower', 'kukluxklan', 'klansman', 'jewhate', 'nojews', 'jewsdid', '4threich', 'fourthreich', 'holocaust',
+    'adolfwasright', 'adolfpaint', 'adolfthepaint', 'whitepride', 'jewskil', 'yahudisik', 'natsist', 'nacist', 'nigaman',
+    'nigakil', 'swastika', 'bitler']),
   whole: Object.freeze(['fag', 'dyke', 'coon', 'spic', 'paki', 'kike', 'gook', 'chink',
     'niga', 'nyga', 'ngga', 'neger', 'xach', 'xoxol', 'hohol', 'ukrop', 'pider', 'pedik', 'nazi', 'taliban', 'rape',
-    'nig', 'killnig', 'fucknig', 'hatenig', 'pedo', 'goy']),
-  edge: Object.freeze(['niga', 'nyga', 'hitla', 'hitle']),
+    'nig', 'killnig', 'fucknig', 'hatenig', 'pedo', 'goy', 'hilter', 'heilh', 'heilah', 'heilss', 'ssheil', 'heilhit',
+    'hitlor', 'adolf', 'adolph', 'reich']),
+  edge: Object.freeze(['niga', 'nyga', 'hitla', 'hitle', 'nazi']),
 });
 /** the words a part may start (start) or end (end) with that would read as an edge word there and are none:
- *  a name (Nigar, Nygaard), "Nigam..." ("NIGAMI", a game), a Japanese name (Niigaki), a surname (Zuniga), a word
- *  (kniga: a book; kunigas: a priest; Minigas), a 7-letter cut (Hooniga, Shiniga), Brony... */
+ *  a name (Nigar, Nygaard; Nazir, Nazim, Nazli...), "Nigam..." ("NIGAMI", a game), a Japanese name (Niigaki), a
+ *  surname (Zuniga, Ignazi), a word (kniga: a book; kunigas: a priest; Minigas), a 7-letter cut (Hooniga, Shiniga),
+ *  Brony... */
 export const EDGE_OK = Object.freeze({
-  start: Object.freeze(['nigam', 'nigar', 'nigak', 'nygar']),
-  end: Object.freeze(['zuniga', 'kniga', 'kuniga', 'miniga', 'hooniga', 'shiniga', 'bronyga', 'manyga']),
+  start: Object.freeze(['nigam', 'nigar', 'nigak', 'nygar',
+    'nazir', 'nazim', 'nazif', 'nazik', 'nazih', 'nazib', 'nazia', 'nazio', 'nazli']),
+  end: Object.freeze(['zuniga', 'kniga', 'kuniga', 'miniga', 'hooniga', 'shiniga', 'bronyga', 'manyga',
+    'yanazi', 'ignazi', 'nazli']),
 });
+/** the names a part may be that read as a word of the whole list and are none, as they are (no more of a letter in
+ *  a row, no plural): Nazli (Turkish: Nazlı), Nazilli (a town), "l" reading "i" */
+export const WHOLE_OK = Object.freeze(['nazli', 'nazilli']);
 /** the starts of the English words that end in "pid": rapid, cupid, stupid, tepid, vapid, insipid, lipid, limpid,
  *  sapid, intrepid, hispid */
 export const PID_STEMS = Object.freeze(['ra', 'cu', 'stu', 'te', 'va', 'insi', 'li', 'lim', 'sa', 'intre', 'his']);
@@ -62,7 +76,7 @@ export const HATE = Object.freeze({
   verbs: Object.freeze(['gas', 'kill', 'hate', 'hunt', 'slay', 'burn', 'shoot', 'nuke', 'bomb', 'dead', 'death', 'fck',
     'fuck', 'fuk', 'destroy', 'exterminate']),
   between: Object.freeze(['s', 'the', 'all', 'allthe', 'da', 'dem', 'them', 'those', 'every', 'dirty', 'to']),
-  groups: Object.freeze(['jew', 'kike', 'colored', 'coloured']),
+  groups: Object.freeze(['jew', 'kike', 'colored', 'coloured', 'zyd']),
 });
 
 const LOOKALIKE = {
@@ -86,6 +100,7 @@ const word = w => [...w].map(letter).join('');
 const PHRASES = HATE.verbs.flatMap(v => ['', ...HATE.between].flatMap(b => HATE.groups.map(g => v + b + g)));
 const ANYWHERE = [...SLURS.anywhere, ...PHRASES].map(word), WHOLE = SLURS.whole.map(word), EDGE = SLURS.edge.map(word);
 const OK_START = EDGE_OK.start.map(word), OK_END = EDGE_OK.end.map(word), STEMS = PID_STEMS.map(word);
+const OK_WHOLE = WHOLE_OK.map(word);
 const DYKE = [word('dyke')], NIGER = word('niger'), NIGERIA = word('nigeri');
 const digit = ch => ch !== undefined && ch >= '0' && ch <= '9';
 /** the run of n digits at str[i] is a number, not letters: three or more, or two with no letter after them or a
@@ -130,6 +145,9 @@ function whole(t, words) {
   });
 }
 
+/** t is a word of the whole list (or its plural), and no name of WHOLE_OK */
+const wholeWord = t => whole(t, WHOLE) && !OK_WHOLE.includes(t);
+
 /** t starts with word w (its letters, as at() reads them) */
 const startsWith = (t, w) => at(t, 0, w) >= 0;
 /** t ends with word w, or its plural */
@@ -149,7 +167,8 @@ const edge = t => EDGE.some(w => (startsWith(t, w) && !OK_START.some(x => starts
 /** name reads as a slur (above) */
 export function blockedName(name) {
   const str = [...String(name ?? '').normalize('NFKD').replace(/\p{M}/gu, '')].map(ch => LOOKALIKE[ch] ?? ch);
-  if (str.join('').includes('1488')) return true;
+  // 1488, spaces, _ or - between its digits or not ("14_88"; not "1:48.8", a lap time)
+  if (str.filter(ch => !' _-'.includes(ch)).join('').includes('1488')) return true;
   let s = '', t = '', prev = '', low = false;
   const starts = [];
   for (let i = 0; i <= str.length; i++) {
@@ -161,7 +180,7 @@ export function blockedName(name) {
     if (num && (t === 'n' || t === 'ni') && str[i + r] && letter(str[i + r])) num = false;
     const c = num ? '' : ch && letter(ch);
     if ((!c || (low && ch >= 'A' && ch <= 'Z')) && t) {
-      if ((whole(t, WHOLE) && !(prev === 'van' && whole(t, DYKE))) || edge(t)) return true;
+      if ((wholeWord(t) && !(prev === 'van' && whole(t, DYKE))) || edge(t)) return true;
       prev = t; t = '';
     }
     if (c) {
@@ -175,5 +194,5 @@ export function blockedName(name) {
   return ANYWHERE.some(w => {
     for (let i = 0; i < s.length; i++) if (at(s, i, w) >= 0 && !excused(s, i, w, starts)) return true;
     return false;
-  }) || whole(s, WHOLE) || edge(s);
+  }) || wholeWord(s) || edge(s);
 }
