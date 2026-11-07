@@ -71,6 +71,41 @@ void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t fir
 int fileio_mod_pack(const char *rel, char *out, size_t outsz);
 #define SCRATCHES_REL "DAMAGE/SCRATCHES.TPK"
 #define TPK_CHUNK     0xb3300000u
+/* the chunk at b inside [b, end): its size, or -1 */
+static int64_t dmg_chunk(uint32_t b, uint32_t end){
+    return b + 8u <= end && MR32(b + 4u) <= end - b - 8u ? (int64_t)MR32(b + 4u) : -1;
+}
+/* the TPK at d (n bytes) as the game's loader trusts it (tools/packcheck.py checks it before it is written): every
+ * chunk inside the one that holds it, a hash list (0x33310002), TextureInfos (0x33310004, 0x7C each) and platform
+ * infos (0x33310005, 0x20 each) of one count, each texture's hash the list's, its image and palette inside the
+ * pixels (0x33320002, from its first 0x80 boundary) */
+static int dmg_tpk_ok(uint32_t d, uint32_t n){
+    static const uint32_t want[3] = { 0x33310002u, 0x33310004u, 0x33310005u };
+    uint32_t at[3] = { 0 }, sz[3] = { 0 }, pix = 0, pend = 0, end = d + n;
+    for (uint32_t c = d + 8u; c < end;){
+        int64_t s = dmg_chunk(c, end);
+        if (s < 0) return 0;
+        uint32_t ce = c + 8u + (uint32_t)s;
+        if (MR32(c) == 0xb3310000u || MR32(c) == 0xb3320000u)
+            for (uint32_t k = c + 8u; k < ce;){
+                int64_t ks = dmg_chunk(k, ce);
+                if (ks < 0) return 0;
+                for (int j = 0; j < 3; j++) if (MR32(k) == want[j]){ at[j] = k + 8u; sz[j] = (uint32_t)ks; }
+                if (MR32(k) == 0x33320002u){ pix = (k + 8u + 0x7fu) & ~0x7fu; pend = k + 8u + (uint32_t)ks; }
+                k += 8u + (uint32_t)ks;
+            }
+        c = ce;
+    }
+    uint32_t cnt = sz[0] / 8u;
+    if (!at[0] || !at[1] || !at[2] || !pix || pix > pend || sz[0] != cnt * 8u || sz[1] != cnt * 0x7cu || sz[2] != cnt * 0x20u)
+        return 0;
+    for (uint32_t k = 0; k < cnt; k++){
+        uint32_t ti = at[1] + k * 0x7cu, img = MR32(ti + 0x30u), pal = MR32(ti + 0x34u), isz = MR32(ti + 0x38u), psz = MR32(ti + 0x3cu);
+        if (MR32(ti + 0x24u) != MR32(at[0] + 8u * k) || img > pend - pix || isz > pend - pix - img ||
+            (psz && (pal > pend - pix || psz > pend - pix - pal))) return 0;
+    }
+    return 1;
+}
 uint32_t dmg_scratches_read(uint32_t *data, uint32_t *size){
     char path[1200];
     *data = 0; *size = 0;
@@ -80,7 +115,8 @@ uint32_t dmg_scratches_read(uint32_t *data, uint32_t *size){
     long n = fseek(f, 0, SEEK_END) == 0 ? ftell(f) : -1;
     uint32_t block = n >= 8 && n <= (16l << 20) && fseek(f, 0, SEEK_SET) == 0 ? gheap_alloc(1, (uint32_t)n + 128u, 0) : 0;
     uint32_t d = (block + 127u) & ~127u;
-    if (!block || fread(g_mem + d, 1, (size_t)n, f) != (size_t)n || MR32(d) != TPK_CHUNK || MR32(d + 4u) + 8u != (uint32_t)n){
+    if (!block || fread(g_mem + d, 1, (size_t)n, f) != (size_t)n || MR32(d) != TPK_CHUNK || MR32(d + 4u) + 8u != (uint32_t)n ||
+        !dmg_tpk_ok(d, (uint32_t)n)){
         fclose(f);
         if (block) gheap_free(1, block);
         fprintf(stderr, "[damage] MODPACKS/" SCRATCHES_REL ": not a texture pack as tools/damagepack.py writes it\n");
