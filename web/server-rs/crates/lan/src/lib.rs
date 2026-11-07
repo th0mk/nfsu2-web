@@ -244,6 +244,7 @@ mod lag;
 mod members;
 pub mod mix;
 pub mod paths;
+mod plates;
 mod queue;
 mod reader;
 mod route;
@@ -566,6 +567,8 @@ pub type OnClaim = Box<dyn Fn(&str) -> Option<Arc<str>> + Send + Sync>;
 /// `LanSwitch::on_text`: a page's message for the server (the crate doc's Friends): its address, its keyphrase's owner
 /// (`AttachOpts::on_claim`), its client's opaque id (`AttachOpts::group`), and the message
 pub type OnText = Box<dyn Fn(u32, Option<Arc<str>>, Arc<str>, Map<String, Value>) + Send + Sync>;
+/// `LanSwitch::on_line`: a line for the server's log (plates.rs: `[plate] ...`)
+pub type OnLine = Box<dyn Fn(&str) + Send + Sync>;
 
 /// What the server tells the switch about a new connection (never its address: the crate doc's What a peer learns).
 #[derive(Default)]
@@ -855,6 +858,8 @@ pub(crate) struct Peer {
     /// the players its LAN play sent UDP to since the last `paths` (races, and their lobbies), a few, at the places
     /// paths.rs `race_with` puts them: only its own reader writes them, `paths` takes them
     lan_to: [AtomicU32; paths::LAN_TO],
+    /// its license plates in free roam (plates.rs): the last that went to the others, and when
+    plates: Mutex<plates::Seen>,
 }
 
 impl Peer {
@@ -981,6 +986,8 @@ pub struct LanSwitch {
     stopped: CancellationToken,
     /// where the pages' messages for the server go (`on_text`)
     on_text: OnceLock<OnText>,
+    /// where the switch's own lines for the log go (`on_line`: the `[plate]` lines)
+    on_line: OnceLock<OnLine>,
 }
 
 /// The bundle clock's tick for `n` players who take bundles: what sends them `bundle_budget` bundles a second in all
@@ -1055,6 +1062,7 @@ impl LanSwitch {
             gone: Mutex::new(Default::default()),
             stopped: CancellationToken::new(),
             on_text: OnceLock::new(),
+            on_line: OnceLock::new(),
             me: me.clone(),
             o,
         });
@@ -1426,6 +1434,17 @@ impl LanSwitch {
         let g = self.gone.lock();
         v.extend(g.iter().rev().filter(|w| w.vip == vip && w.left.is_some_and(|t| now - t <= GONE_MS)).cloned());
         v
+    }
+
+    /// where the switch's own lines for the log go: the `[plate]` lines (plates.rs; the first one set stays, none:
+    /// they go nowhere)
+    pub fn on_line(&self, f: OnLine) {
+        let _ = self.on_line.set(f);
+    }
+    pub(crate) fn line(&self, s: &str) {
+        if let Some(f) = self.on_line.get() {
+            f(s);
+        }
     }
 
     /// where the pages' messages for the server go (the crate doc's Friends; the first one set stays)

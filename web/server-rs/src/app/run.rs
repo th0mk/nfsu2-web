@@ -220,6 +220,8 @@ pub async fn run(o: Options, cores: usize) {
         h.attach_switch(lan.switch_send());
     }
     marker.set_switch(lan.clone());
+    // the switch's lines: the players' license plates in free roam (a new one, one that reads as a slur)
+    lan.on_line(Box::new(|line: &str| log::line(line)));
 
     // Cloudflare's check for a claim (turnstile.rs: off without its two keys)
     let turnstile = super::turnstile::Turnstile::from_env();
