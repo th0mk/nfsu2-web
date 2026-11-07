@@ -1,6 +1,6 @@
 /* catchup.c -- the career's rubberbanding (the AI's "catch up"), as the
  * player chooses it.  NFSU2_CATCHUP = original (default, the original game),
- * noboost or off: settings.ini's catchup (Settings, Game, More game settings).
+ * noboost or off: settings.ini's catchup (Mods: Rubberbanding).
  *
  * Addresses: SPEED2.EXE v1.2 NA; the European exe has these same ones.
  *
@@ -25,15 +25,16 @@
  * The opponents' "CatchUp" byte of the career race table (GCareerRace +0x4B,
  * +0x57, ...; racer +0x902) only picks one of three rows of the same chunk
  * (+0x934, 8 bytes each: 200/1, 200/1, 400/1), and the rows 0 and 1 are the
- * same, so the Binary scripts that set it to 0 (nfsmods.xyz 3222, 1694)
- * change nothing.
+ * same.
  *
  * Here, after the game's own 0x4172D0 and only in a career race (Career
  * +0x8730):
  *   noboost  M at most 1 in the driver and 1 in the car: an opponent ahead
  *            still waits for you, one behind never gets past its own pace
  *   off      1 in both, as with the Catch Up flag off (Quick Race's Catch Up
- *            Off): no waiting and no boost
+ *            Off): no waiting and no boost.  With the flag off the game's M
+ *            is 1 exactly: 0x4084A0 gives 0 for both its terms, and the scale
+ *            by the race's progress after it (GLOBALB +0x504) only scales M - 1
  * Quick Race keeps its own option, and a race over the network has no AI. */
 #include "cpu.h"
 #include <stdio.h>

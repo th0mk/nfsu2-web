@@ -240,6 +240,13 @@ export const MODS: readonly Mod[] = [
     details: 'In the original game a stage\'s DVD cover shoots come only once your car\'s parts rate enough stars, and pay more for more stars. On, the rating is the stage\'s: 0, 1, 3, 5.5 and 8 stars in stages 0 to 4, 10 from stage 5, so the stage\'s cover shoots come and pay by it. The shops show no Visual Rating box.',
     online: 'career', files: ['runtime/visualrep.c', 'licenses/novisualrep.txt'],
   },
+  {
+    id: 'rubberbanding', name: 'Rubberbanding', authors: [{ name: '007hacky007', url: 'https://github.com/007hacky007' }], links: {},
+    kind: 'rules', uses: 'original', control: { setting: 'catchup', values: ['noboost', 'off'] }, off: false,
+    line: N('Career rivals that wait and catch up.'),
+    details: 'In a career race the game slows the opponents ahead of you and gives the ones behind more power and grip. Original, the default, keeps that; No boost keeps the waiting, but one behind never beats its own pace; Off drops both, as Quick Race with Catch Up off. Only in your own career races: never in Quick Race, LAN or online races.',
+    online: 'career', files: ['runtime/catchup.c'],
+  },
 ];
 
 /** one of our changes: its name, its key ('': none) and what it does, in one short line */

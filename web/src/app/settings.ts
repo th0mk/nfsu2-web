@@ -186,15 +186,14 @@ export const KEYS: readonly KeyDef[] = [
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
-  // the career's rubberbanding: original, noboost (opponents ahead still wait, none behind beats its own pace) or off
-  // (runtime/catchup.c).  Not in bundle.m's table either: there a lower-case key, so it reaches the runtime as
-  // NFSU2_CATCHUP all the same
-  { key: 'catchup', env: 'NFSU2_CATCHUP', kind: 'enum', vals: 'original|noboost|off', scope: 'web' },
   // the career's visual rating set by the stage, not by the car's parts (runtime/visualrep.c).  Not in bundle.m's
   // table: there a lower-case key, so it reaches the runtime as NFSU2_VISUAL_REP_REMOVER all the same
   { key: 'visual_rep_remover', env: 'NFSU2_VISUAL_REP_REMOVER', kind: 'bool', scope: 'web' },
-  // The rims are out for now (mods.ts): these two keys come back with their lines in TEMPLATE, after
-  // visual_rep_remover's:
+  // the career's rubberbanding: original, noboost (opponents ahead still wait, none behind beats its own pace) or off
+  // (runtime/catchup.c).  Not in bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_CATCHUP
+  // all the same
+  { key: 'catchup', env: 'NFSU2_CATCHUP', kind: 'enum', vals: 'original|noboost|off', scope: 'web' },
+  // The rims are out for now (mods.ts): these two keys come back with their lines in TEMPLATE, after catchup's:
   //   # New rim brands in the rim shop: Blitz.  Everyone's game has their rims,
   //   # so a friend's car with them looks the same either way, and rims already
   //   # on your car stay.  off = the shops offer only the original game's.
@@ -334,14 +333,6 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # [NFSU2_SHOW_HIDDEN_RACES]
 #show_hidden_races = off
 
-# The career's rubberbanding.  In a career race the game slows opponents
-# who are ahead of you and gives ones behind you more power, grip and top
-# speed (up to 37% more when they are 320 m behind).  noboost = they still
-# wait for you, but none behind ever beats its own pace; off = neither, as
-# Quick Race with Catch Up off.  original = the original game.  Quick Race
-# keeps its own Catch Up option.  [NFSU2_CATCHUP]
-#catchup = original
-
 # The distance to the GPS destination under its arrow, in metres or feet as
 # Speedometer Units has it (Mods: GPS Distance).
 # [NFSU2_GPS_DISTANCE]
@@ -360,9 +351,20 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # mirrors, hood, trunk lid and doors, and break their lights.  Only what is
 # seen: the engine, the suspension and the handling are as before, and the
 # game's own repair (a race's start, the garage) takes the damage away.
-# In free roam friends who have it on see the damage of your car.  off (the
-# default) = the original game.  [NFSU2_DAMAGE]
+# In free roam other players who have it on see the damage of your car;
+# off, you see every car undamaged.  off (the default) = the original game.
+# [NFSU2_DAMAGE]
 #crash_damage = off
+
+# The career's rubberbanding (Mods: Rubberbanding).  In a career race the
+# game slows opponents who are ahead of you and gives ones behind you more
+# power, grip and top speed (up to 37% more when they are 320 m behind).
+# noboost = they still wait for you, but none behind ever beats its own
+# pace; off = neither, as Quick Race with Catch Up off.  original = the
+# original game.  Only your own career races: Quick Race keeps its own Catch
+# Up option, and LAN and online races have no computer opponents.
+# [NFSU2_CATCHUP]
+#catchup = original
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"

@@ -104,8 +104,8 @@ misread the log's numbers:
   (Original, Map only, Upscaled), English Subtitles Fixed (off: no movie subtitles in any language), Uncensored &
   Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover,
   Crash Damage (off by default: dents, loose parts and scratches on the racers' cars, looks only; in free roam players
-  who have it on see each other's damage, with it off every car shows undamaged). Music in drag and drift races is the
-  site's own setting: Game.
+  who have it on see each other's damage, with it off every car shows undamaged), Rubberbanding (Original, No boost,
+  Off: the career races' catch-up). Music in drag and drift races is the site's own setting: Game.
 - Resolution scale: 50%, 75%, 100%, 150%, 200%. 50% is the lowest (a quarter of the pixels); phones start at 75%.
 - Frame rate: Auto, 30, 60, 120, 240. Auto picks one of those from the screen's refresh rate (240 from 239 Hz, 120
   from 119 Hz, 30 at 31 Hz or less, else 60; runtime/framerate.c). A 75 Hz screen gets 60 and a 144-165 Hz one 120,
@@ -570,7 +570,8 @@ The game plays as the original did. Additions and improvements around it are wel
 life, controls, the page, languages, optional graphics settings (off by default: the original look stays the default),
 fixes of the original game's crashes and glitches. Changing its core gameplay mechanics is not done: handling and physics, car
 performance and tuning, AI and traffic, the career's progression, races and rewards, the economy. The Mods tab's mods
-that change the career (Show Hidden Races Mod, Visual Reputation Remover) are off by default: the player's choice.
+that change the career (Show Hidden Races Mod, Visual Reputation Remover, Rubberbanding) are off by default: the
+player's choice.
 
 - A suggestion of an addition or improvement: none, unless it exists already: then say where
   (Power Units in Options, Gameplay; Show Player Names there too since 31cc3384 (also in the pause menu's Options, Gameplay): Off

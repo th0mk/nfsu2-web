@@ -80,6 +80,7 @@ export const MOD_CONTROLS: Record<string, Control> = {
   show_hidden_races: { t: 'switch' },
   visual_rep_remover: { t: 'switch' },
   crash_damage: { t: 'switch' },
+  catchup: { t: 'seg', opts: [['original', N('Original')], ['noboost', N('No boost')], ['off', N('Off')]] },
   // mod_rims: { t: 'switch' },   (the rims: out for now, mods.ts)
 };
 /** the Mods tab's one row that is no mod's: how other players' cars show the mods' parts (mods-ui.ts: first in "Seen by
@@ -119,7 +120,6 @@ const GROUPS: Group[] = [
     { key: 'movies', label: N('Movies'), help: N('Intro and story movies.'), c: { t: 'switch' } },
     { key: 'race_music', label: N('Music in drag and drift races'), help: N('The songs play there too, as in the other races. Off: none there, as in the original, so you hear the engine.'), c: { t: 'switch' } },
     { key: 'autosave', label: N('Autosave'), help: N('Sets each profile\'s Save option to Autosave once. A later change in the game\'s Options stays.'), c: { t: 'switch' } },
-    { key: 'catchup', label: N('Rubberbanding'), help: N('Career opponents ahead of you wait for you, ones behind get more power and grip. No boost: they still wait, but never beat their own pace. Off: neither, as Quick Race with Catch Up off.'), c: { t: 'seg', opts: [['original', N('Original')], ['noboost', N('No boost')], ['off', N('Off')]] }, more: true },
     { key: 'intro', label: N('Startup movies'), help: N('Logos, PSA and intro. Skippable: Enter, Esc, Space, a click, A, B or Start skips each. Original: only the intro can be skipped.'), c: { t: 'seg', opts: [['skippable', N('Skippable')], ['original', N('Original')], ['off', N('Off')]] }, more: true },
     { key: 'sound', label: N('Sound'), help: N('All sound output.'), c: { t: 'switch' }, more: true },
     { key: 'background', label: N('Background tab'), help: N('Pause freezes the game, like alt-tab on Windows. LAN and Online games keep running, muted.'), c: { t: 'seg', opts: [['pause', N('Pause')], ['run', N('Keep running')]] }, more: true },
