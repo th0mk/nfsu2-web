@@ -227,9 +227,12 @@ class PackCheck(unittest.TestCase):
         bad = b'JDLZ\x02\x10\x00\x00' + struct.pack('<II', len(raw), 0x14) + b'\x01\x01' + b'\x10\x00'
         cut, head, tail = vinyl_pack(self.base, [('TEST_N0', raw, bad)])
         self.refused({'VINYLPACKS/CARS/TEST/VINYLS.BIN': vpak(self.base, cut, head, tail)}, r'before its start')
-        # unpacked size other than its entry's
+        # unpacked size other than its entry's: smaller, and bigger (the streamer allocates the entry's: written past)
         cut, head, tail = vinyl_pack(self.base, [('TEST_N0', raw + b'\0' * 4, jdlz_pack(raw))])
-        self.refused({'VINYLPACKS/CARS/TEST/VINYLS.BIN': vpak(self.base, cut, head, tail)}, r'its entry says')
+        self.refused({'VINYLPACKS/CARS/TEST/VINYLS.BIN': vpak(self.base, cut, head, tail)}, r'says it unpacks to 416 bytes, its entry 420')
+        big = bytearray(jdlz_pack(raw)); struct.pack_into('<I', big, 8, len(raw) + 65536)
+        cut, head, tail = vinyl_pack(self.base, [('TEST_N0', raw, bytes(big))])
+        self.refused({'VINYLPACKS/CARS/TEST/VINYLS.BIN': vpak(self.base, cut, head, tail)}, rf'says it unpacks to {len(raw) + 65536} bytes, its entry {len(raw)}')
 
     # --- LANGPACKS: a file in place of the game's -------------------------------------------------------------------
     def test_language_pack(self):

@@ -167,6 +167,8 @@ def unpack(blob, size):
     unpacker's rules, RAWW; another kind (HUFF, COMP: the game's own code) is not unpacked here"""
     tag = blob[:4]
     if tag == b'JDLZ':
+        if len(blob) >= 12 and u32(blob, 8) != size:
+            return None, f'says it unpacks to {u32(blob, 8)} bytes, its entry {size} (the streamer allocates the entry\'s)'
         u, why = jdlz_native(blob)
         if u is not None and len(u) != size: return None, f'JDLZ of {len(u)} bytes, its entry says {size}'
         return u, why

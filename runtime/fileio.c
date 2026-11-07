@@ -490,8 +490,11 @@ int fileio_open_handles(void){ int n = 0; for (int k = 1; k < FH_MAX; k++) n += 
  * writes past the output, as our first Greek pack's JDLZ did now and then).  So each read keeps where the bytes of a
  * pack went: a splice's head and tail (VINYLPACKS, MODPACKS), a language pack's or a mod pack's own file -- the last
  * PR_N reads, each with the pack file and the offset in it.  fileio_pack_bytes() asks whether a block in guest
- * memory came from one: a kept read holds it, and its first bytes are still the pack file's bytes there (the memory
- * may have been used again since).  Under the guest lock, as the rest of this file's state. */
+ * memory came from one: a kept read holds its first byte (the rest may be the next read's, of the file's next bytes),
+ * and its first bytes are still the pack file's bytes there, read again (the memory may have been used again since);
+ * when they cannot be read again, it counts as the pack's (a texture left out rather than a read past a block).  The
+ * reading again is done with the guest lock let go, as ReadFile's (in the browser it may wait for the network); the
+ * rest under it, as the rest of this file's state. */
 #define PR_N 256
 static struct { uint32_t at, len; int64_t off; const char *pk; } g_pr[PR_N];
 static unsigned g_pr_n;
@@ -515,20 +518,32 @@ static void pr_note(const FH *f, uint32_t buf, int64_t got, int64_t at){
     if (at < f->sp_head) pr_add(buf, (end < f->sp_head ? end : f->sp_head) - at, VP_HDR + at, f->pk);
     if (end > mid){ int64_t a = at > mid ? at : mid; pr_add(buf + (uint32_t)(a - at), end - a, VP_HDR + f->sp_head + (a - mid), f->pk); }
 }
-/* 1 if the n (<= 32) bytes at guest address a came from a pack: the newest kept read that holds them, its file's bytes
- * still there; *pk the pack file, *off where in it */
+/* 1 if the n (<= 32) bytes at guest address a came from a pack: the newest kept read that holds the first of them, the
+ * pack file's n bytes there the same; -1 if that read holds it but the file cannot be read again (a pack's too); 0 not
+ * a pack's.  *pk the pack file, *off where in it */
+#ifdef __wasm__
+void guest_wait_begin(void); void guest_wait_end(void);
+#endif
 int fileio_pack_bytes(uint32_t a, uint32_t n, const char **pk, int64_t *off){
     for (unsigned i = 0; i < PR_N && i < g_pr_n; i++){
         unsigned k = (g_pr_n - 1u - i) % PR_N;
-        if (a < g_pr[k].at || (uint64_t)a + n > (uint64_t)g_pr[k].at + g_pr[k].len) continue;
+        if (a < g_pr[k].at || a - g_pr[k].at >= g_pr[k].len) continue;
+        const char *path = g_pr[k].pk;
         int64_t o = g_pr[k].off + (a - g_pr[k].at);
         uint8_t b[32];
-        int fd = n <= sizeof b ? open(g_pr[k].pk, O_RDONLY) : -1;
-        int same = fd >= 0 && pread(fd, b, n, (off_t)o) == (ssize_t)n && !memcmp(b, g_mem + a, n);
-        if (fd >= 0) close(fd);
-        if (!same) return 0;
-        *pk = g_pr[k].pk; *off = o;
-        return 1;
+        ssize_t got = -1;
+        if (n > sizeof b) n = sizeof b;
+#ifdef __wasm__
+        guest_wait_begin();
+#endif
+        int fd = open(path, O_RDONLY);
+        if (fd >= 0){ got = pread(fd, b, n, (off_t)o); close(fd); }
+#ifdef __wasm__
+        guest_wait_end();
+#endif
+        *pk = path; *off = o;
+        if (got != (ssize_t)n) return -1;
+        return memcmp(b, g_mem + a, n) ? 0 : 1;
     }
     return 0;
 }
@@ -568,18 +583,18 @@ static int vp_open(FH *f, const char *win, const char *real, int fd){
         if (said_n++ < 4) fprintf(stderr, "  [file] %s/%s not read: the memory file's pack was not (the game reads its old header)\n", dir, rel);
         close(fd2); return 0;
     }
-    static int said_v, said_m;
-    int *said_p = dir[0] == 'V' ? &said_v : &said_m, said = (*said_p)++;
+    static int said_v, said_m, said_no;                   /* (a pack not read: a budget of its own, every pack's) */
     if (!fits){
-        if (said < 4) fprintf(stderr, "  [file] %s/%s does not fit the game's file (%lld bytes): the game's alone\n",
-                                dir, rel, (long long)st.st_size);
+        if (said_no++ < 32) fprintf(stderr, "  [file] %s/%s does not fit the game's file (%lld bytes): the game's alone\n",
+                                    dir, rel, (long long)st.st_size);
         close(fd2); return 0;
     }
     if (!whole){
-        if (said < 4) fprintf(stderr, "  [file] %s/%s is not as long as its header says (32 + %u + %u bytes): the game's file alone\n",
-                                dir, rel, v[4], v[5]);
+        if (said_no++ < 32) fprintf(stderr, "  [file] %s/%s is not as long as its header says (32 + %u + %u bytes): the game's file alone\n",
+                                    dir, rel, v[4], v[5]);
         close(fd2); return 0;
     }
+    int *said_p = dir[0] == 'V' ? &said_v : &said_m, said = (*said_p)++;
     f->pk = pk_name(p);
     f->fd2 = fd2; f->sp_bsize = v[2]; f->sp_cut = v[3]; f->sp_head = v[4];
     if (dir[0] == 'M' && !strcasecmp(rel, MP_MEMFILE)) g_mp_memfile = 1;

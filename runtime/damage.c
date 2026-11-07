@@ -75,10 +75,29 @@ int fileio_mod_pack(const char *rel, char *out, size_t outsz);
 static int64_t dmg_chunk(uint32_t b, uint32_t end){
     return b + 8u <= end && MR32(b + 4u) <= end - b - 8u ? (int64_t)MR32(b + 4u) : -1;
 }
+/* the bytes a texture's levels take as the game makes and uploads them (TextureInfo +0x44 width, +0x46 height,
+ * +0x4E levels; the platform info's +0x14 its format), as tools/packcheck.py counts them; 0 for a format it does not
+ * know */
+static uint64_t dmg_tex_bytes(uint32_t w, uint32_t h, uint32_t levels, uint32_t fmt){
+    uint32_t blk = 1, bpb;
+    switch (fmt){
+    case 21: case 22: bpb = 4; break;                   /* A8R8G8B8, X8R8G8B8 */
+    case 28: case 41: bpb = 1; break;                   /* A8, P8 */
+    case 0x31545844u: blk = 4; bpb = 8; break;          /* DXT1 */
+    case 0x33545844u: case 0x35545844u: blk = 4; bpb = 16; break;   /* DXT3, DXT5 */
+    default: return 0;
+    }
+    uint64_t n = 0;
+    for (uint32_t lv = 0; lv < (levels ? levels : 1u) && lv < 16u; lv++){
+        uint32_t lw = w >> lv ? w >> lv : 1u, lh = h >> lv ? h >> lv : 1u;
+        n += (uint64_t)((lw + blk - 1u) / blk) * ((lh + blk - 1u) / blk) * bpb;
+    }
+    return n;
+}
 /* the TPK at d (n bytes) as the game's loader trusts it (tools/packcheck.py checks it before it is written): every
  * chunk inside the one that holds it, a hash list (0x33310002), TextureInfos (0x33310004, 0x7C each) and platform
- * infos (0x33310005, 0x20 each) of one count, each texture's hash the list's, its image and palette inside the
- * pixels (0x33320002, from its first 0x80 boundary) */
+ * infos (0x33310005, 0x20 each) of one count, each texture's hash the list's, its image as big as its size, format
+ * and levels take, and it and its palette inside the pixels (0x33320002, from its first 0x80 boundary) */
 static int dmg_tpk_ok(uint32_t d, uint32_t n){
     static const uint32_t want[3] = { 0x33310002u, 0x33310004u, 0x33310005u };
     uint32_t at[3] = { 0 }, sz[3] = { 0 }, pix = 0, pend = 0, end = d + n;
@@ -101,7 +120,9 @@ static int dmg_tpk_ok(uint32_t d, uint32_t n){
         return 0;
     for (uint32_t k = 0; k < cnt; k++){
         uint32_t ti = at[1] + k * 0x7cu, img = MR32(ti + 0x30u), pal = MR32(ti + 0x34u), isz = MR32(ti + 0x38u), psz = MR32(ti + 0x3cu);
-        if (MR32(ti + 0x24u) != MR32(at[0] + 8u * k) || img > pend - pix || isz > pend - pix - img ||
+        uint64_t need = dmg_tex_bytes(MR16(ti + 0x44u), MR16(ti + 0x46u), MR8(ti + 0x4eu), MR32(at[2] + k * 0x20u + 0x14u));
+        if (MR32(ti + 0x24u) != MR32(at[0] + 8u * k) || !MR16(ti + 0x44u) || !MR16(ti + 0x46u) || !need || isz < need ||
+            img > pend - pix || isz > pend - pix - img ||
             (psz && (pal > pend - pix || psz > pend - pix - pal))) return 0;
     }
     return 1;
