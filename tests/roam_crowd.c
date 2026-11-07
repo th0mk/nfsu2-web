@@ -51,7 +51,7 @@ char *strstr(const char *h, const char *n){
 }
 
 static rc_session S;
-static uint8_t IO[4096];                     /* a datagram, or the name, car type, parts and flag */
+static uint8_t IO[4096];                     /* a datagram, or the name, car type, parts, flag and license plate */
 static void io_send(void *u, uint32_t ip, uint16_t port, const uint8_t *b, int n){ (void)u; js_send(ip, port, b, n); }
 static void io_event(void *u, int ev, int peer, const char *t){ (void)u; (void)peer; js_event(ev, t, (int)strlen(t)); }
 
@@ -92,7 +92,7 @@ static void dmg_publish(int64_t now){
 /* the buffer the script writes a name or a received datagram into */
 __attribute__((export_name("crowd_io"))) uint8_t *crowd_io(void){ return IO; }
 
-/* name, car type, parts and flag (in IO, each 0-terminated), id, room hash, a crew's hash (0: none), the hub's address, our port, the car type's
+/* name, car type, parts, flag and license plate (in IO, each 0-terminated), id, room hash, a crew's hash (0: none), the hub's address, our port, the car type's
  * name hash, states per SNAP */
 __attribute__((export_name("crowd_init"))) void crowd_init(uint32_t id, uint32_t room, uint32_t crew, uint32_t hub_ip, uint32_t port,
                                                            uint32_t type_hash, uint32_t states, double now_us){
@@ -104,7 +104,11 @@ __attribute__((export_name("crowd_init"))) void crowd_init(uint32_t id, uint32_t
     rc_name_clean(cf.name, (const char *)IO, RC_NAME_MAX);
     { /* the flag before the name (--flags), after the parts */
       const char *t = (const char *)IO + strlen((const char *)IO) + 1, *pa = t + strlen(t) + 1, *f = pa + strlen(pa) + 1;
-      for (int i = 0; i < RC_FLAG_MAX && f[i]; i++) cf.flag[i] = f[i]; }
+      for (int i = 0; i < RC_FLAG_MAX && f[i]; i++) cf.flag[i] = f[i];
+      /* the license plate (--plates), after the flag: one rc_plate_ok refuses, none */
+      const char *pl = f + strlen(f) + 1;
+      size_t n = strlen(pl);
+      if (n <= RC_PLATE_MAX && rc_plate_ok(pl, (uint32_t)n)) memcpy(cf.plate, pl, n); }
     rc_io io = { 0, io_send, 0, io_event };
     rc_session_init(&S, &cf, &io);
     rc_carcfg cc; memset(&cc, 0, sizeof cc);

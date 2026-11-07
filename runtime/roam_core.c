@@ -360,6 +360,12 @@ int rc_state_get(rc_r *r, rc_state *s, int ext){
 /* a flag's code: lower case letters and '-' (roam_game.c looks it up; one it does not have shows none) */
 static int flag_ok(const char *s, uint32_t n){ for (uint32_t i = 0; i < n; i++) if (!((s[i] >= 'a' && s[i] <= 'z') || s[i] == '-')) return 0; return 1; }
 static uint32_t flag_len(const char *s){ uint32_t n = 0; while (n <= RC_FLAG_MAX && s[n]) n++; return n; }   /* RC_FLAG_MAX + 1: too long */
+int rc_plate_ok(const char *s, uint32_t n){
+    if (n > RC_PLATE_MAX) return 0;
+    for (uint32_t i = 0; i < n; i++) if (!((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= '0' && s[i] <= '9'))) return 0;
+    return 1;
+}
+static uint32_t plate_len(const char *s){ uint32_t n = 0; while (n <= RC_PLATE_MAX && s[n]) n++; return n; }   /* RC_PLATE_MAX + 1: too long */
 static int printable(const char *s, uint32_t n){ for (uint32_t i = 0; i < n; i++) if ((uint8_t)s[i] < 0x20 || (uint8_t)s[i] >= 0x7F) return 0; return 1; }
 
 /* a LOBBY message's fields: a known op, state and reason, an id for the
@@ -414,13 +420,18 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         for (int i = 0; i < m->u.hello.n_seen; i++) rc_put32(&w, m->u.hello.seen[i]);
         uint32_t fl = flag_len(m->u.hello.flag);
         if (fl > RC_FLAG_MAX || !flag_ok(m->u.hello.flag, fl)) return -1;
-        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel || fl){
+        /* the plate goes with the header's flag only, and the flag with a plate only (rc_decode reads it by the flag) */
+        uint32_t pl = plate_len(m->u.hello.plate);
+        int plate = (m->h.flags & RC_HF_PLATE) != 0;
+        if (!rc_plate_ok(m->u.hello.plate, pl) || plate != (pl > 0)) return -1;
+        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel || fl || plate){
             if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX || m->u.hello.links > RC_MAX_PEERS) return -1;
             rc_put8(&w, m->u.hello.n_crews);
             for (int i = 0; i < m->u.hello.n_crews; i++){ if (!m->u.hello.crews[i]) return -1; rc_put32(&w, m->u.hello.crews[i]); }
-            if (m->u.hello.links || m->u.hello.duel || fl) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
-            if (m->u.hello.duel || fl) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
-            if (fl){ rc_put8(&w, fl); rc_putb(&w, m->u.hello.flag, fl); }                  /* (...before version 13 this) */
+            if (m->u.hello.links || m->u.hello.duel || fl || plate) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
+            if (m->u.hello.duel || fl || plate) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
+            if (fl || plate){ rc_put8(&w, fl); rc_putb(&w, m->u.hello.flag, fl); }                  /* (...before version 13 this) */
+            if (plate){ rc_put8(&w, pl); rc_putb(&w, m->u.hello.plate, pl); }                         /* (...before version 17 this) */
         }
         break; }
     case RC_MSG_PEERS:
@@ -582,6 +593,15 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
                 if (fl <= RC_FLAG_MAX && r.n + fl <= r.len){
                     rc_getb(&r, m->u.hello.flag, fl); m->u.hello.flag[fl] = 0;
                     if (!flag_ok(m->u.hello.flag, fl)) m->u.hello.flag[0] = 0;
+                }
+            }
+            /* the license plate (core 17), with the header's flag: one that is not capitals and digits, or reads as a
+             * slur (every plate heard comes through here, as every name), none: the game's own plate */
+            if ((m->h.flags & RC_HF_PLATE) && r.n < r.len){
+                uint32_t pl = rc_get8(&r);
+                if (pl <= RC_PLATE_MAX && r.n + pl <= r.len){
+                    rc_getb(&r, m->u.hello.plate, pl); m->u.hello.plate[pl] = 0;
+                    if (!rc_plate_ok(m->u.hello.plate, pl) || name_blocked(m->u.hello.plate)) m->u.hello.plate[0] = 0;
                 }
             }
             r.n = r.len;                                              /* (a newer core's additions) */
@@ -1458,6 +1478,14 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
         uint32_t fl = flag_len(s->conf.flag);
         if (fl <= RC_FLAG_MAX && flag_ok(s->conf.flag, fl)){ memcpy(m->u.hello.flag, s->conf.flag, fl); m->u.hello.flag[fl] = 0; }
     }
+    /* our license plate to each peer, from the first HELLO on (its core version not known yet: an older core reads past
+     * it, rc_decode's newer additions), and with no hub the beacon's too; none of it, when we have none, so the HELLO
+     * is the bytes it was */
+    uint32_t pl = plate_len(s->conf.plate);
+    if (pl && rc_plate_ok(s->conf.plate, pl) && (to || !s->conf.hub_ip)){
+        memcpy(m->u.hello.plate, s->conf.plate, pl); m->u.hello.plate[pl] = 0;
+        m->h.flags |= RC_HF_PLATE;
+    }
     int n = 0;
     /* a peer that sees its id here takes us as established, so it is named
      * once established, or heard while the group has room (with the group full
@@ -1672,6 +1700,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         int first = !p->name[0];
         memcpy(p->name, m.u.hello.name, sizeof p->name);
         memcpy(p->flag, m.u.hello.flag, sizeof p->flag);
+        memcpy(p->plate, m.u.hello.plate, sizeof p->plate);
         p->platform = m.u.hello.platform; p->status = m.u.hello.status; p->cfg_rev_seen = m.u.hello.cfg_rev;
         p->core_ver = m.u.hello.core_ver; p->duels = (m.h.flags & RC_HF_DUELS) != 0;
         p->drifts = p->duels && (m.h.flags & RC_HF_DRIFT) != 0;

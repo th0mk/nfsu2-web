@@ -4,8 +4,9 @@
 //    network, hostile datagrams, interpolation, and the platform layer's guard
 //    and peer list) against runtime/roam_core.c + runtime/web/roam_web.c;
 // 2. tests/roam_selftest.c's byte stream with the game build's code
-//    generation: it must be the Mac's and x86's (37,880 bytes, FNV-1a 885556ae);
-// 3. the pose log's buffer (web/test/poselog_unit.c).
+//    generation: it must be the Mac's and x86's (37,880 bytes, FNV-1a 5b4b09dc);
+// 3. the pose log's buffer (web/test/poselog_unit.c);
+// 4. license plates: tests/plates_unit.c.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -35,6 +36,16 @@ test('roam_unit on wasm (core + web platform layer)', { skip: !CC && 'no wasi-sd
   assert.ok(+m[1] >= 119, 'every check ran');
 });
 
+test('plates_unit on wasm: license plates\' pictures and their HELLO (runtime/plate_image.c, roam_core.c)', { skip: !CC && 'no wasi-sdk in deps/' }, () => {
+  const w = path.join(OUT, 'plates_unit.wasm');
+  cc(w, ['tests/plates_unit.c', 'runtime/plate_image.c', 'runtime/roam_core.c']);
+  const out = run(w);
+  const m = /plates_unit: (\d+) passed, (\d+) failed/.exec(out);
+  console.log(out.trim().split('\n').filter(l => /FAIL|plates_unit/.test(l)).join('\n'));
+  assert.ok(m, 'plates_unit ran to the end');
+  assert.equal(+m[2], 0, 'no failed check');
+});
+
 test('the pose log flushes only every 240 frames (roam_host.h buffer)', { skip: !CC && 'no wasi-sdk in deps/' }, () => {
   const w = path.join(OUT, 'poselog_unit.wasm');
   execFileSync(CC, ['--target=wasm32-wasip1-threads', '-pthread', '-O2', '-include', 'runtime/web/compat/wasm_plat.h',
@@ -53,5 +64,5 @@ test('roam_selftest bytes on wasm = Mac = x86', { skip: !CC && 'no wasi-sdk in d
   cc(w, ['web/test/roam_selftest_main.c', 'tests/roam_selftest.c']);
   const out = run(w).trim();
   console.log(out);
-  assert.equal(out, 'roam_selftest: 37880 bytes, FNV-1a 885556ae');
+  assert.equal(out, 'roam_selftest: 37880 bytes, FNV-1a 5b4b09dc');
 });

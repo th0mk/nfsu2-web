@@ -1,0 +1,61 @@
+# License plates of other players' cars and our own (runtime/plates.c), in the new career's prologue free roam among
+# two web/tools/roam-crowd.mjs players standing in cars of other models on the road ahead, each with a plate of its own:
+# photo mode's orbit camera goes round our car, then round each of theirs (the car in the middle, ours hidden), and
+# dumps its back and front.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1920x1080 --a Al:license_plate_crowd.txt:NFSU2_LICENSE_PLATE=UG2LIFE
+#        --crowd 2 --crowd-args "--track <line.csv> --cars ESCALADE,PEUGOT106 --plates BAYVIEW,106GTI"
+# with line.csv two pose-log rows (L,host_us,0,1,x,y,z) a million seconds apart, from 10 m ahead of the new career's
+# start (1695.25 -883.64 24.11, facing 0.982 -0.190) to 34 m: the two stand 12 m apart on the road ahead
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 2 6000
++0    roam mp waitcars 2 6000
++900  photo hello
++0    photo on
++30   photo dolly 2
++0    photo drag 0 -0.15
++0    photo fov 45
++90   dump plate_own_back
++0    photo drag 4 0
++90   dump plate_own_front
++0    photo off
++0    roam mp followname 6 3 -27 Bot01
++200  photo on
++0    photo show 62
++30   photo target 1
++30   photo dolly 2
++0    photo drag -0.3 0
++0    photo fov 40
++90   dump plate_1_back
++0    photo drag 4 0
++90   dump plate_1_front
++0    photo off
++0    roam mp followname 6 3 -27 Bot02
++200  photo on
++0    photo show 62
++30   photo target 1
++30   photo dolly 2
++0    photo drag -0.3 0
++0    photo fov 40
++90   dump plate_2_back
++0    photo drag 4 0
++90   dump plate_2_front
++0    photo off
++30   roam mp status
++10   quit

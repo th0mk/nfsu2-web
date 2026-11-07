@@ -1,0 +1,33 @@
+# License plates in a split race (runtime/plates.c): two players on one keyboard (as split_keyboard_two.txt), both
+# cars with the browser's plate (NFSU2_LICENSE_PLATE), each half showing its car's back at the start and driving.
+0 tapuntil RETURN MC_Background.fng 120 4000
++200 tap RETURN
++0 waitfng GarageMain.fng 3000
++300 tap RIGHT
++200 tap RETURN
++200 tap RETURN
++0 waitfng UI_QRModeSelect.fng 2000
++100 tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++100 tapuntil RETURN UI_QRModeOptions.fng 150 1500
++100 tapuntil RETURN 2P_PressStart.fng 150 1500
++150 down RETURN
++20 up RETURN
++150 dump keyboard_two_car_select
++0 tap RETURN
++200 tap RETURN
++200 dump keyboard_two_second_join
++0 down SPACE
++20 up SPACE
++150 tap RIGHT
++150 tap RETURN
++150 tap RETURN
++0 waitmem 0x8654a4 6 6000
++700 dump plates_two_start
++0 expect i:0xd00030 == 2
++0 down UP
++0 down W
++240 dump plates_two_driving
++0 up UP
++0 up W
++0 status split_plates_two_complete
++60 quit

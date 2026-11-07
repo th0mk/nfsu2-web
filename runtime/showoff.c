@@ -493,18 +493,22 @@ __attribute__((weak)) void damage_render(CPU *c);
 __attribute__((weak)) void carpaint_draw(uint32_t ri);
 __attribute__((weak)) void carpaint_drawn(void);
 void sub_00620ae0_orig(CPU *c);
+uint32_t plates_begin(uint32_t ri);               /* plates.c: the car's own license plate while it is drawn */
+void plates_end(uint32_t before);
 void sub_00620ae0(CPU *c){                       /* the car's drawing */
     if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0x30u; return; }   /* (thiscall, ret 0x30) */
     if (damage_render) damage_render(c);
     if (carpaint_draw) carpaint_draw(c->ecx);
+    uint32_t plate = plates_begin(c->ecx);
     uint32_t b = 0, keep[2]; Car *k = drawn(c->ecx, &b);
-    if (!k){ sub_00620ae0_orig(c); if (carpaint_drawn) carpaint_drawn(); return; }
+    if (!k){ sub_00620ae0_orig(c); plates_end(plate); if (carpaint_drawn) carpaint_drawn(); return; }
     put_on(k, b, keep);
     uint32_t rec = trunk_rec(k), kind = 0; uint8_t shoot = 0;
     if (rec){ shoot = MR8(G_SHOWCASE); kind = MR32(rec + 4u); MR8(G_SHOWCASE) = 1; MR32(rec + 4u) = 1u; }
     sub_00620ae0_orig(c);
     if (rec){ MR8(G_SHOWCASE) = shoot; MR32(rec + 4u) = kind; }
     take_off(b, keep);
+    plates_end(plate);
     if (carpaint_drawn) carpaint_drawn();
 }
 void sub_00615a10_orig(CPU *c);

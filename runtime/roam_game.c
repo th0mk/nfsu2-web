@@ -233,6 +233,8 @@ static inline uint32_t coop_player(void){ return 0; }
 #define NOPP            0
 #endif
 #define NSLOT           64            /* NOPP opponent cars + the rest of our own */
+#define PLATE_EVERY_US  10000000      /* a friend's license plate changes here at most this often (the server lets no more
+                                         through either: a game that sends new ones faster, edited, costs us no more) */
 #define WORLD_INDEX     22            /* World::IndexCars' cars[] (World +0x1C; other fields follow) */
 #define KIND_OUT        4             /* a racer record kind IndexCars skips (1 human, 2 AI racer, 3 traffic) */
 #define SKIN_GAME       6             /* the game's paint slots, DUMMY_SKIN1-6 */
@@ -449,6 +451,9 @@ typedef struct {
     char     name[RC_NAME_MAX + 1];
     char     flagcode[RC_FLAG_MAX + 1];       /* the flag before the name, as the peer's HELLO has it ("" none) */
     int      flag;                            /* ...flags.dat's (-1 none: flag_find) */
+    char     plate[RC_PLATE_MAX + 1];         /* the license plate the car wears ("" the game's own: plates.c) */
+    int64_t  plate_at;                        /* ...since (host clock): another one not within PLATE_EVERY_US */
+    int      plated;                          /* the friend's first plate is on it: a change waits PLATE_EVERY_US */
     uint32_t car, world;                      /* the slot's car in this world */
     int      created;                         /* one of our own cars (k >= NOPP) */
     int      unindexed;                       /* ...past World::IndexCars' 22: record kind KIND_OUT */
@@ -1504,6 +1509,7 @@ static void world_gone(void){
         s->ride_new = rn; s->ride_orig = ro; s->rec = rec;
     }
     g_created_n = 0; g_em = EM_GAME; g_em_pin = 0; g_em_racing_noted = 0; g_em_release_at = 0;
+    rh_plates_forget();
 }
 static void flush_unloads(CPU *c){
     for (int i = 0; i < g_npending; i++) gcall1(c, FN_LOADER_UNLOAD, G_CARLOADER, g_handles_pending[i]);
@@ -4037,6 +4043,7 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
 
 /* ---- per-frame --------------------------------------------------------------------------------- */
 typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; char flag[RC_FLAG_MAX + 1]; int visible, paused; float dist; uint32_t cfg_gen;
+                 char plate[RC_PLATE_MAX + 1];   /* its license plate, as its HELLO has it ("" the game's own) */
                  int roams;            /* its status: in free roam, or paused there (shown or not) */
                  float rank;           /* the slots' order (assign): the nearest of the distances SOON_S and LOOK_S
                                           on, both cars at their speeds, and from our view point VIEW_M ahead (as
@@ -4613,6 +4620,14 @@ static void lights_peers(void){
     for (int k = 0; k < NSLOT; k++){
         uint32_t car = g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
         rh_lights_car(k, ok(car, 0x9e0) ? car : 0, st[k]);
+    }
+}
+
+/* friends' license plates (plates.c): each shown car's, as its player's HELLO has it; none on the others */
+static void plates_peers(void){
+    for (int k = 0; k < NSLOT; k++){
+        uint32_t car = g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
+        rh_plate_car(k, ok(car, 0x9e0) ? car : 0, g_sl[k].plate);
     }
 }
 
@@ -8521,6 +8536,7 @@ static void init_once(CPU *c){
     O.flag = fl && strlen(fl) <= RC_FLAG_MAX ? flag_find(flc) : -1;
     if (O.flag >= 0) snprintf(cf.flag, sizeof cf.flag, "%s", flc);
     else if (fl && *fl) rlog("[roam] NFSU2_ROAM_FLAG=%s is no flag this game has: none\n", fl);
+    snprintf(cf.plate, sizeof cf.plate, "%s", rh_plate_mine());   /* our license plate (plates.c checked it) */
 #ifdef ROAM_HOST_WIN
     cf.platform = RC_PLAT_WIN;                             /* HELLO byte 18: the Windows plugin */
 #else
@@ -8860,11 +8876,13 @@ static void assign(CPU *c, int64_t host){
         s->acq_us = roam_plat_now_us();
         snprintf(s->name, sizeof s->name, "%s", v->name);
         memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode);
+        memcpy(s->plate, v->plate, sizeof s->plate); s->plate_at = s->acq_us; s->plated = v->plate[0] != 0;
         if (reuse){
             s->st = SL_ACTIVE; s->cfg_gen = v->cfg_gen; s->hidden = 1; g_acquires++; g_reuses++;
             set_name(s);
             rlog("[roam] f=%ld slot %d for %s, %.0f m away: the parked %s already wears this look\n", rh_frame(), k,
                     s->name, (double)v->dist, s->carname);
+            if (s->plated) rlog("[roam] f=%ld slot %d for %s: license plate %s\n", rh_frame(), k, s->name, s->plate);
             continue;
         }
         if (g_heavy >= HEAVY_PER_FRAME || !load_may_start(c)){                 /* the next frame */
@@ -8878,6 +8896,7 @@ static void assign(CPU *c, int64_t host){
             s->st = SL_CREATING; g_acquires++;
             rlog("[roam] f=%ld slot %d (car of our own, being created) for %s, %.0f m away\n", rh_frame(), k, s->name,
                     (double)v->dist);
+            if (s->plated) rlog("[roam] f=%ld slot %d for %s: license plate %s\n", rh_frame(), k, s->name, s->plate);
             continue;
         }
         if (!begin_load(c, k, v->cfg, v->cfg_len, v->cfg_gen)){
@@ -8890,6 +8909,7 @@ static void assign(CPU *c, int64_t host){
         s->st = SL_LOADING; g_acquires++;
         rlog("[roam] f=%ld slot %d (%s) for %s, %.0f m away\n", rh_frame(), k,
                 k < NOPP ? "free-roam opponent car" : "car of our own", s->name, (double)v->dist);
+        if (s->plated) rlog("[roam] f=%ld slot %d for %s: license plate %s\n", rh_frame(), k, s->name, s->plate);
     }
 }
 
@@ -9547,6 +9567,7 @@ void roam_game_frame(CPU *c){
 #endif
             PeerView *v = &g_pv[g_npv++];
             v->idx = gi; v->seats = seats; v->id = p->id; snprintf(v->name, sizeof v->name, "%s", p->name); memcpy(v->flag, p->flag, sizeof v->flag);
+            memcpy(v->plate, p->plate, sizeof v->plate);
             /* shown while it is in free roam and its snapshots keep coming,
              * or while it is paused there: a paused game (pause menu, or a
              * window in the background: lifecycle.c parks the game, no
@@ -9650,6 +9671,13 @@ void roam_game_frame(CPU *c){
             if (!v) continue;
             s->seats = v->seats;
             if (strcmp(s->flagcode, v->flag)){ memcpy(s->flagcode, v->flag, sizeof s->flagcode); s->flag = flag_find(s->flagcode); }
+            /* the friend's first plate at once, then a new one at most every PLATE_EVERY_US: one who changes it again
+             * and again costs us a texture's pixels that often, no more (plates.c) */
+            if (strcmp(s->plate, v->plate) && (!s->plated || host - s->plate_at >= PLATE_EVERY_US)){
+                memcpy(s->plate, v->plate, sizeof s->plate); s->plate_at = host;
+                if (v->plate[0]) s->plated = 1;
+                rlog("[roam] f=%ld slot %d (%s): license plate %s\n", rh_frame(), k, s->name, s->plate[0] ? s->plate : "the game's own");
+            }
             s->oneway = v->oneway;
             /* a second first: a hitch in the friend's game (streaming) is a pause too */
             if (!v->paused) s->paused_since = 0;
@@ -9763,6 +9791,7 @@ void roam_game_frame(CPU *c){
     showoff_peers(c);
     lights_peers();
     damage_peers(c);
+    plates_peers();
     if (g_poselog && have_ls){
         uint32_t me = player_car();
         rh_fprintf(g_poselog, "L,%lld,%.0f,%08x,%.4f,%.4f,%.4f,%.3f,0,0,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", (long long)host, g_sync, g_s.conf.self_id,
@@ -10097,6 +10126,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
                     sqrt((double)(dx * dx + dy * dy)), car ? MR16(car + 0x40cu) : 0, car ? MR8(car + 0x5c0u) : 0, car ? MR8(car + 0x550u) : 0,
                     car ? MR32(car + 0x24u) : 0, car ? MR32(car + 0x28u) : 0, car ? MR32(car + 0x554u) : 0, car ? (int16_t)MR16(car + 8u) : -1,
                     car ? (double)MRF32(car + 0x50u) : 0, car ? (double)MRF32(car + 0x54u) : 0, car ? (double)MRF32(car + 0x58u) : 0);
+            rlog("[roam]     license plate %s\n", g_sl[k].plate[0] ? g_sl[k].plate : "the game's own");
             uint32_t body = car ? rd32(car + 0x3cu) : 0;
             if (car) rlog("[roam]     %s%s%s%s%s%s%s%s%s%s%s%s; collision body %s%s; %u hit(s) with my car (at most %.1f m/s)\n", g_sl[k].duel ? "the outrun's, " : "",
                           !O.collide && !g_sl[k].duel ? "solid cars off" : g_sl[k].soft ? "passable:" : g_sl[k].ghost ? "a ghost" : "solid",

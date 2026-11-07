@@ -882,8 +882,7 @@ static int pc_inside(uint32_t th, uint32_t M, const float lo[3], const float hi[
 }
 int g_carpaint_watch;                            /* carpaint.c's test aid ("roam mp paint on"): each model drawn checked */
 __attribute__((weak)) void carpaint_model(uint32_t mdl);
-void sub_005c5930(CPU *c){
-    if (g_carpaint_watch && carpaint_model) carpaint_model(MR32(c->esp + 4u));
+static void partcull_draw(CPU *c){
     if (g_pc_on < 0){ const char *e = getenv("PARTCULL"); g_pc_on = e ? atoi(e) : 1; }
     uint32_t e = c->esp, item = MR32(e + 4u), fl = MR32(e + 16u);
     uint32_t W = g_pc_on && item && !(fl & 4u) ? MR32(item + 0xcu) : 0;
@@ -918,6 +917,16 @@ void sub_005c5930(CPU *c){
     }
     MR32(e + 16u) = fl | 4u;
     sub_005c5930_orig(c);
+}
+/* A car with a license plate of its own (plates.c) puts that plate's texture in the model's texture table for as long
+ * as the model goes into the render lists, which keep it; the table has the game's back after, for the next car */
+void plates_model(uint32_t item, uint32_t keep[2]);
+void sub_005c5930(CPU *c){
+    uint32_t keep[2];
+    if (g_carpaint_watch && carpaint_model) carpaint_model(MR32(c->esp + 4u));
+    plates_model(MR32(c->esp + 4u), keep);
+    partcull_draw(c);
+    if (keep[0]) MR32(keep[0]) = keep[1];
 }
 
 /* --- sub_0068ce7c: D3DXMatrixMultiply, the SSE version ---------------------

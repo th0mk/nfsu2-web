@@ -21,7 +21,7 @@
 #include <stddef.h>
 
 #define RC_PROTO_VER     1          /* header byte 4; a different value is ignored */
-#define RC_CORE_VER      16        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
+#define RC_CORE_VER      17        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
                                        4: state extensions, RC_HF_STATEX; 5: race lobbies, RC_HF_LOBBY; 6: quick chat,
                                        RC_HF_SAY; 7: crews, RC_HF_CREW; 8: crews from the hub, RC_HF_HUBCREW;
                                        9: a HELLO to one peer names only that peer, roam_core.c fill_hello;
@@ -32,7 +32,8 @@
                                        RC_MAX_PEERS (64); 15: one-way links, the hub's lists of up to RC_LIST_MAX
                                        with RC_MARK_RXONLY / RC_MARK_TXONLY; 16: the hub's lists end in hints, which
                                        of the players who only get our car are far off (RC_HINT_*) and why the hub let
-                                       the cars near us go that it no longer lists (RC_GONE_*, rc_hub_gone)) */
+                                       the cars near us go that it no longer lists (RC_GONE_*, rc_hub_gone);
+                                       17: to a peer, after the flag, the player's license plate, RC_HF_PLATE) */
 #define RC_MAGIC0        0x4E       /* "N2FR" */
 #define RC_MAGIC1        0x32
 #define RC_MAGIC2        0x46
@@ -289,6 +290,13 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
 #define RC_HF_CREW       0x0200
 #define RC_CREW_MAX      4
 #define RC_FLAG_MAX      6          /* a flag's code: "nl", "gb-eng" (lower case letters and '-') */
+/* header flags (HELLO, core 17 and up): the player's license plate after the flag (and the bytes before it, 0 or not:
+ * the crews' count, the links, the outrun's player, the flag), to each peer (an older core reads past it); none: the
+ * game's own plate.
+ * Only with RC_HF_CREW.  Up to RC_PLATE_MAX capital letters and digits (rc_plate_ok); one that reads as a slur is
+ * none (roam_core.c rc_decode, names.h) */
+#define RC_HF_PLATE      0x8000
+#define RC_PLATE_MAX     8
 /* header flags (HELLO, core 8 and up): this player reads the crew marks of
  * the hub's PEERS (RC_HF_CREW above); a hub sends them to no other */
 #define RC_HF_HUBCREW    0x0400
@@ -361,6 +369,9 @@ float    rc_sqrtf(float x);
 /* printable ASCII, at most RC_NAME_MAX bytes, never empty and never one that
  * reads as a slur (names.h): "Player" then */
 void     rc_name_clean(char *dst, const char *src, uint32_t srclen);
+/* a license plate's text: n (at most RC_PLATE_MAX) capital letters A-Z and digits, none other (n 0: the game's own
+ * plate).  Whether it reads as a slur is names.h's name_blocked */
+int      rc_plate_ok(const char *s, uint32_t n);
 
 /* ---- messages -------------------------------------------------------------- */
 typedef struct {
@@ -464,8 +475,10 @@ typedef struct {
                  uint8_t n_crews; uint32_t crews[RC_CREW_MAX];             /* crews: with RC_HF_CREW only */
                  uint8_t links;            /* after the crews (their count too, 0 or not): the links we want, 0: not said (core 10, to the hub) */
                  uint32_t duel;            /* after the links (the byte too, 0 or not): our outrun's other player, 0: none (core 11, to the hub) */
-                 char flag[RC_FLAG_MAX + 1]; } hello;   /* after the duel (the links and the duel too, 0 or not): our flag, "" none
-                                                           (core 13, to a peer: roam_game.c flags_*) */
+                 char flag[RC_FLAG_MAX + 1];   /* after the duel (the links and the duel too, 0 or not): our flag, "" none
+                                                 (core 13, to a peer: roam_game.c flags_*) */
+                 char plate[RC_PLATE_MAX + 1]; } hello;   /* after the flag: our license plate, "" the game's own
+                                                            (core 17, to each peer, RC_HF_PLATE) */
         struct { uint8_t n; struct { uint32_t ip; uint16_t port; uint32_t id; } e[RC_LIST_MAX];
                  uint8_t n_mine; uint32_t mine[RC_CREW_MAX]; uint8_t crew[RC_LIST_MAX];   /* the crew marks: with RC_HF_CREW only */
                  uint8_t hints;            /* after the marks, the hints (a hub of core 16's): */
@@ -618,6 +631,7 @@ typedef struct {
     int      n_crews;
     char     name[RC_NAME_MAX + 1];
     char     flag[RC_FLAG_MAX + 1];  /* the flag before our name ("" none): HELLO, to the peers */
+    char     plate[RC_PLATE_MAX + 1];  /* our license plate ("" the game's own): HELLO, to the peers of core 17 and up */
     uint8_t  platform;
     int      discovery;            /* beacon through io.broadcast every 2 s */
     int      test_mode;            /* only 127/8 peers are accepted */
@@ -665,6 +679,7 @@ typedef struct {
                                       SNAPs (0: no hints; snap_every) */
     char     name[RC_NAME_MAX + 1];
     char     flag[RC_FLAG_MAX + 1];  /* the flag before its name, as its last HELLO had it ("" none, or a core before 13) */
+    char     plate[RC_PLATE_MAX + 1];  /* its license plate, as its last HELLO had it ("" the game's own, or a core before 17) */
     uint8_t  platform, status;
     uint16_t core_ver;             /* its HELLO's (0 until one came): below 2 it reads lists of RC_PEERS_V1 at most */
     uint8_t  duels;                /* its HELLO says it takes outrun challenges (RC_HF_DUELS) */

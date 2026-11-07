@@ -1394,10 +1394,14 @@ void sub_0048acb0(CPU *c){
 void sub_006162e0_orig(CPU *c);
 __attribute__((weak)) void carpaint_draw(uint32_t ri);     /* carpaint.c: the car's tips, calipers and rims, its own paint */
 __attribute__((weak)) void carpaint_drawn(void);
+uint32_t plates_begin(uint32_t ri);               /* plates.c: the car's own license plate while it is drawn */
+void plates_end(uint32_t before);
 void sub_006162e0(CPU *c){
     if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0x30u; return; }
     if (carpaint_draw) carpaint_draw(c->ecx);
+    uint32_t plate = plates_begin(c->ecx);
     sub_006162e0_orig(c);
+    plates_end(plate);
     if (carpaint_drawn) carpaint_drawn();
 }
 void sub_00615630_orig(CPU *c);

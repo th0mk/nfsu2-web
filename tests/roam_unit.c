@@ -504,12 +504,17 @@ static void hub_in(int from, const uint8_t *b, int len){
     else if (m.h.type == RC_MSG_BYE) g_hub_bye[from]++;
     else if (m.h.type == RC_MSG_LOBBY){ g_hub_lobby[from]++; g_hub_lobby_last[from] = m.u.lobby; }
 }
+/* the license plate of the first HELLO each node sent each other (t_flag), and how many it sent */
+static char g_first_plate[NN][NN][RC_PLATE_MAX + 1];
+static int g_hellos[NN][NN];
 static void net_send(void *u, uint32_t ip, uint16_t port, const uint8_t *buf, int len){
     if (ip == HUB_IP && port == HUB_PORT){ hub_in((int)(intptr_t)u, buf, len); return; }
     int from = (int)(intptr_t)u, to = node_of(ip, port);
     if (len > 5 && buf[5] == RC_MSG_CFG) g_cfg_tx[from]++;
     if (to >= 0 && len > 5 && buf[5] == RC_MSG_PING) g_ping_tx[from][to]++;
     if (to >= 0 && len > 5 && buf[5] == RC_MSG_HELLO) g_hello_tx[from][to]++;
+    if (to >= 0 && len > 15 && buf[5] == RC_MSG_HELLO && !g_hellos[from][to]++){
+        rc_msg d; if (rc_decode(buf, len, &d) == RC_OK) memcpy(g_first_plate[from][to], d.u.hello.plate, sizeof g_first_plate[from][to]); }
     if (to >= 0 && len > 16 && buf[5] == RC_MSG_DENTS){ if (buf[16] == RC_DENTS_STATE) g_dents_tx[from][to]++; else g_have_tx[from][to]++; }
     if (to >= 0 && len > 15 && buf[5] == RC_MSG_SNAP){ if (buf[14] & RC_HF_STATEX) g_snapx_rx[to]++; else g_snap_rx[to]++; g_snap_tx[from][to]++; }
     if (to < 0 || g_drop[from][to]) return;
@@ -1459,6 +1464,17 @@ static void t_flag(void){
     CHECK(a1 >= 0 && a2 >= 0 && b0 >= 0 && c0 >= 0 && !strcmp(g_n[1].peer[a1].flag, "br") && !strcmp(g_n[2].peer[a2].flag, "br") &&
           !strcmp(g_n[0].peer[b0].flag, "gb-sct") && !g_n[0].peer[c0].flag[0], "each peer has the other's flag (%s, %s, %s, '%s')",
           a1 >= 0 ? g_n[1].peer[a1].flag : "?", a2 >= 0 ? g_n[2].peer[a2].flag : "?", b0 >= 0 ? g_n[0].peer[b0].flag : "?", c0 >= 0 ? g_n[0].peer[c0].flag : "?");
+    /* sessions: our license plate from the first HELLO a peer gets (its core version not known yet: an older core reads
+     * past it), the peer has it from then on; a game with none sends none */
+    mesh(2, 8);
+    memset(g_hellos, 0, sizeof g_hellos); memset(g_first_plate, 0, sizeof g_first_plate);
+    strcpy(g_n[0].conf.plate, "ABC123");
+    rc_add_peer(&g_n[0], node_ip(1), node_port(1), 1, g_now); rc_add_peer(&g_n[1], node_ip(0), node_port(0), 1, g_now);
+    drive(2, g_now + 3000000);
+    int p1 = peer_of(1, 0x500), p0 = peer_of(0, 0x501);
+    CHECK(g_hellos[0][1] > 0 && !strcmp(g_first_plate[0][1], "ABC123") && !g_first_plate[1][0][0] && p1 >= 0 && p0 >= 0 &&
+          !strcmp(g_n[1].peer[p1].plate, "ABC123") && !g_n[0].peer[p0].plate[0], "the plate from the first HELLO on ('%s', the peer has '%s')",
+          g_first_plate[0][1], p1 >= 0 ? g_n[1].peer[p1].plate : "?");
 }
 
 /* ---- 4d''. drift battles: a drift challenge and SCORE only to a peer whose HELLO takes them, the points through -- */

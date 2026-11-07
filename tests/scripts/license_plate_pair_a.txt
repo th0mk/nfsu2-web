@@ -1,0 +1,40 @@
+# License plates between two players (runtime/plates.c), instance A, with license_plate_pair_b.txt: both in the new
+# career's prologue free roam in the same model (the 350Z), each with a plate of its own from Settings (settings.ini
+# license_plate, which the game takes at Play: roam-pair's --seed-for with a settings.ini of each player's).  B drives
+# some 20 m ahead; A shoots both cars, then B's and its own close in photo mode, and says B's plate (mp status).
+#   roam-pair --page app --a Ann:license_plate_pair_a.txt --b Bob:license_plate_pair_b.txt --env NFSU2_ROAM_ROOM=<r>
+#             --seed-for Ann:<a folder with settings.ini: license_plate = ann1> --seed-for Bob:<... license_plate = BOB12345>
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++1300 log SHOT drive
++0    roam mp status
++0    log KEY F12
++60   photo target 1
++30   photo dolly 2
++0    photo fov 40
++90   log SHOT photo_b
++0    photo target 0
++30   photo dolly 2
++0    photo fov 40
++90   log SHOT photo_a
++0    photo off
++60   roam mp status
++10   quit

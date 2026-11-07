@@ -1,0 +1,20 @@
+# License plates in the front end (runtime/plates.c): a career's car with our plate (NFSU2_LICENSE_PLATE) in free
+# roam, then into the shop ${SHOP}: the body shop's car is ours (our plate), the car lot's are the dealer's (the
+# game's own plate, "[plates] ... not our car").  Frames of each.
+#   roam-pair --solo --page play --seed <a career save> --a Al:license_plate_fe.txt:NFSU2_LICENSE_PLATE=MINE1,SHOP=CC_BODYSHOP_1
+#   (and SHOP=CC_CAR_LOT_1)
+0     bot on
++0    waitroam 6000
++0    bot off
++300  dump fe_world
++0    shopgo ${SHOP}
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the shop
++900  fnglist
++0    dump fe_shop
++3    dump fe_shop
++120  tap RIGHT
++120  dump fe_shop_next
++3    dump fe_shop_next
++60   quit

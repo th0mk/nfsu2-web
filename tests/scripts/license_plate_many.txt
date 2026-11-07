@@ -1,0 +1,29 @@
+# License plates on many cars (runtime/plates.c): the new career's prologue free roam among ${ROAM_CROWD_CARS}
+# web/tools/roam-crowd.mjs players standing round the start, each with a plate of its own (or none, to compare); the
+# game stands 40 s with them all shown and says its frame rate every second ([hfr] lines) and its plates ([plates]).
+#   roam-pair --solo --page play --size 1280x720 --a Al:license_plate_many.txt
+#             --env ROAM_CROWD_CARS=56 --env NFSU2_ROAM_MAX_CARS=56 --env NFSU2_HFR_LOG=1
+#             --crowd 56 --crowd-args "--speed 0 --spread 10 --cars all --plates P01,P02,...,P56"   (or without --plates)
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers ${ROAM_CROWD_CARS} 6000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++600  dump many
++2400 roam mp status
++10   quit
