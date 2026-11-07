@@ -398,10 +398,11 @@ async function aheadLoop() {
   } finally { aheadLoops--; }
 }
 
-// A read whose blocks this device keeps goes from the cache file straight into the game's memory, not through a 1 MB
-// block of its own for each: in WebKit this worker collects next to nothing (it holds the game's memory: memory.ts),
-// and those blocks were ~250 MB of garbage as a crowded free roam came in (Playwright WebKit, 2026-11-07).  A
-// browser that will not read a file into shared memory (a TypeError) reads through the blocks, as before.
+// In WebKit (offPage) a read whose blocks this device keeps, and the memory does not, goes from the cache file straight
+// into the game's memory, not through a 1 MB block of its own for each: this worker collects next to nothing there (it
+// holds the game's memory: memory.ts), and those blocks were ~250 MB of garbage as a crowded free roam came in
+// (Playwright WebKit, 2026-11-07).  A browser that will not read a file into shared memory (a TypeError) reads
+// through the blocks, as Chrome and Firefox do.
 let readsKept = true;
 function readKept(cf: CacheFile, pos: number, end: number, dst: { ptr: number; len: number }[], first: number, last: number): number {
   for (let bi = first; bi <= last; bi++) if (!cf.have[bi]) return -1;
@@ -409,8 +410,9 @@ function readKept(cf: CacheFile, pos: number, end: number, dst: { ptr: number; l
   let off = pos;
   try {
     for (const d of dst) {
+      if (off >= end) break;
+      if (!d.len) continue;                    // (an empty buffer between two others: the next one goes on)
       const k = Math.min(d.len, end - off);
-      if (k <= 0) break;
       if (cf.h.read(mem.subarray(d.ptr, d.ptr + k), { at: off }) !== k) return -1;
       off += k;
     }
@@ -422,13 +424,18 @@ function readKept(cf: CacheFile, pos: number, end: number, dst: { ptr: number; l
   return end - pos;
 }
 
+/** whether the memory has every block of first..last (a read the blocks serve at once) */
+function blocksInMemory(n: DNode, first: number, last: number): boolean {
+  for (let bi = first; bi <= last; bi++) if (!memBlocks.has(n.path + '#' + bi)) return false;
+  return true;
+}
 async function dataRead(n: DNode, pos: number, dst: { ptr: number; len: number }[]): Promise<number> {
   const total = dst.reduce((a, d) => a + d.len, 0);
   const end = Math.min(n.size, pos + total);
   if (end <= pos) return 0;
   const first = Math.floor(pos / BLOCK), last = Math.floor((end - 1) / BLOCK), track = isTrackStream(n);
   if (track) readAhead(n, first);
-  if (readsKept && cacheDir) {
+  if (readsKept && offPage && cacheDir && !blocksInMemory(n, first, last)) {
     dataSummary(performance.now());
     const cf = await cacheFile(n);
     const r = cf ? readKept(cf, pos, end, dst, first, last) : -1;
