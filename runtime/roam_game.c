@@ -730,8 +730,16 @@ static int car_state(uint32_t car, rc_state *s, int horn, uint8_t *thumps, int *
 }
 static int local_state(rc_state *s){ return car_state(player_car(), s, g_horn, &g_thumps, &g_landed, rh_showoff_mine()); }
 /* a slot's friend's crash damage, as its peer's last DENTS had it (with the session's lock held): again when the peer
- * has a new one, or the slot another peer */
+ * has a new one, or the slot another peer.  The DENTS come to player 1's endpoint only (co-op: player 2's asks for
+ * none), so a slot of player 2's session's peer takes them from player 1's peer of the same player, and keeps what it
+ * has while player 1's has no such peer */
 static void slot_damage(Slot *s, const rc_peer *p, int gi){
+    if (gi >= RC_TABLE){
+        int j = 0;
+        while (j < RC_TABLE && !(g_s.peer[j].state == RC_PS_EST && g_s.peer[j].id == p->id)) j++;
+        if (j == RC_TABLE) return;
+        p = &g_s.peer[j]; gi = j;
+    }
     if (s->dmg_idx == gi && s->dmg_gen == p->dents_gen) return;
     s->dmg_idx = gi; s->dmg_gen = p->dents_gen;
     s->dmg_epoch = p->dents_epoch; s->dmg_first = p->dents_first; s->dmg_n = p->dents_n;
@@ -9154,6 +9162,7 @@ static void c2_start(int64_t host){
     cf.self_id = g_c2.id; cf.port = (uint16_t)(g_s.conf.port + C2_PORT_STEP);
     memset(cf.crews, 0, sizeof cf.crews); cf.n_crews = 0;
     cf.duels = cf.drifts = cf.lobbies = cf.say = cf.discovery = 0; cf.seat2 = 1;
+    cf.dents = 0;                         /* (friends' crash damage comes to player 1's endpoint: once a browser) */
     cf.hub_ip = 0; cf.hub_port = 0;
     /* (a name the page picked for player 2 before, for the same player 1's name, stays) */
     const char *base = O.name[0] ? O.name : "Player";
@@ -10037,9 +10046,10 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         for (int i = 0; i < RC_TABLE; i++){
             const rc_peer *p = &g_s.peer[i]; char b[16];
             if (p->state == RC_PS_FREE) continue;
-            rlog("[roam]   peer %d %s:%u id %08x state %d %s (%s) cfg rev %u%s, %d states, crew %d (%d crews, reads them %d; %d of ours by the hub)%s\n", i,
+            rlog("[roam]   peer %d %s:%u id %08x state %d %s (%s) cfg rev %u%s, %d states, crew %d (%d crews, reads them %d; %d of ours by the hub)%s%s\n", i,
                     roam_ip_str(p->ip, b), p->port, p->id, p->state, p->name, rc_status_name(p->status), p->cfg_rev, p->cfg_len ? "" : " (none yet)",
-                    p->mo.n, rc_peer_crew(&g_s, i) + 1, p->n_crews, p->reads_crews, p->n_hub_crews, p->hub_friend ? ", our friend" : "");
+                    p->mo.n, rc_peer_crew(&g_s, i) + 1, p->n_crews, p->reads_crews, p->n_hub_crews, p->hub_friend ? ", our friend" : "",
+                    p->dents ? ", shows crash damage" : "");
         }
         roam_plat_unlock();
         uint32_t icons = rd32(G_MM_ICONS); int arrows = 0, freev = 0, tinted = 0, wrong = 0, ais = 0, grey = 0, greyf = 0; uint8_t has[256] = {0};
