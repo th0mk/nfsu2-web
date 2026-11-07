@@ -23,12 +23,18 @@ let tid = 0;
 let blockedMs = 0;
 const post = (m: ToPage) => (self as unknown as Worker).postMessage(m);
 
-// (WebKit, host/memory.ts) the Memory comes on a port the I/O worker posts it on, not from the page
-// (or through the page, { t: 'memory' }, where the I/O worker could not post it on the port)
-const memoryFrom = (p: MessagePort) => new Promise<WebAssembly.Memory>((res, rej) => {
-  self.addEventListener('message', (e: MessageEvent) => { if (e.data?.t === 'memory' && e.data.memory instanceof WebAssembly.Memory) res(e.data.memory); });
-  p.onmessage = (e) => { p.close(); if (e.data instanceof WebAssembly.Memory) res(e.data); else rej(new Error('no memory on the port')); };
-  p.onmessageerror = () => { p.close(); rej(new Error('the game\'s memory could not reach this thread')); };
+// (WebKit, host/memory.ts) the Memory comes on a port the I/O worker posts it on, not from the page; or through the
+// page ({ t: 'memory' }): where the I/O worker could not post it on the port, or where nothing usable came on it in
+// MEMORY_PORT_MS (this thread asks then: 'memory-please')
+const MEMORY_PORT_MS = 5000;
+const memoryFrom = (p: MessagePort, slot: number) => new Promise<WebAssembly.Memory>(res => {
+  let done = false, asked = false;
+  const take = (m: WebAssembly.Memory) => { if (done) return; done = true; clearTimeout(late); p.close(); res(m); };
+  const viaPage = (why: string) => { if (done || asked) return; asked = true; post({ t: 'memory-please', slot, why }); };
+  self.addEventListener('message', (e: MessageEvent) => { if (e.data?.t === 'memory' && e.data.memory instanceof WebAssembly.Memory) take(e.data.memory); });
+  p.onmessage = (e) => { if (e.data instanceof WebAssembly.Memory) take(e.data); else viaPage('something else came on its port'); };
+  p.onmessageerror = () => viaPage('it could not come on its port');
+  const late = setTimeout(() => viaPage(`nothing came on its port in ${MEMORY_PORT_MS / 1000} s`), MEMORY_PORT_MS);
 });
 
 // One view of each kind, made again only when the memory grew, not one per call: a game thread's sleeps and file calls
@@ -299,8 +305,7 @@ onmessage = async (e: MessageEvent<Init | { t: 'memory' }>) => {
   if ('t' in e.data) return;                 // the Memory through the page (memoryFrom)
   const m = e.data;
   ctl = new Int32Array(m.ctl); slot = m.slot; POOL = m.pool; cfg = m.cfg;
-  try { memory = m.memory ?? await memoryFrom(m.memPort!); }
-  catch (x) { post({ t: 'trap', tid: 0, msg: `pool worker ${slot}: ${x instanceof Error ? x.message : String(x)}` }); return; }
+  memory = m.memory ?? await memoryFrom(m.memPort!, slot);
   rpcI32 = new Int32Array(m.rpc); rpcI64 = new BigInt64Array(m.rpc);
   const imports: WebAssembly.Imports = {
     env: { memory },

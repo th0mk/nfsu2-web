@@ -1021,7 +1021,7 @@ async function serve() {
 }
 
 let gaveHere = false;
-onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; port: MessagePort; slot: number }>) => {
+onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; port: MessagePort; slot: number } | { t: 'give-page'; slot: number }>) => {
   if ('t' in e.data) {
     if (e.data.t === 'save-ready') saveAnswered?.();
     // the Memory for a game thread, on the port the page gave it
@@ -1034,6 +1034,8 @@ onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; por
       }
       e.data.port.close();
     }
+    // a game thread that had nothing usable on its port asked the page for the Memory (game-worker.ts memoryFrom)
+    else if (e.data.t === 'give-page') (self as unknown as Worker).postMessage({ t: 'give-here', slot: e.data.slot, memory });
     return;
   }
   cfg = e.data.cfg;

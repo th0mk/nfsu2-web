@@ -59,6 +59,8 @@ function memoryPagesOf(mod: WebAssembly.Module): number | null {
 const POOL_START = 12, POOL_SPARE = 2;
 /** how long the I/O worker may take to say it is ready (startProcess) */
 const IO_START_MS = 45_000;
+/** ... and the first pool of game workers after it */
+const POOL_START_MS = 45_000;
 
 export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   const pool = Math.min(o.pool ?? 24, MAX_THREADS);
@@ -98,6 +100,10 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     if (m.t === 'log') o.onLog?.(m.s, m.fd, m.tid);
     else if (m.t === 'trap') o.onLog?.(`TRAP in thread ${m.tid}: ${m.msg}\n${m.stack ?? ''}`, 2, m.tid);
     else if (m.t === 'pool') topUp();
+    else if (m.t === 'memory-please') {
+      if (!viaPage) { viaPage = true; o.onNote?.(`[memory] game worker ${m.slot}: ${m.why}; the game threads get it through the page`); }
+      io.postMessage({ t: 'give-page', slot: m.slot });
+    }
     else if (m.t === 'exit') {
       o.onNote?.(`[pool] ${started} game workers started, at most ${mostBusy} threads at once`);
       o.onExit?.(m.code); resolveExit(m.code);
@@ -137,6 +143,7 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
       else if (e.data.t === 'memory') { memory = new MemoryBuffer(e.data.buf); o.onNote?.(e.data.note); }
       else if (e.data.t === 'io-error') {
         clearTimeout(late);
+        io.terminate();                      // (and with it a memory it made)
         // (a size refused: as the page's own refusal would be, for its message to the player and the log's line)
         if (e.data.note) o.onNote?.(e.data.note);
         rej(e.data.range ? new RangeError(e.data.msg) : new Error(e.data.msg));
@@ -174,6 +181,7 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     io.postMessage({ t: 'give', port: ch.port1, slot }, [ch.port1]);
   };
   const bySlot = new Map<number, Worker>();
+  let viaPage = false;
   for (let s = 0; s < pool; s++) ctl[CTL_POOL + 4 * s] = POOL_NONE;   // each worker makes its slot idle when ready
   let started = 0, starting = 0, mostBusy = 0;
   const startWorker = () => {
@@ -196,7 +204,16 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     mostBusy = Math.max(mostBusy, started - starting - idle);
     for (let n = idle + starting; n < POOL_SPARE && started < pool; n++) void startWorker();
   };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(o.poolStart ?? POOL_START, pool)) }, startWorker));
+  // the first pool ready in POOL_START_MS at most: one that never is (a thread whose memory never came) is a game that
+  // does not start, said so, never a black stage for good
+  let poolLate: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([Promise.all(Array.from({ length: Math.max(1, Math.min(o.poolStart ?? POOL_START, pool)) }, startWorker)),
+      new Promise((_, no) => { poolLate = setTimeout(() => no(new Error(`the game's threads did not start in ${POOL_START_MS / 1000} s`)), POOL_START_MS); })]);
+  } catch (e) {
+    for (const w of workers) w.terminate();
+    throw e;
+  } finally { clearTimeout(poolLate); }
   // slot 0 runs the process entry
   Atomics.store(ctl, CTL_POOL, POOL_RUN_MAIN); Atomics.notify(ctl, CTL_POOL);
 
