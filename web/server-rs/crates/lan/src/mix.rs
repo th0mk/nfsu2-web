@@ -14,9 +14,9 @@ use crate::compact::ROAM_OK;
 use crate::{BROADCAST, KIND_UDP};
 
 /// runtime/roam_core.h RC_MSG_*: a free-roam datagram's type (0: one this does not know)
-const ROAM_TYPES: [&str; 18] = [
+const ROAM_TYPES: [&str; 21] = [
     "?", "hello", "peers", "car state", "car look", "car look ask", "ping", "pong", "bye", "duel", "map ask", "map",
-    "lobby", "lobbies", "race report", "say", "race results", "map delta",
+    "lobby", "lobbies", "race report", "say", "race results", "map delta", "near ask", "near", "crash damage",
 ];
 const R: usize = ROAM_TYPES.len();
 /// a free-roam datagram whose magic, length or CRC did not check out (or another kind 1 on free roam's ports)
@@ -242,6 +242,11 @@ mod tests {
         let mut roam = b"N2FR\x01\x06".to_vec();
         roam.resize(24, 0);
         assert_eq!(name(of_entry(&frame(1, ROAM_OK, BASE | 2, ROAM_PORT, &roam), BASE | 2, BASE | 9)), "ping");
+        let mut dents = roam.clone();
+        dents[5] = 20;
+        assert_eq!(name(of_entry(&frame(1, ROAM_OK, BASE | 2, ROAM_PORT, &dents), BASE | 2, BASE | 9)), "crash damage");
+        dents[5] = 18;
+        assert_eq!(name(of_page(&frame(1, 0, BASE | 2, ROAM_PORT, &dents), HUB_VIP)), "hub near ask");
         assert_eq!(name(of_entry(&frame(1, 0, BASE | 2, ROAM_PORT, &roam), BASE | 2, BASE | 9)), "free roam's port, unchecked");
         assert_eq!(name(of_entry(&frame(1, 0, BASE | 2, 3659, &roam), BASE | 2, BASE | 9)), "UDP, other ports");
         assert_eq!(name(of_entry(&frame(3, 0, BASE | 2, 9999, &roam), BASE | 2, BASE | 9)), "LAN UDP");
