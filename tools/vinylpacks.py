@@ -47,8 +47,11 @@ P8_PIX = 262144 + 65536 + 16384 + 4096 + 1024 + 256 + 64   # 512x512, 7 levels
 P8_PAL = 0x55580                                      # the palette's place in a P8 vinyl's blob (the game's)
 P8_SIZE = P8_PAL + 1024 + 0x9C                        # = 350748, every vinyl of the game's
 TEMPLATES = ('350Z', '350Z_ART_F_12', '350Z_AEM_HKS_MASK')   # a car whose TPK has a main and a mask in JDLZ
-IMG_BASE = 0x20000000                                 # TextureInfo image offsets past the game's own (the game uses
-                                                      # only palette - image; each texture gets its own)
+IMG_BASE = 0x30000000                                 # TextureInfo image offsets past the game's own: a VINYLS.BIN's
+                                                      # are its textures' hash ranks x 0x55980, up to 0x25526F00 (the
+                                                      # streamer makes every texture whose offset lies in a block's
+                                                      # place from that block: runtime/vinylpacks.c tex_in); each gets
+                                                      # its own
 
 
 def read_tpk(path):

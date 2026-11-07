@@ -1,0 +1,6 @@
+# vinylpacks_places_a.txt's watcher: in free roam while that car changes its vinyls
+0     bot on
++0    waitroam 6000
++0    bot off
++2400 log PLACES B DONE
++10   quit

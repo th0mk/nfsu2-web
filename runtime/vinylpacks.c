@@ -33,6 +33,7 @@
  * two attributes. */
 #include "cpu.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
@@ -187,6 +188,83 @@ static void loader(CPU *c){
     if (copy) MR32(c->esp) = chunk;                /* the caller's argument as it was (the loader's ret is behind esp) */
 }
 
+/* --- the packs' textures' place among the game's ----------------------------------------------------------------
+ * A compressed texture pack (a car's VINYLS.BIN) keeps each texture in a block of its own, unpacked when it is wanted:
+ * its pixels, palette, TextureInfo and platform info (those two the block's last 0x9C bytes).  The streamer's callback
+ * 0x494C10 (cdecl: the unpacked block, its entry with +0xC the unpacked size, the request with +0xBC -> +0x70 the
+ * pack) gives the pack the block's TextureInfo (0x48FD30), then hands the block to 0x494A50 as the place of the image
+ * offsets [TextureInfo +0x30, + the image and its palette): every texture of the pack whose image offset lies there is
+ * pointed into the block (+0x70 = the block + its offset - the place's start) and made (0x5CE170: a P8 one converted
+ * to A8R8G8B8, all seven levels).  The block's unload (0x494C80 -> 0x494B10) lets every texture there go.  The game's
+ * image offsets are each texture's place in the pack's hash order times 0x55980, a P8 vinyl's size (1786 textures a
+ * car: 0 to 0x25526F00), so a block's place holds its own texture alone.  The packs' (tools/vinylpacks.py IMG_BASE
+ * until PACK_IMG) were 0x20000000 + 0x56000 each, among the game's: each one's place held a game vinyl too (hash
+ * ranks 1532 to 1545), and each one lay in the place of the game vinyl before that (1531 to 1544).  With both
+ * loaded, the one that came later took the other into its block 0x1B000 to 0x3A000 bytes in and made it from there,
+ * up to 230 KB past the block's end: a car's Art Factory 28 to 34 while another car of its type with one of those
+ * vinyls loads.  That drew the vinyl from other memory, or trapped in 0x5CE170 ("memory access out of bounds") with
+ * the block near the end of memory (the heap window's top on a 2 GB page; 2026-11-06, three games in a row as
+ * friends' cars came), and the block's unload let the other one's texture go.  Here a pack texture's offsets (its
+ * name one of theirs, its image offset in their old span) move to places of their own past the game's before the
+ * game sees them; the unload reads the same TextureInfo.  A place that holds a texture besides the block's own is
+ * logged ("[vinyls] ... takes in ...").  NFSU2_TEST_VINYL_PLACES=1 (script runs only): the packs' offsets as they are. */
+#define FN_TEX_IN       0x00494c10u
+#define TI_TAIL         0x9cu         /* the TextureInfo and the platform info: a block's last bytes */
+#define TI_NAME         0x0cu         /* TextureInfo: its name (24 bytes), +0x24 its hash */
+#define TI_IMG          0x30u         /* ... its image offset, +0x34 its palette's (-1: none) */
+#define TI_IMG_SZ       0x38u         /* ... the image's size, +0x3C the palette's */
+#define OLD_IMG         0x20000000u   /* the packs' first image offset, and the step between theirs, until PACK_IMG */
+#define OLD_STEP        0x56000u
+#define PACK_IMG        0x30000000u   /* theirs from here on: past every VINYLS.BIN's 1786 x 0x55980 */
+#define REQ_PACK        0xbcu         /* the request: -> +0x70 the texture pack (+0x70 -> +0x74 its table of
+                                         { hash, TextureInfo }, +0x74 how many) */
+void sub_00494c10(CPU *c);                     /* the lifted callback */
+static uint32_t g_moved, g_takes;
+/* the TextureInfo ti a pack's (named <CAR>_ART_F_28 .. 34, with _MASK or cut short in it) */
+static int pack_texture(uint32_t ti){
+    char nm[25] = {0};
+    for (int i = 0; i < 24; i++) nm[i] = (char)MR8(ti + TI_NAME + (uint32_t)i);
+    const char *a = strstr(nm, "_ART_F_");
+    if (!a || a[7] < '0' || a[7] > '9' || a[8] < '0' || a[8] > '9') return 0;
+    int k = (a[7] - '0') * 10 + (a[8] - '0');
+    return k >= FIRST_NEW && k < FIRST_NEW + NEW_N && (!a[9] || a[9] == '_');
+}
+static void tex_in(CPU *c){
+    static int keep = -1, packs = -1;
+    if (keep < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_VINYL_PLACES"); keep = s && *s && e && *e == '1'; }
+    if (packs < 0) packs = fileio_vinyl_packs() > 0;
+    uint32_t blk = MR32(c->esp + 4u), ent = MR32(c->esp + 8u), req = MR32(c->esp + 12u);
+    uint32_t n = packs && ok(ent, 0x10u) ? MR32(ent + 0xcu) : 0u, ti = blk + n - TI_TAIL;
+    if (blk && n >= TI_TAIL && ok(blk, n)){
+        uint32_t img = MR32(ti + TI_IMG), pal = MR32(ti + TI_IMG + 4u);
+        if (!keep && img >= OLD_IMG && img < OLD_IMG + 2u * NEW_N * OLD_STEP && pack_texture(ti)){
+            MR32(ti + TI_IMG) = img = PACK_IMG + (img - OLD_IMG);
+            if (pal != 0xffffffffu) MR32(ti + TI_IMG + 4u) = pal = PACK_IMG + (pal - OLD_IMG);
+            if (!g_moved++) fprintf(stderr, "[vinyls] the packs' textures at places of their own, past the game's\n");
+        }
+        /* the place 0x494C10 gives 0x494A50: the textures in it besides the block's own */
+        uint32_t len = pal != 0xffffffffu ? MR32(ti + TI_IMG_SZ + 4u) + pal - img : MR32(ti + TI_IMG_SZ);
+        uint32_t hold = ok(req, REQ_PACK + 4u) ? MR32(req + REQ_PACK) : 0u, pack = ok(hold, 0x74u) ? MR32(hold + 0x70u) : 0u;
+        uint32_t list = ok(pack, 0x78u) ? MR32(pack + 0x70u) : 0u, tab = ok(list, 0x78u) ? MR32(list + 0x74u) : 0u;
+        uint32_t cnt = tab ? MR32(pack + 0x74u) : 0u, h = MR32(ti + 0x24u);
+        for (uint32_t i = 0; i < cnt && i < 0x10000u && ok(tab + i * 8u, 8u); i++){
+            uint32_t o = MR32(tab + i * 8u + 4u);
+            if (!o || o == ti || !ok(o, 0x7cu) || MR32(o + 0x24u) == h || !MR32(o + TI_IMG_SZ)) continue;
+            uint32_t at = MR32(o + TI_IMG);
+            if ((int32_t)at < (int32_t)img || (int32_t)at >= (int32_t)(img + len)) continue;
+            if (g_takes++ < 8){
+                char a[25] = {0}, b[25] = {0};
+                for (int k = 0; k < 24; k++){ a[k] = (char)MR8(ti + TI_NAME + (uint32_t)k); b[k] = (char)MR8(o + TI_NAME + (uint32_t)k); }
+                uint32_t end = at - img + MR32(o + TI_IMG_SZ);
+                fprintf(stderr, "[vinyls] %s's block takes in %s: its image 0x%x bytes in, %u bytes past the block's end\n",
+                        a, b, at - img, end > n ? end - n : 0u);
+            }
+        }
+    }
+    sub_00494c10(c);
+}
+
 void vinylpacks_install(void){
     dispatch_patch(FN_LOADER, loader);
+    dispatch_patch(FN_TEX_IN, tex_in);
 }
