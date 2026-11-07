@@ -1,5 +1,6 @@
 // The start page in the player's language.  It is the game's own (settings.ini language, settings.ts LANGUAGES), so
-// one choice sets both, in Settings and in the list at the top; English until the player picks another.  English is
+// one choice sets both, in Settings and in the list at the top; until the player picks one, the browser's language
+// where the game has it, else English (browserLanguage).  English is
 // the source: each text is written in English where it is used, and t() looks that English up in the language's file
 // (web/src/app/lang/<language>.json, served as /lang/<language>.json, fetched once the language is picked), {name}
 // for the parts that change.  A text the file does not have stays English.  The start page's own markup is marked in
@@ -34,6 +35,30 @@ export const NATIVE: Record<Language, string> = {
   portuguese: 'Português (Brasil)', polish: 'Polski', turkish: 'Türkçe', hungarian: 'Magyar', ukrainian: 'Українська',
   czech: 'Čeština', slovak: 'Slovenčina', greek: 'Ελληνικά',
 };
+
+/** each language by its BCP 47 tag's language subtag ("tr", "pt", "zh"): how browserLanguage reads a browser's */
+const BY_SUBTAG = new Map<string, Language>(LANGUAGES.map(l => [LOCALE[l].split('-')[0], l]));
+
+/**
+ * The game's language for the browser's languages (navigator.languages: the player's, most wanted first), for a
+ * player who has not picked one: the first of them the game has, else English.  A tag is read by its language alone,
+ * so a country or script the game lacks still finds the language (tr-TR and tr: Turkish; pt-PT: the game's Brazilian
+ * Portuguese; zh-CN: its Traditional Chinese, the only Chinese it has).  A language the game does not have is passed
+ * over, never matched to one near it (az: Azerbaijani is not Turkish, nb: Norwegian is not Danish): the browser's next
+ * one decides, and English where none is the game's.  The browser's languages, not the country the player's address
+ * is in: a Turk in Germany reads Turkish, a German on holiday in Turkey German, and no server has to guess.
+ */
+export function browserLanguage(tags: readonly string[] = navigatorLanguages()): Language {
+  for (const tag of tags) {
+    const l = BY_SUBTAG.get(tag.trim().toLowerCase().split(/[-_]/)[0]);
+    if (l) return l;
+  }
+  return 'english';
+}
+function navigatorLanguages(): readonly string[] {
+  if (typeof navigator === 'undefined') return [];               // (node before 21 has none)
+  return navigator.languages?.length ? navigator.languages : navigator.language ? [navigator.language] : [];
+}
 
 let current: Language = 'english';
 let dict: Record<string, string | Forms> = {};
@@ -149,7 +174,7 @@ export async function setLanguage(l: string, log?: (s: string) => void): Promise
   }
   if (asked !== want) return false;            // a newer pick came first
   current = want; dict = next; plural = null;
-  try { localStorage.setItem(STORE, want); } catch { /* not kept: the next start shows English until settings.ini is read */ }
+  try { localStorage.setItem(STORE, want); } catch { /* not kept: the next start shows the browser's language until settings.ini is read */ }
   if (typeof document !== 'undefined') {
     document.documentElement.lang = LOCALE[want];
     translatePage(document);
@@ -160,10 +185,13 @@ export async function setLanguage(l: string, log?: (s: string) => void): Promise
   return true;
 }
 
-/** the language this browser showed last (the page asks for its file at once, before settings.ini is read) */
+/** the language this browser showed last (the page asks for its file at once, before settings.ini is read); on its
+ *  first visit, the browser's language (browserLanguage), which settings.ini then keeps unless it sets another */
 const STORE = 'nfsu2-page-language';
 export function lastLanguage(): Language {
-  try { const v = localStorage.getItem(STORE) ?? ''; return isLanguage(v) ? v : 'english'; } catch { return 'english'; }
+  let v = '';
+  try { v = localStorage.getItem(STORE) ?? ''; } catch { /* no storage: as on a first visit */ }
+  return isLanguage(v) ? v : browserLanguage();
 }
 
 // ------------------------------------------------------------------------------------------------ the markup --
