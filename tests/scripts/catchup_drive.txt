@@ -1,0 +1,57 @@
+# Rubberbanding (runtime/catchup.c) with the player ahead: catchup_park.txt's career race, the player's car driven
+# by the game's autopilot from the green light, so the opponents fall behind and the game boosts them (factor over
+# 1).  noboost and off keep them at their own pace (NFSU2_CATCHUP_LOG=1: "car boost up to 1.000", and how many
+# factors were changed); original as the game.  d0 is the player's share of the route.
+#   NFSU2_SAVE_SEED=<a career save tree> node web/tools/run-suite.mjs --base <server> --script catchup_drive.txt
+#        --marker "CATCHUP done" --name <name> --env CU_RACE=<a circuit of the seed's career> --env NFSU2_FIXED_DT=60
+#        [--env NFSU2_CATCHUP=original|noboost|off] [--env NFSU2_CATCHUP_LOG=1]
+0     bot on
++0    waitroam 6000
++0    bot off
++60   careerlist
++0    careergo ${CU_RACE}
++300  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # Accept
++0    waitexpr i:0x863470 != 0 3000   # Career +0x8730: the career race being run
++0    waitexpr i:[0x890118]+0x24 >= 2 6000
++0    waitfng HUD_SingleRace.fng 6000
++0    waitexpr i:[0x890118] == 4 3000
++0    wzero
++0    log race_started
++0    autopilot on
++0    expect i:0x89e7f8 != 0          # the race's Catch Up flag (a career race leaves it on)
++0    trace 300 rc=i:[0x890118]+0x14 st=i:[0x890118] d0=[0x890118]+0x44 d1=[0x890118]+0x234 d2=[0x890118]+0x424 d3=[0x890118]+0x614 v1=[[0x890118]+0x220]+0x430 v2=[[0x890118]+0x410]+0x430 v3=[[0x890118]+0x600]+0x430 x1=[[0x890118]+0x220]+0x60 y1=[[0x890118]+0x220]+0x64 x2=[[0x890118]+0x410]+0x60 y2=[[0x890118]+0x410]+0x64 x3=[[0x890118]+0x600]+0x60 y3=[[0x890118]+0x600]+0x64
++0    waitexpr i:[0x890118]+0x14 >= 120000 9000
++0    log at_30s
++0    peekx *0x890118+0x14 1
++0    peekx *0x890118+0x44 1
++0    peekx *(*0x890118+0x220)+0x60 2
++0    peekx *0x890118+0x234 1
++0    peekx *(*0x890118+0x410)+0x60 2
++0    peekx *0x890118+0x424 1
++0    peekx *(*0x890118+0x600)+0x60 2
++0    peekx *0x890118+0x614 1
++0    waitexpr i:[0x890118]+0x14 >= 240000 9000
++0    log at_60s
++0    peekx *0x890118+0x14 1
++0    peekx *0x890118+0x44 1
++0    peekx *(*0x890118+0x220)+0x60 2
++0    peekx *0x890118+0x234 1
++0    peekx *(*0x890118+0x410)+0x60 2
++0    peekx *0x890118+0x424 1
++0    peekx *(*0x890118+0x600)+0x60 2
++0    peekx *0x890118+0x614 1
++0    waitexpr i:[0x890118]+0x14 >= 360000 9000
++0    log at_90s
++0    peekx *0x890118+0x14 1
++0    peekx *0x890118+0x44 1
++0    peekx *(*0x890118+0x220)+0x60 2
++0    peekx *0x890118+0x234 1
++0    peekx *(*0x890118+0x410)+0x60 2
++0    peekx *0x890118+0x424 1
++0    peekx *(*0x890118+0x600)+0x60 2
++0    peekx *0x890118+0x614 1
++0    untrace
++0    log CATCHUP done
++10   quit

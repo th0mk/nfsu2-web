@@ -1,0 +1,23 @@
+# Rubberbanding (runtime/catchup.c) leaves Quick Race to its own Catch Up option: a Quick Race (the first circuit, the
+# menus' defaults, Catch Up on) with the player left at the start, traced as catchup_park.txt traces a career race.
+# With NFSU2_CATCHUP=off the opponents must drive as with it unset, and catchup.c logs nothing with
+# NFSU2_CATCHUP_LOG=1 (it changes only career races).
+#   node web/tools/run-suite.mjs --base <server> --script catchup_quickrace.txt --marker "CATCHUP QR done" --name <name>
+#        --env NFSU2_FIXED_DT=60 [--env NFSU2_CATCHUP=off] [--env NFSU2_CATCHUP_LOG=1]
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    waitexpr i:[0x890118] == 4 6000
++0    wzero
++0    log race_started
++0    expect i:0x89e7f8 != 0                       # Catch Up on
++0    expect i:0x863470 == 0                       # no career race
++0    trace 300 st=i:[0x890118] d0=[0x890118]+0x44 d1=[0x890118]+0x234 d2=[0x890118]+0x424 d3=[0x890118]+0x614 v1=[[0x890118]+0x220]+0x430 v2=[[0x890118]+0x410]+0x430 v3=[[0x890118]+0x600]+0x430 x1=[[0x890118]+0x220]+0x60 y1=[[0x890118]+0x220]+0x64 x2=[[0x890118]+0x410]+0x60 y2=[[0x890118]+0x410]+0x64 x3=[[0x890118]+0x600]+0x60 y3=[[0x890118]+0x600]+0x64
+60000wms untrace
++0    log CATCHUP QR done
++10   quit
