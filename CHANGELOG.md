@@ -11,8 +11,10 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-07 (9a92545)
+## 2026-11-07 (b58448b)
 
+- **Free roam:** pick a world in F9 or on the start page, with each one's player count: the main world with everyone, World 1 to 4, or your own by name. Ghost mode stays off in World 4.
+- **Page menu:** Controls open inside the F9 menu, as Crews and Friends.
 - **iPhone:** performance and stability improvements.
 - **Free roam:** a "memory access out of bounds" crash as other players' cars with Art Factory vinyls came in is fixed.
 - **Free roam:** other players' engines show under an open hood.
