@@ -172,6 +172,7 @@ int main(int argc,char**argv){
     { extern void garage_install(void); garage_install(); }           /* the career garage's slots 6-10 and Trade Car */
     { extern void vinylpacks_install(void); vinylpacks_install(); }   /* the Japanese release's Art Factory 28-34 (VINYLPACKS) */
     { extern void specialties_install(void); specialties_install(); } /* Car Specialties: Stock gauges again, Trunk Audio's Back */
+    { extern void showoff_install(void); showoff_install(); }         /* the animation library's heap: room for show-off's animations, its end checked */
     { extern void carshadow_install(void); carshadow_install(); }     /* a car's shadow 1.5 cm above the road, not 4: off its wheels */
     { extern void autotest_init(void); autotest_init(); }       /* NFSU2_INPUT_SCRIPT ... */
     if (getenv("BT")) g_bt_on = 1;

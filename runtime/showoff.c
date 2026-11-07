@@ -65,6 +65,7 @@
 #include <time.h>
 
 void dispatch_indirect(CPU *c, uint32_t addr);
+void dispatch_patch(uint32_t a, void (*f)(CPU *));
 long autotest_frame(void);
 
 #define DIK_O          0x18u         /* in none of the game's key maps */
@@ -566,4 +567,91 @@ void sub_00438140(CPU *c){
         b = next;
     }
     POP32(c->eip);                                                    /* (cdecl) */
+}
+
+/* ---- the animation library's heap ------------------------------------------
+ * EAGL, the game's animation library, takes one block for its animation
+ * objects at startup (0x431840 -> 0x6E1B30 -> its allocator's init 0x6E2310,
+ * vtable 0x7C147C +4): 0x19000 bytes from the main pool (0x42FB40), base
+ * [0x8AB28C], size [0x8AB288].  Objects come from free lists, by size (+0x14,
+ * 0x6E2290: [0x8AAE80 + k * 4] with k = (n >> 4) & 0xFF, a block of k * 16 +
+ * 0x14 bytes, k in its first dword, the object 4 in) or by kind (+0x1C,
+ * 0x6E2240: [0x8AAE18 + kind * 4], word [0x811E00 + kind * 2] bytes), else
+ * from the bump [0x8AAE10], which nothing checks against the block's end;
+ * freeing (+0x18, +0x20) only puts a block back on its list.  The game loads
+ * one car type's part animations at a time and never came near the end.
+ * Show-off keeps those of every car type a friend's car opened a part with
+ * (79 of the 100 KB with all 31; they do not grow when loaded again), and a
+ * race's ending scene and the like took more on top: the bump ran past the
+ * block into the next ones on the heap, the effect pool [0x870914] and the
+ * first effect [0x86EB28] (error 134 at a race's results, or in free roam,
+ * after an hour or more with friends: sub_005c2430 / sub_005d21f0 /
+ * sub_005d1e20 < sub_005d2850, 2026-11-03 to 11-07).  So the block is
+ * EAGL_HEAP bytes, and an object the bump has no room for comes from the
+ * process heap instead (kept: EAGL only puts it on its list).
+ * Test aids, script runs only: NFSU2_TEST_EAGL_LEFT=<n> keeps the game's
+ * size and starts with only n KB of it left (as if the rest were in use);
+ * NFSU2_TEST_EAGL_GAMEWAY=1 leaves the size and the unchecked end as the
+ * game has them (tests/scripts/showoff_eagl_heap.txt). */
+#define FN_EAGL_INIT   0x006e2310u   /* (size), ret 4 */
+#define FN_EAGL_NEW    0x006e2290u   /* (size) -> object, ret 4 */
+#define FN_EAGL_KIND   0x006e2240u   /* (word kind) -> object, ret 4 */
+#define G_EAGL_BUMP    0x008aae10u
+#define G_EAGL_SIZE    0x008ab288u
+#define G_EAGL_BASE    0x008ab28cu
+#define G_EAGL_BYKIND  0x008aae18u   /* 26 lists */
+#define G_EAGL_BYSIZE  0x008aae80u   /* 256 lists */
+#define T_EAGL_KIND    0x00811e00u   /* each kind's size (word) */
+#define EAGL_GAME      0x19000u
+#define EAGL_HEAP      0x80000u      /* 512 KB: the game's 100 and every car type's part animations, with room */
+void sub_006e2310(CPU *c);
+void sub_006e2290(CPU *c);
+void sub_006e2240(CPU *c);
+uint32_t gheap_alloc(int heap, uint32_t n, int zero);
+static uint64_t g_eagl_more, g_eagl_more_bytes;
+
+static long eagl_test(const char *name){
+    const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv(name);
+    return s && *s && e && *e ? atol(e) : 0;
+}
+static void eagl_init(CPU *c){
+    uint32_t n = MR32(c->esp + 4u), left = (uint32_t)eagl_test("NFSU2_TEST_EAGL_LEFT") << 10;
+    if (n == EAGL_GAME && !left && eagl_test("NFSU2_TEST_EAGL_GAMEWAY") != 1) MR32(c->esp + 4u) = EAGL_HEAP;
+    sub_006e2310(c);
+    if (left && left < MR32(G_EAGL_SIZE)) MR32(G_EAGL_BUMP) = MR32(G_EAGL_BASE) + MR32(G_EAGL_SIZE) - left;
+    fprintf(stderr, "[eagl] the animation heap: %u KB at 0x%08x (the game's %u KB)%s\n", MR32(G_EAGL_SIZE) >> 10,
+            MR32(G_EAGL_BASE), n >> 10, left ? ", test: as if the rest of it were in use" : "");
+}
+/* the bump has room for need bytes before the block's end */
+static int eagl_room(uint32_t need){
+    uint32_t b = MR32(G_EAGL_BUMP), base = MR32(G_EAGL_BASE), end = base + MR32(G_EAGL_SIZE);
+    return b >= base && b <= end && need <= end - b;
+}
+static uint32_t eagl_more(uint32_t need, const char *how){
+    uint32_t p = gheap_alloc(1, need, 1);
+    g_eagl_more++; g_eagl_more_bytes += need;
+    if (g_eagl_more <= 4 || !(g_eagl_more & 255))
+        fprintf(stderr, "[eagl] f=%ld the animation heap is full (%u of %u bytes): %u bytes %s from the process heap (%llu so far, "
+                "%llu bytes)%s\n", autotest_frame(), MR32(G_EAGL_BUMP) - MR32(G_EAGL_BASE), MR32(G_EAGL_SIZE), need, how,
+                (unsigned long long)g_eagl_more, (unsigned long long)g_eagl_more_bytes, p ? "" : ": NONE");
+    return p;
+}
+static void eagl_new(CPU *c){
+    uint32_t n = MR32(c->esp + 4u), k = (n >> 4) & 0xffu, need = k * 16u + 0x14u;
+    if (MR32(G_EAGL_BYSIZE + k * 4u) || eagl_room(need)){ sub_006e2290(c); return; }
+    uint32_t p = eagl_more(need, "by size");
+    if (p) MR32(p) = k;
+    POP32(c->eip); c->esp += 4u; c->eax = p ? p + 4u : 0u;
+}
+static void eagl_kind(CPU *c){
+    uint32_t k = MR16(c->esp + 4u), need = MR16(T_EAGL_KIND + k * 2u);
+    if (MR32(G_EAGL_BYKIND + k * 4u) || eagl_room(need)){ sub_006e2240(c); return; }
+    uint32_t p = eagl_more(need, "by kind");
+    POP32(c->eip); c->esp += 4u; c->eax = p;
+}
+void showoff_install(void){
+    dispatch_patch(FN_EAGL_INIT, eagl_init);
+    if (eagl_test("NFSU2_TEST_EAGL_GAMEWAY") == 1){ fprintf(stderr, "[eagl] test: the animation heap's end unchecked, as in the game\n"); return; }
+    dispatch_patch(FN_EAGL_NEW, eagl_new);
+    dispatch_patch(FN_EAGL_KIND, eagl_kind);
 }

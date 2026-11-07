@@ -1,0 +1,48 @@
+# The animation library's heap with every car type's part animations (showoff.c, "the animation library's heap").
+# EAGL takes one block of 0x19000 bytes for its animation objects at startup and hands them out by bumping a pointer
+# with no check against the block's end; the game loads one car type's part animations at a time.  Show-off keeps
+# those of every car type a friend's car opened a part with, and with the game's own use on top the bump ran past
+# the block into the next ones on the heap: the effect pool [0x870914] and the first effect [0x86EB28] (error 134 at
+# a race's results or in free roam, sub_005c2430 / sub_005d21f0, 2026-11-03 to 11-07).
+# New career -> prologue free roam among roam-crowd players of all 31 car types, every part open, standing (show-off
+# loads their animations); then the banks thrown away and loaded again (0x633A00 as a cover shoot's start, 0x61C5B0
+# its end) three times.  After each: the effect pool's and the first effect's vtables as at the start.
+# Good: "[expect] PASS" x 8, no "UNRESOLVED INDIRECT CALL", quit at the end.  With NFSU2_TEST_EAGL_LEFT=40 (the game's
+# block, 40 KB of it left: as if the game's own use filled the rest) "[eagl] ... the animation heap is full" lines
+# and still PASS; adding NFSU2_TEST_EAGL_GAMEWAY=1 (the game's unchecked end) gives "[expect] FAIL" (the field's crash).
+#   node web/tools/roam-pair.mjs --solo --a Al:showoff_eagl_heap.txt --env NFSU2_ROAM_ROOM=<r> --env ROAM_CROWD_CARS=31
+#        --crowd 31 --crowd-args "--room <r> --cars all --open 15 --speed 0 --spread 8"
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    trace 600 bump=x:0x8aae10 base=x:0x8ab28c size=x:0x8ab288 effect=x:[0x86eb28] pool=x:[0x870914]
++0    roam mp waitpeers ${ROAM_CROWD_CARS} 6000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++1200 log loaded
++0    expect x:[0x86eb28] == 0x7a4578
++0    expect x:[0x870914] == 0x7ab4e8
++0    loop 3
++0    roam call 0x633a00 ecx=0x8a3288
++90   roam call 0x61c5b0 ecx=0x8a3288
++900  log reloaded
++0    expect x:[0x86eb28] == 0x7a4578
++0    expect x:[0x870914] == 0x7ab4e8
++0    endloop
++0    untrace
++0    log eagl_end
++10   quit
