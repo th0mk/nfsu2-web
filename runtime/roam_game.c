@@ -790,6 +790,9 @@ static uint32_t find_part(CPU *c, uint32_t type, uint32_t sl, uint32_t key, uint
  * runtime/modpacks.c modpacks_for_others).
  * Returns the number of parts not found, or -1. */
 uint32_t modpacks_for_others(uint32_t key);          /* modpacks.c: a mod part's stand-in (others_mod_parts = original) */
+/* set while a friend's look is loaded (begin_load): the car loader's texture list for it (overrides.c
+ * sub_00631e20) names its engine's texture too, for an open hood (showoff.c) */
+int roam_texlist_engine;
 static int build_ride(CPU *c, const rc_carcfg *cc, uint32_t ride, uint32_t skin, char *why, int whylen, int others){
     uint32_t types = rd32(G_CARTYPES);
     uint32_t ti = gcall1(c, FN_TYPE_BY_HASH, 0, cc->type_hash);
@@ -2016,7 +2019,12 @@ static int begin_load(CPU *c, int k, const uint8_t *cfg, int len, uint32_t gen){
     if (why[0]) rlog("[roam] f=%ld slot %d: %s's car: %s\n", rh_frame(), k, s->name, why);
     uint32_t a3[3] = { ride, 0, 0 };
     s->load_wait = load_wait_us();
+    {   /* its engine's texture loads too (overrides.c sub_00631e20); NFSU2_TEST_ENGINE_GAMEWAY=1 (script runs only): the game's way */
+        const char *sc = rh_opt("NFSU2_INPUT_SCRIPT"), *gw = rh_opt("NFSU2_TEST_ENGINE_GAMEWAY");
+        roam_texlist_engine = !(sc && *sc && gw && *gw == '1');
+    }
     s->h_new = rh_call(c, FN_LOADER_LOAD, G_CARLOADER, 0, 3, a3);
+    roam_texlist_engine = 0;
     uint32_t a2[2] = { 0, 0 }; rh_call(c, FN_LOADER_SERVICE, G_CARLOADER, 0, 2, a2);
     s->load_t0 = roam_plat_now_us(); s->load_f0 = rh_frame(); s->pending_cfg = 1; s->cfg_gen = gen;
     s->look = rc_fnv1a_bytes(cfg, (uint32_t)len);
@@ -10834,7 +10842,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         return 1;
     }
     if (!strcasecmp(sub, "cfgdump") || !strcasecmp(sub, "cfgtest") || !strcasecmp(sub, "parts") || !strcasecmp(sub, "setpart") ||
-        !strcasecmp(sub, "trunk")){
+        !strcasecmp(sub, "trunk") || !strcasecmp(sub, "engine")){
         if (g_njob == NJOB){ rlog("[roam] f=%ld mp %s: busy\n", f, sub); return 1; }
         snprintf(g_job[g_njob++], sizeof g_job[0], "%s", args);
         return 1;
@@ -10883,6 +10891,40 @@ static void run_job(CPU *c, const char *job){
         rlog("[roam] f=%ld mp cfgtest: %s, %d parts in a %d-byte record, %d not found%s%s; rebuilt ride: %d of 170 part slots differ, "
                         "%d other bytes differ (first at +0x%x); performance/tuning bytes differing %d, physics block bytes differing %d\n",
                 f, tn, cc.n_parts, n, miss, why[0] ? ": " : "", why, diff_slots, diff_bytes, first, diff_perf, diff_phys);
+        return;
+    }
+    if (!strcasecmp(sub, "engine")){
+        /* "mp engine": the player's car's and each shown friend's engine as the car's drawing has it with the hood
+         * open (0x620AE0 at 0x630650: the render info's models of ride slot 0xD, CRI_MODELS +0 and +0x10), and
+         * each model's own textures (its solid +0x2C, +0x19 of them: a name hash and the texture, which is the
+         * game's stand-in DEFAULTALPHA (texture +0x24 its hash) when the texture is not in: the engine's parts with
+         * it draw nothing); "mp engine expect": "[expect] FAIL" when a friend's engine has its own texture
+         * (<name>_ENGINE, the car type's +0x20 name: overrides.c texlist_engine) as a stand-in.  (Some engines name
+         * a texture no TEXTURES.BIN has, a stand-in on the player's own car too: not counted) */
+        int expect = !strcasecmp(a1, "expect"), bad = 0;
+        for (int k = -1; k < NSLOT; k++){
+            uint32_t car = k < 0 ? player_car() : g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
+            uint32_t ride = ok(car, 0x9e0) ? rd32(car + 0x10u) : 0, ri = ok(car, 0x9e0) ? rd32(car + 0x554u) : 0, types = rd32(G_CARTYPES);
+            if (!ok(ride, 0x8f0) || !ok(ri, CRI_MODELS + 0x20u * 0xeu)) continue;
+            char tn[24] = "?", en[48] = "", ln[400] = {0}; int at = 0, nm = 0, stand = 0;
+            if (types && MR32(ride) < 256u){ cstr(types + MR32(ride) * 0x890u, tn, sizeof tn); cstr(types + MR32(ride) * 0x890u + 0x20u, en, 32); }
+            uint32_t own = 0;
+            if (en[0]){ strcat(en, "_ENGINE"); own = bhash(en); }
+            for (uint32_t m = 0; m < 8u; m += 4u){
+                uint32_t mo = rd32(ri + CRI_MODELS + 0x20u * 0xdu + 4u * m), so = ok(mo, 0x10) ? MR32(mo + 0xcu) : 0;
+                if (!ok(so, 0x40)) continue;
+                uint32_t n = MR8(so + 0x19u), tt = MR32(so + 0x2cu);
+                nm++;
+                for (uint32_t q = 0; q < n && q < 8u && ok(tt, 8u * (q + 1u)) && at < (int)sizeof ln - 40; q++){
+                    uint32_t h = MR32(tt + 8u * q), t = MR32(tt + 8u * q + 4u), st = ok(t, 0x28) && MR32(t + 0x24u) == 0x66994f4au;
+                    stand += (int)st && h == own;
+                    at += snprintf(ln + at, sizeof ln - (size_t)at, " %08x %s", h, st ? "NOT IN (DEFAULTALPHA)" : "in");
+                }
+            }
+            if (k >= 0 && nm && stand) bad++;
+            rlog("[roam] f=%ld mp engine %s (%s): %d model(s);%s\n", f, k < 0 ? "me" : g_sl[k].name, tn, nm, at ? ln : " no textures");
+        }
+        if (expect) rlog("[expect] %s mp engine: %d friend(s)' engine texture(s) not in\n", bad ? "FAIL" : "ok", bad);
         return;
     }
     if (!strcasecmp(sub, "trunk")){

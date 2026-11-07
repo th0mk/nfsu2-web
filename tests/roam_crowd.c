@@ -58,6 +58,10 @@ static void io_event(void *u, int ev, int peer, const char *t){ (void)u; (void)p
 /* the links the players ask the hub for (--links; 0: they say nothing, and get 32), before crowd_init */
 static int LINKS;
 __attribute__((export_name("crowd_links"))) void crowd_links(uint32_t n){ LINKS = (int)n; }
+/* the car's open parts (roam-crowd --open, RC_OPEN_*): sent in every state's extension (the wheels' heights out of the
+ * receiver's range: at rest) */
+static uint8_t OPEN;
+__attribute__((export_name("crowd_open"))) void crowd_open(uint32_t m){ OPEN = (uint8_t)(m & RC_OPEN_ALL); }
 
 /* the buffer the script writes a name or a received datagram into */
 __attribute__((export_name("crowd_io"))) uint8_t *crowd_io(void){ return IO; }
@@ -112,6 +116,7 @@ __attribute__((export_name("crowd_tick"))) void crowd_tick(double now_us, float 
     st.q[2] = a - a * a2 / 6.f + a * a2 * a2 / 120.f - a * a2 * a2 * a2 / 5040.f;
     st.q[3] = 1.f - a2 / 2.f + a2 * a2 / 24.f - a2 * a2 * a2 / 720.f + a2 * a2 * a2 * a2 / 40320.f;
     st.speed = rc_sqrtf(vx * vx + vy * vy); st.rpm = 2500.f; st.gear = 3; st.throttle = 0.5f;
+    if (OPEN){ st.ext = 1; st.open = OPEN; for (int w = 0; w < 4; w++) st.wz[w] = 5.f; }
     rc_push_state(&S, &st, (int64_t)now_us);
     rc_tick(&S, (int64_t)now_us);
 }

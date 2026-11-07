@@ -24,6 +24,8 @@
 // --parts  the players' cars' parts instead of the stock ones, slot:key:owner in hex, comma-separated (or from a file): a
 //          record names every part (tests/scripts/roam_crowd_rims.parts: a 350Z with the rim shops' rims).
 // --states the car states in each SNAP: 1 as the browsers send them (roam_web.c), 3 as a LAN does.
+// --open   the players' cars' open parts (RC_OPEN_*: 1 the hood, 2 the trunk, 4 and 8 the doors, 15 all), as a game
+//          sends them while its car is shown off (showoff.c): the others' games open them on these cars.
 // --links  the links every player asks the hub for (1-64, as the game asks for its Players' cars shown); without it they
 //          say nothing, and the hub gives them 32 (a game before core version 10)
 // --crew   every player is in this crew (the Crews setting's one name): the hub links them to the players who share it
@@ -70,6 +72,7 @@ const BASE = opt('base', 'http://localhost:8655'), N = +opt('n', 62), SECONDS = 
 const SPEED = +opt('speed', 15), CAR = opt('car', '350Z'), STAGGER = +opt('stagger', 50), TRACK = opt('track', ''), OUTF = opt('out', '');
 const STATES = +opt('states', 1), SPREAD = +opt('spread', 20), BUNDLE = argv.includes('--bundle'), FIRST = +opt('first', 0);
 const LOOP_MS = +opt('loop-ms', 0), HOLD = +opt('hold', 0), LINKS = +opt('links', 0);
+const OPEN = +opt('open', 0);
 const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim() : p)(opt('parts', ''));
 const RACE = (opt('race', '').match(/^(\d+)-(\d+):(\d+):(\d+)$/) ?? []).slice(1).map(Number);
 const PAUSED = (opt('paused', '').match(/^(\d+)-(\d+)$/) ?? []).slice(1).map(Number), PREFIX = opt('prefix', 'Bot');
@@ -294,6 +297,7 @@ class Bot {
           const flag = FLAGS.length ? FLAGS[(this.i ?? 0) % FLAGS.length] : '';
           const b = Buffer.from(`${this.name}\0${this.car}\0${PARTS}\0${flag}\0`, 'latin1'); m8.set(b, io);
           if (LINKS) this.x.crowd_links(LINKS);
+          if (OPEN) this.x.crowd_open(OPEN);
           this.x.crowd_init(this.id, roomHash(ROOM), roomHash(CREW), HUB, PORT, bhash(this.car), STATES, nowUs());
           this.ready = true;
         }
