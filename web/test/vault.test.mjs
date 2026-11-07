@@ -125,6 +125,7 @@ test('a player\'s folder packs far below what the server takes; the hash is of t
   assert.ok(!V.keptBy(4)('gamefile.bin') && !V.keptBy(4)('registry.txt') && V.keptBy(4)('settings.ini') && V.keptBy(4)(at('TOBI')));
   assert.ok(!V.keeps(`${DIR}/TOBI DVD 1/TOBI DVD 1`) && !V.keeps(`${DIR}/TOBI Magazine 12/TOBI Magazine 12`));
   assert.ok(V.keeps(`${DIR}/TOBI/GARAGE.DAT`) && V.keeps(`${DIR}/TOBI/GARAGE.OLD`), 'the garage\'s slots 6-10 go with their profile (runtime/garage.c)');
+  assert.ok(V.keeps(`${DIR}/TOBI/MODPARTS.DAT`), 'the cars\' mod parts go with their profile (runtime/modpacks.c: the profile has the stock ones)');
   assert.ok(V.isCover(`${DIR}/TOBI DVD 1/TOBI DVD 1`) && !V.isCover(at('TOBI')) && !V.isCover('TOBI DVD 1'));
   await assert.rejects(V.unpack(enc.encode('not deflate')), /damaged/);
 });

@@ -14,6 +14,7 @@
 // finished GPU frame.  The main thread never blocks.
 import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
+import { MemoryBuffer } from '../host/memory';
 import * as P from './proto';
 import { C, F } from './proto';
 import { Encoder } from './encoder';
@@ -774,6 +775,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     const answer = (px: ArrayBuffer | null) => {
       const I = i32();
       if (Atomics.compareExchange(I, cw + C.rbWant, id, id | P.RB_FLAG) !== id) return;
+      // (a memory that grew under a page holding its buffer only: the new buffer came first, or the read fails)
+      if (px && rb && dst + pitch * Math.min(rows, rb.h) > mem.buffer.byteLength) px = null;
       if (px && rb) {
         const m = new Uint8Array(mem.buffer), n = Math.min(pitch, rb.w * 4);
         for (let y = 0; y < Math.min(rows, rb.h); y++) m.set(new Uint8Array(px, y * rb.bpr, n), dst + y * pitch);
@@ -782,7 +785,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       Atomics.notify(I, cw + C.rbDone);
     };
     if (!rb) { log(`[gpu] texture read back for the game: not there`); answer(null); return; }
-    const job = rb.buf.mapAsync(GPUMapMode.READ).then(() => { answer(rb.buf.getMappedRange()); rb.buf.unmap(); },
+    const grown = mem instanceof MemoryBuffer ? mem.until(dst + pitch * Math.min(rows, rb.h)) : null;
+    const job = rb.buf.mapAsync(GPUMapMode.READ).then(() => grown).then(() => { answer(rb.buf.getMappedRange()); rb.buf.unmap(); },
       x => { log(`[gpu] texture read back for the game failed: ${x}`); answer(null); }).finally(() => rb.buf.destroy());
     pending.add(job); job.finally(() => pending.delete(job));
   };

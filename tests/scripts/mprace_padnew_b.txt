@@ -1,0 +1,22 @@
+# The lobby card's keys on a controller (dinput_pad.c lobby_pad, roam_game.c mp_pad), with mprace_pick_a.txt: B comes to
+# A's lobby at its start on a controller and holds D-pad left a second: a new lobby of its own beside A's (the card's
+# B), the D-pad's press kept from the game while held.
+#   node web/tools/roam-pair.mjs --seed <save tree> --a Ann:mprace_pick_a.txt --b Bob:mprace_padnew_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPRINT_3
+# Bob's log: "the card here: 1 lobbies and a new one's", "[pad] D-pad left held: the race lobby's card (5)", "race lobby:
+# a new one beside the 1 here (the card's B)", "opened for S2_SPRINT_3", then hosting.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    pad connect
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    log LOBBY at the start
++0    pad DLEFT down
++60   pad DLEFT up
++60   roam mp lobby
++0    log LOBBY DONE
++600  quit

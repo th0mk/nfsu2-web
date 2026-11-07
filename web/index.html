@@ -99,8 +99,8 @@
       <div class="pane prose" role="tabpanel" data-tab="about">
         <p data-i18n>The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.</p>
         <p data-i18n>My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.</p>
-        <p data-i18n-html>To help with hosting and development costs, you can <a href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer">buy me a coffee</a>. No perks, apart from a Discord role.</p>
-        <p data-i18n-html>Rights holders: <a href="mailto:legal@nfsu2.xyz">legal@nfsu2.xyz</a>. Support emails won't be answered; ask on <a href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer">our Discord</a>.</p>
+        <p data-i18n-html>To help with hosting and development costs, you can <a href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer">buy me a coffee</a>. Everyone gets the same game, with no microtransactions or paid perks. Supporters just get a Discord role.</p>
+        <p data-i18n-html>Help, bugs and questions: <a href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer">our Discord</a>. Rights holders: legal (at) nfsu2.xyz.</p>
       </div>
       <div class="pane prose" role="tabpanel" data-tab="credits" hidden>
         <p data-i18n-html>Source code on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. Based on Talha Müderrisoğlu's <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a>, the original x86 → C static recompiler for NFSU2, after <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>. This project was forked from NFSU2Recomp's <a href="https://github.com/TalhaMudo/NFSU2Recomp/tree/3d187ce7e5f1b99c0580866da4dbaa6d59dd23c7" target="_blank" rel="noopener noreferrer">MIT-licensed version of 16 October 2026</a> and uses only code from that version.</p>
@@ -128,7 +128,7 @@
       <div class="tabs big" role="tablist">
         <button type="button" class="tab" role="tab" data-tab="saves" data-i18n>Saves</button>
         <button type="button" class="tab" role="tab" data-tab="online" data-i18n>Online</button>
-        <button type="button" class="tab" role="tab" data-tab="friends" data-i18n>Friends &amp; crews</button>
+        <button type="button" class="tab" role="tab" data-tab="friends"><span data-i18n>Friends &amp; crews</span><span class="tab-new" hidden></span></button>
         <button type="button" class="tab" role="tab" data-tab="game" data-i18n>Game</button>
         <button type="button" class="tab" role="tab" data-tab="mods" data-i18n>Mods</button>
         <button type="button" class="tab" role="tab" data-tab="controls" data-i18n>Controls</button>
@@ -337,62 +337,77 @@
   <div class="toast away" id="away" role="status" hidden></div>
   <div class="toast away" id="removed" role="alert" hidden></div>
   <div class="notices" id="notices" role="status" aria-live="polite"></div>
-  <div class="lobby" id="lobby" role="status" aria-live="polite" hidden></div>
+  <div class="ov-card lobby" id="lobby" role="status" aria-live="polite" hidden></div>
   <div class="lobby-cover" id="lobby-cover" role="status" aria-live="polite" hidden></div>
 </div>
 
 <div class="page-toast" id="page-toast" role="status" aria-live="polite"></div>
 
-<dialog class="dlg help" id="help" aria-labelledby="help-title">
-  <form method="dialog" class="dlg-head">
-    <h2 id="help-title" data-i18n>Controls</h2>
-    <button class="btn" value="close" data-i18n>Close</button>
-  </form>
-  <div id="help-body"></div>
-</dialog>
-
+<!-- the page menu (F9): its list, or in its place its World, Crews or Friends (a game in free roam) or its Controls (shell.ts menuPage) -->
 <dialog class="dlg menu" id="menu" aria-labelledby="menu-title">
-  <h2 id="menu-title" data-i18n>Menu</h2>
-  <p class="hint" data-i18n>The game keeps running.</p>
-  <p class="hint" id="menu-save"></p>
-  <div class="menu-actions">
-    <button type="button" class="btn selected" data-act="resume" data-i18n>Back to the game</button>
-    <button type="button" class="btn" data-act="fullscreen">Full screen</button>
-    <button type="button" class="btn" data-act="fps">Frame-rate counter: off</button>
-    <button type="button" class="btn" data-act="solid" data-i18n-attr="title" title="Off: collide with every car. Players: drive through other players' cars. Everything: through traffic and tuners too." hidden>Ghost mode: off</button>
-    <button type="button" class="btn" data-act="crews" aria-haspopup="dialog" hidden>Crews: none</button>
-    <button type="button" class="btn" data-act="friends" aria-haspopup="dialog" hidden data-i18n>Friends</button>
-    <button type="button" class="btn selected" data-act="friend" hidden></button>
-    <div class="menu-radio">
-      <button type="button" class="btn" data-act="radio" aria-pressed="false"><span id="radio-label">Radio: off</span></button>
-      <button type="button" class="icon" data-act="radio-folder" data-i18n-attr="aria-label title" aria-label="Music folder" title="Music folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg></button>
-      <button type="button" class="icon" data-act="playlist" data-i18n-attr="aria-label title" aria-label="Playlist" title="Playlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+  <div class="menu-page" id="menu-main">
+    <div class="menu-head">
+      <h2 id="menu-title" data-i18n>Menu</h2>
+      <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
     </div>
-    <button type="button" class="btn" data-act="help" data-i18n>Controls</button>
-    <button type="button" class="btn" data-act="offline" hidden data-i18n>Stop waiting: play offline</button>
-    <button type="button" class="btn" data-act="log" data-i18n>Download log</button>
-    <button type="button" class="btn danger" data-act="quit">Quit game</button>
+    <div class="menu-body">
+      <div class="menu-block">
+        <button type="button" class="menu-row go" data-act="offline" hidden data-i18n>Stop waiting: play offline</button>
+        <button type="button" class="menu-row go" data-act="friend" hidden></button>
+        <button type="button" class="menu-row" data-act="worlds" hidden><span data-i18n>World</span><span class="menu-val"></span></button>
+        <button type="button" class="menu-row" data-act="solid" data-i18n-attr="title" title="Off: collide with every car. Players: drive through other players' cars. Everything: through traffic and tuners too." hidden><span data-i18n>Ghost mode</span><span class="menu-val"></span></button>
+        <button type="button" class="menu-row" data-act="crews" hidden><span data-i18n>Crews</span><span class="menu-val"></span></button>
+        <button type="button" class="menu-row" data-act="friends" hidden><span data-i18n>Friends</span><span class="menu-val menu-dot"></span></button>
+      </div>
+      <div class="menu-block">
+        <div class="menu-radio">
+          <button type="button" class="menu-row" data-act="radio" aria-pressed="false"><span data-i18n>Radio</span><span class="menu-val" id="radio-label"></span></button>
+          <button type="button" class="icon" data-act="radio-folder" data-i18n-attr="aria-label title" aria-label="Music folder" title="Music folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg></button>
+          <button type="button" class="icon" data-act="playlist" data-i18n-attr="aria-label title" aria-label="Playlist" title="Playlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+        </div>
+        <button type="button" class="menu-row" data-act="fullscreen"><span data-i18n>Full screen</span><span class="menu-val"></span></button>
+        <button type="button" class="menu-row" data-act="help" data-i18n>Controls</button>
+        <button type="button" class="menu-row bad" data-act="quit">Quit game</button>
+      </div>
+    </div>
+    <p class="menu-foot"><span id="menu-save"></span><button type="button" class="text-btn" data-act="log" data-i18n>Download log</button></p>
+  </div>
+  <!-- the worlds, each with how many are in free roam there: one picked, the game is in it at once (shell.ts openWorlds) -->
+  <div class="menu-page" id="menu-worlds" hidden>
+    <div class="menu-head">
+      <button type="button" class="menu-back" data-act="back" data-i18n-attr="aria-label title" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span id="menu-worlds-title" data-i18n>World</span></button>
+      <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
+    </div>
+    <div class="menu-block menu-worlds" id="menu-worlds-box"></div>
+  </div>
+  <!-- the Crews row's control, which changes the game's crews at once; ‹ back to the list -->
+  <div class="menu-page" id="menu-crews" hidden>
+    <div class="menu-head">
+      <button type="button" class="menu-back" data-act="back" data-i18n-attr="aria-label title" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span id="menu-crews-title" data-i18n>Crews</span></button>
+      <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
+    </div>
+    <p class="menu-note" id="menu-crews-help" data-i18n>Players with the same crew name always see each other in free roam, in the crew's colour. Type a name to start or join a crew (up to 4).</p>
+    <div class="menu-block menu-crews" id="menu-crews-box"></div>
+  </div>
+  <!-- requests, the friends in free roam (Join, Invite), the others, a request by name; the line on Join only where a friend has one -->
+  <div class="menu-page" id="menu-friends" hidden>
+    <div class="menu-head">
+      <button type="button" class="menu-back" data-act="back" data-i18n-attr="aria-label title" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span id="menu-friends-title" data-i18n>Friends</span></button>
+      <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
+    </div>
+    <p class="menu-note" id="menu-friends-help" data-i18n>Join a friend's world: free roam shows its players from now on.</p>
+    <div class="menu-block menu-friends" id="menu-friends-box"></div>
+  </div>
+  <!-- the start page's Controls sheet, copied (shell.ts openHelp) -->
+  <div class="menu-page" id="menu-controls" hidden>
+    <div class="menu-head">
+      <button type="button" class="menu-back" data-act="back" data-i18n-attr="aria-label title" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span id="menu-controls-title" data-i18n>Controls</span></button>
+      <button type="button" class="text-btn" data-act="resume" data-i18n>Close</button>
+    </div>
+    <div class="menu-sheet" id="help-body"></div>
   </div>
 </dialog>
 
-<!-- the menu's Crews (a game in free roam), over the menu; after it in the page, so it is the top dialog (padnav.ts) -->
-<dialog class="dlg crews-pop" id="crews-pop" aria-labelledby="crews-pop-title" aria-describedby="crews-pop-help">
-  <h2 id="crews-pop-title" data-i18n>Crews</h2>
-  <p class="hint" id="crews-pop-help" data-i18n>Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.</p>
-  <div class="crews-pop-box" id="crews-pop-box"></div>
-  <div class="row end">
-    <button type="button" class="btn selected" data-act="crews-done" data-i18n>Done</button>
-  </div>
-</dialog>
-<!-- the menu's Friends (a game in free roam, with friends), over the menu, as its Crews -->
-<dialog class="dlg friends-pop" id="friends-pop" aria-labelledby="friends-pop-title" aria-describedby="friends-pop-help">
-  <h2 id="friends-pop-title" data-i18n>Friends</h2>
-  <p class="hint" id="friends-pop-help" data-i18n>Join a friend's room: free roam shows its players from now on.</p>
-  <div class="friends-pop-box" id="friends-pop-box"></div>
-  <div class="row end">
-    <button type="button" class="btn selected" data-act="friends-done" data-i18n>Done</button>
-  </div>
-</dialog>
 <dialog class="dlg playlist" id="playlist" aria-labelledby="playlist-title">
   <form method="dialog" class="dlg-head">
     <h2 id="playlist-title" data-i18n>Playlist</h2>
@@ -443,7 +458,7 @@
 <dialog class="dlg" id="donate" aria-labelledby="donate-title">
   <form method="dialog">
     <h2 id="donate-title" data-i18n>Support the project</h2>
-    <p data-i18n>To help with hosting and development costs, you can buy me a coffee on Ko-fi. No perks, apart from a Discord role.</p>
+    <p data-i18n>To help with hosting and development costs, you can buy me a coffee on Ko-fi. Everyone gets the same game, with no microtransactions or paid perks. Supporters just get a Discord role.</p>
     <div class="row end">
       <button class="btn" value="close" data-i18n>Not now</button>
       <a class="btn selected" id="donate-go" href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer" data-i18n>Donate on Ko-fi</a>

@@ -708,7 +708,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn the_welcome_is_queued_before_anyone_can_send_to_the_newcomer() {
         const N: usize = 300;
-        let sw = LanSwitch::new(LanOptions { max_peers: 16000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 24000, ..LanOptions::default() }, "", None, None, None, None);
         // a sender on another core: it looks at each address the switch hands out next, as soon as it is taken
         let watcher = {
             let sw = sw.clone();
@@ -740,7 +740,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn what_full_costs() {
-        let sw = LanSwitch::new(LanOptions { max_peers: 16000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 24000, ..LanOptions::default() }, "", None, None, None, None);
         let peers: Vec<_> = (0..1000).map(|i| crate::route::tests::peer(&sw, &format!("g{i}"))).collect();
         let t = std::time::Instant::now();
         let mut n = 0;

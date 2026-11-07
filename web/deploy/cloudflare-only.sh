@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Only Cloudflare's addresses reach the server's TLS port (compose.origin.yml): a table of its own in
-# nftables, so nothing else on the VPS changes (Docker's rules, ufw's, other ports).  The server also asks Cloudflare's addresses for its origin-pull certificate; this keeps everyone
-# else from reaching it past Cloudflare.  Run as root; again when Cloudflare's list changes (www.cloudflare.com/ips).
+# nftables, so nothing else on the VPS changes (Docker's rules, ufw's, other ports).  The server also asks Cloudflare's
+# addresses for its origin-pull certificate; this keeps everyone else from reaching it past Cloudflare.  Run as root;
+# again when Cloudflare's list changes (www.cloudflare.com/ips).
 #
 #   web/deploy/cloudflare-only.sh [port]          the port (default 28443) for Cloudflare's addresses only
 #   web/deploy/cloudflare-only.sh --off           the table gone: the port open to all again
@@ -19,13 +20,25 @@ case "$port" in '' | *[!0-9]*) echo "cloudflare-only: not a port: $port" >&2; ex
 list() { curl -fsS --max-time 20 "https://www.cloudflare.com/ips-$1" | tr -d '\r' | sed '/^$/d' | paste -sd, -; }
 v4=$(list v4) v6=$(list v6)
 [ -n "$v4" ] && [ -n "$v6" ] || { echo "cloudflare-only: no list from www.cloudflare.com" >&2; exit 1; }
-# one transaction: the table made if it is not there, then dropped and made again, so a second run replaces the first
+# one transaction: the table made if it is not there, then dropped and made again, so a second run replaces the first.
+# The port's packets also go untracked (notrack, before connection tracking looks at them): Docker's NAT rules on the
+# VPS turn tracking on for its whole network, and the server's ~16000 connections would each be tracked, every packet
+# through its hooks, for nothing (no rule here or Docker's asks about them; the same cost on cloudflared's hop was a
+# twentieth of the server's kernel time, nfsu2.xyz 2026-11-05).
 nft -f - <<EOF
 table inet $table
 delete table inet $table
 table inet $table {
   set v4 { type ipv4_addr; flags interval; elements = { $v4 } }
   set v6 { type ipv6_addr; flags interval; elements = { $v6 } }
+  chain untracked_in {
+    type filter hook prerouting priority raw; policy accept;
+    tcp dport $port notrack
+  }
+  chain untracked_out {
+    type filter hook output priority raw; policy accept;
+    tcp sport $port notrack
+  }
   chain input {
     type filter hook input priority -10; policy accept;
     tcp dport $port ip saddr @v4 accept

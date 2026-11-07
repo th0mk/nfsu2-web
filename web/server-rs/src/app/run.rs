@@ -175,8 +175,11 @@ pub async fn run(o: Options, cores: usize) {
     // (its lines: the cap on the players' links going down while the server is busy and back up, at most one every 5 s)
     let m = marker.clone();
     let roam_log = Arc::new(move |line: &str| log::line(m.tag(line).as_deref().unwrap_or(line)));
-    // (a player under a name taken away plays alone, as under another's claimed name)
-    let roam_options = RoamOptions { deny: Some(bans.deny()), ..RoamOptions::default() };
+    // (a player under a name taken away plays alone, as under another's claimed name; one who races others in a car
+    // past the operator's numbers is race-banned by the server: autoban.rs)
+    let car_bans = super::autoban::from_env();
+    let roam_options =
+        RoamOptions { deny: Some(bans.deny()), car_bans: car_bans.as_ref().map(|(c, _)| c.clone()), ..RoamOptions::default() };
     let roam = o.roam_hub.then(|| RoamHub::spawn_with(roam_options, roam_log, claims.clone()));
     // keyphrase saves: a folder in the state folder (none with --vault-gb 0)
     let vault = (o.vault_gb > 0.0).then(|| {
@@ -254,6 +257,10 @@ pub async fn run(o: Options, cores: usize) {
     }
     let o = &app.o;
     let control = super::control::listen(app.clone());
+    // (with free roam's hub only: its lobby races are where the cars are seen)
+    if let (Some((cars, races)), Some(_)) = (car_bans, &app.roam) {
+        super::autoban::start(app.clone(), marker.clone(), &cars, races);
+    }
 
     // the switch's players, every 5 minutes while any are on
     {

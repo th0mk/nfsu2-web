@@ -30,6 +30,7 @@ const KEEP_MS = 30 * 60_000, MAX_LINES = 150;    // the recent messages kept a c
 const MAX_PICTURES = 2, CALL_PICTURES = 8;       // pictures a sorted author, and a call (each ~1,500 tokens)
 const MAX_IMAGE = 10 << 20;
 const USER_COOLDOWN_MS = 7 * 86400_000;          // one pointer a person a week
+const HELPED_MS = 3600_000;                      // no pointer this long after #help's answer to them (help.mjs)
 const CHANNEL_MAX_PER_HOUR = 6;
 
 // a problem in any of the server's languages; how-to questions pass too and the model sorts them out
@@ -122,7 +123,7 @@ const FIXES = {
   },
   'cannot-reach': {
     when: 'the start page says "This device can\'t reach the server" or "No connection to the server", or the browser cannot open nfsu2.xyz at all ("This site can\'t be reached", an ERR_ code), while others play. Never a problem inside the game: no other players in free roam, a Room, a race that will not join, a controller, the game\'s GPS',
-    re: /reach|no connection|not connected|ERR_|took too long|server|servidor|serwer|sunucu|сервер|conex|подключ|соедин/i,
+    re: /reach|no connection|not connected|ERR_|took too long|timed? ?out|server|servidor|serwer|sunucu|сервер|conex|подключ|соедин|интернет/i,
     en: 'Your network is blocking the server (some providers block Cloudflare; in Spain they do during football matches, and it works again after the match): try mobile data or another Wi-Fi, or turn off an ad blocker, a web filter or private DNS.',
   },
   'vpn-ban': {
@@ -139,8 +140,25 @@ const FIXES = {
   'iphone-sound': {
     when: 'no sound at all in the game on an iPhone or iPad',
     words: true,
-    re: /\b(iphone|ipad|ios)\b/i,
+    // an iPhone and a word for sound in their words: "iPhone keeps closing" got this one (7 November)
+    re: /^(?=[\s\S]*\b(iphone|ipad|ios)\b)(?=[\s\S]*(sound|audio|\bsom\b|sonido|\bsuono|\bson\b|\bton\b|geluid|звук|\bses\b|dźwięk|silent|mute))/i,
     en: 'Reload the page: since 4 November the game plays its sound in Silent mode too (other apps\' music pauses while it plays).',
+  },
+  'iphone-closes': {
+    when: 'the game closes, crashes or goes back to the start page by itself on an iPhone or iPad, after some minutes or after a race or a shop (the start page then says the last game stopped without warning, or GPU-LOST)',
+    words: true,
+    re: /^(?=[\s\S]*\b(iphone|ipad|ios)\b)(?=[\s\S]*(clos|crash|kick|bounc|exit|quit|back to|start page|stop|GPU-LOST|fech|cierr|sale|cae|вылет|выкид|закр|виліт|çök|kapan|wywal|zamyk|crush))/i,
+    en: 'On iPhone and iPad the browser closes the game when it runs short of memory, and the start page comes back. No setting fixes it yet: follow it in <#1564554732649971802>, and post your log there (start page, Download log, before you press Play again).',
+  },
+  'storage-none': {
+    when: 'STORAGE-NONE: "This browser window cannot store files" (a private, incognito or guest window)',
+    re: /STORAGE-NONE|cannot store|can't store|private|incognito|guest/i,
+    en: 'A private, incognito or guest window can\'t keep saves: open nfsu2.xyz in a normal window.',
+  },
+  'gpu-adapter-firefox': {
+    when: 'GPU-ADAPTER-FIREFOX: Firefox on a computer would not use the graphics (not Firefox for Android)',
+    re: /GPU-ADAPTER-FIREFOX/i,
+    en: 'Firefox would not use this computer\'s graphics: update the graphics driver and Firefox, or play in Chrome or Edge.',
   },
   'iphone-full-screen': {
     when: 'they say full screen does not work on an iPhone (Safari\'s bars stay); the page\'s yellow iPhone note in a screenshot is not this',
@@ -161,6 +179,14 @@ export const ANSWERS = {
     en: 'Wide body kits: in Stage 5, winning 11 outruns before the last URL race puts a star on the map, and that gives one car its wide body (as in the original game). Once you beat Caleb, every car in your career can get the wide body kits, and the other unique hoods, spoilers, rims and vinyls, in the shops.',
   },
 };
+/** the scripts besides the Latin one that a text is written in (bot.mjs: a forum reply in one nobody there writes) */
+const SCRIPTS = {
+  Cyrillic: /\p{Script=Cyrillic}/u, Greek: /\p{Script=Greek}/u, Chinese: /\p{Script=Han}/u,
+  Japanese: /[\p{Script=Hiragana}\p{Script=Katakana}]/u, Korean: /\p{Script=Hangul}/u, Thai: /\p{Script=Thai}/u,
+  Arabic: /\p{Script=Arabic}/u, Hebrew: /\p{Script=Hebrew}/u, Devanagari: /\p{Script=Devanagari}/u,
+};
+export const scriptsOf = text => Object.keys(SCRIPTS).filter(k => SCRIPTS[k].test(text));
+const SCRIPT_OF = { ru: 'Cyrillic', uk: 'Cyrillic', bg: 'Cyrillic', sr: 'Cyrillic', el: 'Greek', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', th: 'Thai', ar: 'Arabic', he: 'Hebrew', hi: 'Devanagari' };
 const ASKS = new RegExp(Object.values(ANSWERS).map(a => a.re.source).join('|'), 'i');
 
 const SORT = {
@@ -191,7 +217,7 @@ const SORT_SYSTEM = `You read the general chat of "Underground 2 Revived" (Need 
 
 For each marked author:
 - why: a few words on what they say in the chat.
-- kind: "report" when the author says something goes wrong for them, now, in the game or on the page: a crash, a freeze, an error message or code, the game or the site will not start, load or connect, a controller, sound, graphics or saves not working, something broken since an update. "Is anyone else having X?" counts when they have X and say what X is. A bare "is it just me?", "is the server down?" or "why can't I play?" with no detail and no picture is "other": the chat answers those. Asking how to fix or get past such a thing ("how do I fix this?", "how to get past this error?") is a report too. Everything else is "other": how-to questions (controls, settings, progress, cars, tuning, saves, multiplayer, "how do I ..."), wishes and suggestions, opinions about the game or a device, chat and jokes, a problem mentioned in passing ("lol it crashes on my phone") or one they explain themselves ("must be all the players"), how the career or the game is meant to work (no races left, unlocking parts, the map), an answer or advice to someone else, someone else's problem, a problem from long ago or one they solved, a line quoted from someone else. When unsure, "other".
+- kind: "report" when the author says something goes wrong for them, now, in the game or on the page: a crash, a freeze, an error message or code, the game or the site will not start, load or connect, a controller, sound, graphics or saves not working, something broken since an update. "Is anyone else having X?" counts when they have X and say what X is. A bare "is it just me?", "is the server down?" or "why can't I play?" with no detail and no picture is "other": the chat answers those. Asking how to fix or get past such a thing ("how do I fix this?", "how to get past this error?") is a report too. Everything else is "other": how-to questions (controls, settings, progress, cars, tuning, saves, multiplayer, "how do I ..."), wishes and suggestions, opinions about the game or a device, chat and jokes, a problem mentioned in passing ("lol it crashes on my phone") or one they explain themselves ("must be all the players"), how the career or the game is meant to work (no races left, unlocking parts, the map), something that may be a setting, a game mode or how a feature works (photo mode stopping the other cars, no world map in Quick Race's Free Run, which controllers work, a Steam Controller acting as a mouse), slowness on a weak device or at busy times, a lost passphrase or name, an answer or advice to someone else, someone else's problem, a problem from long ago or one they solved, a line quoted from someone else. When unsure, "other".
 - handled: true when someone else in the chat already answered them with something that fits their problem (an explanation, something to try, a question back about it, a pointer to a channel), or they said it works now or found the cause themselves ("nvm", "got it", "found it", "it was my VPN"). A line to the whole channel counts too: staff or a member saying where such problems go (#bug-reports, a thread), that the problem is known, or that a fix is out answers every author with that same problem in the chat shown. Staff asking them about it ("you can't continue?"), with or without Discord's reply, is an answer. A wild guess ("maybe a VPN? idk"), a joke or "same here" is not an answer.
 - fix: the id of a fix below when their problem is unmistakably that one: the page's code or its message, or exactly the case the fix names, is in their words or their picture. Else "". Never on a guess: a fix that does not fit is worse than none.
 - fix_text: when fix or answer is set and they don't write in English, its text in their language, nothing added or left out; else "".
@@ -238,6 +264,7 @@ export class General {
     this.now ??= Date.now;
     this.file = path.join(o.state, 'general.json');
     this.pending = new Map();                   // author id -> { msgs: [Message], first, last }
+    this.helped = new Map();                    // author id -> ms help.mjs answered them last
     this.recent = new Map();                    // channel id -> the last KEEP_MS of messages, for the chat around one
     this.sent = [];                             // { at, ch } of pointers, for the hourly cap
     this.conversing = new Map();                // author id -> ms they were last in a conversation about their problem
@@ -259,7 +286,8 @@ export class General {
   static isHelp(ch) { return ch?.type === ChannelType.GuildText && HELP.test(ch.name ?? ''); }
 
   /** someone help.mjs answered: no pointer on top of it for the same messages */
-  skip(id) { this.pending.delete(id); }
+  /** help.mjs answered them: no pointer now, nor for HELPED_MS (a pointer came on top of two answers 13 minutes apart) */
+  skip(id) { this.pending.delete(id); this.helped.set(id, this.now()); }
 
   onMessage(m) {
     if (!General.isGeneral(m.channel)) return;
@@ -333,7 +361,8 @@ export class General {
     const due = [...this.pending].filter(([, p]) => now - p.last >= WAIT_MS || now - p.first >= LATE_MS);
     for (const [id] of due) this.pending.delete(id);
     for (const [id, t] of this.conversing) if (now - t > TALKING_MS) this.conversing.delete(id);
-    const ready = due.filter(([id, p]) => now - (this.saved.nudged[id] ?? 0) > USER_COOLDOWN_MS && now - p.first < LATE_MS);
+    for (const [id, t] of this.helped) if (now - t > HELPED_MS) this.helped.delete(id);
+    const ready = due.filter(([id, p]) => now - (this.saved.nudged[id] ?? 0) > USER_COOLDOWN_MS && now - p.first < LATE_MS && !this.helped.has(id));
     // a channel at a time, with its chat; a channel that had its pointers this hour sends its people to no model:
     // they would get no reply
     for (const [ch, list] of Map.groupBy(ready, ([, p]) => p.msgs[0].channelId)) {
@@ -405,8 +434,10 @@ export class General {
       // a fix only when the author's own words name it, or they posted a picture the model read it from
       const fix = !answer && FIXES[s.fix] && (FIXES[s.fix].re.test(words) || (!FIXES[s.fix].words && own.some(l => l.files.some(f => IMAGE.test(f.name))))) ? s.fix : '';
       const thread = !fix && !answer && known.has(s.thread) ? s.thread : '';
-      // they posted it in the forum already: that thread gets the bot's look there
-      if (thread && owners.get(thread) === author) { console.log(`[general] #${channel.name} ${said}: their own thread ${thread}, no pointer`); continue; }
+      // they posted in the forum already (about this or not): they know where it goes, and their thread gets the bot's look
+      if (!fix && !answer && [...owners.values()].includes(author)) { console.log(`[general] #${channel.name} ${said}: a thread of their own, no pointer`); continue; }
+      // a language whose letters are not in their own words (a Russian page in their picture) is a wrong guess: English
+      if (SCRIPT_OF[s.lang] && !scriptsOf(words).includes(SCRIPT_OF[s.lang])) s.lang = 'en';
       // a fix or an answer the model did not translate goes out in English, its footer too
       const translated = (fix || answer) && s.lang !== 'en' && s.fix_text;
       const t = (fix || answer) && !translated ? T.en : T[s.lang] ?? T.en;

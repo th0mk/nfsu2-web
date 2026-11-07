@@ -236,6 +236,33 @@ fn the_world_map_shows_the_room_in_free_roam_lately() {
     assert_eq!(mapd_answer(&k).2, 0, "only its link 1 is fresh");
 }
 
+// a world map names each player it shows by a key of its own, not by its place on the hub (keys run to 16384, places
+// past it): one that goes to a race gives its key back, behind the free ones, and gets the next free one when it is in
+// free roam again (4 here: 0-3 are taken), so keys and places no longer go together; an answer lists its players by
+// key (the game merges them in that order), and one from the answer the map holds says the old key went
+#[test]
+fn the_world_map_names_a_player_by_a_key_of_its_own() {
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..4 {
+        join(&mut k, i);
+        k.from(W(i), &snap(100 + i, [i as f64 * 100.0, 0.0, 0.0]));
+    }
+    let ask = |k: &mut Kit, req: u16, base: u16| {
+        k.step(300.0);
+        k.hub.tick();
+        k.clear();
+        k.from(W(3), &mapreq_base(103, req, 2048, base));
+        mapd_answer(k).3.into_iter().map(|(key, e)| (key, e.map(|e| e.0))).collect::<Vec<_>>()
+    };
+    // 3 asks; 2 is its link (the nearest): the map shows 0 and 1, under keys 0 and 1
+    assert_eq!(ask(&mut k, 1, 0), [(0, Some(0)), (1, Some(100))]);
+    // 0 races (status 3), then is in free roam again further on: key 4, its place on the hub still the first
+    k.from(W(0), &snap_n(100, [0.0, 0.0, 0.0], 3, 1));
+    k.from(W(0), &snap(100, [50.0, 0.0, 0.0]));
+    assert_eq!(ask(&mut k, 2, 1), [(0, None), (4, Some(50))], "key 0 gone, 0 placed again under key 4");
+    assert_eq!(ask(&mut k, 3, 0), [(1, Some(100)), (4, Some(50))], "from nothing: by key");
+}
+
 // a map that asks for them (MAPREQ flags 1) learns who has stood at one spot for a minute (0x4000 in the key: a car
 // meet counts those) and where everyone is, height and all (the GPS to a meet needs it); one placed again when it
 // drives off; a map that does not ask never sees the mark

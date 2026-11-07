@@ -1,0 +1,22 @@
+# Who can join a lobby (roam_game.c mp_act, the card's V) and the cars against ours (RC_EXT_RATING), the host's side
+# (with mprace_who_b.txt): a stage 2 career opens a lobby for a stage 1 race (its host past the race's stage: no stage
+# limit, everyone may join: MP_PAST), goes round Who can join (Friends & crew only, then everyone again) and waits for
+# a stage 3 career (on its side of the stage), who joins.
+#   node web/tools/roam-pair.mjs --seed <stage 2 save> --seed-for Bob:<stage 3 save> --a Ann:mprace_who_a.txt
+#        --b Bob:mprace_who_b.txt --env MP_RACE=STAGE_1_SPRINT_1
+# Ann's log: "who can join: Friends & crew only", "who can join: everyone", "Bob joined, 2 of 6"; "staged 0, host past 1".
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  roam mp open ${MP_RACE}
++0    roam mp waitlobby 1 3000
++60   roam mp private
++60   roam mp private
++60   roam mp lobby
++0    log LOBBY waiting
++0    roam mp waitlobby 2 4000
++60   roam mp lobby
++0    log LOBBY DONE
++600  quit

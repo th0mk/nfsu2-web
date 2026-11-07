@@ -1,6 +1,7 @@
-# Keep right and the page menu's Ghost mode, instance A (--page app): new career -> prologue free roam, wait for the
-# other instance, then the game's autopilot drives off the new career's start: the line "Please keep right to help
-# avoid crashes" shows at the top (log SHOT keepright), for 15 s.  Then the page menu (F9) switches ghost mode on
+# Ghost mode's hint and the page menu's Ghost mode, instance A (--page app): new career -> prologue free roam, wait for
+# the other instance, then the game's autopilot drives off the new career's start: the game says "ghost hint ... the
+# page shows it" and the page's note at the top says where Ghost mode is (log SHOT ghosthint; the page's log
+# "[notice] hint: ghost"), for 15 s.  Then the page menu (F9) switches ghost mode on
 # and off again (log MENU solid): the log says "solid cars off (the page's menu)", the status "passable", and B sees
 # this car passable meanwhile (roam_keepright_b.txt).  NFSU2_ROAM=1 and peers from the environment.
 0     tapuntil RETURN MC_Background.fng 120 4000
@@ -24,7 +25,7 @@
 +0    roam mp waitpeers 1 6000
 +0    roam mp waitcars 1 3000
 +240  roam call 0x5fae20 ecx=*0x8900ac          # Player::AutoPilotOn: off the new career's start
-+420  log SHOT keepright
++420  log SHOT ghosthint
 +600  roam mp status
 +0    log MENU solid                            # ghost mode on
 +300  roam mp status

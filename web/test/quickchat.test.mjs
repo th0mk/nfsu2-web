@@ -225,7 +225,7 @@ test('the countdown: big near, over the car far, one at a time, not in a race', 
   await game(p, true, true, 2);
   await key(p, 'Digit4');
   assert.equal(await p.evaluate(() => document.querySelectorAll('.qc-row svg.qc-watch').length), 1, 'the fourth group shows it with its stopwatch');
-  assert.equal(await text(p, '.qc-row:nth-of-type(5) .qc-text'), 'Countdown', 'in the last place (the default sixteen)');
+  assert.equal(await text(p, '.qc-row:nth-of-type(4) .qc-text'), 'Countdown', 'in the last place (the default sixteen)');
   await key(p, 'Digit4');
   assert.deepEqual(await said(p), [[152, false]], 'said as a phrase, in free roam');
   await from(p, { id: 1, name: 'Me', p: 152, me: 1 });

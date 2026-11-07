@@ -1,0 +1,40 @@
+# A friend's crew invite on the player's own page, instance B (with roam_crew_invite_a.txt): Bob, in Night Owls,
+# befriends Ann nose to nose, gets "Night Owls 2 in free roam" in the log; Ann's invite to Touge shows as a card at the
+# top (shot b_card), Z takes it: Touge joined in the running game (the menu's Crews shows it), settings.ini keeps it.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++960  roam teleport 1695.3 -879.96 24.6 0xc000
++300  roam teleport 1695.3 -879.96 24.6 0xc000
++0    log placed
++0    roam mp waitbump Ann 6000
++120  log SHOT b_counts
++0    log KEY KeyF
++400  log KEY KeyF
++400  log KEY KeyF
++400  log KEY KeyF
++0    roam mp waitfriend Ann 6000
++500  log SHOT b_card                      # Ann's invite (Ann's page sends it ~300 frames after the friendship)
++120  log SHOT b_card2
++0    log KEY KeyZ                         # joins Touge, in Ann's room (the room of everyone)
++120  log SHOT b_joined
++600  roam mp status                       # Ann a crew-mate in Touge (the running game's second crew) too
++0    log CREW shot b_crews
++300  quit

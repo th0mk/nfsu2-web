@@ -1,0 +1,106 @@
+# The Car Specialties shop (UI_ICEMAIN.fng) with runtime/specialties.c: Back out of Trunk Audio keeps the list on
+# Trunk Audio, the Custom Gauges list opens on the gauge fitted, and Stock can be picked again, free, with the car's
+# HUD slots as they were before any purchase.  A stage-4 career save whose car has the stock gauges:
+#  - the list's place is UI_ICEMAIN.fng's screen-table row 0x7F890C +0x10 (the place plus 1): Nitrous Purge 5, Trunk
+#    Audio 7, and 7 again after Trunk Audio's Back (the game wrote 0 there: the list was back on Custom Gauges);
+#  - the car record's HUD slots ([0x8389AC] +0x2B0: 163 CUSTOM_HUD, then 164-166 its colours) are marked as the car
+#    came, Flames is bought with its colours (the record's 163 FLAMES, 0x5BD31AF7), the list opens on Flames again,
+#    then Stock (UP) and Enter: the game's install question, Yes, and the four slots are the ones marked, the bank as
+#    it was; the stage [0x838560] stays 1 (the style list);
+#  - out of the shop (the save questions answered Yes) the free-roam HUD has the stock gauges again.
+# Frames: np_back (Nitrous Purge kept), ta_in, ta_back (Trunk Audio kept), g_bought, g_again (Flames, its colours),
+# g_stock, g_stock_ask, g_stock_done, g_stock_again (Stock fitted), hud_stock and hud_after (the same gauges).
+# Good: no [expect] FAIL, SPECIALTIES DONE.
+#   node web/tools/roam-pair.mjs --solo --page play --size 960x540 --seed <a stage-4 career save>
+#        --a G:shop_specialties.txt:NFSU2_ROAM=0
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank: room for parts
++0    poke 0x838464 1                 # unlock all (Trunk Audio is locked until later)
++120  dump hud_stock
++60   shopgo CC_CAR_SPECIALTY
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the shop
++1500 fnglist
++0    mark hud163 x:[0x8389ac]+0x2b0  # the car's gauges as it came
++0    mark hud164 x:[0x8389ac]+0x2b4
++0    mark hud165 x:[0x8389ac]+0x2b8
++0    mark hud166 x:[0x8389ac]+0x2bc
++0    loop 4
++40   tap RIGHT
++0    endloop
++200  expect i:0x7f891c == 5          # the list's place: Nitrous Purge (the 5th)
++30   tap RETURN                      # Nitrous Purge (no nitrous: the game's OK box)
++600  tap ESCAPE
++400  fnglist
++0    dump np_back
++0    expect i:0x7f891c == 5
++30   tap RIGHT
++40   tap RIGHT
++200  expect i:0x7f891c == 7          # Trunk Audio
++30   tap RETURN
++600  fnglist
++0    dump ta_in
++0    expect i:0x7f891c == 7          # Trunk Audio's own list, on the same row
++30   tap ESCAPE
++400  fnglist
++0    dump ta_back                    # still Trunk Audio
++0    expect i:0x7f891c == 7
++0    loop 6
++40   tap LEFT
++0    endloop
++200  expect i:0x7f891c == 1          # Custom Gauges
++30   tap RETURN
++600  expect i:0x838560 == 1          # the style list
++30   tap DOWN                        # Flames
++120  tap RETURN                      # its backing colour
++120  tap RIGHT
++60   tap RETURN                      # dial
++120  tap RIGHT
++60   tap RETURN                      # needle
++120  tap RIGHT
++60   tap RETURN                      # buy it?
++200  tap LEFT
++60   tap RETURN                      # Yes
++400  fnglist
++0    dump g_bought
++0    expect x:[0x8389ac]+0x2b0 == 0x5bd31af7    # the car record's CUSTOM_HUD: FLAMES
++30   tap RETURN                      # Custom Gauges again
++600  fnglist
++0    dump g_again                    # on Flames, with its colours
++0    expect i:0x838560 == 1
++0    mark bank i:0x861e74
++30   tap UP                          # Stock
++300  dump g_stock
++30   tap RETURN
++300  fnglist
++0    dump g_stock_ask                # the game's install question
++0    expect i:0x838560 == 1
++30   tap LEFT
++60   tap RETURN                      # Yes
++400  fnglist
++0    dump g_stock_done
++0    expect x:[0x8389ac]+0x2b0 == @hud163
++0    expect x:[0x8389ac]+0x2b4 == @hud164
++0    expect x:[0x8389ac]+0x2b8 == @hud165
++0    expect x:[0x8389ac]+0x2bc == @hud166
++0    expect i:0x861e74 == @bank       # free
++30   tap RETURN                      # Custom Gauges again
++600  fnglist
++0    dump g_stock_again              # on Stock
++30   tap ESCAPE                      # the category list
++400  tapfe ESCAPE GenericDialog_SMALL.fng 200 2000
++60   tap LEFT
++30   tap RETURN                      # exit back to Explore Mode: Yes
++0    waitfe MC_Main.fng 900
++60   tap LEFT
++30   tap RETURN                      # save the profile: Yes
++300  tap LEFT
++30   tap RETURN                      # overwrite: Yes
++300  tap RETURN                      # Save complete: Continue
++0    waitroam 6000
++300  dump hud_after                  # the stock gauges again
++0    log SPECIALTIES DONE
++10   quit

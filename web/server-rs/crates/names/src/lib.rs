@@ -15,14 +15,16 @@
 //!  - whole: a short one that other words have inside them ("Mustafa GS", "raccoon", "spicy", "Pakize"), only as a
 //!    part of the name on its own, and plural: the parts are split where a character is no letter and where a
 //!    capital follows a small letter, digits and signs read as letters between them or not ("f4g_42", "XxCoonXx",
-//!    "Big1Fag"); the name's letters together count as one too ("F A G").  "Dyke" after "Van" is the surname.
+//!    "Big1Fag"); the name's letters together count as one too ("F A G").  "Dyke" after "Van" is the surname; a name
+//!    of [`WHOLE_OK`] is none ("Nazli").
 //!  - edge: a word that starts or ends a part (or the name's letters together), plural too ("nigabro", "biggniga"),
 //!    but not where a part starts or ends with a word of [`EDGE_OK_START`] or [`EDGE_OK_END`] there ("Nigar",
 //!    "Zuniga", "Hooniga")
 //!
-//! The other offensive names go the same way (picked from the live server's names, 2026-10-26, 11-02 and 11-05): Nazi
-//! ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it (the neo-Nazi
-//! code); and hate aimed at a group as a phrase ([`HATE_VERBS`]: a verb, a word between or none, the group).  A swear
+//! The other offensive names go the same way (picked from the live server's names, 2026-10-26, 11-02, 11-05 and
+//! 11-07): Nazi ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it
+//! (the neo-Nazi code), spaces, _ or - between its digits or not ("14_88"); and hate aimed at a group as a phrase
+//! ([`HATE_VERBS`]: a verb, a word between or none, the group).  A swear
 //! word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an English word
 //! that ends in "pid" (rapid, cupid, stupid), or after a vowel when it runs into the next part ("TopiDrift"), is no
 //! slur ("RapidRacer"; "dapidor", "YaPidor" are).
@@ -82,7 +84,7 @@ pub const ANYWHERE: &[&str] = &[
     "fuehrer",
     "siegheil",
     "zighael",
-    "goebbels",
+    "goebbel",
     "mengele",
     "mussolini",
     "jewhunt",
@@ -116,12 +118,12 @@ pub const ANYWHERE: &[&str] = &[
     "nazist",
     "uncleadolf",
     "austrianartist",
-    "austrianpainter",
+    "austrianpaint",
     "pintoraustria",
     "zyklonb",
     "kristalnacht",
     "ovendodger",
-    "jewkill",
+    "jewkil",
     "jewslay",
     "jewdestroy",
     "jebaczyd",
@@ -153,20 +155,74 @@ pub const ANYWHERE: &[&str] = &[
     "rapedog",
     "rapeloli",
     "biraped",
+    "sigheil",
+    "seigheil",
+    "zigheil",
+    "ziegheil",
+    "zeigheil",
+    "sieghail",
+    "seighail",
+    "sighail",
+    "heilnaz",
+    "heiluncle",
+    "hitl8r",
+    "hitteru",
+    "reltih",
+    "furher",
+    "austriandraw",
+    "ausartreject",
+    "wehrmacht",
+    "gestapo",
+    "waffenss",
+    "dasreich",
+    "thirdreich",
+    "drittesreich",
+    "goering",
+    "meinkampf",
+    "auschwitz",
+    "holohoax",
+    "hakenkreuz",
+    "whitepower",
+    "kukluxklan",
+    "klansman",
+    "jewhate",
+    "nojews",
+    "jewsdid",
+    "4threich",
+    "fourthreich",
+    "holocaust",
+    "adolfwasright",
+    "adolfpaint",
+    "adolfthepaint",
+    "whitepride",
+    "jewskil",
+    "yahudisik",
+    "natsist",
+    "nacist",
+    "nigaman",
+    "nigakil",
+    "swastika",
+    "bitler",
 ];
 /// short words that match only as a part of the name on its own
 pub const WHOLE: &[&str] = &[
     "fag", "dyke", "coon", "spic", "paki", "kike", "gook", "chink", "niga", "nyga", "ngga", "neger", "xach", "xoxol", "hohol", "ukrop",
-    "pider", "pedik", "nazi", "taliban", "rape", "nig", "killnig", "fucknig", "hatenig", "pedo", "goy",
+    "pider", "pedik", "nazi", "taliban", "rape", "nig", "killnig", "fucknig", "hatenig", "pedo", "goy", "hilter", "heilh",
+    "heilah", "heilss", "ssheil", "heilhit", "hitlor", "adolf", "adolph", "reich",
 ];
 /// words that match where they start or end a part of the name (or its letters together)
-pub const EDGE: &[&str] = &["niga", "nyga", "hitla", "hitle"];
-/// the words a part may start with that would read as an edge word there and are none: a name (Nigar, Nygaard),
-/// "Nigam..." ("NIGAMI", a game), a Japanese name (Niigaki)
-pub const EDGE_OK_START: &[&str] = &["nigam", "nigar", "nigak", "nygar"];
-/// the words a part may end with that would read as an edge word there and are none: a surname (Zuniga), a word
-/// (kniga: a book; kunigas: a priest; Minigas), a 7-letter cut (Hooniga, Shiniga), Brony...
-pub const EDGE_OK_END: &[&str] = &["zuniga", "kniga", "kuniga", "miniga", "hooniga", "shiniga", "bronyga", "manyga"];
+pub const EDGE: &[&str] = &["niga", "nyga", "hitla", "hitle", "nazi"];
+/// the words a part may start with that would read as an edge word there and are none: a name (Nigar, Nygaard; Nazir,
+/// Nazim, Nazli...), "Nigam..." ("NIGAMI", a game), a Japanese name (Niigaki)
+pub const EDGE_OK_START: &[&str] =
+    &["nigam", "nigar", "nigak", "nygar", "nazir", "nazim", "nazif", "nazik", "nazih", "nazib", "nazia", "nazio", "nazli"];
+/// the words a part may end with that would read as an edge word there and are none: a surname (Zuniga, Ignazi), a
+/// word (kniga: a book; kunigas: a priest; Minigas), a 7-letter cut (Hooniga, Shiniga), Brony..., a name (Nazli)
+pub const EDGE_OK_END: &[&str] =
+    &["zuniga", "kniga", "kuniga", "miniga", "hooniga", "shiniga", "bronyga", "manyga", "yanazi", "ignazi", "nazli"];
+/// the names a part may be that read as a word of [`WHOLE`] and are none, as they are (no more of a letter in a row,
+/// no plural): Nazli (Turkish: Nazlı), Nazilli (a town), "l" reading "i"
+pub const WHOLE_OK: &[&str] = &["nazli", "nazilli"];
 /// the starts of the English words that end in "pid": rapid, cupid, stupid, tepid, vapid, insipid, lipid, limpid,
 /// sapid, intrepid, hispid
 pub const PID_STEMS: &[&str] = &["ra", "cu", "stu", "te", "va", "insi", "li", "lim", "sa", "intre", "his"];
@@ -193,7 +249,7 @@ pub const HATE_VERBS: &[&str] = &[
 /// the words that may come between a verb and a group of a hate phrase
 pub const HATE_BETWEEN: &[&str] = &["s", "the", "all", "allthe", "da", "dem", "them", "those", "every", "dirty", "to"];
 /// the groups of a hate phrase
-pub const HATE_GROUPS: &[&str] = &["jew", "kike", "colored", "coloured"];
+pub const HATE_GROUPS: &[&str] = &["jew", "kike", "colored", "coloured", "zyd"];
 /// a name with these digits in a row in it is one too (the neo-Nazi code)
 const CODE: &[char] = &['1', '4', '8', '8'];
 
@@ -271,20 +327,22 @@ const WHOLE_WORDS: [Word; WHOLE.len()] = words(WHOLE);
 const EDGE_WORDS: [Word; EDGE.len()] = words(EDGE);
 const OK_START_WORDS: [Word; EDGE_OK_START.len()] = words(EDGE_OK_START);
 const OK_END_WORDS: [Word; EDGE_OK_END.len()] = words(EDGE_OK_END);
+const OK_WHOLE_WORDS: [Word; WHOLE_OK.len()] = words(WHOLE_OK);
 const STEM_WORDS: [Word; PID_STEMS.len()] = words(PID_STEMS);
 const DYKE: [Word; 1] = words(&["dyke"]);
 const VERB_WORDS: [Word; HATE_VERBS.len()] = words(HATE_VERBS);
 const BETWEEN_WORDS: [Word; HATE_BETWEEN.len()] = words(HATE_BETWEEN);
 const GROUP_WORDS: [Word; HATE_GROUPS.len()] = words(HATE_GROUPS);
 
-/// The anywhere words by their first letter (a to z), as bits of their index: a word is at s[i] only when s[i] is
-/// its first letter, so only those are looked for there (the lobby's chat reads every line).
-const ANYWHERE_FIRST: [u128; 26] = {
-    assert!(ANYWHERE.len() <= 128);
-    let mut t = [0; 26];
+/// The anywhere words by their first letter (a to z), as bits of their index (the first 128 words in [0], the rest in
+/// [1]): a word is at s[i] only when s[i] is its first letter, so only those are looked for there (the lobby's chat
+/// reads every line).
+const ANYWHERE_FIRST: [[u128; 2]; 26] = {
+    assert!(ANYWHERE.len() <= 256);
+    let mut t = [[0; 2]; 26];
     let mut i = 0;
     while i < ANYWHERE_WORDS.len() {
-        t[(ANYWHERE_WORDS[i].letters[0] - b'a') as usize] |= 1 << i;
+        t[(ANYWHERE_WORDS[i].letters[0] - b'a') as usize][i / 128] |= 1 << (i % 128);
         i += 1;
     }
     t
@@ -446,6 +504,11 @@ fn whole(t: &[u8], words: &[Word]) -> bool {
     words.iter().any(|w| at(t, 0, w.letters()).is_some_and(|e| t[e..].iter().all(|&c| c == b's')))
 }
 
+/// t is a word of [`WHOLE`] (or its plural), and no name of [`WHOLE_OK`]
+fn whole_word(t: &[u8]) -> bool {
+    whole(t, &WHOLE_WORDS) && !OK_WHOLE_WORDS.iter().any(|x| x.letters() == t)
+}
+
 /// t starts with word w (its letters)
 fn starts_with(t: &[u8], w: &Word) -> bool {
     at(t, 0, w.letters()).is_some()
@@ -531,16 +594,18 @@ fn anywhere(s: &[u8], starts: &[bool]) -> bool {
         if hate(s, i) {
             return true;
         }
-        let mut m = ANYWHERE_FIRST[(s[i] - b'a') as usize];
-        while m != 0 {
-            let w = ANYWHERE_WORDS[m.trailing_zeros() as usize].letters();
-            let nigeria = w == b"niger" && s[i..].starts_with(NIGERIA);
-            if at(s, i, w).is_some() && !english_pid(s, i, w, starts) && !nigeria {
-                return true;
+        ANYWHERE_FIRST[(s[i] - b'a') as usize].iter().enumerate().any(|(half, &bits)| {
+            let mut m = bits;
+            while m != 0 {
+                let w = ANYWHERE_WORDS[half * 128 + m.trailing_zeros() as usize].letters();
+                let nigeria = w == b"niger" && s[i..].starts_with(NIGERIA);
+                if at(s, i, w).is_some() && !english_pid(s, i, w, starts) && !nigeria {
+                    return true;
+                }
+                m &= m - 1;
             }
-            m &= m - 1;
-        }
-        false
+            false
+        })
     })
 }
 
@@ -554,7 +619,9 @@ struct Scan {
 /// word of the edge list) is in it
 fn scan(name: &str) -> Option<Scan> {
     let str = read(name);
-    if str.windows(CODE.len()).any(|w| w == CODE) {
+    // spaces, _ or - between its digits or not ("14_88"; not "1:48.8", a lap time)
+    let code: Vec<char> = str.iter().copied().filter(|c| !matches!(c, ' ' | '_' | '-')).collect();
+    if code.windows(CODE.len()).any(|w| w == CODE) {
         return None;
     }
     // s: all the name's letters; t: the part being read
@@ -570,7 +637,7 @@ fn scan(name: &str) -> Option<Scan> {
         let num = r > 0 && number(&str, i, r) && !lone_n;
         let c = if num { None } else { ch.and_then(letter) };
         if (c.is_none() || (low && ch.is_some_and(|ch| ch.is_ascii_uppercase()))) && t.len > 0 {
-            if (whole(t.get(), &WHOLE_WORDS) && !(after_van && whole(t.get(), &DYKE))) || edge(t.get()) {
+            if (whole_word(t.get()) && !(after_van && whole(t.get(), &DYKE))) || edge(t.get()) {
                 return None;
             }
             after_van = t.get() == b"van";
@@ -594,7 +661,7 @@ fn scan(name: &str) -> Option<Scan> {
 
 /// names.mjs `blockedName(name)`: the name reads as a slur (above)
 pub fn blocked_name(name: &str) -> bool {
-    scan(name).is_none_or(|n| anywhere(n.s.get(), n.s.starts()) || whole(n.s.get(), &WHOLE_WORDS) || edge(n.s.get()))
+    scan(name).is_none_or(|n| anywhere(n.s.get(), n.s.starts()) || whole_word(n.s.get()) || edge(n.s.get()))
 }
 
 /// The most one-letter words in a row read as a word of the whole list ("f a g s")
@@ -638,7 +705,7 @@ pub fn chat_slur(line: &str) -> Option<&str> {
             n => (n, 0),
         };
         let (s, st) = match n {
-            Some(n) if !anywhere(n.s.get(), n.s.starts()) && !(n.single && (whole(n.s.get(), &WHOLE_WORDS) || edge(n.s.get()))) => {
+            Some(n) if !anywhere(n.s.get(), n.s.starts()) && !(n.single && (whole_word(n.s.get()) || edge(n.s.get()))) => {
                 (n.s.get()[skip..].to_vec(), n.s.starts()[skip..].to_vec())
             }
             _ => return Some(&line[a..b]),
@@ -667,7 +734,7 @@ pub fn chat_slur(line: &str) -> Option<&str> {
             }
             for i in 0..n {
                 for j in i + 3..=(i + WHOLE_RUN).min(n) {
-                    if whole(&s[i..j], &WHOLE_WORDS) {
+                    if whole_word(&s[i..j]) {
                         return Some(span(i, j));
                     }
                 }

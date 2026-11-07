@@ -24,7 +24,7 @@ const K = await import('data:text/javascript;base64,' + Buffer.from(await build(
 
 test('the keys and buttons from the environment', () => {
   K.applySiteKeys({});
-  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, null, 'KeyI', 'KeyF', 'KeyE', 'KeyV', 'KeyZ', 'F12', 'F10', 'F9', 'F7', 'F8']);
+  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, null, 'KeyI', 'KeyF', 'KeyE', 'KeyB', 'KeyV', 'KeyZ', 'F12', 'F10', 'F9', 'F7', 'F8']);
   assert.deepEqual(['button_hold', 'button_horn', 'button_chat', 'button_look'].map(K.siteButton), ['ddown', 'ls', 'rs', 'auto']);
   assert.ok(K.SITE_KEYS.includes('key_lights'), 'the headlights\' key is one of settings.ini\'s');
   assert.ok(K.SITE_KEYS.includes('key_hud') && K.SITE_KEYS.includes('button_look'), 'hiding the HUD\'s key and the free look\'s switch too');
@@ -61,10 +61,13 @@ test('what may be picked', () => {
   assert.match(K.refusal('drift', 'KeyZ'), /Z is already Invite to a race/, 'the race lobby card\'s E, V and Z');
   assert.equal(K.refusal('drift', 'KeyX'), '', 'its own key');
   assert.match(K.refusal('drift', 'KeyW'), /W is one of the game's keys/);
-  assert.match(K.refusal('drift', 'KeyG'), /one of the game's keys/, 'the debug camera\'s too');
+  assert.match(K.refusal('drift', 'KeyG'), /G is already Headlights/, 'the debug camera\'s G is free, but the headlights\'');
+  assert.match(K.refusal('drift', 'KeyQ'), /Q is one of the game's keys: move its control to another key in the game's Options, Controls first/,
+    'the game\'s HUD (issue 107)');
   assert.equal(K.refusal('lights', 'KeyG'), '', 'the headlights\' own G (the debug camera\'s)');
   assert.equal(K.refusal('lights', 'Digit6'), '');
-  assert.match(K.refusal('lights', 'KeyL'), /L is one of the game's keys/);
+  for (const code of ['KeyL', 'BracketLeft', 'BracketRight', 'Numpad6', 'Numpad7', 'Numpad8', 'Numpad9'])
+    assert.equal(K.refusal('lights', code), '', `${code}: the debug camera's, which the game never reads`);
   assert.match(K.refusal('lights', 'KeyX'), /X is already Drift mode/);
   assert.match(K.refusal('lights', 'Digit3'), /quick chat's/);
   assert.equal(K.refusal('lights', 'F6'), '', 'a driving key may be an F key');
@@ -95,6 +98,22 @@ test('the keys the player put one of the game\'s controls on (registry.txt)', ()
     's DIMap.{25C7B2E0-6F7E-4B7B-9A0B-123456789ABC}.53.20=81000430 00000009 00000000'].join('\n');
   assert.deepEqual([...K.gameBoundKeys(reg)].sort(), ['KeyI', 'KeyX'], 'Shift Up on X, Nitrous on I; an action with no key none');
   assert.deepEqual([...K.gameBoundKeys(null)], []);
+});
+
+test('the driving keys the game keeps: not those whose control the player moved (registry.txt)', () => {
+  const all = K.gameDrivingKeys(null);
+  assert.equal(all.size, 39, 'every row but the debug camera\'s');
+  for (const code of ['KeyQ', 'Equal', 'KeyW', 'ControlLeft', 'Digit5']) assert.ok(all.has(code), code);
+  assert.ok(!all.has('KeyL') && !all.has('KeyG'), 'the debug camera\'s');
+  const reg = ['d Version=2', 's DIMap.{25C7B2E0-6F7E-4B7B-9A0B-123456789ABC}.53.16=81000410 0000000b 00002c04',   // HUD: Q -> Z
+    's DIMap.{25C7B2E0-6F7E-4B7B-9A0B-123456789ABC}.53.21=81000425 00000009 00000000',                              // Look Back's K: none
+    's DIMap.{25C7B2E0-6F7E-4B7B-9A0B-123456789ABC}.53.1=81000411 00000001 00001104',                               // Throttle's W: W still
+    's DIMap.{0A1B2C3D-0000-0000-0000-000000000000}.32.16=81000410 00000004 00002c04'].join('\n');                  // another map's row 16
+  const kept = K.gameDrivingKeys(reg);
+  assert.ok(!kept.has('KeyQ') && !kept.has('KeyK'), 'moved off, or left with no key');
+  assert.ok(kept.has('KeyW') && kept.has('Equal'), 'still on its default; HUD\'s other key');
+  assert.equal(K.refusal('drift', 'KeyQ', K.siteKey, kept), '', 'Q free once HUD has another key');
+  assert.match(K.refusal('drift', 'KeyW', K.siteKey, kept), /W is one of the game's keys/);
 });
 
 test('the Site tab\'s rows', async () => {

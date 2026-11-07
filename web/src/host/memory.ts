@@ -64,3 +64,43 @@ export function allocMemory(tries: MemoryTry[], make = (t: MemoryTry) => new Web
   if (last) (last as { note?: string }).note = `[memory] the browser refused every size: ${refused.join(', then ')}`;
   throw last;
 }
+
+// In WebKit the page holds the memory's buffer, not the WebAssembly.Memory.  JavaScriptCore lets a page or worker
+// that holds a live Memory of the game's size take about as much again in garbage before it collects: in a two-minute
+// crowded free roam the page collected nothing from the game's start to its end and had 650 MB of garbage by then
+// (Playwright's WebKit as an iPhone, 2026-11-07, JSC_logGC), ~5 MB a second of its frames' and the network's objects.
+// With the buffer alone it collected every ~15-40 MB.  A Memory made on the page sets off a collection as it is made,
+// which counts it however soon the page lets it go (one game in three collected nothing all the same), so the I/O
+// worker makes it, sends the page its buffer and hands the Memory to each game thread (their module's instance needs
+// it) on a port the page gives both; it tells the page each new buffer as the memory grows (io-worker.ts memGrew),
+// which the page passes to the network's worker.  (A worker collects as little with the buffer as with the Memory.)
+
+/** the memory as the page and the network's worker use it: its buffer (a WebAssembly.Memory is one too) */
+export interface GameMemory { readonly buffer: ArrayBufferLike }
+
+/** whether the page holds the memory's buffer only: in WebKit (Safari, and every browser on an iPhone or iPad) */
+export function memoryOffPage(ua = typeof navigator === 'undefined' ? '' : navigator.userAgent): boolean {
+  return /AppleWebKit\//.test(ua) && !/Chrome\/|Chromium\/|Firefox\//.test(ua);
+}
+
+/** The memory's buffer, the newest one as the memory grows (a shared memory's buffer keeps the length it had). */
+export class MemoryBuffer implements GameMemory {
+  private waiting: { bytes: number; done: (ok: boolean) => void }[] = [];
+  constructor(public buffer: SharedArrayBuffer) {}
+  /** a buffer of the grown memory: taken when it is longer than this one */
+  grew(b: SharedArrayBuffer): boolean {
+    if (!(b instanceof SharedArrayBuffer) || b.byteLength <= this.buffer.byteLength) return false;
+    this.buffer = b;
+    this.waiting = this.waiting.filter(w => { if (w.bytes > b.byteLength) return true; w.done(true); return false; });
+    return true;
+  }
+  /** resolves true once the buffer has `bytes` bytes, false after ms without */
+  until(bytes: number, ms = 10_000): Promise<boolean> {
+    if (bytes <= this.buffer.byteLength) return Promise.resolve(true);
+    return new Promise(res => {
+      const w = { bytes, done: (ok: boolean) => { clearTimeout(t); res(ok); } };
+      const t = setTimeout(() => { this.waiting = this.waiting.filter(x => x !== w); res(false); }, ms);
+      this.waiting.push(w);
+    });
+  }
+}

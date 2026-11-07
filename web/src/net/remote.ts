@@ -32,7 +32,9 @@ export interface NetNow { state: NetState; vip: string | null; peers?: NetPeer[]
 /** NetOptions without its callbacks (what can go to the worker) */
 export type NetPlain = Omit<NetOptions, NetCallback>;
 export type ToNet =
-  | { t: 'init'; memory: WebAssembly.Memory; o: NetPlain; cbs: NetCallback[] }
+  // the memory, or (WebKit: host/memory.ts) its buffer, and a new one as it grows ('mem')
+  | { t: 'init'; memory: WebAssembly.Memory | SharedArrayBuffer; o: NetPlain; cbs: NetCallback[] }
+  | { t: 'mem'; buf: SharedArrayBuffer }
   | { t: 'reg'; kind: number; ptr: number; size: number }
   | { t: 'exit' }
   | { t: 'call'; m: NetCall; a: unknown[] };
@@ -79,7 +81,9 @@ class RemoteLink implements NetLink {
     this.readyTimer = setTimeout(() => this.onPage(`nothing from it in ${READY_MS / 1000} s`), READY_MS);
     const plain: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(o)) if (typeof v !== 'function') plain[k] = v;
-    this.post({ t: 'init', memory: proc.memory, o: plain as NetPlain, cbs: CALLBACKS.filter(k => !!o[k]) });
+    const held = proc.memory instanceof WebAssembly.Memory;
+    this.post({ t: 'init', memory: held ? proc.memory as WebAssembly.Memory : proc.memory.buffer as unknown as SharedArrayBuffer, o: plain as NetPlain, cbs: CALLBACKS.filter(k => !!o[k]) });
+    if (!held) proc.onGrow(buf => this.post({ t: 'mem', buf }));
     for (const kind of [HostKind.Net, HostKind.Lan])
       void proc.registered(kind).then(r => this.post({ t: 'reg', kind, ptr: r.ptr, size: r.size }));
     void proc.exited.then(() => { this.post({ t: 'exit' }); this.ended(); });

@@ -17,8 +17,12 @@ import {
 } from './proto';
 import { BLOCK, CACHE_DIR, av1Path, songsPath, blockRuns, cacheKey, cacheOpen, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
 import { movieClose, movieDecode, movieOpen } from './movie';
+import { allocMemory, type MemoryTry } from './memory';
 
-interface Init { memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig }
+// The memory, or the sizes to try for it where the page holds its buffer only (WebKit, memory.ts): then this worker
+// makes it, sends the page its buffer, hands the Memory to each game thread ({ t: 'give', port }) and tells the page
+// each new buffer as the memory grows (memGrew)
+interface Init { memory?: WebAssembly.Memory; tries?: MemoryTry[]; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig }
 
 const FT_DIR = 3, FT_FILE = 4;
 const td = new TextDecoder(), te = new TextEncoder();
@@ -394,12 +398,49 @@ async function aheadLoop() {
   } finally { aheadLoops--; }
 }
 
+// In WebKit (offPage) a read whose blocks this device keeps, and the memory does not, goes from the cache file straight
+// into the game's memory, not through a 1 MB block of its own for each: this worker collects next to nothing there (it
+// holds the game's memory: memory.ts), and those blocks were ~250 MB of garbage as a crowded free roam came in
+// (Playwright WebKit, 2026-11-07).  A browser that will not read a file into shared memory (a TypeError) reads
+// through the blocks, as Chrome and Firefox do.
+let readsKept = true;
+function readKept(cf: CacheFile, pos: number, end: number, dst: { ptr: number; len: number }[], first: number, last: number): number {
+  for (let bi = first; bi <= last; bi++) if (!cf.have[bi]) return -1;
+  const mem = u8();
+  let off = pos;
+  try {
+    for (const d of dst) {
+      if (off >= end) break;
+      if (!d.len) continue;                    // (an empty buffer between two others: the next one goes on)
+      const k = Math.min(d.len, end - off);
+      if (cf.h.read(mem.subarray(d.ptr, d.ptr + k), { at: off }) !== k) return -1;
+      off += k;
+    }
+  } catch (e) {
+    if (e instanceof TypeError) { readsKept = false; note(`[data] the cache files are read through blocks of their own (${e.message})`); }
+    return -1;
+  }
+  sum.local += last - first + 1;
+  return end - pos;
+}
+
+/** whether the memory has every block of first..last (a read the blocks serve at once) */
+function blocksInMemory(n: DNode, first: number, last: number): boolean {
+  for (let bi = first; bi <= last; bi++) if (!memBlocks.has(n.path + '#' + bi)) return false;
+  return true;
+}
 async function dataRead(n: DNode, pos: number, dst: { ptr: number; len: number }[]): Promise<number> {
   const total = dst.reduce((a, d) => a + d.len, 0);
   const end = Math.min(n.size, pos + total);
   if (end <= pos) return 0;
   const first = Math.floor(pos / BLOCK), last = Math.floor((end - 1) / BLOCK), track = isTrackStream(n);
   if (track) readAhead(n, first);
+  if (readsKept && offPage && cacheDir && !blocksInMemory(n, first, last)) {
+    dataSummary(performance.now());
+    const cf = await cacheFile(n);
+    const r = cf ? readKept(cf, pos, end, dst, first, last) : -1;
+    if (r >= 0) return r;
+  }
   const blocks = await Promise.all(Array.from({ length: last - first + 1 }, (_, i) => getBlock(n, first + i, track ? P_TRACK : P_GAME)));
   const mem = u8();
   let off = pos, di = 0, dOff = 0;
@@ -946,11 +987,21 @@ function watch() {
     note(`[io] ${opName(r.op)} of ${r.what} unanswered for ${((now - r.t0) / 1000).toFixed(0)} s${at.length ? `; waiting: ${at.slice(0, 4).join('; ')}` : ''}`);
   }
 }
+// where the page holds the memory's buffer only: each new one as the memory grows, before the page needs it (a game
+// thread's read into the grown part comes through here; the renderer's readbacks wait for it: gpu/index.ts)
+let offPage = false, memSaid = 0;
+function memGrew() {
+  const b = memory.buffer;
+  if (b.byteLength <= memSaid) return;
+  memSaid = b.byteLength;
+  (self as unknown as Worker).postMessage({ t: 'mem', buf: b });
+}
 async function serve() {
   let seen = Atomics.load(ctl, CTL_IO_DOORBELL);
   setInterval(watch, 5000);
   for (;;) {
     Atomics.add(ctl, CTL_IO_BEAT, 1);
+    if (offPage) memGrew();
     for (let s = 0; s < MAX_THREADS; s++) {
       const b = s * (RPC_SLOT / 4);
       if (Atomics.compareExchange(rpcI32, b, RPC_POSTED, RPC_TAKEN) !== RPC_POSTED) continue;
@@ -969,9 +1020,38 @@ async function serve() {
   }
 }
 
-onmessage = async (e: MessageEvent<Init | { t: 'save-ready' }>) => {
-  if ('t' in e.data) { if (e.data.t === 'save-ready') saveAnswered?.(); return; }
-  ({ memory, cfg } = e.data);
+let gaveHere = false;
+onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; port: MessagePort; slot: number } | { t: 'give-page'; slot: number }>) => {
+  if ('t' in e.data) {
+    if (e.data.t === 'save-ready') saveAnswered?.();
+    // the Memory for a game thread, on the port the page gave it
+    else if (e.data.t === 'give') {
+      // (a browser that will not post a shared memory on a port: through the page, which then holds it a moment)
+      try { e.data.port.postMessage(memory); }
+      catch (x) {
+        if (!gaveHere) { gaveHere = true; note(`[memory] the game threads get the memory through the page (${x instanceof Error ? x.message : x})`); }
+        (self as unknown as Worker).postMessage({ t: 'give-here', slot: e.data.slot, memory });
+      }
+      e.data.port.close();
+    }
+    // a game thread that had nothing usable on its port asked the page for the Memory (game-worker.ts memoryFrom)
+    else if (e.data.t === 'give-page') (self as unknown as Worker).postMessage({ t: 'give-here', slot: e.data.slot, memory });
+    return;
+  }
+  cfg = e.data.cfg;
+  if (e.data.memory) memory = e.data.memory;
+  else {
+    try {
+      const got = allocMemory(e.data.tries!);
+      memory = got.memory; offPage = true;
+      (self as unknown as Worker).postMessage({ t: 'memory', buf: memory.buffer, note: got.note });
+    } catch (err) {
+      (self as unknown as Worker).postMessage({ t: 'io-error', msg: err instanceof Error ? err.message : String(err),
+        range: err instanceof RangeError, note: (err as { note?: string } | null)?.note });
+      return;
+    }
+  }
+  memSaid = memory.buffer.byteLength;
   ctl = new Int32Array(e.data.ctl); rpcI32 = new Int32Array(e.data.rpc); rpcI64 = new BigInt64Array(e.data.rpc);
   try {
     if (inMemory()) {

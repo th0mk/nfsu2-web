@@ -1,6 +1,6 @@
 # Maintainer's notes
 
-The player's guide (below these notes) is the reference for what the page and the game do. These notes add what the
+The player's guide (above these notes) is the reference for what the page and the game do. These notes add what the
 guide does not say: how the project runs, what a useful report needs, the answers that keep coming up, and what is
 known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
 
@@ -52,6 +52,17 @@ The log is the most useful thing in a bug report. Say exactly how:
   players', crews, rooms) and addresses are replaced by stand-ins such as `you` and `player-…` since 26 October (logs
   from older pages still have them). No passwords, no passphrase.
 
+Reading a log (the thread shows each log's gist; these are the lines that were misread, 6-7 November):
+
+- `display N Hz`, `rAF median`, `[gpu] display N Hz` and `[hfr] … display N Hz` are the screen's refresh rate, not
+  the game's frame rate. The game's own rate is `fps=` in its `[status]` lines (and the `GPU done` times); `[hfr] …
+  content rate N` is the rate it aims for.
+- A log holds every game since the page loaded: count each game's end (the gist lists them) before giving numbers
+  ("two of three games").
+- A start page that shows the player counts and the last game's note has its script running: nothing blocks the page.
+- The world map's labels like "Sprint 1/6" are other players' race lobbies (players in it / its places), not career
+  races. A 100% save has every race won, and a won race leaves the map.
+
 ## What a report needs, by problem
 
 - Crash, freeze, black screen, stuck loading, car or world glitch: the log, what they were doing (career, free roam,
@@ -91,8 +102,12 @@ misread the log's numbers:
   buttons' layout, not the pad's name.
 - The mods' settings are on their rows in Mods, named by the mod (no "More" step): Upscaled HUD and Detailed Map
   (Original, Map only, Upscaled), English Subtitles Fixed (off: no movie subtitles in any language), Uncensored &
-  Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover. Music in drag
-  and drift races is the site's own setting: Game.
+  Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover,
+  Crash Damage (off by default: dents, loose parts and scratches on the racers' cars, looks only; in free roam players
+  who have it on see each other's damage, with it off every car shows undamaged), Rubberbanding (Original, No boost,
+  Off: the career races' catch-up), Transmission Whine (ropi's: NFS Carbon's gearbox whine on your car, off by
+  default; no volume of its own, the game's Engine Volume sets it). Music in drag and drift races is the site's own
+  setting: Game.
 - Resolution scale: 50%, 75%, 100%, 150%, 200%. 50% is the lowest (a quarter of the pixels); phones start at 75%.
 - Frame rate: Auto, 30, 60, 120, 240. Auto picks one of those from the screen's refresh rate (240 from 239 Hz, 120
   from 119 Hz, 30 at 31 Hz or less, else 60; runtime/framerate.c). A 75 Hz screen gets 60 and a 144-165 Hz one 120,
@@ -111,6 +126,17 @@ misread the log's numbers:
 ## Answers that keep coming up
 
 Checked against the guide or the code, and confirmed by players in threads:
+
+- No other players in free roam, and the log says `still no switch` or `hub switch not reachable` in every game (the
+  page's connection to the server's switch never opens, while the game and its downloads work): something on the
+  network or in the browser blocks that one connection. A VPN (Firefox's own counts), mobile data or another network
+  fixed it for the players who tried (since 4d158a79 the page says so too). Never tell them to turn a VPN off for this.
+- Restore says `nfsu2-passphrase.txt cannot be restored`: that file is the cloud saves passphrase, not a backup. Start
+  page, Saves, Cloud saves: paste the passphrase in the box and press **Load**.
+- Name claims refused with "full" on 6 November, about 18:50 to 19:20 UTC: the server's list of claimed names was
+  full; since d740043f (live that evening) it has room for 5 million. Claim again now.
+- Underground2.net's Blitz rims (live 6 November) were taken out again the same evening (b3be4d14); Art Factory 28 to
+  34 stay. Don't promise when the rims come back.
 
 - "It worked yesterday, today it won't start" or a crash on an older version (the log's `game <rev>` is not the live
   one): reload the page, Ctrl+F5 on a PC; when a fix for it is live, say when it was fixed and since when it is live.
@@ -239,7 +265,9 @@ Checked against the guide or the code, and confirmed by players in threads:
      shops then show no Visual Rating box. Offer it as their choice, after the parts.
   3. Only then the original game's hidden races: they never show on the map or the radar, only a marker on the street
      when you drive near. Start page, Mods, Show Hidden Races Mod (off by default) puts them on the map
-     and the radar from the next Play.
+     and the radar from the next Play. It adds only the 33 hidden races (circuits, sprints, drags and the like,
+     runtime/hiddenraces.c), never a URL race, a sponsor's race or a DVD cover shoot: a missing URL race or cover is
+     steps 1 and 2.
   Saves (Saves, Download backup) and escalating only when all three are done and still nothing shows.
 - Wide body kits, the most asked question of all (how to get them, locked after finishing the game, more than one
   car): as in the original game, 11 outrun wins in stage 5 put a star on the map before the last URL race (S5_URL_9),
@@ -306,8 +334,12 @@ Checked against the guide or the code, and confirmed by players in threads:
   friends see the claimed name). Saves, Cloud saves shows "This passphrase also holds your claim on X": that is the
   name others can add. To play as the typed name: Change name (once a week; "You can change it on <date>" says when).
   Changing moves the friends along (the start page or the Online menu, whichever comes first).
-- Races only with friends, career races too: everyone sets the same uncommon Room (start page, Online) before Play;
-  lobbies stay within the room. It is not private. Alone in free roam often means a Room left set: clear it.
+- Free roam split into worlds (commit 41737add; before it is live the page has a Room name box, empty = main world):
+  Main world (everyone, default), World 1 to 4 (quieter; World 4 holds Ghost mode Off for all), or Own name. Picked in
+  F9, World (counts shown, switches at once) or start page, Online, World. "Too busy / crowded" -> World 1 to 4.
+- Races only with friends, career races too: everyone picks the same uncommon Own name world (Room on an older page)
+  before Play; lobbies stay within the world. It is not private. Alone in free roam often means another world picked
+  (or a Room left set on an older page): pick Main world.
 - A career without other players: start page, Online, Free roam with others off, then Play. The page menu's "Stop
   waiting: play offline" shows only while the page waits in line for a full server, never during a game.
 - Manual or automatic gears: the game's pause menu, Options, Player, Transmission (Quick Race and the Online menu ask
@@ -319,13 +351,32 @@ Checked against the guide or the code, and confirmed by players in threads:
   the browser's limit for the site.
 - A profile left out of a restore because "the name inside … is not one the game makes": since a530a5a0 (2 November,
   live that evening) it comes in renamed. Reload, then restore again.
+- Enter (Return on a Mac) doing nothing at a race's start in free roam, or an outrun that won't start, on a page from
+  3 to 5 November: another player's lobby there that keeps later stages out stopped the player opening their own
+  (85c39ac). Since fc56fdd (live 5 November, about 20:18 UTC) Enter there opens another lobby: reload the page. Near
+  four or more players no outrun starts at all, as before (the guide).
 
 ## Known open problems (as of 2026-11-04)
 
 The developer updates this list. Check the commits after that date before calling one open: a fix may have come. The
-context lists every problem the developer has a report on, with its first thread: point posters there, and set
+context lists the problems flagged for the developer, with the first thread of each: point posters there, and set
 `duplicate_of` to it, rather than searching for "the main thread". Where an entry names a thread, link that one.
 
+Matching a thread to one of these: controllers by the pad's id (`045e:0b13`, from the log's pad line), the system and
+the browser; a Windows Xbox pad and an Android one are different problems. Sound: link the choppy-sound thread
+(1564348705572917298) only when the log has `the AudioWorklet stopped consuming`; underruns in the first seconds after
+Play alone are not it. The iPhone and iPad memory problem in two sentences (the browser closes the game for memory,
+no setting fixes it yet, the thread to follow); ask for the log in the poster's own thread, never in the main one, and
+in the main thread itself (1564554732649971802) never tell its reader to follow it.
+
+- Free roam, error 134 with `sub_00517e20 < dispatch_indirect < tags_update < roam_game_hud` at the top of the stack
+  (sub_00517ad0, sub_005178d0 or sub_00504640 first), often an hour or more into free roam with many players, right
+  after another player's car loaded; on the live version (5 November), Windows PCs with NVIDIA and AMD graphics. No fix
+  yet. The thread to link: 1567604844712304650. Not the 2 November crash in garages and car lots (sub_004380f0 <
+  sub_00438140, fixed), nor the hood and trunk freeze below, even when the same thread had those first.
+- Special vinyls (the Graphics Shop's Special category): Street Reaper, Japan Tuning, David Choe, Snoop Dogg, Snoop Dogg 2
+  and The Doors are listed for a car but not drawn on it, also after leaving the shop (5 November, live version). No
+  fix yet. The thread to link: 1567778264909611128.
 - Free roam freeze (`[watchdog] no Present`) or error 134 right after another player's car opened or closed its hood,
   trunk or doors (sub_00433ad0 < sub_00433d10): fixed on 3 November (bf4fe9f), live since 14:39 UTC that day. A log on
   an older version: reload the page (Ctrl+F5 on a PC). A newer log that stops there is new: escalate it. Thread
@@ -349,14 +400,44 @@ context lists every problem the developer has a report on, with its first thread
   plugging in a controller got a player past it. Also on 4 November in Firefox: the race results stop taking input
   after Alt+Tab and back, not every time (thread 1567493082470158336). No fix yet. Ask for the log while it is stuck
   (F9, Download log), and whether a controller gets past it.
+- The camera turning round by itself and not stopping, after a reload too: photo mode's Auto-turn (Camera tab), kept
+  from the last visit; Reset did not stop it, and its off is the slider's middle (fully left is the fastest turn).
+  Since 8963bd72 it starts off at each visit, Reset stops it, and the middle tenth of the slider is off. Until that is
+  live: in photo mode, double-click the Auto-turn slider (it goes to the middle, off).
+- Joining a race with others from free roam: loading for about 3 minutes, then back to the lobby, the host's race
+  gone, every time: the joiner's trip took another icon than Lobby in the LAN menu (the one picked last in the Online
+  menu: Options, Car Select). Fixed since 6df52f06; the log's `[mprace] ... UI_OLMAIN's Enter opened ...` shows a
+  detour backed out of. Until live: in the game's Online menu, leave the Lobby icon picked.
+- iPhone: two fingers no longer turned the car in the garage and shops. Since fce0e64a two fingers are the page's
+  (not Safari's pinch) and any two make the turn; the log's `[touch] a two-finger turn: ...` lines say how each ended.
+- Enter (or D-pad up) doing nothing at a marker while its prompt shows (a shop door, a race start, a cover shoot's
+  target), until a reload: since 8507c17e the game's "engaging" byte left set is cleared after 2 s (the log's
+  `[engage] ... cleared`), and an Enter that brings nothing up logs what the game tested (`[engage] Enter at marker
+  ... brought nothing up: ...`): ask for that log if it still happens.
+- Alt (nitrous) or Shift/Ctrl (gears) dead in Firefox while other keys work: since 2fe1aab6 a modifier counts however
+  the browser sends it; the log says `[key] ... first keydown came as a repeat` or `[input] a key with no code of
+  ours` when that is why. Ask for the browser (about:support), privacy.resistFingerprinting, keyboard tools
+  (AutoHotkey, layout switchers), and a test in Edge or Chrome.
+- iPhones and iPads: the picture freezes for about a second every 10 to 20 seconds (the sound goes on), worse the
+  longer the page is open in a busy free roam; logs show `GPU done ... max` 500-1300 ms with `0 waited for the GPU`
+  each minute. The page's copy of the log for a stopped game (every 10 s) took Safari that long with many players'
+  names. Fixed since 38c83a1c; until it is live, a reload of the page makes it short again for a while.
+- Career garage slots 6-10 locked and their cars gone ("5 cars, 5 of 10 slots open" in the log's `[garage]` line on a
+  career that had more, 100% saves too): a visit to Split Screen made slots 6-10 empty and locked, and the career's
+  next save kept them so. Fixed since ec2b5d69. Cars lost that way come back only from a backup or a cloud save made
+  before it (Saves, Restore; cloud saves' Go back).
+- Error 134 after the car lot on a profile whose career car is none of its cars (the pause menu's log line "no car of
+  the career's own yet" while it has cars): such a career drives its first car since c01f24e2.
 - Phones with Adreno 6xx graphics (Adreno 610 among them, often Android 10 or 11): `GPU-LOST` at the first frame, black
   screen, every Play; the log's `[gpu] device lost` line says `VK_ERROR_FORMAT_NOT_SUPPORTED` "While checking external
   image import support with TextureFormat::RGBA8Unorm". Chrome asks the phone's graphics driver whether it may use the
   picture it made for the page, the driver says no, and Chrome takes that for a lost device: no fix on the game's side,
   no setting or flag helps; a system update for the phone may. Since 3 November (583c516b, live) the page says so
   itself (`GPU-ANDROID-DRIVER`). Other Adreno 6xx phones play fine. First thread 1565320939904704613.
-- Phones with PowerVR BXM graphics (MediaTek Dimensity 7020/7025): the graphics stop within seconds in landscape
-  (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); portrait works for some.
+- Phones with PowerVR BXM graphics (MediaTek Dimensity 7020/7025; the log's `Graphics: img-tec b-series`): the graphics
+  stop within seconds in full screen, mostly in landscape (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); in the window
+  the game runs. Since 344b554c these phones start in the window (Full screen on Play off by default). A player who
+  turned it on: the start page's Game, Display, Full screen on Play off.
 - Black picture with sound on Intel graphics of the 9th generation (HD 510 and similar), in Chrome and Firefox: the
   log shows the game drawing with no WebGPU errors. No fix.
 - Free roam: error 134 after an hour or more among many players, with trips out of free roam and back (the crib,
@@ -413,7 +494,7 @@ context lists every problem the developer has a report on, with its first thread
   the game's Joypad Configuration steers or brakes with no longer looks round; the left stick does when the game uses
   none of it. On an older version: reload. On a newer one the report is new. Threads 1567127501359153282,
   1567191097149497415 (also 1567230313292112002, "Option to change view stick on gamepad", which this answers).
-  Since 1c0af43d the look can be turned off: the start page's Controls, Site, Free look (a click on its Auto makes it Off): no stick
+  Free look is listed with the site's changes in the start page's Mods tab (its last part, Driving). Since 1c0af43d the look can be turned off: the start page's Controls, Site, Free look (a click on its Auto makes it Off): the camera is the game's own again, no stick
   looks round, straight back is no Look Back, and the stick straight up no longer switches the headlights (G still
   does); the answer to "make the 360 camera optional" (threads 1567427206119166022, 1567191097149497415).
 - Free roam, error 134 with `tlsf_alloc < gheap_alloc_c < gbuf_alloc` at the top of the stack while other players'
@@ -426,11 +507,18 @@ context lists every problem the developer has a report on, with its first thread
 - Linux PCs with NVIDIA graphics, Chrome or Brave: the picture stops within seconds of Play (`GPU-LOST`, or black with
   sound). Logs show `vkAllocateMemory failed with VK_ERROR_OUT_OF_DEVICE_MEMORY` or `Requested allocation size (…) is
   smaller than the image requires` on every frame: maybe not one problem. No fix. Ask for the `chrome://gpu` report.
-  Threads 1567135816499859456, 1567350752186470540.
+  Threads 1567135816499859456, 1567350752186470540. Another case: `chrome://gpu` names the NVIDIA driver, but Vulkan
+  lists only Mesa's `llvmpipe` (software), and the game is white or very slow: ask for `nvidia-smi`'s output. "Driver/library
+  version mismatch" there means the NVIDIA driver is half updated: reinstall the driver package and reboot (it fixed it
+  for a player on 5 November, thread 1567865750130004049). That is their system, not the game.
 - A controller whose gas does nothing while its other controls work: an original 8BitDo Ultimate 2.4G on Windows (RT
-  dead, LT reverse works; the Ultimate 2C works), and a wired pad on a Mac seen as `PS3 GamePad (054c:0268)`. No fix
-  yet. Ask for the log and what Controls, Controller shows when the trigger is pressed. Threads
-  1567258347940352072, 1566999852288843858.
+  dead, LT reverse works; the Ultimate 2C works), and a wired pad on a Mac seen as `PS3 GamePad (054c:0268)`. The
+  8BitDo's fix, from its poster (6 November): switch the controller to D-input, or set Trigger full press (start page,
+  Controls, Controller, More controller settings) very low, about 0.07. For the Mac pad: ask for the log and what Controls,
+  Controller shows when the trigger is pressed. Threads 1567258347940352072, 1566999852288843858.
+- Xbox controllers on Bluetooth (One S, Elite 2, Adaptive with the newer firmware: `045e` with `0b20`, `0b21`, `0b22`)
+  in Firefox: the triggers do nothing, LB brakes and RB drives. On a Mac fixed since 15e89f37. Firefox on Windows
+  gives such a pad no triggers at all: Chrome or Edge, or the controller on a USB cable, read it properly.
 - Horns (yours and other players') still sounding with the game's Master Volume at 0: horns had only their own slider,
   Horn Volume (the game's Options, Audio, also the pause menu's), 10 % to 100 %. Fixed on 4 November (47f8c0c6): horns
   follow Master Volume as the game's own sounds do, so Master Volume at 0 silences them too; Horn Volume stays 10 % to
@@ -439,8 +527,9 @@ context lists every problem the developer has a report on, with its first thread
 - Ghost mode Everything: the camera jumped up for a moment as a traffic car, a van most of all, drove through the
   player's car, as if they had collided. Not a collision: the game's camera lifts itself over any car its eye is in,
   and the car that passed through went on through the camera behind; nothing else changed (no slow motion, the car's
-  speed kept). Fixed on 4 November (77d744ad): the camera goes through those cars too. Until that is live there is no
-  workaround but Ghost mode Players (traffic solid). Thread 1567227790888017980.
+  speed kept). Fixed on 4 November (77d744ad, live) for the views behind the car; in the hood and bumper views the camera
+  still hops on the live version (a log of 5 November): no fix yet, Ghost mode Players (traffic solid) avoids it. Thread
+  1567227790888017980.
 - Rebinding: the game's own controls are set in its Options, Controls (Keyboard Configuration, Joypad Configuration).
   The site's own keys and buttons (X drift mode, O trunk/hood/doors, N horn, I message, F add friend, 1-4 quick chat;
   a controller's D-pad down held, left stick click horn, right stick click quick chat) can't be changed there. Before
@@ -452,9 +541,14 @@ context lists every problem the developer has a report on, with its first thread
   doors, horn, headlights, free look, quick chat, message, add friend, photo mode, hide HUD, menu, next song,
   frame-rate counter) with each one's key and controller button as caps; click one, then press the new key or button,
   or Off (the free look's cap switches Auto / Off with a click). Keys the game itself uses can't
-  be picked, quick chat's 1-4 stay, the menu always keeps a key (and Home or both sticks), and a key the player put a
+  be picked (since fa648f82 a game key is free once its game control has another key in the game's Options, Controls,
+  e.g. Q after HUD is moved, and the debug camera's L, [, ], Numpad 6-9 can be picked), quick chat's 1-4 stay, the menu always keeps a key (and Home or both sticks), and a key the player put a
   game control on says so there. It applies at the next Play; the touch controls' Drift and Horn work whatever is
   picked. Until that is live, only the game's own Controls can be changed.
+- Right Alt (nitrous) also shifting down: on a layout with AltGr (German, French, Turkish, Polish, Nordic ...) Windows
+  sends that key as Left Ctrl (Shift Down) plus Right Alt. Since ef7e0436 the page keeps that Left Ctrl from the game
+  after the first AltGr in a browser (the first one still shifts down; the log says `[keys] this browser sends AltGr as
+  Left Ctrl and Right Alt`). Until that is live: Left Alt for nitrous, or Nitrous on another key in Options, Controls.
 
 ## Decided
 
@@ -478,13 +572,16 @@ The game plays as the original did. Additions and improvements around it are wel
 life, controls, the page, languages, optional graphics settings (off by default: the original look stays the default),
 fixes of the original game's crashes and glitches. Changing its core gameplay mechanics is not done: handling and physics, car
 performance and tuning, AI and traffic, the career's progression, races and rewards, the economy. The Mods tab's mods
-that change the career (Show Hidden Races Mod, Visual Reputation Remover) are off by default: the player's choice.
+that change the career (Show Hidden Races Mod, Visual Reputation Remover, Rubberbanding) are off by default: the
+player's choice.
 
-- A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
+- A suggestion of an addition or improvement: none, unless it exists already: then say where
   (Power Units in Options, Gameplay; Show Player Names there too since 31cc3384 (also in the pause menu's Options, Gameplay): Off
   hides the names over other players' cars, in free roam and LAN races; the Bank box in career free roam shows only
   for 20 s after the bank changes, 10 s when free roam starts and 8 s after the pause menu, the map or a shop, the
-  answer to "hide the Bank"; Jump Camera Off in Options, Gameplay (also the pause menu's; it may take the next race
+  answer to "hide the Bank"; the box at the top left with the D-pad and its icons (SMS envelope, Engage, outrun) the
+  same way, for 20 s after a new message and while the car is at a race marker, a shop's door or an outrun's tuner,
+  in the release after d4efa0a7; Jump Camera Off in Options, Gameplay (also the pause menu's; it may take the next race
   or free roam to apply) turns off both the jump camera and the slow-motion camera after a crash, the answer to
   "disable the jump and crash cutscenes" (thread 1567563824121249905); drift mode with X, and since 19f84c9 with the drift races' handling and the car's
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
@@ -524,7 +621,10 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   on overrides the game's Texture Filtering), since 7f34eaa8; C goes on from the game's four views to the drift
   races' camera in every drive, since 0c930f2f; the Graphics Shop's vinyls have a Special category after Sponsor
   with the game's promo vinyls (Snoop Dogg, Capone, Chingy, The Doors and others; free, no visual rating, stages 2
-  and 3), since 84c85172; Quick Race: laps 1 to 127 and up to 5 opponents (drags 3), Lap KO's laps and opponents
+  and 3), since 84c85172: D3, Shinestreet, Chingy and Capone on every car, the others made for a few cars each in
+  the game's data (Street Reaper: 3000GT, Celica, Escalade, G35, GTO, Mustang GT, RX-8, TT; Japan Tuning: G35; David
+  Choe: 350Z, Corolla; Snoop Dogg: Mustang GT; Snoop Dogg 2: Escalade; The Doors: GTO); picked on another car they
+  drew nothing, and since 0200cad9 Special lists only the ones the car has; Quick Race: laps 1 to 127 and up to 5 opponents (drags 3), Lap KO's laps and opponents
   changeable (it starts at 5 and 5), and a race of one lap shows Completed % in place of LAP 1/1, since 81fad175;
   headlights on G: a tap turns them off or back on, held is high beam (brighter, reaching farther) until let go, and
   friends in free roam see it; on a controller the look's stick straight up; another key, or none, in Controls,
@@ -588,9 +688,17 @@ that change the career (Show Hidden Races Mod, Visual Reputation Remover) are of
   still has it); since 8027226 the note after such a race says "Only a win counts in your career". The lobby panel marks with a star whom
   it counts for ("A win counts in your career"); the words over a lobby and on the world map end in "- career". A
   lobby whose race counts for the player who opened it takes only players up to that race's stage and the opener's
-  friends (and crew-mates since 8027226; a later stage's car would win it most of the time); the others see why at the spot, and since 85c39ac no
-  other lobby opens at that start while it waits (before that they could open their own beside it; a full lobby still
-  lets them). A
+  friends (and crew-mates since 8027226; a later stage's car would win it most of the time). Since 0d543f8 the others
+  don't see such a lobby at all (not at the start, over it or on the world map), nor a full lobby or one already on
+  its way to the race, and Enter at that start opens a lobby of their own beside it (before that they saw it with the
+  reason, "A career race for players up to stage 2 ..."; from 85c39ac to fc56fdd it even stopped them opening their
+  own there). Since 0e56c9b every lobby keeps out players past its host's stage by default, friends and crew-mates aside:
+  the host's V goes round "Stage 2 and below can join", "Friends & crew can join" and "Everyone can join" (a career
+  lobby has no Everyone). At a start, B
+  opens a new lobby beside the others and E goes to the next one; the card shows a speedometer of the fastest other
+  car against yours with the engines evened out (a little right of centre for an upgraded car; in the red only for a
+  gap the evening out can't close, like a stock car against a maxed one). On a controller: D-pad up joins, starts or opens; left held a second is a new lobby, who can
+  join or leave; right held the next lobby; invites are in the menu's Friends. A
   URL event of 2 or 3 heats races them all in one trip, with the career's points. A race that does not count pays
   by the player's stage (1st what a normal race of the stage pays, at least $400; 2nd to 4th three quarters, half,
   a quarter of that, at least $300/$200/$100). A race that counts pays the career's prize or that, whichever is more. Where the game would offer sponsors, the crib asks on the way back

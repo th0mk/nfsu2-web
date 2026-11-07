@@ -1332,6 +1332,14 @@ void heap_totals(uint64_t *live, uint64_t *peak, uint64_t *va, uint64_t *held){
 }
 uint64_t heap_internal_live(int i){ return (i > 0 && i < MAXHEAP) ? g_heap[i].st.live : 0; }
 uint64_t heap_internal_nlive(int i){ return (i > 0 && i < MAXHEAP) ? g_heap[i].st.nlive : 0; }
+/* The guest address space still free, bytes (~0u with the bump allocator, which keeps no count): what damage.c
+ * leaves to the game before it makes clones of friends' cars */
+uint32_t gheap_va_free(void){
+    if (g_bump) return ~0u;
+    uint32_t fr = 0;
+    LOCK(); va_free_runs(&fr, 0, 0); UNLOCK();
+    return fr >= ~0u / VA_GRAN ? ~0u : fr * VA_GRAN;
+}
 
 /* One status-line fragment for autotest.c ([status] ... mem: ...). */
 void com_mem_stats(uint64_t *com_bytes, uint64_t *buf_bytes, uint64_t *objs);

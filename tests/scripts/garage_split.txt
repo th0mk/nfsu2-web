@@ -1,0 +1,19 @@
+# The career garage's slots 6-10 (runtime/garage.c) through the game's split-screen mode: the main menu with a
+# career profile loaded, Split Screen, its mode select, back out to the main menu.  The mode's end puts the game's own
+# cars back from its backup (0x515D70, filled by splitscreen.c as the mode starts); slots 6-10 must come back as
+# they were: "[garage] split screen: slots 6-10 kept aside, N cars of yours, M of 10 slots open", then
+# "[garage] split screen's end: slots 6-10 as they were" with the same N and M.  (Until 2026-11-06 they were made
+# empty and locked there, and the career's next save kept them so.)
+#   node web/tools/roam-pair.mjs --solo --page play --seed <a career save> --a Ex:garage_split.txt:NFSU2_ROAM=0
+0     bot on
++0    waitfng GarageMain.fng 3000
++0    bot off
++300  tap RIGHT                       # Split Screen (one right of Quick Race)
++200  tap RETURN
++200  tap RETURN
++0    waitfng UI_QRModeSelect.fng 2000
++300  tap ESCAPE
++300  tap ESCAPE
++0    waitfe UI_Main.fng 3000
++300  log SPLIT DONE
++10   quit

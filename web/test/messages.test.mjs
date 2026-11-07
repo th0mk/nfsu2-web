@@ -44,7 +44,7 @@ async function page() {
     w.msgs = new w.M.FriendMessages(document.getElementById('stage'), w.store, {
       send: m => { w.sent.push(m); return w.answer; }, driving: () => w.driving,
       line: (name, text, out, note) => { w.lines.push(`${out ? '>' : '<'} ${name}: ${text}${note ? ` ${note}` : ''}`); return document.createElement('div'); },
-      hint: ms => w.hints.push(ms === null ? null : 'I'), placeNow: () => {}, focusGame: () => document.getElementById('game').focus(),
+      hint: (ms, text) => w.hints.push(ms === null ? null : text ? `I ${text}` : 'I'), placeNow: () => {}, focusGame: () => document.getElementById('game').focus(),
       toast: s => w.toasts.push(s), log: () => {},
     });
     w.msgs.start({}, true);
@@ -170,6 +170,32 @@ test('in the game: I with nothing to answer picks a friend; Esc; never in a fiel
   await p.keyboard.press('Enter');
   await wait(p, 10_400);
   assert.deepEqual(await take(p, 'toasts'), ['The message was not sent: try again in a moment'], 'no answer in 10 s');
+  await p.close();
+});
+
+test('in the game: a friend\'s notice offers I for a message to it, while the notice shows', async () => {
+  const p = await page();
+  await server(p, list);
+  await server(p, where);
+  await p.evaluate(() => /** @type {any} */ (window).msgs.offer('Cy_', 400));
+  assert.deepEqual(await take(p, 'hints'), ['I Message'], 'the line under the notice');
+  await p.keyboard.press('KeyI');
+  assert.match(await card(p) ?? '', /^Message Cy_ Enter sends/, 'I writes to that friend');
+  await p.keyboard.press('Escape');
+  await wait(p, 450);
+  await p.keyboard.press('KeyI');
+  assert.match(await card(p) ?? '', /^Message a friend/, 'the notice gone: the friends to pick');
+  await p.keyboard.press('Escape');
+  // a friend's message after it: I answers that one
+  await p.evaluate(() => /** @type {any} */ (window).msgs.offer('Cy_', 5000));
+  await server(p, { op: 'mail', from: 'Gus', body: 'hey', at: 5 });
+  await p.keyboard.press('KeyI');
+  assert.match(await card(p) ?? '', /^Message Gus /);
+  await p.keyboard.press('Escape');
+  // not while not driving
+  await take(p, 'hints');
+  await p.evaluate(() => { const w = /** @type {any} */ (window); w.driving = false; w.msgs.offer('Cy_', 400); });
+  assert.deepEqual(await take(p, 'hints'), []);
   await p.close();
 });
 

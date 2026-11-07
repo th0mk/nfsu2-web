@@ -1,6 +1,7 @@
-//! Questions this server asks other servers (Cloudflare's Turnstile: turnstile.rs; Last.fm: lastfm.rs): a form
-//! POSTed over HTTPS with the web's root certificates built in (webpki-roots: the image has no certificate store),
-//! HTTP/1.1 with the connection closed after the answer.  The caller sets the time limit.
+//! Questions this server asks other servers (Cloudflare's Turnstile: turnstile.rs; Last.fm: lastfm.rs; Discord's
+//! webhook: autoban.rs): a form or JSON POSTed over HTTPS with the web's root certificates built in (webpki-roots: the
+//! image has no certificate store), HTTP/1.1 with the connection closed after the answer.  The caller sets the time
+//! limit.
 
 use std::sync::Arc;
 
@@ -27,6 +28,15 @@ impl Https {
 
     /// a form POSTed to `url` (https://, or http:// for the tests' own servers): the answer's status and body
     pub async fn post_form(&self, url: &str, body: &str) -> Result<(u16, Vec<u8>), String> {
+        self.post(url, "application/x-www-form-urlencoded", body).await
+    }
+
+    /// JSON POSTed to `url` (Discord's webhook: autoban.rs), as `post_form`
+    pub async fn post_json(&self, url: &str, body: &str) -> Result<(u16, Vec<u8>), String> {
+        self.post(url, "application/json", body).await
+    }
+
+    async fn post(&self, url: &str, content_type: &str, body: &str) -> Result<(u16, Vec<u8>), String> {
         let (tls, rest) = match url.split_once("://") {
             Some(("https", r)) => (true, r),
             Some(("http", r)) => (false, r),
@@ -38,7 +48,7 @@ impl Https {
             _ => (hostport, if tls { 443 } else { 80 }),
         };
         let req = format!(
-            "POST {path} HTTP/1.1\r\nHost: {hostport}\r\nUser-Agent: nfsu2-server\r\nContent-Type: application/x-www-form-urlencoded\r\n\
+            "POST {path} HTTP/1.1\r\nHost: {hostport}\r\nUser-Agent: nfsu2-server\r\nContent-Type: {content_type}\r\n\
              Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
         );

@@ -1,0 +1,69 @@
+# GPS Distance (runtime/gpsdistance.c) through a co-op career race together (2PHudTop),
+# then back in free roam the label made again in the new HUD.  A saved career with a car of its own (the bot does
+# not buy the first car after the prologue), free roam offline:
+#   node web/tools/roam-pair.mjs --solo --seed <a saved career> --a Gps:gps_distance_together.txt
+#        --env NFSU2_GPS_DISTANCE=1 --env NFSU2_ROAM=0 [--page app]
+0     bot on
++0    waitexpr i:0x862838 >= 1 24000
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    poke 0x8385b9 0 byte
++0    poke 0x8385b8 0 byte
++120  tapuntil M UI_InGame_WorldMap.fng 90 1500
++180  tap C
++90   log SHOT gps_prompt
++0    tap LEFT
++20   tap RETURN
++300  expect b:0x8385b9 == 1
++0    poke 0x83aa1a 1 byte
++60   log SHOT gps_metric
++60   poke 0x83aa1a 0 byte
++60   log SHOT gps_imperial
++0    log SHOT gps_on
+
++60   roam coop join kb
++0    waitmem 0xd00030 2 1500
++60   careergo next
++120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitfe IG_GenericDialog_MED.fng 300
++60   tap LEFT                        # "Together" (the dialog opens on "Alone")
++30   tap RETURN
++0    waitfng 2PHudTop.fng 3000
++300  log SHOT race_hud
++0    roam coop state
++0    expect i:0x89e7c0 == 2
++0    expect i:0xd00030 == 2
++0    expect i:[0x890118]+0x24 == 5
++0    expect i:0x8707e0 == 3
++0    status coop_together_racing
++0    down W
++120  expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0    expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0    up W
++60   racewin
++120  roam coop finish                # the race ends once both players are home (the game's rule for two humans)
++0    bot on                          # the post-race screens, the save
++0    waitroam 30000                  # back in free roam
++0    bot off
++0    roam smsauto on
++0    waitmem 0x89e7c0 1 3000
++0    waitmem 0xd00030 2 3000
++60   expect i:0x89e7c0 == 1
++0    status coop_together_complete
++90   log SHOT race_return
+# Recreate the label in the newly loaded HUD, then hide it again via GPS off.
++0    teleport 1718 -825 24.5
++300  poke 0x8385b9 0 byte
++0    poke 0x8385b8 0 byte
++0    tapuntil M UI_InGame_WorldMap.fng 90 1500
++180  tap C
++90   tap LEFT
++20   tap RETURN
++300  expect b:0x8385b9 == 1
++0    log SHOT gps_recreated
++60   poke 0x8385b9 0 byte
++60   log SHOT gps_hidden
++60   quit

@@ -9,6 +9,7 @@
 //                pick first, 1-9.  Enter sends, Esc closes; the game has no keys while the card is open.  On a touch
 //                screen a tap on a message answers it, and quick chat's sheet has "Message a friend".  A message that
 //                comes while the player is not driving in free roam (a race, a shop, a menu) shows once they are.
+//                A friend's notice that it came into the player's room has "I Message" under it: I writes to it then.
 //   wire         {"t":"friend","op":"msg","name","body","id"} -> {"op":"msg","id","done"};
 //                {"op":"mail","from","body","at"} and the list's "mail" bring the friends' (friends.rs).
 //   start page   friends.ts FriendsPanel: Message on each friend, the unread ones counted on it; ChatDialog.
@@ -17,6 +18,7 @@ import { gameHas, KEY_MESSAGE } from './gamekeys';
 import { t } from './i18n';
 import { siteKey } from './sitekeys';
 import { touchFirst } from './device';
+import { act, block, el } from './cards';
 
 /** an envelope: what marks a line in the log as a friend's message (quick chat's have a speech balloon) */
 export const MSG_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.8 4l6.2 5 6.2-5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
@@ -144,8 +146,8 @@ export interface FriendMessagesDeps {
   /** a message's line in the log (shell.ts msgLine): its name, text, whether it is the player's, a note after it, how
    *  long it stays, and what a tap on it does (none: nothing); returns the line */
   line(name: string, text: string, out: boolean, note: string, ms: number, tap?: () => void): HTMLElement;
-  /** "I Write back" under the newest message, for ms (shell.ts msgHint); null: gone */
-  hint(ms: number | null): void;
+  /** "I Write back" under the newest message, for ms (shell.ts msgHint), or another word after the key; null: gone */
+  hint(ms: number | null, text?: string): void;
   /** the card's place: the log's (shell.ts placeNotices calls place()) */
   placeNow(): void;
   /** the keyboard back to the game */
@@ -170,6 +172,8 @@ export class FriendMessages {
   private listed = false;
   /** the newest message of this game that was shown, for MSG_KEY */
   private newest: { name: string; at: number } | null = null;
+  /** a friend whose notice says it came into free roam (offer), for MSG_KEY until then */
+  private offered: { name: string; until: number } | null = null;
   /** the friends' messages not shown yet (the player was not driving) */
   private queue: { from: string; body: string }[] = [];
   /** the player's messages on their way: page id -> the friend, its time (the store's key), its text, when it went */
@@ -179,7 +183,7 @@ export class FriendMessages {
 
   constructor(stage: HTMLElement, private store: MessageStore, private deps: FriendMessagesDeps) {
     const c = this.card = document.createElement('div');
-    c.className = 'qc-picker msg-card'; c.hidden = true; c.tabIndex = -1; c.dataset.nfsu2Ui = '';
+    c.className = 'ov-card qc-picker msg-card'; c.hidden = true; c.tabIndex = -1; c.dataset.nfsu2Ui = '';
     c.addEventListener('click', e => {
       const row = (e.target as HTMLElement).closest<HTMLElement>('[data-friend]');
       if (row) this.write(row.dataset.friend!);
@@ -195,7 +199,7 @@ export class FriendMessages {
 
   /** a game started: messages on (free roam with others) or off */
   start(s: GameSession, on: boolean) {
-    this.session = s; this.on = on; this.friends = []; this.listed = false; this.newest = null; this.queue = []; this.waiting.clear();
+    this.session = s; this.on = on; this.friends = []; this.listed = false; this.newest = null; this.offered = null; this.queue = []; this.waiting.clear();
     clearInterval(this.timer);
     if (on) this.timer = window.setInterval(() => this.tick(), 250);
   }
@@ -273,7 +277,7 @@ export class FriendMessages {
       const ms = lineMs(body);
       this.deps.line(from, body, false, '', ms, () => this.write(from, true));
       this.store.read(from);
-      this.newest = { name: from, at: now };
+      this.newest = { name: from, at: now }; this.offered = null;
       this.deps.hint(touchFirst() ? null : ms);
     }
   }
@@ -286,9 +290,19 @@ export class FriendMessages {
     if (this.mode || !this.deps.driving() || gameHas(this.session, KEY_MESSAGE)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (e.repeat) return;
-    const n = this.newest;
-    if (n && performance.now() - n.at < REPLY_MS) this.write(n.name, false);
+    const n = this.newest, o = this.offered, now = performance.now();
+    if (o && now < o.until) this.write(o.name, false);
+    else if (n && now - n.at < REPLY_MS) this.write(n.name, false);
     else this.pick(false);
+  }
+
+  /** a friend came into free roam (friends.ts's notice, shell.ts friendNotice): for the notice's time MSG_KEY writes
+   *  to it, and the hint under the notice says so ("I Message"); not on a touch screen (quick chat's sheet has
+   *  Message a friend), nor while the key is the game's */
+  offer(name: string, ms: number) {
+    if (!this.on || this.mode || touchFirst() || !msgKey() || !this.deps.driving() || gameHas(this.session, KEY_MESSAGE)) return;
+    this.offered = { name, until: performance.now() + ms };
+    this.deps.hint(ms, t('Message'));
   }
 
   /** quick chat's touch sheet: "Message a friend" */
@@ -354,36 +368,37 @@ export class FriendMessages {
     this.close();
   }
 
+  /** the card (cards.ts, quick chat's picker's place): picking, its title, the friends (a key cap, the name, where
+   *  each plays; on a touch screen rows to tap), "Esc closes"; writing, its title, the message answered and the field,
+   *  then what the keys do and the characters left (on a touch screen Send) */
   private draw() {
     const c = this.card;
     this.deps.placeNow();
     c.dataset.mode = this.touch ? 'touch' : 'keys';
-    const el = (tag: string, cls: string, text?: string) => {
-      const e = document.createElement(tag); e.className = cls; if (text !== undefined) e.textContent = text; return e;
-    };
     const kids: HTMLElement[] = [];
     if (this.mode === 'pick') {
-      kids.push(el('div', 'qc-title', t('Message a friend')));
+      kids.push(block(el('div', 'ov-title', t('Message a friend'))));
       const list = this.sorted();
-      for (const [i, f] of list.entries()) {
-        const row = el(this.touch ? 'button' : 'div', 'qc-row msg-friend');
-        if (row instanceof HTMLButtonElement) row.type = 'button';
-        row.dataset.friend = f.name;
-        if (!this.touch) row.append(el('kbd', '', String(i + 1)));
+      const rows = list.map((f, i) => {
         const where = f.at === 'roam' ? t('free roam') : f.at === 'online' ? t('Online lobby') : t('offline');
-        row.append(el('span', 'qc-text', f.name), el('span', 'msg-where' + (f.at ? ' ok' : ''), where));
-        kids.push(row);
-      }
-      if (!list.length) kids.push(el('div', 'qc-wait', this.listed ? t('Touch front bumpers in free roam for 3 s to add a player.') : t('Wait a moment')));
-      if (!this.touch) kids.push(el('div', 'qc-foot', t('Esc closes')));
+        const name = el('span', '', f.name), at = el('span', 'msg-where' + (f.at ? ' ok' : ''), where);
+        let row: HTMLElement;
+        if (this.touch) { row = el('button', 'msg-friend'); (row as HTMLButtonElement).type = 'button'; row.append(name, at); }
+        else { row = act(String(i + 1), name); row.classList.add('msg-friend'); row.append(at); }
+        row.dataset.friend = f.name;
+        return row;
+      });
+      kids.push(rows.length ? block(...rows)
+        : block(el('div', 'ov-dim', this.listed ? t('Touch front bumpers in free roam for 3 s to add a player.') : t('Wait a moment'))));
+      if (!this.touch) kids.push(block(el('div', 'ov-small', t('Esc closes'))));
     } else if (this.mode === 'write') {
-      kids.push(el('div', 'qc-title', t('Message {name}', { name: this.to })));
+      kids.push(block(el('div', 'ov-title', t('Message {name}', { name: this.to }))));
       // what is answered: the friend's message, when it is the conversation's newest
-      const last = this.store.messages(this.to).at(-1);
+      const body: HTMLElement[] = [], last = this.store.messages(this.to).at(-1);
       if (last?.dir === 'in') {
         const q = el('div', 'msg-quote'), b = el('b', '', this.to);
         q.append(b, document.createTextNode(` ${last.body}`));
-        kids.push(q);
+        body.push(q);
       }
       const input = document.createElement('input');
       input.type = 'text'; input.className = 'msg-input'; input.maxLength = MSG_MAX; input.autocomplete = 'off';
@@ -391,10 +406,11 @@ export class FriendMessages {
       input.setAttribute('aria-label', t('Message {name}', { name: this.to }));
       const left = el('span', 'msg-left', String(MSG_MAX));
       input.addEventListener('input', () => { left.textContent = String(MSG_MAX - input.value.length); });
-      kids.push(input);
-      const foot = el('div', 'qc-foot msg-foot');
+      body.push(input);
+      kids.push(block(...body));
+      const foot = el('div', 'ov-small msg-foot');
       if (this.touch) {
-        const send = el('button', 'qc-say msg-send', t('Send')) as HTMLButtonElement;
+        const send = el('button', 'qc-say msg-send', t('Send'));
         send.type = 'button';
         send.addEventListener('pointerdown', e => e.preventDefault());    // the field keeps the focus (and the keyboard)
         send.addEventListener('click', () => this.sendNow());
@@ -402,7 +418,7 @@ export class FriendMessages {
       } else {
         foot.append(el('span', '', t('Enter sends · Esc closes')), left);
       }
-      kids.push(foot);
+      kids.push(block(foot));
     }
     c.replaceChildren(...kids);
     c.hidden = !this.mode;

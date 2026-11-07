@@ -165,13 +165,18 @@ static void roam_state(void){
  * after the press (0x407400) if the car is then at 10 mph or less and the
  * race has them (0x407370 with 1; the press itself only counts under 30
  * mph), so a key held from faster never starts them.  The page presses its
- * key again when this goes to 2. */
+ * key again when this goes to 2, and shows the buttons only then (or while
+ * one is on).  "fast": 1 while the player's car goes over FAST_ON_KMH, 0 again
+ * under FAST_OFF_KMH, so Reset shows only when the car is slow (stuck, after a
+ * crash), not where a stray tap at speed would set it back on the road. */
 #define PL_MARKER    0x9acu
 #define PL_CAR       4u
 #define CAR_SPEED    0x430u           /* float: m/s */
 #define G_OUTRUN_ST  0x00860a58u      /* Career4230 (0x85EF70) +0x1AE8 */
 #define G_HYD_LEVEL  0x007e949cu      /* int: every car's hydraulics level, -1: each its own */
 #define G_HYD_ON     0x007e94a0u      /* byte: the hydraulics at all */
+#define FAST_ON_KMH  30.f
+#define FAST_OFF_KMH 25.f
 int roam_game_engage(void); int roam_game_near(void);
 static uint32_t rd32_ok(uint32_t a){ return a && mem_is_committed(a) && mem_is_committed(a + 3u) ? MR32(a) : 0u; }
 static int hydraulics(void){
@@ -182,16 +187,26 @@ static int hydraulics(void){
     if (!MR8(G_HYD_ON) || MR8(0x0089e7d9u) || MR32(0x00890104u) || MR8(0x0089e7e3u) || MR32(0x0089010cu)) return 1;
     return mem_is_committed(car + CAR_SPEED + 3u) && MRF32(car + CAR_SPEED) * 2.237f <= 10.f ? 2 : 1;
 }
+static int fast(void){
+    static int on;
+    uint32_t car = rd32_ok(rd32_ok(G_PLAYER0) + PL_CAR);
+    if (!car || !mem_is_committed(car + CAR_SPEED + 3u)) return on = 0;
+    float kmh = MRF32(car + CAR_SPEED) * 3.6f;
+    if (kmh < 0.f) kmh = -kmh;                    /* (backwards too) */
+    return on = on ? kmh >= FAST_OFF_KMH : kmh > FAST_ON_KMH;
+}
 static void touch_state(int drive){
-    static int slot[3] = { -2, -2, -2 };
-    static double last[3] = { -1, -1, -1 };
-    if (slot[0] == -2){ slot[0] = host_status_slot("engage"); slot[1] = host_status_slot("roam_near"); slot[2] = host_status_slot("hydraulics"); }
+    static int slot[4] = { -2, -2, -2, -2 };
+    static double last[4] = { -1, -1, -1, -1 };
+    if (slot[0] == -2){ slot[0] = host_status_slot("engage"); slot[1] = host_status_slot("roam_near"); slot[2] = host_status_slot("hydraulics");
+                        slot[3] = host_status_slot("fast"); }
     int roam = (drive & 3) == 2;
     uint32_t p = roam && mem_is_committed(G_PLAYER0 + 3u) ? MR32(G_PLAYER0) : 0u;
     int marker = p && mem_is_committed(p + PL_MARKER + 3u) && MR32(p + PL_MARKER);
     int outrun = roam && mem_is_committed(G_OUTRUN_ST + 3u) && MR32(G_OUTRUN_ST) == 2u;
-    double v[3] = { roam && (marker || outrun || roam_game_engage()), roam ? (double)roam_game_near() : 0, (drive & 3) ? hydraulics() : 0 };
-    if (v[0] != last[0] || v[1] != last[1] || v[2] != last[2]){ last[0] = v[0]; last[1] = v[1]; last[2] = v[2]; host_status_set_n(slot, v, 3); }
+    double v[4] = { roam && (marker || outrun || roam_game_engage()), roam ? (double)roam_game_near() : 0, (drive & 3) ? hydraulics() : 0,
+                    (drive & 3) ? fast() : 0 };
+    if (memcmp(v, last, sizeof v)){ memcpy(last, v, sizeof v); host_status_set_n(slot, v, 4); }
 }
 /* "sms": the text message of ours (sms.c) the game has in its inbox this
  * game, 0 none, so the page asks for it no more (web/src/app/playtime.ts) */

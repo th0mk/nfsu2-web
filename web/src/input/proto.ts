@@ -72,7 +72,7 @@ export const INAME_SEAT2 = 1;                 // IEV_NAME's flags: co-op player 
 export const IEV_LOBBY = 16;
 /** IEV_LOBBY's what (runtime/roam_plat.h ROAM_LB_*): the lobby card's next page, Friends & crew only (hosting), leave a
  *  lobby joined from afar, an invite's Join */
-export const LB_NEXT = 1, LB_PRIVATE = 2, LB_LEAVE = 3, LB_JOIN = 4;
+export const LB_NEXT = 1, LB_PRIVATE = 2, LB_LEAVE = 3, LB_JOIN = 4, LB_NEW = 5;
 
 export const IKF_REPEAT = 1;
 export const IKF_ALT = 2;

@@ -6,12 +6,11 @@ designs for Art Factory Graphics.  The runtime (runtime/fileio.c) reads a car's
 VINYLS.BIN as the game's own file with these textures added, and
 runtime/vinylpacks.c adds their seven parts to the car part database.
 
-    tools/vinylpacks.py <game folder> --shado <underground2.net folder> [--out <folder>]
+    tools/vinylpacks.py <game folder> --shado <mod folder> [--out <folder>]
 
-<underground2.net folder> is the underground2.net mod (nfsmods.xyz/mod/2004, by
-the underground2.net team) extracted: the folder with "1 - Mod Files" in it, or
-that folder itself.  Its cars' VINYLS.BIN have
-the Sha_Do vinyls ported to the PC; only those 14 textures a car (7 vinyls, each
+<mod folder> is a PC mod with the Japanese release's vinyls, extracted: the
+folder with "1 - Mod Files" in it, or that folder itself.  Its cars'
+VINYLS.BIN have the Sha_Do vinyls ported to the PC; only those 14 textures a car (7 vinyls, each
 with its mask) are taken, nothing else of the mod.  The packs are written under
 <out> (default: the game folder): VINYLPACKS/...
 
@@ -48,8 +47,11 @@ P8_PIX = 262144 + 65536 + 16384 + 4096 + 1024 + 256 + 64   # 512x512, 7 levels
 P8_PAL = 0x55580                                      # the palette's place in a P8 vinyl's blob (the game's)
 P8_SIZE = P8_PAL + 1024 + 0x9C                        # = 350748, every vinyl of the game's
 TEMPLATES = ('350Z', '350Z_ART_F_12', '350Z_AEM_HKS_MASK')   # a car whose TPK has a main and a mask in JDLZ
-IMG_BASE = 0x20000000                                 # TextureInfo image offsets past the game's own (the game uses
-                                                      # only palette - image; each texture gets its own)
+IMG_BASE = 0x30000000                                 # TextureInfo image offsets past the game's own: a VINYLS.BIN's
+                                                      # are its textures' hash ranks x 0x55980, up to 0x25526F00 (the
+                                                      # streamer makes every texture whose offset lies in a block's
+                                                      # place from that block: runtime/vinylpacks.c tex_in); each gets
+                                                      # its own
 
 
 def read_tpk(path):
@@ -340,9 +342,9 @@ def one_car(job):
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/vinylpacks.py <game folder> --shado <underground2.net folder> [--out <folder>]')
+    ap = argparse.ArgumentParser(usage='tools/vinylpacks.py <game folder> --shado <mod folder> [--out <folder>]')
     ap.add_argument('game')
-    ap.add_argument('--shado', metavar='MOD', help='the underground2.net mod (nfsmods.xyz/mod/2004), extracted')
+    ap.add_argument('--shado', metavar='MOD', help='a PC mod with the Japanese release\'s vinyls, extracted')
     ap.add_argument('--out', metavar='DIR', help='where VINYLPACKS/ goes (default: the game folder)')
     ap.add_argument('--cars', help='only these cars (comma-separated folder names), for a test')
     ap.add_argument('--jobs', type=int, default=os.cpu_count() or 4)

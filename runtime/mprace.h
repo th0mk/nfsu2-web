@@ -96,6 +96,9 @@ float mprace_factor(void);
 /* a network race of this type (its N_MODE: circuit 0, sprint 1, drag 2, drift 3, URL 4, Street X 10) evens
  * out the cars */
 int  mprace_evened(int net_mode);
+/* the ratings r (n of them, 0 not known) as a race of this type would even out their cars (none: left as they are),
+ * counting that part of each car's way to the race's target (1: all of it) */
+void mprace_even_ratings(float *r, int n, int net_mode, float part);
 /* the player quit the race (its pause menu's Quit); the fee the bank paid for it (less than mprace_quit_fee when it
  * held less, 0 before the crib) */
 int  mprace_quit(void);

@@ -180,12 +180,42 @@ export const KEYS: readonly KeyDef[] = [
   // the players this one blocks in free roam, by name (the page's hello to the server: net/index.ts).  Not in bundle.m's
   // table: the Mac's free roam has no hub
   { key: 'roam_block', env: 'NFSU2_ROAM_BLOCK', kind: 'names', ic: true, scope: 'web' },
+  // the distance to the GPS destination under its arrow (runtime/gpsdistance.c).  Not in bundle.m's table: there a
+  // lower-case key, so it reaches the runtime as NFSU2_GPS_DISTANCE all the same
+  { key: 'gps_distance', env: 'NFSU2_GPS_DISTANCE', kind: 'bool', scope: 'web' },
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
   // the career's visual rating set by the stage, not by the car's parts (runtime/visualrep.c).  Not in bundle.m's
   // table: there a lower-case key, so it reaches the runtime as NFSU2_VISUAL_REP_REMOVER all the same
   { key: 'visual_rep_remover', env: 'NFSU2_VISUAL_REP_REMOVER', kind: 'bool', scope: 'web' },
+  // the career's rubberbanding: original, noboost (opponents ahead still wait, none behind beats its own pace) or off
+  // (runtime/catchup.c).  Not in bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_CATCHUP
+  // all the same
+  { key: 'catchup', env: 'NFSU2_CATCHUP', kind: 'enum', vals: 'original|noboost|off', scope: 'web' },
+  // The rims are out for now (mods.ts): these two keys come back with their lines in TEMPLATE, after catchup's:
+  //   # New rim brands in the rim shop: Blitz.  Everyone's game has their rims,
+  //   # so a friend's car with them looks the same either way, and rims already
+  //   # on your car stay.  off = the shops offer only the original game's.
+  //   # [NFSU2_MOD_RIMS]
+  //   #mod_rims = off
+  //
+  //   # Other players' cars: shown = with the mods' parts they have (rims of a
+  //   # mod's on above), as they see them; original = with parts of the original
+  //   # game in their place (a look-alike rim of the same size, else the stock
+  //   # part).  Your own car keeps its own either way.  [NFSU2_OTHERS_MOD_PARTS]
+  //   #others_mod_parts = shown
+  // the new rim brands in the rim shop (runtime/modpacks.c; everyone's game has them, so a friend's car shows them either
+  // way).  Not in bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_MOD_RIMS all the same
+  // { key: 'mod_rims', env: 'NFSU2_MOD_RIMS', kind: 'bool', scope: 'web' },
+  // other players' cars with the mods' parts or with the game's in their place (runtime/modpacks.c: the parts'
+  // look-alikes, else the stock ones; free roam's cars and the race's).  Not in bundle.m's table: there a lower-case
+  // key, so it reaches the runtime as NFSU2_OTHERS_MOD_PARTS all the same
+  // { key: 'others_mod_parts', env: 'NFSU2_OTHERS_MOD_PARTS', kind: 'enum', vals: 'shown|original', scope: 'web' },
+  // each local player's gearbox whine over the game's sound, as ropi's Underground 2 Transmission Whine (runtime/whine.c;
+  // its sounds from the game folder's MODPACKS/WHINE, read only when on: tools/whinepack.py).  Not in bundle.m's
+  // table: there a lower-case key, so it reaches the runtime as NFSU2_GEARBOX_WHINE all the same
+  { key: 'gearbox_whine', env: 'NFSU2_GEARBOX_WHINE', kind: 'bool', scope: 'web' },
   // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
   // pointTex).  Not in bundle.m's table
   { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
@@ -204,6 +234,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'key_message', env: 'NFSU2_KEY_MESSAGE', kind: 'key', scope: 'web', device: true },
   { key: 'key_friend', env: 'NFSU2_KEY_FRIEND', kind: 'key', scope: 'web', device: true },
   { key: 'key_lobby', env: 'NFSU2_KEY_LOBBY', kind: 'key', scope: 'web', device: true },
+  { key: 'key_lobby_new', env: 'NFSU2_KEY_LOBBY_NEW', kind: 'key', scope: 'web', device: true },
   { key: 'key_lobby_private', env: 'NFSU2_KEY_LOBBY_PRIVATE', kind: 'key', scope: 'web', device: true },
   { key: 'key_lobby_invite', env: 'NFSU2_KEY_LOBBY_INVITE', kind: 'key', scope: 'web', device: true },
   { key: 'key_photo', env: 'NFSU2_KEY_PHOTO', kind: 'key', scope: 'web', device: true },
@@ -215,6 +246,9 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'button_horn', env: 'NFSU2_BUTTON_HORN', kind: 'enum', vals: 'ls|rs|off', scope: 'web', device: true },
   { key: 'button_chat', env: 'NFSU2_BUTTON_CHAT', kind: 'enum', vals: 'rs|ls|off', scope: 'web', device: true },
   { key: 'button_look', env: 'NFSU2_BUTTON_LOOK', kind: 'enum', vals: 'auto|off', scope: 'web', device: true },
+  // the racers' visual crash damage, FRS Mods' Crashing Foreign Cars (runtime/damage.c), off unless asked for.  Not in
+  // bundle.m's table
+  { key: 'crash_damage', env: 'NFSU2_DAMAGE', kind: 'bool', scope: 'web' },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -303,6 +337,11 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # [NFSU2_SHOW_HIDDEN_RACES]
 #show_hidden_races = off
 
+# The distance to the GPS destination under its arrow, in metres or feet as
+# Speedometer Units has it (Mods: GPS Distance).
+# [NFSU2_GPS_DISTANCE]
+#gps_distance = off
+
 # The car's visual rating set by the career's stage, not by its parts, as
 # thelink2012's Visual Reputation Remover (github.com/thelink2012/novisualrep)
 # has it: every DVD cover shoot of the stage is offered at the next free-roam
@@ -310,6 +349,34 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # off = the original game.
 # [NFSU2_VISUAL_REP_REMOVER]
 #visual_rep_remover = off
+
+# Crash damage, as FRS Mods' Crashing Foreign Cars has it: the racers' cars
+# (yours and the AI's) dent where they are hit, scratch, lose their bumpers,
+# mirrors, hood, trunk lid and doors, and break their lights.  Only what is
+# seen: the engine, the suspension and the handling are as before, and the
+# game's own repair (a race's start, the garage) takes the damage away.
+# In free roam other players who have it on see the damage of your car;
+# off, you see every car undamaged.  off (the default) = the original game.
+# [NFSU2_DAMAGE]
+#crash_damage = off
+
+# The career's rubberbanding (Mods: Rubberbanding).  In a career race the
+# game slows opponents who are ahead of you and gives ones behind you more
+# power, grip and top speed (up to 37% more when they are 320 m behind).
+# noboost = they still wait for you, but none behind ever beats its own
+# pace; off = neither, as Quick Race with Catch Up off.  original = the
+# original game.  Only your own career races: Quick Race keeps its own Catch
+# Up option, and LAN and online races have no computer opponents.
+# [NFSU2_CATCHUP]
+#catchup = original
+
+# NFS Carbon's transmission whine on your car, as ropi's Underground 2
+# Transmission Whine (github.com/ropi336/UG2WhineGen) has it: a whine rising
+# with the speed, quiet for a moment at each upshift, and its own in
+# reverse, by the game's Engine Volume.  Its sounds download once it is on.
+# off = the original game.
+# [NFSU2_GEARBOX_WHINE]
+#gearbox_whine = off
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"
@@ -452,7 +519,7 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # the frame-rate counter.  A key one of the game's controls is on (its
 # Options, Controls) stays the game's.
 # [NFSU2_KEY_DRIFT, NFSU2_KEY_SHOWOFF, NFSU2_KEY_HORN, NFSU2_KEY_LIGHTS,
-# NFSU2_KEY_MESSAGE, NFSU2_KEY_FRIEND, NFSU2_KEY_LOBBY,
+# NFSU2_KEY_MESSAGE, NFSU2_KEY_FRIEND, NFSU2_KEY_LOBBY, NFSU2_KEY_LOBBY_NEW,
 # NFSU2_KEY_LOBBY_PRIVATE, NFSU2_KEY_LOBBY_INVITE, NFSU2_KEY_PHOTO,
 # NFSU2_KEY_HUD, NFSU2_KEY_MENU, NFSU2_KEY_SONG, NFSU2_KEY_FPS]
 #key_drift = KeyX
@@ -462,6 +529,7 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #key_message = KeyI
 #key_friend = KeyF
 #key_lobby = KeyE
+#key_lobby_new = KeyB
 #key_lobby_private = KeyV
 #key_lobby_invite = KeyZ
 #key_photo = F12
@@ -527,8 +595,9 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # see.  For these options a ';' or '#' after a blank starts a comment.
 # [NFSU2_ROAM]
 #roam = on
-# Empty: you drive with everyone.  With a name, free roam shows only the
-# players who set the same name (capitals and spaces do not count).  Not
+# Your world: free roam shows only the players in the same one.  Empty: the
+# main world, with everyone.  World 1 to World 4: quieter ones anyone picks.
+# Any other name: a world of your own (capitals and spaces do not count).  Not
 # private: everyone on the server still sees your name.  [NFSU2_ROAM_ROOM]
 #roam_room =
 # Players you block, by the name over their car, separated by commas (up to
@@ -862,7 +931,7 @@ export function checkSetting(key: string, val: string): Checked | Refused | null
     }
     case 'room':
       if (!valueOk('text', val)) return refuse(N('"{value}" is not {kind}'), val, { kind: KIND_TEXT.text! });
-      if (blockedName(val)) return refuse(N('"{value}" is not a room name (it reads as a slur)'), val);
+      if (blockedName(val)) return refuse(N('"{value}" is not a world name (it reads as a slur)'), val);
       break;
     case 'peers': {
       const bad = peersBad(val);

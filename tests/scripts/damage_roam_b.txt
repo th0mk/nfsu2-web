@@ -1,0 +1,60 @@
+# Crash damage in free roam, instance B (watches, play page): waits for A's car (damage_roam_a.txt), follows it while
+# A crashes, then goes into photo mode on A's car and dumps it from all round, near and from above: A's dents come
+# to B in A's DENTS messages ("free roam: friend's car ... dents ... made" in B's log).  How to run:
+# damage_roam_a.txt; without NFSU2_DAMAGE for the A/B (the same crash, the car undamaged).
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp status
++0    loop 16
++0    roam mp follow 0 9
++150  log wait
++0    endloop
++0    roam mp follow 0 9
++150  photo on
++30   photo target 1
++0    photo dolly 5
++0    photo drag 0 0.12
++120  dump p_0
++0    photo drag 0.0833 0
++120  dump p_1
++0    photo drag 0.0833 0
++120  dump p_2
++0    photo drag 0.0833 0
++120  dump p_3
++0    photo drag 0.0833 0
++120  dump p_4
++0    photo drag 0.0833 0
++120  dump p_5
++0    photo drag 0.0833 0
++120  dump p_6
++0    photo drag 0.0833 0
++120  dump p_7
++0    photo drag 0.0833 0
++120  dump p_8
++0    photo drag 0.0833 0
++120  dump p_9
++0    photo drag 0.0833 0
++120  dump p_10
++0    photo drag 0.0833 0
++120  dump p_11
++0    photo off
++60   roam mp status
++10   quit

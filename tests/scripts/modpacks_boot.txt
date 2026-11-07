@@ -1,0 +1,5 @@
+# Boot to the career world and quit: the log's "[file]" and "[mods]" lines (MODPACKS read, the parts added).
+0     bot on
++0    waitroam 6000
++600  log BOOT DONE
++10   quit

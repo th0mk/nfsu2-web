@@ -4,7 +4,7 @@
 //
 //   node web/tools/roam-crowd.mjs [--base http://localhost:8655] [--n 62] [--seconds 120] [--room <name>] [--crew <name>]
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
-//        [--out <summary.json>]
+//        [--out <summary.json>] [--open 15] [--dents 1|2|3] [--dents-ms 1000]
 //        [--race 1-3:60:120] [--paused 1-3] [--prefix Bot] [--links 64] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
 //        [--flags nl,br,gb-eng] [--meet x,y,z] [--city side[,x,y]] [--seed n]
 //
@@ -24,6 +24,11 @@
 // --parts  the players' cars' parts instead of the stock ones, slot:key:owner in hex, comma-separated (or from a file): a
 //          record names every part (tests/scripts/roam_crowd_rims.parts: a 350Z with the rim shops' rims).
 // --states the car states in each SNAP: 1 as the browsers send them (roam_web.c), 3 as a LAN does.
+// --open   the players' cars' open parts (RC_OPEN_*: 1 the hood, 2 the trunk, 4 and 8 the doors, 15 all), as a game
+//          sends them while its car is shown off (showoff.c): the others' games open them on these cars.
+// --dents  the players' cars' crash damage (RC_MSG_DENTS, to the games that show it: runtime/damage.c), 66 dents each:
+//          1 once; 2 a new set (a repair and a new crash) every --dents-ms (1000), as a game that sends what it likes
+//          may; 3 as 2 with bytes at random (tests/scripts/damage_crowd.txt).
 // --links  the links every player asks the hub for (1-64, as the game asks for its Players' cars shown); without it they
 //          say nothing, and the hub gives them 32 (a game before core version 10)
 // --crew   every player is in this crew (the Crews setting's one name): the hub links them to the players who share it
@@ -70,6 +75,8 @@ const BASE = opt('base', 'http://localhost:8655'), N = +opt('n', 62), SECONDS = 
 const SPEED = +opt('speed', 15), CAR = opt('car', '350Z'), STAGGER = +opt('stagger', 50), TRACK = opt('track', ''), OUTF = opt('out', '');
 const STATES = +opt('states', 1), SPREAD = +opt('spread', 20), BUNDLE = argv.includes('--bundle'), FIRST = +opt('first', 0);
 const LOOP_MS = +opt('loop-ms', 0), HOLD = +opt('hold', 0), LINKS = +opt('links', 0);
+const OPEN = +opt('open', 0);
+const DENTS = +opt('dents', 0), DENTS_MS = +opt('dents-ms', 1000);
 const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim() : p)(opt('parts', ''));
 const RACE = (opt('race', '').match(/^(\d+)-(\d+):(\d+):(\d+)$/) ?? []).slice(1).map(Number);
 const PAUSED = (opt('paused', '').match(/^(\d+)-(\d+)$/) ?? []).slice(1).map(Number), PREFIX = opt('prefix', 'Bot');
@@ -294,6 +301,8 @@ class Bot {
           const flag = FLAGS.length ? FLAGS[(this.i ?? 0) % FLAGS.length] : '';
           const b = Buffer.from(`${this.name}\0${this.car}\0${PARTS}\0${flag}\0`, 'latin1'); m8.set(b, io);
           if (LINKS) this.x.crowd_links(LINKS);
+          if (OPEN) this.x.crowd_open(OPEN);
+          if (DENTS) this.x.crowd_dents(DENTS, DENTS_MS, (this.id * 2654435761) >>> 0);
           this.x.crowd_init(this.id, roomHash(ROOM), roomHash(CREW), HUB, PORT, bhash(this.car), STATES, nowUs());
           this.ready = true;
         }

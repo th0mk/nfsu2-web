@@ -74,7 +74,7 @@ int  g_guest_exited = 0;
  * patch inside .text goes into the dispatch table itself (at dispatch_init,
  * or at once when that has run); one elsewhere (a lifted DLL) is looked up
  * in this list before the DLL's own functions. */
-#define PATCH_MAX 24
+#define PATCH_MAX 64
 static struct { uint32_t addr; guest_fn fn; } g_patch[PATCH_MAX];
 static int g_patch_n = 0;
 static void patch_apply(void){
@@ -89,6 +89,7 @@ void dispatch_patch(uint32_t a, guest_fn f){
         fprintf(stderr,"dispatch_patch: address %08x outside the text range, ignored\n", a);
         return; }
     if (g_patch_n < PATCH_MAX){ g_patch[g_patch_n].addr=a; g_patch[g_patch_n].fn=f; g_patch_n++; }
+    else fprintf(stderr,"dispatch_patch: no room for %08x (PATCH_MAX %d), ignored\n", a, PATCH_MAX);
     if (g_dtab_ready) patch_apply();
 }
 static guest_fn patch_at(uint32_t addr){

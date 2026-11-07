@@ -49,8 +49,8 @@ const F_DATA: usize = 16;
 /// the most data one TCP frame carries (net_proto.h NET_MAX_PAYLOAD - NET_LAN_HDR)
 pub const TCP_CHUNK: usize = 1472 - LAN_HDR;
 
-/// The virtual host's limits.  max_conns: a player in the lobby holds two (the lobby and EA Messenger), so 8000 lobby
-/// sessions take 16000
+/// The virtual host's limits.  max_conns: a player in the lobby holds two (the lobby and EA Messenger), so 12000 lobby
+/// sessions take 24000
 #[derive(Clone, Copy, Debug)]
 pub struct VhostLimits {
     pub max_conns: usize,
@@ -59,7 +59,7 @@ pub struct VhostLimits {
 
 impl Default for VhostLimits {
     fn default() -> Self {
-        VhostLimits { max_conns: 32000, per_vip: 8 }
+        VhostLimits { max_conns: 48000, per_vip: 8 }
     }
 }
 

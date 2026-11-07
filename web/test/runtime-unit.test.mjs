@@ -2,9 +2,10 @@
 // object table of runtime/win32_ext.c: a full table takes back a finished thread's slot, never one a wait or a handle
 // still names), tests/watchdog_unit.c (runtime/watchdog.c: no false stall from a stamp a little ahead of its
 // clock), tests/racenet_unit.c (runtime/racenet.c: the creator's list only from the creator, with the slot each
-// joiner's game drives, each joiner's car states for that slot only) and tests/racecars_unit.c (runtime/racecars.c:
-// each racer's own car states, who may speak for which car, the cars drawn and driven).  Every case of theirs
-// passes, and each one ran.
+// joiner's game drives, each joiner's car states for that slot only), tests/racecars_unit.c (runtime/racecars.c:
+// each racer's own car states, who may speak for which car, the cars drawn and driven) and tests/catchup_unit.c
+// (runtime/catchup.c: the career's rubberbanding for each setting, and the game's own outside career races).  Every
+// case of theirs passes, and each one ran.
 //   node --test web/test/runtime-unit.test.mjs        (macOS with clang: Xcode's command line tools; about 10 s)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -58,4 +59,12 @@ test('racecars_unit: each racer\'s own car states, only for its own car, drawn a
   for (const c of ['wire', 'stranger', 'own-slot', 'bound', 'rtt', 'drawn', 'ghost', 'hit', 'hit-back', 'driven', 'reset', 'claimed', 'honest',
     'old-creator']) assert.ok(pass.includes(c), `case ${c} passed`);
   assert.match(out, /racecars unit tests: all passed/);
+});
+
+test('catchup_unit: the career\'s rubberbanding as the setting says, outside career races the game\'s own', { skip }, () => {
+  const { out, pass } = run('catchup_unit', ['-O1', '-g', '-Wall', '-Wextra', '-Wno-unused-function']);
+  for (const m of ['original', 'noboost', 'off'])
+    for (const c of ['no-race', 'behind', 'ahead', 'no-car']) assert.ok(pass.includes(`${m}-${c}`), `case ${m}-${c} passed`);
+  for (const c of ['unset', 'bogus', 'case']) assert.ok(pass.includes(c), `case ${c} passed`);
+  assert.match(out, /catchup unit tests: all passed/);
 });

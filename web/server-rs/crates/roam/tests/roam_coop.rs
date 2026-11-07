@@ -13,8 +13,8 @@
 //! 6. a block of the second player's name, as a claimed name's, blocks its owner (both players); a second form two
 //!    claims of before share is one keyphrase's: another one's player under it is an impostor, and a block of it never
 //!    blocks that other keyphrase;
-//! 7. the counts: /players counts the browser once, info() its second players; a full hub of 15360 with players
-//!    coming and going keeps every slot a world map's key can name.
+//! 7. the counts: /players counts the browser once, info() its second players; a full hub of 24576 with players
+//!    coming and going keeps every world map's key under 16384, and a key that goes back goes to the next one shown.
 
 mod kit;
 
@@ -391,18 +391,21 @@ fn a_second_player_counts_as_its_browser() {
     assert_eq!(k.info("coopSeats"), 0.0);
 }
 
-// a full hub (15360 endpoints: the free-roam share of the switch's 16000 places and co-op's second players), 2000
-// coming as others go: the 15361st is refused, and every player keeps a slot under 16384, the most a parked world
-// map's key names (a slot past it read as another one's, parked); the new ones' map shows each of them once
+// a full hub (24576 endpoints: the switch's 24000 places, nearly all of which can be in free roam, and co-op's second
+// players), 2000 coming as others go: the 24577th is refused.  A world map names each player it shows by a key of its
+// own, under 16384, the most a parked map's key names (one past it read as another one's, parked): with everyone
+// driving the keys run out (the first 16384 have one, the others show on no map), each leaver's goes to a newcomer, the
+// new ones' map shows each of them once, and a key one gives back (to the menus) goes to the next player shown
 #[test]
-fn a_full_hub_keeps_every_slot_a_maps_key_names() {
+fn a_full_hub_keeps_every_maps_key_under_16384() {
     let mut k = Kit::new(RoamOptions::default());
     let v = |i: u32| 0x0A4D_0100 + i;
-    for i in 0..15360u32 {
+    for i in 0..24576u32 {
         k.from(v(i), &hello(1000 + i));
     }
-    k.from(v(20_000), &hello(99));
-    assert_eq!((k.info("players"), k.info("refused")), (15360.0, 1.0));
+    k.from(v(25_000), &hello(99));
+    assert_eq!((k.info("players"), k.info("refused")), (24576.0, 1.0));
+    assert_eq!(k.info("mapKeys"), 16384.0, "every key handed out");
     let late = fnv1a("late");
     for n in 0..2000u32 {
         k.from(v(n), &bye(1000 + n));
@@ -410,7 +413,8 @@ fn a_full_hub_keeps_every_slot_a_maps_key_names() {
         k.from(vip, &hello_with(id, &HelloOpts { room: late, ..Default::default() }));
         k.from(vip, &snap(id, [(n % 50) as f64 * 20.0, (n / 50) as f64 * 20.0, 0.0]));
     }
-    assert_eq!(k.info("players"), 15360.0);
+    assert_eq!(k.info("players"), 24576.0);
+    assert_eq!(k.info("mapKeys"), 16384.0, "each leaver's key to a newcomer");
     k.clear();
     // the world map of one of them, with who is parked and heights (the game's), as wide as it takes
     k.from(v(30_000), &mapreq_flags(50_000, 1, 4096, 0, 1 | 2));
@@ -418,4 +422,9 @@ fn a_full_hub_keeps_every_slot_a_maps_key_names() {
     assert_eq!(keys.len(), 1999, "the room's others");
     assert!(keys.iter().all(|&s| s < 0x4000), "a key past 16383: {:?}", keys.iter().filter(|&&s| s >= 0x4000).take(3).collect::<Vec<_>>());
     assert_eq!(keys.iter().collect::<HashSet<_>>().len(), 1999, "each once");
+    // one of them goes to the menus: its key goes back, and a player without one takes it at its next SNAP
+    k.from(v(30_001), &snap_n(50_001, [20.0, 0.0, 0.0], 0, 1));
+    assert_eq!(k.info("mapKeys"), 16383.0, "a key back");
+    k.from(v(20_000), &snap(21_000, [0.0, 0.0, 0.0]));
+    assert_eq!(k.info("mapKeys"), 16384.0, "taken by the next one shown");
 }

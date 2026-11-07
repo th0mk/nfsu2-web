@@ -97,6 +97,10 @@ function section(id: string, title: string, rows: HTMLElement[]): HTMLElement {
   return box;
 }
 
+/** a section's first row, a setting of no mod's: how other players' cars show the mods' parts (settings-ui.ts; out for
+ *  now with the rims: { shared: 'others_mod_parts' }) */
+const LEAD: Partial<Record<string, string>> = {};
+
 /**
  * The tab's sections, in KINDS' order (a section without entries is left out), a row per mod, then our changes, a row
  * per group.  settingRow(key): the settings panel's row for that setting (its name with the (i): modName).
@@ -104,7 +108,8 @@ function section(id: string, title: string, rows: HTMLElement[]): HTMLElement {
 export function modSections(settingRow: (key: string) => HTMLElement): HTMLElement[] {
   const mods = KINDS.flatMap(k => {
     const ms = MODS.filter(m => m.kind === k.kind && !m.row);
-    return ms.length ? [section(k.kind, k.title, ms.map(m => 'setting' in m.control ? settingRow(m.control.setting) : modRow(m)))] : [];
+    const lead = LEAD[k.kind] ? [settingRow(LEAD[k.kind]!)] : [];
+    return ms.length ? [section(k.kind, k.title, [...lead, ...ms.map(m => 'setting' in m.control ? settingRow(m.control.setting) : modRow(m))])] : [];
   });
   return [...mods, section('ours', OURS.title, ADDED.map(g =>
     plainRow(g.id, t(g.title), t(LABELS.ours, { name: t(g.title) }), groupHelp(g.items))))];

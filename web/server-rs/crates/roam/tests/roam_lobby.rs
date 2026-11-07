@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use kit::*;
 use nfsu2_claims::owner_of_token;
-use nfsu2_roam::{Hosted, RoamOptions};
+use nfsu2_roam::{CarBan, CarBans, Hosted, RoamOptions};
+use parking_lot::Mutex;
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
@@ -99,7 +100,7 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     }
     // 1 and 2 host (2 nearer to 0), 4 hosts in another room; to a player, not the hub: not kept
     k.from(W(1), &lobby(101, 1, 0, 0xA1, 0x1111, 500, 0, 0, 6, &[101]));
-    k.from(W(2), &lobby(102, 1, 0, 0xA2, 0x2222, 50, -20, 1, 4, &[102, 103]));
+    k.from(W(2), &lobby(102, 1, 0, 0xA2, 0x2222, 50, -20, 0, 4, &[102, 103]));
     k.from(W(4), &lobby(104, 1, 0, 0xA4, 0x4444, 0, 0, 0, 6, &[104]));
     k.from(W(3), &lobby(103, 1, 100, 0xA3, 0x3333, 0, 0, 0, 6, &[103]));
     // a bad one: the same player twice
@@ -107,7 +108,7 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     k.hub.tick();
     k.clear();
     k.from(W(0), &mapreq_base(100, 7, 2048, 0));
-    assert_eq!(lobbies(&k), [(W(0), 7, vec![(50, -20, 0x2222, 2, 4, 1), (500, 0, 0x1111, 1, 6, 0)])]);
+    assert_eq!(lobbies(&k), [(W(0), 7, vec![(50, -20, 0x2222, 2, 4, 0), (500, 0, 0x1111, 1, 6, 0)])]);
     // without the flag: the map, no lobbies; another room: its own
     k.clear();
     k.from(W(3), &mapreq_base(103, 1, 2048, 0));
@@ -121,7 +122,7 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     k.step(1100.0);
     k.clear();
     k.from(W(0), &mapreq_base(100, 8, 2048, 0));
-    assert_eq!(lobbies(&k), [(W(0), 8, vec![(50, -20, 0x2222, 2, 4, 1)])], "only 2's, closed with another id");
+    assert_eq!(lobbies(&k), [(W(0), 8, vec![(50, -20, 0x2222, 2, 4, 0)])], "only 2's, closed with another id");
     k.step(3100.0);
     k.from(W(0), &snap(100, [0.0, 0.0, 0.0]));
     k.clear();
@@ -239,7 +240,21 @@ fn lobbies_on_the_wire_roam_core_and_the_hub_agree() {
     let mut args = vec!["lobbies".to_string()];
     args.extend(frames);
     let got = run(&args);
-    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0", 0x0BADF00Du32).as_str()), "{got}");
+    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0,0,0", 0x0BADF00Du32).as_str()), "{got}");
+    // a career lobby's advert (its t: the race counts in its host's career): its entry marked so, and the C core
+    // takes the mark off its state (an older core drops the entry)
+    let ad = unhex(&run(&["lobbycareer".to_string()]));
+    k.step(1100.0);
+    k.from(W(0), &ad);
+    k.from(W(1), &snap(101, [0.0, 0.0, 0.0]));
+    k.clear();
+    k.from(W(1), &mapreq_base(101, 1, 2048, 0));
+    assert_eq!(lobbies(&k), [(W(1), 1, vec![(-1234, 567, 0x0BADF00D, 2, 6, 0x88)])]);
+    let frames: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();
+    let mut args = vec!["lobbies".to_string()];
+    args.extend(frames);
+    let got = run(&args);
+    assert_eq!(got.lines().last(), Some(format!("lobbies 1 1 -1234,567,{},2,6,0,128,2", 0x0BADF00Du32).as_str()), "{got}");
 }
 
 // a lobby's host is linked with its players and with the players in free roam near its start before any nearer one
@@ -330,7 +345,17 @@ fn racerep(sender: u32, lobby: u32, place: u8, players: u8, flags: u8, rating: f
 
 /// `racerep` with the reporter's time (s)
 #[allow(clippy::too_many_arguments)]
-fn racerep_in(sender: u32, lobby: u32, place: u8, players: u8, flags: u8, rating: f32, name: &[u8], payload_len: usize, time: f32) -> Vec<u8> {
+fn racerep_in(
+    sender: u32,
+    lobby: u32,
+    place: u8,
+    players: u8,
+    flags: u8,
+    rating: f32,
+    name: &[u8],
+    payload_len: usize,
+    time: f32,
+) -> Vec<u8> {
     let mut p = vec![0u8; payload_len];
     p[0..4].copy_from_slice(&lobby.to_le_bytes());
     p[4..8].copy_from_slice(&0x0BADF00Du32.to_le_bytes());
@@ -421,7 +446,8 @@ fn an_edited_car_in_a_race_is_a_cheat_line() {
 fn a_car_of_edited_game_data_in_a_race_is_a_cheat_line_when_it_gained() {
     let mut k = Kit::new(RoamOptions::default());
     k.from(W(0), &hello_with(100, &HelloOpts { core: 5, name: b"Ed", ..Default::default() }));
-    let rep = |lobby: u32, place: u8, flags: u8, rating: f32, time: f32| racerep_in(100, lobby, place, 3, flags, rating, b"SUPRA", 64, time);
+    let rep =
+        |lobby: u32, place: u8, flags: u8, rating: f32, time: f32| racerep_in(100, lobby, place, 3, flags, rating, b"SUPRA", 64, time);
     // too few honest times of the race yet: a note on its [race] line
     k.from(W(0), &rep(0xA0, 2, 4, 239.3, 35.0));
     let lines = k.lines.lock().clone();
@@ -495,6 +521,78 @@ fn a_car_of_edited_game_data_in_a_race_is_a_cheat_line_when_it_gained() {
     assert_eq!(k.info("cheatLines"), 2.0);
 }
 
+/// a RACEREP of a car: its type, rating, engine power (kW) and top speed (km/h), 1st of `players`, no time
+fn racerep_car(sender: u32, lobby: u32, players: u8, car_type: u8, rating: f32, kw: f32, kmh: f32) -> Vec<u8> {
+    let mut p = vec![0u8; 64];
+    p[0..4].copy_from_slice(&lobby.to_le_bytes());
+    p[4..8].copy_from_slice(&0x0BADF00Du32.to_le_bytes());
+    p[8] = 1; // sprint
+    p[9] = 1;
+    p[10..12].copy_from_slice(&4104u16.to_le_bytes());
+    p[12] = 1;
+    p[13] = players;
+    p[15] = car_type;
+    p[16] = 0;
+    for (k, v) in [rating, 500.0, 1.0, kw, 1338.0, kmh, 0.0].iter().enumerate() {
+        p[20 + 4 * k..24 + 4 * k].copy_from_slice(&v.to_le_bytes());
+    }
+    p[48..55].copy_from_slice(b"SKYLINE");
+    dgram(14, sender, &p)
+}
+
+// the operator's cars to race-ban for (RoamOptions::car_bans; these numbers are the test's own): a lobby race in one
+// of the player's car types at that engine power or rating or more, with others, is told on once, after its lines,
+// with the player, its car and how it did; under both, alone in its race, a traffic car's figures, or top speed alone
+// is none
+#[test]
+fn a_car_past_the_operators_numbers_is_told_for_a_race_ban() {
+    let told: Arc<Mutex<Vec<CarBan>>> = Default::default();
+    let t = told.clone();
+    let call = Arc::new(move |c: CarBan| t.lock().push(c));
+    let mut k = Kit::new(RoamOptions { car_bans: Some(CarBans { kw: Some(1500.0), rating: Some(3000.0), call }), ..Default::default() });
+    k.from(W(0), &hello_with(100, &HelloOpts { core: 5, name: b"Evl", ..Default::default() }));
+    let mut lobby = 0xC0;
+    let mut race = |k: &mut Kit, players: u8, car_type: u8, rating: f32, kw: f32, kmh: f32| {
+        k.step(25000.0);
+        lobby += 1;
+        k.from(W(0), &racerep_car(100, lobby, players, car_type, rating, kw, kmh));
+        lobby
+    };
+    for (what, players, car_type, rating, kw, kmh) in [
+        ("an honest car", 4, 27, 735.0, 505.0, 362.0),
+        ("under both numbers", 4, 27, 2999.0, 1499.0, 381.0),
+        ("alone in its race", 1, 27, 1451.0, 2829.0, 381.0),
+        ("a traffic car (a fire truck)", 4, 37, 0.0, 2829.0, 381.0),
+        ("top speed alone", 4, 27, 735.0, 505.0, 1999.0),
+    ] {
+        race(&mut k, players, car_type, rating, kw, kmh);
+        assert!(told.lock().is_empty(), "{what}: none");
+    }
+    let lines_before = k.lines.lock().len();
+    let at_kw = race(&mut k, 4, 27, 1451.0, 2829.0, 381.0);
+    {
+        let t = told.lock();
+        assert_eq!(t.len(), 1, "at the power: told once");
+        let c = &t[0];
+        assert_eq!((c.vip, c.name.as_str(), c.car.as_str(), c.car_type), (W(0), "Evl", "SKYLINE", 27));
+        assert_eq!((c.kw, c.kg, c.kmh, c.rating), (2829.0, 1338.0, 381.0, 1451.0));
+        assert_eq!((c.kind.as_str(), c.laps, c.place.as_str(), c.lobby, c.race), ("sprint", 1, "1st of 4", at_kw, 0x0BADF00D));
+    }
+    assert!(k.lines.lock().len() > lines_before, "its lines first");
+    // the same race again: one report a race, none told
+    k.from(W(0), &racerep_car(100, at_kw, 4, 27, 1451.0, 2829.0, 381.0));
+    assert_eq!(told.lock().len(), 1);
+    race(&mut k, 2, 3, 3000.0, 400.0, 381.0);
+    assert_eq!(told.lock().len(), 2, "at the rating: told");
+    assert_eq!(told.lock()[1].place, "1st of 2");
+    assert_eq!(k.info("carBans"), 2.0);
+    // without the operator's numbers: none, whatever the car
+    let mut k = Kit::new(RoamOptions::default());
+    k.from(W(0), &hello_with(100, &HelloOpts { core: 5, name: b"Evl", ..Default::default() }));
+    k.from(W(0), &racerep_car(100, 0xD1, 4, 27, 5000.0, 9999.0, 381.0));
+    assert_eq!(k.info("carBans"), 0.0);
+}
+
 // the wire: roam_core's report is the hub's line
 #[test]
 fn race_reports_on_the_wire_roam_core_and_the_hub_agree() {
@@ -533,7 +631,8 @@ fn race_reports_on_the_wire_roam_core_and_the_hub_agree() {
     assert_eq!(
         k.lines.lock().as_slice(),
         ["[race] lobby a1b2c3d4, race 0badf00d (sprint, track 4102, 1 lap, 3 cars): Ann K. (host) 2nd of 3 in 95.50 s; 350Z (type 22), \
-          class 2, rating 316.6 (the cars' average 280.5), 214 kW, 1450 kg, 249 km/h, power x1.250"]
+          class 2, rating 316.6 (the cars' average 280.5), 214 kW, 1450 kg, 249 km/h, power x1.250; stage 3; its lobby's stage limit; \
+          past it as the host's friend or crew-mate"]
     );
 }
 
@@ -655,6 +754,52 @@ fn a_lobby_for_friends_and_crew_is_on_their_maps_only() {
         k.step(1100.0);
         k.from(W(0), &lobby_t(100, 1, 0, 0xC1, 0x1111, 0, 0, 0, 6, &[100, 104], t));
         assert_eq!(who(&mut k), want, "t {t:#06x}");
+    }
+}
+
+// A lobby a player could not join is not on its world map (every lobby was, and players drove to ones that were not
+// there for them): one on its way to the race, or full, is on its own players' maps only.  A career lobby's entry (its
+// advert's t: 0x8000 | 0x0001) says so (0x80 on its state), and to its host's friends and crew-mates that its host is
+// theirs (0x40): the game keeps it off the map of a player past its race's stage, as it keeps that one out, but theirs
+#[test]
+fn a_lobby_one_could_not_join_is_not_on_the_map() {
+    let x = fnv1a("x crew");
+    let mut k = Kit::new(RoamOptions::default());
+    put(&mut k, 0, b"carl", Some('C'), &[x], [0.0, 0.0]);
+    put(&mut k, 1, b"anna", Some('A'), &[], [5.0, 0.0]);
+    put(&mut k, 2, b"dave", Some('D'), &[], [10.0, 0.0]);
+    put(&mut k, 3, b"bob", Some('B'), &[], [15.0, 0.0]);
+    put(&mut k, 4, b"eve", None, &[x], [20.0, 0.0]);
+    k.hub.friends(W(0), owner('C'), vec![owner('D')]);
+    k.hub.friends(W(2), owner('D'), vec![owner('C')]);
+    k.hub.tick();
+    // each player's map: the lobby's (players, state) when listed
+    let maps = |k: &mut Kit| {
+        (0..5u32)
+            .map(|i| {
+                k.clear();
+                k.from(W(i), &mapreq_base(100 + i, 1, 2048, 0));
+                lobbies(k).first().and_then(|l| l.2.first().map(|e| (e.3, e.5)))
+            })
+            .collect::<Vec<_>>()
+    };
+    // carl's lobby with anna in it: (state, most players, players, t), what each of carl, anna, dave, bob, eve sees
+    let (o, open) = (None, |st: u8| Some((2u8, st)));
+    let cases: [(u8, u8, &[u32], u16, [Option<(u8, u8)>; 5]); 7] = [
+        (0, 6, &[100, 101], 0x8000, [open(0), open(0), open(0), open(0), open(0)]),
+        (1, 6, &[100, 101], 0x8000, [open(1), open(1), o, o, o]),
+        (2, 6, &[100, 101], 0x8000, [open(2), open(2), o, o, o]),
+        (0, 2, &[100, 101], 0x8000, [open(0), open(0), o, o, o]),
+        (0, 6, &[100, 101], 0x8001, [open(0xC0), open(0x80), open(0xC0), open(0x80), open(0xC0)]),
+        // (its host's stage limit, a lobby that does not count for it: the same; with its host's stage, 3, in bits 2-4)
+        (0, 6, &[100, 101], 0x8080, [open(0xC0), open(0x80), open(0xC0), open(0x80), open(0xC0)]),
+        (0, 6, &[100, 101], 0x8080 | 3 << 9, [open(0xCC), open(0x8C), open(0xCC), open(0x8C), open(0xCC)]),
+    ];
+    for (state, max, ids, t, want) in cases {
+        // (a browser's lobbies go with its map's answer once a second at most)
+        k.step(1100.0);
+        k.from(W(0), &lobby_t(100, 1, 0, 0xC1, 0x1111, 0, 0, state, max, ids, t));
+        assert_eq!(maps(&mut k), want, "state {state}, {}/{max}, t {t:#06x}", ids.len());
     }
 }
 

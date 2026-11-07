@@ -1,0 +1,29 @@
+# GPS Distance (runtime/gpsdistance.c) with co-op free roam's player 2:
+#   node web/tools/roam-pair.mjs --solo --a Gps:gps_distance_coop.txt --env NFSU2_GPS_DISTANCE=1 [--page app]
+# A new career with its GPS on, as in gps_distance.txt; player 2 joins and free roam loads again.
+# The log says whose labels were made ("[gps] ... for player N"): player 1's only, as player 2's HUD has no GPS (its
+# HUD +0x5C 0: the GPS is player 1's in the game).  Then player 2 drives, the pause menu, and the GPS off.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    waitexpr b:0x8385b9 == 1 3000
++300  log SHOT gps_on
++0    roam coop join kb
++0    waitmem 0xd00030 2 3000
++600  log SHOT coop_gps
++0    expect b:0x8385b9 == 1
++0    expect x:[[0xd00000]+0x9a4]+0x5c != 0
++0    expect x:[[0xd00004]+0x9a4]+0x5c == 0
++0    down W
++240  up W
++60   log SHOT coop_moved
++0    tap ESCAPE
++90   log SHOT coop_paused
++0    tap ESCAPE
++90   log SHOT coop_resumed
+# the GPS off by its on byte (with player 2 in, the world map's question takes other keys)
++0    poke 0x8385b9 0 byte
++120  log SHOT gps_off
++0    log GPS COOP DONE
++10   quit

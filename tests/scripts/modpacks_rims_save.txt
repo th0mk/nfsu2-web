@@ -1,0 +1,67 @@
+# A career whose car has a mod's rim (modpacks_rims.txt's profile, --fetch), loaded where the rim is not there to be
+# had: a game folder without MODPACKS (an older page) or with the mod off.  The car in the world (sv_world, photo
+# mode), the body shop's Rims and its brands (sv_rims, sv_brand), a hood bought (sv_hood .. sv_bought: a change, so
+# the game saves), back to Explore Mode with the autosave: --fetch the profile again and see whether it still has the
+# rim's key.  Without MODPACKS the car keeps its stock rims (overrides.c: "[parts] a saved car's part").  The log's "[mods]" lines say what the packs gave.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --data <game folder> --seed <that save tree>
+#        --a Sv:modpacks_rims_save.txt:NFSU2_ROAM=0[,NFSU2_MOD_RIMS=0] --fetch "NFS Underground 2/<profile>/<profile>"
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank: room for a hood
++0    poke 0x838464 1                 # unlock all
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave
++600  photo on
++60   photo orbit
++60   photo turn 80 0
++120  dump sv_world
++0    photo off
++60   shopgo CC_BODYSHOP_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the body shop
++1500 fnglist
++0    loop 10
++30   tap RIGHT                       # to Rims
++60   endloop
++300  dump sv_rims
++30   tap RETURN                      # the brands
++600  fnglist
++0    dump sv_brand
++0    loop 3
++30   tap RIGHT
++60   endloop
++300  dump sv_brand3
++60   tap ESCAPE                      # back to the categories
++300  fnglist
++0    loop 6
++30   tap LEFT                        # to Hoods
++60   endloop
++300  dump sv_hoods
++30   tap RETURN                      # the hoods
++900  fnglist
++30   tap DOWN                        # the next one (the list goes down)
++500  dump sv_hood
++30   tap RETURN                      # buy it: a change, so the game saves
++600  fnglist
++0    dump sv_buy
++30   tap LEFT                        # Yes
++30   tap RETURN
++600  fnglist
++0    dump sv_bought                  # back in the categories
++60   tap ESCAPE
++300  fnglist
++0    dump sv_exit
++0    tap LEFT
++30   tap RETURN                      # Yes: back to Explore Mode
++0    waitfe MC_Main.fng 3000
++120  fnglist
++0    tap LEFT
++30   tap RETURN                      # the autosave: Yes
++120  fnglist
++0    tap LEFT
++30   tap RETURN
++0    waitroam 4000
++600  dump sv_world2
++0    log SAVE DONE
++10   quit

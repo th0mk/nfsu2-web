@@ -1,0 +1,32 @@
+# GPS Distance (runtime/gpsdistance.c) in free roam, alone:
+#   node web/tools/roam-pair.mjs --solo --a Gps:gps_distance.txt --env NFSU2_GPS_DISTANCE=1 [--page app]
+# A new career: its first free roam's message sets the GPS to the first race (smsauto answers it).  The log's
+# "[gps] distance under the arrow for player 1" line says the label was made; then Speedometer Units km/h and mph,
+# driving, the pause menu and back, and the GPS off from the world map.  Pictures (log SHOT) with --page app only.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    waitexpr b:0x8385b9 == 1 3000
++300  log SHOT gps_on
++0    poke 0x83aa1a 1 byte
++60   log SHOT gps_metric
++0    poke 0x83aa1a 0 byte
++60   log SHOT gps_imperial
++0    down UP
++240  up UP
++300  log SHOT gps_driving
++30   tap ESCAPE
++90   log SHOT paused
++30   tap ESCAPE
++90   log SHOT resumed
+# the GPS off: the world map's C, then Yes
++0    tapuntil M UI_InGame_WorldMap.fng 90 1500
++90   tap C
++90   tap LEFT
++20   tap RETURN
++90   tap ESCAPE
++180  expect b:0x8385b9 == 0
++0    log SHOT gps_off
++0    log GPS DISTANCE DONE
++10   quit

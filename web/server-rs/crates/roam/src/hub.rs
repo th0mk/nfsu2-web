@@ -5,7 +5,7 @@
 //! that goes is taken out of every link before its slot is used again, at the next tick or once many have gone, and
 //! until then links to it count for nothing) and `order` lists the slots in the order the players came.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use bytes::{Bytes, BytesMut};
@@ -22,16 +22,26 @@ use crate::links::{
 use crate::results::{self, Results};
 use crate::watch::{self, Seen, Watch};
 use crate::wire::{self, F_DATA, KIND_UDP, Msg};
-use crate::{PeerEntry, ROAM_HUB_VIP, RoamOptions};
+use crate::{CarBan, CarBans, PeerEntry, ROAM_HUB_VIP, RoamOptions};
 
 /// no slot, no place in a room
 const NONE: u32 = u32::MAX;
 
-/// The most slots, and so the most players (`RoamOptions::max_players` at most): a world map's answer names each player
-/// by its slot, under wire::MAPD_PARKED (a key's bit past it says it is parked, to the game's map that asks so; a slot
-/// with that bit would be read as another one's, parked).  The slots of players gone wait for the next purge, an
-/// eighth of the players' worth at most (`drop_slots`): past SLOTS_MAX a new player has them purged first (`insert`).
-const SLOTS_MAX: usize = wire::MAPD_PARKED as usize;
+/// The most slots, and so the most players (`RoamOptions::max_players` at most, 1024 under it).  The slots of players
+/// gone wait for the next purge, an eighth of the players' worth at most (`drop_slots`): past SLOTS_MAX a new player
+/// has them purged first (`insert`).  (Until 24000 places a world map named each player by its slot, which kept the
+/// slots under wire::MAPD_PARKED: now by a key of its own, `MAP_KEYS`.)
+const SLOTS_MAX: usize = 25600;
+
+/// The world map's keys (MAPD, and the minimap's NEARD): a player has one while the maps can show it, in free roam or
+/// paused there (`map_key_sync`), under wire::MAPD_PARKED (a key's bit past it says it is parked, to a game's map that
+/// asks so).  A key that goes back is handed out again last (`Hub::map_free`, first in, first out), after every other
+/// free one: a map that still holds it then has it placed again as the other player (`map_diff`: another id).  Some two
+/// in five of the players have one at once (4,290 of 11,700 on nfsu2.xyz, 2026-11-06), 9,600 of 24000.  None left: a
+/// player shows on no map until one is.
+const MAP_KEYS: usize = wire::MAPD_PARKED as usize;
+/// no world map key
+const NO_KEY: u16 = u16::MAX;
 
 /// a race lobby a player hosts (roam_core.h RC_MSG_LOBBY, an advert to the hub): its id, the race, where it starts,
 /// its players (n, the host first), the most it takes and its state, and whether it takes its host's friends and
@@ -47,6 +57,10 @@ struct HubLobby {
     state: u8,
     ids: [u32; wire::LOBBY_PLAYERS],
     private: bool,
+    /// it keeps out the players past its host's stage (a career lobby, wire::LOBBY_COUNTS_HOST, or its host's
+    /// wire::LOBBY_STAGED), that stage (0: an older game's, its race's)
+    staged: bool,
+    hstage: u8,
 }
 
 /// The race lobby a browser's player hosts, as its last advert to the hub had it (`Hub::hosted`), for an invite to a
@@ -111,10 +125,11 @@ const NEAR_FIRST: i32 = 2;
 const NEAR_BUSY_LOW: f64 = 0.6;
 const NEAR_BUSY_HIGH: f64 = 0.75;
 
-/// a player of a room the world map shows (MAPD): its slot (the key) and id, where it is, as sent
+/// a player of a room the world map shows (MAPD): its slot, its key (`MAP_KEYS`) and id, where it is, as sent
 #[derive(Clone, Copy)]
 struct MapCand {
     slot: u32,
+    key: u16,
     id: u32,
     p: [f64; 3],
     x: i16,
@@ -130,7 +145,7 @@ struct MapCand {
 /// its key said
 #[derive(Clone, Copy)]
 struct MapSent {
-    slot: u32,
+    key: u16,
     id: u32,
     x: i16,
     y: i16,
@@ -173,6 +188,8 @@ struct Shown {
     impostor: bool,
     status: u8,
     heading: u8,
+    /// `Player::map_key`
+    map_key: u16,
     id: u32,
     room: u32,
     p: [f64; 3],
@@ -188,6 +205,7 @@ impl Shown {
             impostor: o.impostor,
             status: o.status,
             heading: o.heading,
+            map_key: o.map_key,
             id: o.id,
             room: o.room,
             p: o.p.unwrap_or_default(),
@@ -200,7 +218,7 @@ impl Shown {
     fn same(a: &Shown, b: &Shown) -> bool {
         let bits = |s: &Shown| {
             (
-                (s.live, s.has_p, s.impostor, s.status, s.heading, s.id, s.room),
+                (s.live, s.has_p, s.impostor, s.status, s.heading, s.map_key, s.id, s.room),
                 s.p.map(f64::to_bits),
                 s.v.map(f64::to_bits),
                 s.pos_at.to_bits(),
@@ -347,8 +365,8 @@ fn crew_cap(degree: usize) -> u32 {
 /// a crew of more players than this in one room gets no links first (its pairs grow as the square of its players:
 /// 64 are 2016), its players link by distance as everyone does, and it counts in `crewSkips`
 const CREW_GROUP_MAX: usize = 64;
-/// the friends a browser's list here holds at most (the server's lists hold 50, and others' friendships add to it)
-const FRIENDS_MAX: usize = 64;
+/// the friends a browser's list here holds at most (the server's lists hold 250, and others' friendships add to it)
+const FRIENDS_MAX: usize = 264;
 /// how near two players' cars are, at most, for one to ask the other to be friends (`linked_with`): their cars touched
 /// front bumpers, and a SNAP is a few hundred ms old at most (30 m: 100 km/h for a second)
 const FRIEND_NEAR_M: f64 = 30.0;
@@ -383,7 +401,27 @@ fn race_line(player: &str, r: &wire::RaceRep) -> String {
             2 => "; a friend's win in the career",
             _ => "",
         }
-    )
+    ) + &lobby_notes(r)
+}
+
+/// what a race report says of its player's career stage and its lobby (the stage limits: every lobby race's line, to
+/// measure them by): "; stage 3; its lobby's stage limit; past it as the host's friend or crew-mate; its host past the
+/// race's stage", none from an older game
+fn lobby_notes(r: &wire::RaceRep) -> String {
+    let mut s = String::new();
+    if r.stage > 0 {
+        s += &format!("; stage {}", r.stage);
+    }
+    if r.lobby_bits & wire::RL_STAGED != 0 {
+        s += "; its lobby's stage limit";
+    }
+    if r.lobby_bits & wire::RL_MATE_PAST != 0 {
+        s += "; past it as the host's friend or crew-mate";
+    }
+    if r.lobby_bits & wire::RL_HOST_PAST != 0 {
+        s += "; its host past the race's stage";
+    }
+    s
 }
 
 /// what no car of the game has, however tuned: engine power (kW), top speed (km/h), the game's rating (nfsu2.xyz,
@@ -396,6 +434,23 @@ const CAR_RATING: f64 = 1000.0;
 /// whether a race report's car is one no tuning makes (CAR_KW, CAR_KMH, CAR_RATING)
 fn over_the_game(r: &wire::RaceRep) -> bool {
     r.kw >= CAR_KW || r.kmh >= CAR_KMH || r.rating >= CAR_RATING
+}
+
+/// the player's car types (CarTypeInfo 0..30, mprace.c N_PLAYER_TYPES); traffic's come after them (free roam lets a
+/// player drive a bus or a fire truck, whose figures are no tuning's)
+const PLAYER_TYPES: u8 = 31;
+
+/// Whether a race report's car is one the server race-bans its player for (`RoamOptions::car_bans`): raced with others,
+/// one of the player's car types, at the operator's engine power or rating or more.  The figures are the car's own, as
+/// its game rated it before the race evened the cars out (mprace.c: the report's car is taken before `balance_race`
+/// scales the engines), so no lobby's evening out makes them.  Its top speed decides nothing (in the live reports every
+/// car past the honest ones' top speed was past their power or rating too).  (nfsu2.xyz, 2026-11-01..07,
+/// 1,464,225 lobby race reports: every car far past the honest ones' best was an edited save, an edited GlobalB, or a
+/// game whose engine a tool had made 2, 3, 4 or 5 times as strong between two races, the rating left as it was.)
+fn server_bans(c: &CarBans, r: &wire::RaceRep) -> bool {
+    r.players >= 2
+        && r.car_type < PLAYER_TYPES
+        && (c.kw.is_some_and(|kw| r.kw >= kw) || c.rating.is_some_and(|rating| r.rating >= rating))
 }
 
 /// the honest times of the lobbies' races an edited car's is compared with (`Times`): the last TIMES_KEPT of each race
@@ -526,6 +581,25 @@ fn edited_car_line(who: &str, r: &wire::RaceRep, c: Option<&Compared>) -> (Optio
     (Some(line), String::new())
 }
 
+/// a race the server race-bans its player for (`server_bans`), as `RoamOptions::car_bans` is told of it
+fn car_ban(vip: u32, name: &str, r: &wire::RaceRep) -> CarBan {
+    CarBan {
+        vip,
+        name: name.to_string(),
+        car: r.name.iter().map(|&c| c as char).collect(),
+        car_type: r.car_type,
+        kw: r.kw,
+        kg: r.kg,
+        kmh: r.kmh,
+        rating: r.rating,
+        kind: results::mode_name(r.mode).to_string(),
+        laps: r.laps,
+        place: place_word(r),
+        lobby: r.lobby,
+        race: r.race,
+    }
+}
+
 /// how a race report's player did: "2nd of 4", "did not finish", "quit"
 fn place_word(r: &wire::RaceRep) -> String {
     match r.place {
@@ -612,6 +686,8 @@ struct Player {
     heading: u8,
     /// where its car's nose points up or down (wire `slope`, %): where its places ahead are (`prepare`)
     slope: i8,
+    /// its world map key while the maps can show it (`MAP_KEYS`, `map_key_sync`), else NO_KEY
+    map_key: u16,
     vip: u32,
     port: u16,
     /// the hub's port it last wrote to (the source port of its list)
@@ -824,6 +900,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         near_gap_ms: f(o.near_gap_ms, d.near_gap_ms),
         link_threads: n(o.link_threads, d.link_threads).min(64),
         deny: o.deny,
+        car_bans: o.car_bans,
     }
 }
 
@@ -854,6 +931,8 @@ struct Stats {
     race_reports: u64,
     /// `[cheat]` lines logged
     cheat_lines: u64,
+    /// races the server race-banned a player for (`server_bans`), told on
+    car_bans: u64,
     /// the minimap's answers (NEARD) sent
     nears: u64,
 }
@@ -1010,6 +1089,8 @@ pub struct Hub {
     st: Stats,
     slots: Vec<Option<Player>>,
     free: Vec<u32>,
+    /// the world map's keys no player has, the one that went back longest ago first (`MAP_KEYS`)
+    map_free: VecDeque<u16>,
     /// the slots of players gone that others' links may still name (`drop_slots`), and by slot whether it is one
     dead: Vec<u32>,
     dead_at: Vec<bool>,
@@ -1108,6 +1189,7 @@ impl Hub {
             st: Stats::default(),
             slots: Vec::new(),
             free: Vec::new(),
+            map_free: (0..MAP_KEYS as u16).collect(),
             dead: Vec::new(),
             dead_at: Vec::new(),
             order: Vec::new(),
@@ -1211,6 +1293,21 @@ impl Hub {
         }
     }
 
+    /// the world map's key of the player in `slot` (`MAP_KEYS`): one while the maps can show it (in free roam or paused
+    /// there), the free one that went back longest ago; back when it is not
+    fn map_key_sync(&mut self, slot: u32) {
+        let Some(p) = self.slots.get_mut(slot as usize).and_then(Option::as_mut) else { return };
+        let want = matches!(p.status, 2 | 5);
+        if want && p.map_key == NO_KEY {
+            if let Some(k) = self.map_free.pop_front() {
+                p.map_key = k;
+            }
+        } else if !want && p.map_key != NO_KEY {
+            self.map_free.push_back(p.map_key);
+            p.map_key = NO_KEY;
+        }
+    }
+
     /// the players in the order they came
     fn players(&self) -> impl Iterator<Item = &Player> + '_ {
         self.order.iter().filter_map(|&s| self.slots.get(s as usize)?.as_ref())
@@ -1226,8 +1323,7 @@ impl Hub {
                 p.watch.reset();
             }
         }
-        // (a world map's key names a slot under SLOTS_MAX: past it, the players gone out of the links now, and their
-        // slots taken again, rather than one more)
+        // (past SLOTS_MAX, the players gone out of the links now, and their slots taken again, rather than one more)
         if self.free.is_empty() && self.slots.len() >= SLOTS_MAX {
             self.purge();
         }
@@ -1249,6 +1345,9 @@ impl Hub {
     /// gone without its BYE, its cheat watch is kept for a while (else summed up now)
     fn remove(&mut self, slot: u32, keep: bool) -> bool {
         let Some(mut p) = self.slots.get_mut(slot as usize).and_then(Option::take) else { return false };
+        if p.map_key != NO_KEY {
+            self.map_free.push_back(p.map_key);
+        }
         self.shown_sync(slot);
         let now = (self.now)();
         if keep && self.kept.len() < self.o.max_players {
@@ -1387,6 +1486,7 @@ impl Hub {
                     v: [0.0; 3],
                     heading: 0,
                     slope: 0,
+                    map_key: NO_KEY,
                     pos_at: 0.0,
                     stay: [0.0; 2],
                     stay_at: f64::INFINITY,
@@ -1427,6 +1527,7 @@ impl Hub {
         let mut ask_near = None;
         let mut report = None;
         let mut edited = None;
+        let mut banned = None;
         let mut seen = [None, None];
         let mut res = None;
         let mut heard = None;
@@ -1497,9 +1598,9 @@ impl Hub {
             // (a browser's maps are its first player's: a second one's questions go unanswered, `Player::seat2`)
             Msg::MapReq { req, max, base, flags } if sender == p.id && !p.seat2 => ask = Some((req, max, base, flags)),
             Msg::NearReq { req, max, base, radius } if sender == p.id && !p.seat2 => ask_near = Some((req, max, base, radius)),
-            Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids, private } if sender == p.id => {
+            Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids, private, staged, hstage } if sender == p.id => {
                 match op {
-                    wire::LOBBY_ADVERT => p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids, private }, now)),
+                    wire::LOBBY_ADVERT => p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids, private, staged, hstage }, now)),
                     wire::LOBBY_CLOSE if p.lobby.is_some_and(|(l, _)| l.id == lobby) => p.lobby = None,
                     wire::LOBBY_JOIN => p.join = Some((lobby, now)),
                     _ => {}
@@ -1516,6 +1617,9 @@ impl Hub {
                 self.times.add(&r);
                 report = Some(race_line(&p.name, &r) + &note);
                 edited = line;
+                if self.o.car_bans.as_ref().is_some_and(|c| server_bans(c, &r)) {
+                    banned = Some(car_ban(p.vip, &p.name, &r));
+                }
             }
             // (a URL race of heats: one a heat of the lobby, at once)
             Msg::RaceRes(r)
@@ -1537,6 +1641,7 @@ impl Hub {
         if check {
             self.check_claim(slot, now);
         }
+        self.map_key_sync(slot);
         self.shown_sync(slot);
         if renamed {
             self.name_check(slot);
@@ -1548,6 +1653,11 @@ impl Hub {
         if let Some(line) = edited {
             self.st.cheat_lines += 1;
             (self.log)(&line);
+        }
+        // (after its lines: the ban names its player by the [cheat] line's handle when there is one)
+        if let (Some(b), Some(c)) = (banned, &self.o.car_bans) {
+            self.st.car_bans += 1;
+            (c.call)(b);
         }
         for s in seen.into_iter().flatten() {
             self.cheat(slot, s, now);
@@ -1692,7 +1802,7 @@ impl Hub {
         let Some(p) = self.player(slot) else { return };
         let mut links: Vec<u32> = p.links.iter().filter(|l| l.dir & DIR_RECV != 0).map(|l| l.slot).collect();
         links.sort_unstable();
-        // (by their places in the room's list, which is by slot; past max, the nearest: each one's distance once, its
+        // (by their places in the room's list, which is by key; past max, the nearest: each one's distance once, its
         // square, which orders them alike; not its browser's other endpoints, whose cars its game shows itself)
         let mut pick: Vec<u32> = (0..cands.len() as u32)
             .filter(|&i| {
@@ -1929,12 +2039,12 @@ impl Hub {
                     Shown::same(&s, &self.player(q).map(Shown::of).unwrap_or_default()),
                     "the minimap grid's slot {q} out of date: {s:?}"
                 );
-                if s.live && s.room == room && self.shown_on_map(q, &s, now) {
-                    list.push(map_cand_of(q, s.id, s.p, s.heading, s.v, ahead_of(s.p, s.v, s.pos_at, now), false));
+                if s.live && s.room == room && self.shown_on_map(&s, now) {
+                    list.push(map_cand_of(q, s.map_key, s.id, s.p, s.heading, s.v, ahead_of(s.p, s.v, s.pos_at, now), false));
                 }
             }
         }
-        list.sort_unstable_by_key(|c| c.slot);
+        list.sort_unstable_by_key(|c| c.key);
         self.near_picks = picks;
         self.near_found = found;
         self.near_mark = mark;
@@ -1981,7 +2091,7 @@ impl Hub {
     fn near_grid_of(&self, now: f64, nth: u64) -> NearGrid {
         let mut v: Vec<((u32, i32, i32), NearItem)> = Vec::with_capacity(self.order.len());
         for &q in &self.order {
-            let Some(o) = self.player(q).filter(|o| self.map_shown(q, o, now)) else { continue };
+            let Some(o) = self.player(q).filter(|o| self.map_shown(o, now)) else { continue };
             let at = ahead(o, now);
             let left = (MAP_AHEAD_MS - (now - o.pos_at).max(0.0)).max(0.0) / 1000.0;
             let it = NearItem { slot: q, x: at[0] as f32, y: at[1] as f32, vx: o.v[0] as f32, vy: o.v[1] as f32, left: left as f32 };
@@ -2001,15 +2111,15 @@ impl Hub {
         NearGrid { at: now, nth, keys: v.iter().map(|e| e.0).collect(), rows, live, items: v.into_iter().map(|e| e.1).collect(), pos }
     }
 
-    /// a player in `slot` the maps show: in free roam (or paused there), a position younger than map_fresh_ms, no
-    /// impostor, a slot a MAPD key can name
-    fn map_shown(&self, slot: u32, o: &Player, now: f64) -> bool {
-        slot < wire::MAPD_GONE as u32 && !o.impostor && o.p.is_some() && now - o.pos_at <= self.o.map_fresh_ms && matches!(o.status, 2 | 5)
+    /// a player the maps show: in free roam (or paused there), a position younger than map_fresh_ms, no impostor, a
+    /// world map key (`MAP_KEYS`)
+    fn map_shown(&self, o: &Player, now: f64) -> bool {
+        o.map_key != NO_KEY && !o.impostor && o.p.is_some() && now - o.pos_at <= self.o.map_fresh_ms && matches!(o.status, 2 | 5)
     }
 
     /// `map_shown` of the player in `slot`, as `shown` has it
-    fn shown_on_map(&self, slot: u32, s: &Shown, now: f64) -> bool {
-        slot < wire::MAPD_GONE as u32 && !s.impostor && s.has_p && now - s.pos_at <= self.o.map_fresh_ms && matches!(s.status, 2 | 5)
+    fn shown_on_map(&self, s: &Shown, now: f64) -> bool {
+        s.map_key != NO_KEY && !s.impostor && s.has_p && now - s.pos_at <= self.o.map_fresh_ms && matches!(s.status, 2 | 5)
     }
 
     /// the players of `room` a world map shows (MAPD), by slot: in free roam (or paused there), a position younger
@@ -2023,17 +2133,21 @@ impl Hub {
             .iter()
             .filter_map(|&q| {
                 let o = self.player(q)?;
-                (o.room == room && self.map_shown(q, o, now)).then(|| map_cand(q, o, ahead(o, now), now))
+                (o.room == room && self.map_shown(o, now)).then(|| map_cand(q, o, ahead(o, now), now))
             })
             .collect();
-        list.sort_unstable_by_key(|c| c.slot);
+        list.sort_unstable_by_key(|c| c.key);
         list
     }
 
     /// With the world map's answer, to a player that takes race lobbies: the open lobbies of its room (any player's,
     /// its own too, an advert younger than LOBBY_STALE_MS), nearest first, LOBBIES_MAX at most, in one datagram.  A
     /// lobby for its host's friends and crew-mates only (`HubLobby::private`) only to them, to the players it lists
-    /// and to its host.
+    /// and to its host.  One the player could not join, full or starting its race (a map showed them all, and
+    /// players drove to lobbies that were not there for them, 2026-11-05), only to its own players.  The entry of a
+    /// lobby that keeps out the players past its host's stage says so, with that stage, and whether its host is the
+    /// player's friend or crew-mate (wire::LOBBIES_STAGED, LOBBIES_HSTAGE, LOBBIES_MATE): the game keeps it off the map
+    /// for a player past that stage, as it keeps that one out.
     fn lobbies(&mut self, slot: u32, req: u16, now: f64) {
         let Some(p) = self.player(slot) else { return };
         if !p.lobbies || p.impostor {
@@ -2050,11 +2164,20 @@ impl Hub {
             if self.apart_from(slot, q, p, o) {
                 continue;
             }
-            if l.private && q != slot && !l.ids[..(l.n as usize).min(wire::LOBBY_PLAYERS)].contains(&p.id) && !mates(p, o) {
+            let ours = q == slot || l.ids[..(l.n as usize).min(wire::LOBBY_PLAYERS)].contains(&p.id);
+            if l.private && !ours && !mates(p, o) {
                 continue;
             }
+            if !ours && (l.state != 0 || l.n >= l.max) {
+                continue;
+            }
+            let state = if l.staged {
+                l.state | wire::LOBBIES_STAGED | (l.hstage & 7) << wire::LOBBIES_HSTAGE | if mates(p, o) { wire::LOBBIES_MATE } else { 0 }
+            } else {
+                l.state
+            };
             let d = distance(&at, &[l.x as f64, l.y as f64, at[2]]);
-            near.push((order_key(d), (l.x, l.y, l.race, l.n, l.max, l.state)));
+            near.push((order_key(d), (l.x, l.y, l.race, l.n, l.max, state)));
         }
         near.sort_by_key(|e| e.0);
         near.truncate(wire::LOBBIES_MAX);
@@ -2659,12 +2782,12 @@ impl Hub {
         self.players().filter(|p| p.seat2 && matches!(p.status, 2 | 5) && !p.impostor).count()
     }
 
-    /// `in_roam()` by room, for the rooms with a name (room 0, none, is everyone's and not here): the server's
-    /// /players `room`, for the start page of a player who set one
+    /// `in_roam()` by room (room 0, none, is the main world: everyone's): the server's /players `room` and `rooms`, for
+    /// the start page and the page menu's World
     pub fn in_rooms(&self) -> HashMap<u32, usize> {
         let mut seen = HashSet::new();
         let mut n = HashMap::new();
-        for p in self.players().filter(|p| p.room != 0 && matches!(p.status, 2 | 5) && !p.impostor) {
+        for p in self.players().filter(|p| matches!(p.status, 2 | 5) && !p.impostor) {
             if seen.insert((p.room, p.vip)) {
                 *n.entry(p.room).or_insert(0) += 1;
             }
@@ -2735,9 +2858,11 @@ impl Hub {
             "nearGone": self.s.ow.gone.to_vec(),
             "raceReports": st.race_reports,
             "cheatLines": st.cheat_lines,
+            "carBans": st.car_bans,
             "nears": st.nears,
             "threadBusy": num(self.thread_busy),
             "watchesKept": self.kept.len(),
+            "mapKeys": MAP_KEYS - self.map_free.len(),
             "blocking": self.blocks.len(),
             "keptApart": self.apart.len(),
             "coopSeats": self.coop_seats(),
@@ -4244,14 +4369,15 @@ fn ahead_of(pos: [f64; 3], v: [f64; 2], pos_at: f64, now: f64) -> [f64; 2] {
 /// a player in `slot` as a map places it, at `at` (`ahead`): whole metres, its velocity in whole m/s; parked if it
 /// has stood at one spot for PARKED_MS by `now`
 fn map_cand(slot: u32, o: &Player, at: [f64; 2], now: f64) -> MapCand {
-    map_cand_of(slot, o.id, o.p.unwrap_or_default(), o.heading, [o.v[0], o.v[1]], at, now - o.stay_at >= PARKED_MS)
+    map_cand_of(slot, o.map_key, o.id, o.p.unwrap_or_default(), o.heading, [o.v[0], o.v[1]], at, now - o.stay_at >= PARKED_MS)
 }
 
-/// `map_cand` of a player with that id, position, heading and velocity
-fn map_cand_of(slot: u32, id: u32, p: [f64; 3], heading: u8, v: [f64; 2], at: [f64; 2], parked: bool) -> MapCand {
+/// `map_cand` of a player with that key, id, position, heading and velocity
+#[allow(clippy::too_many_arguments)]
+fn map_cand_of(slot: u32, key: u16, id: u32, p: [f64; 3], heading: u8, v: [f64; 2], at: [f64; 2], parked: bool) -> MapCand {
     let c = |x: f64| (x + 0.5).floor().clamp(-32767.0, 32767.0) as i16;
     let w = |x: f64| x.round().clamp(-127.0, 127.0) as i8;
-    MapCand { slot, id, p, x: c(at[0]), y: c(at[1]), heading, vx: w(v[0]), vy: w(v[1]), parked }
+    MapCand { slot, key, id, p, x: c(at[0]), y: c(at[1]), heading, vx: w(v[0]), vy: w(v[1]), parked }
 }
 
 /// the NEARD grid's cell of a coordinate (m)
@@ -4259,30 +4385,30 @@ fn near_cell(x: f64) -> i32 {
     (x / NEAR_CELL_M).floor().clamp(-1e6, 1e6) as i32
 }
 
-/// MAPD (and NEARD): the entries that take a map from `from` (by slot) to `list` (by slot): each player come, or moved
-/// off where the page has it now (tol_m metres, or its heading tol_h), placed, each one gone gone; with where each entry
-/// ends in the bytes, and what the map holds after them (by slot).  With `parked`, a parked player's key has
-/// wire::MAPD_PARKED (a slot under it: every one), one parked since or no longer is placed again, and each placed
-/// one's height follows (wire::MAPD_PLACE_Z).
+/// MAPD (and NEARD): the entries that take a map from `from` (by key) to `list` (by key: the game merges them in that
+/// order): each player come, or moved off where the page has it now (tol_m metres, or its heading tol_h), or another
+/// player under its key (another id), placed, each one gone gone; with where each entry ends in the bytes, and what the
+/// map holds after them (by key).  With `parked`, a parked player's key has wire::MAPD_PARKED, one parked since or no
+/// longer is placed again, and each placed one's height follows (wire::MAPD_PLACE_Z).
 fn map_diff(from: &[MapSent], list: &[MapCand], now: f64, tol_m: f64, tol_h: u8, parked: bool) -> (Vec<u8>, Vec<usize>, Vec<MapSent>) {
     let (mut e, mut ends, mut next) = (Vec::new(), Vec::new(), Vec::with_capacity(list.len()));
-    let pk = |c: &MapCand| parked && c.parked && c.slot < wire::MAPD_PARKED as u32;
+    let pk = |c: &MapCand| parked && c.parked && c.key < wire::MAPD_PARKED;
     let place = |e: &mut Vec<u8>, c: &MapCand| {
-        e.extend_from_slice(&(c.slot as u16 | if pk(c) { wire::MAPD_PARKED } else { 0 }).to_le_bytes());
+        e.extend_from_slice(&(c.key | if pk(c) { wire::MAPD_PARKED } else { 0 }).to_le_bytes());
         e.extend_from_slice(&c.x.to_le_bytes());
         e.extend_from_slice(&c.y.to_le_bytes());
         e.extend_from_slice(&[c.heading, c.vx as u8, c.vy as u8]);
         if parked {
             e.extend_from_slice(&((c.p[2] + 0.5).floor().clamp(-32767.0, 32767.0) as i16).to_le_bytes());
         }
-        MapSent { slot: c.slot, id: c.id, x: c.x, y: c.y, heading: c.heading, vx: c.vx, vy: c.vy, parked: pk(c), t: now }
+        MapSent { key: c.key, id: c.id, x: c.x, y: c.y, heading: c.heading, vx: c.vx, vy: c.vy, parked: pk(c), t: now }
     };
     let (mut i, mut j) = (0, 0);
     while i < from.len() || j < list.len() {
         let (a, c) = (from.get(i), list.get(j));
         let was = e.len();
         match (a, c) {
-            (Some(a), Some(c)) if a.slot == c.slot => {
+            (Some(a), Some(c)) if a.key == c.key => {
                 let dt = (now - a.t) / 1000.0;
                 let (dx, dy) = (c.x as f64 - (a.x as f64 + a.vx as f64 * dt), c.y as f64 - (a.y as f64 + a.vy as f64 * dt));
                 let dh = c.heading.wrapping_sub(a.heading).min(a.heading.wrapping_sub(c.heading));
@@ -4293,8 +4419,8 @@ fn map_diff(from: &[MapSent], list: &[MapCand], now: f64, tol_m: f64, tol_h: u8,
                 });
                 (i, j) = (i + 1, j + 1);
             }
-            (Some(a), c) if c.is_none_or(|c| a.slot < c.slot) => {
-                e.extend_from_slice(&(a.slot as u16 | wire::MAPD_GONE).to_le_bytes());
+            (Some(a), c) if c.is_none_or(|c| a.key < c.key) => {
+                e.extend_from_slice(&(a.key | wire::MAPD_GONE).to_le_bytes());
                 i += 1;
             }
             (_, Some(c)) => {

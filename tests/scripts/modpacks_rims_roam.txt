@@ -1,0 +1,15 @@
+# Free roam: friends' cars with a mod's rims (runtime/modpacks.c: everyone's game has them, each one's switch only
+# the shops').  Two careers whose car has a Blitz rim (modpacks_rims.txt's profile), in one room: "mp rims" must say
+# the friend's car has its rims' models (the shops' rims, CARS\WHEELS\GEOMETRY_BLITZ.BIN from MODPACKS), whatever
+# each page's switch is.
+#   node web/tools/roam-pair.mjs --page play --size 960x540 --data <game folder with MODPACKS> --seed <that save tree>
+#        --a Al:modpacks_rims_roam.txt:NFSU2_MOD_RIMS=1 --b Bo:modpacks_rims_roam.txt:NFSU2_MOD_RIMS=0
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++600  roam mp rims
++0    roam mp solids
++120  log ROAM RIMS DONE
++10   quit

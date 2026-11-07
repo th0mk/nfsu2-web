@@ -3,7 +3,7 @@
 import { CTL_EXIT, CTL_INTS, CTL_NEXT_TID, CTL_POOL, MAX_THREADS, POOL_IDLE, POOL_NONE, POOL_RUN_MAIN, RPC_BYTES, type BootConfig, type ToPage } from './proto';
 import { tzEnv } from './tz';
 import { movieCodec } from './movie';
-import { allocMemory, memoryTries } from './memory';
+import { allocMemory, memoryOffPage, memoryTries, MemoryBuffer, type GameMemory } from './memory';
 
 export interface ProcessOptions {
   module: WebAssembly.Module;
@@ -11,6 +11,8 @@ export interface ProcessOptions {
   pool?: number;                         // game-thread workers at most (started as threads need them; default 24)
   poolStart?: number;                    // ... and at first (default POOL_START)
   initialPages?: number;                 // wasm pages (64 KiB) of the shared memory at start
+  /** the page holds the memory's buffer only, not the WebAssembly.Memory (memory.ts; default: in WebKit) */
+  memoryOffPage?: boolean;
   onLog?: (s: string, fd: number, tid: number) => void;
   onExit?: (code: number) => void;
   onRegister?: (kind: number, ptr: number, size: number) => void;
@@ -31,7 +33,10 @@ export interface ProcessOptions {
 }
 
 export interface GameProcess {
-  memory: WebAssembly.Memory;
+  /** the WebAssembly.Memory, or in WebKit its buffer only (memory.ts MemoryBuffer: the newest as it grows) */
+  memory: GameMemory;
+  /** f gets each new buffer of the memory as it grows, where the page holds the buffer only (the network's worker) */
+  onGrow(f: (buf: SharedArrayBuffer) => void): void;
   ctl: Int32Array;
   exited: Promise<number>;
   terminate(): void;
@@ -54,6 +59,8 @@ function memoryPagesOf(mod: WebAssembly.Module): number | null {
 const POOL_START = 12, POOL_SPARE = 2;
 /** how long the I/O worker may take to say it is ready (startProcess) */
 const IO_START_MS = 45_000;
+/** ... and the first pool of game workers after it */
+const POOL_START_MS = 45_000;
 
 export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   const pool = Math.min(o.pool ?? 24, MAX_THREADS);
@@ -64,11 +71,21 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   const initial = o.initialPages ?? memoryPagesOf(o.module) ?? 16384;
   // the build's size, able to grow to 4 GB, or not growing where the browser refuses that (memory.ts); on a computer
   // 2 GB first, for the guest heap's window (NFSU2_HEAP_WINDOW=1: app/shell.ts, or a test page's env); the log says which
-  let got: ReturnType<typeof allocMemory>;
-  try { got = allocMemory(memoryTries(initial, cfg.env.NFSU2_HEAP_WINDOW === '1')); }
-  catch (e) { const n = (e as { note?: string } | null)?.note; if (n) o.onNote?.(n); throw e; }
-  const { memory, note } = got;
-  o.onNote?.(note);
+  const tries = memoryTries(initial, cfg.env.NFSU2_HEAP_WINDOW === '1');
+  // In WebKit the page holds the memory's buffer only (memory.ts): the I/O worker makes the Memory and sends the page
+  // its buffer, and each game thread gets the Memory from there on a port (withMemoryPort).  `kept`: the page's own
+  // Memory elsewhere, made here as before
+  const offPage = o.memoryOffPage ?? memoryOffPage();
+  let kept: WebAssembly.Memory | null = null;
+  if (!offPage) {
+    let got: ReturnType<typeof allocMemory>;
+    try { got = allocMemory(tries); }
+    catch (e) { const n = (e as { note?: string } | null)?.note; if (n) o.onNote?.(n); throw e; }
+    o.onNote?.(got.note);
+    kept = got.memory;
+  }
+  let memory: GameMemory | null = kept;
+  const growers: ((buf: SharedArrayBuffer) => void)[] = [];
   const ctlBuf = new SharedArrayBuffer(CTL_INTS * 4), rpc = new SharedArrayBuffer(RPC_BYTES);
   const ctl = new Int32Array(ctlBuf);
   ctl[CTL_NEXT_TID] = 1;
@@ -78,20 +95,35 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   let resolveExit!: (c: number) => void;
   const exited = new Promise<number>(r => (resolveExit = r));
   const workers: Worker[] = [];
-  const onMsg = (e: MessageEvent<ToPage | { t: 'register'; kind: number; ptr: number; size: number }>) => {
+  const onMsg = (e: MessageEvent<ToPage | { t: 'register'; kind: number; ptr: number; size: number; bytes?: number }>) => {
     const m = e.data;
     if (m.t === 'log') o.onLog?.(m.s, m.fd, m.tid);
     else if (m.t === 'trap') o.onLog?.(`TRAP in thread ${m.tid}: ${m.msg}\n${m.stack ?? ''}`, 2, m.tid);
     else if (m.t === 'pool') topUp();
+    else if (m.t === 'memory-please') {
+      if (!viaPage) { viaPage = true; o.onNote?.(`[memory] game worker ${m.slot}: ${m.why}; the game threads get it through the page`); }
+      io.postMessage({ t: 'give-page', slot: m.slot });
+    }
     else if (m.t === 'exit') {
       o.onNote?.(`[pool] ${started} game workers started, at most ${mostBusy} threads at once`);
       o.onExit?.(m.code); resolveExit(m.code);
     }
     else if (m.t === 'register') {
-      regs.set(m.kind, { ptr: m.ptr, size: m.size });
-      for (const w of regWaiters.get(m.kind) ?? []) w({ ptr: m.ptr, size: m.size });
-      regWaiters.delete(m.kind);
-      o.onRegister?.(m.kind, m.ptr, m.size);
+      const done = () => {
+        regs.set(m.kind, { ptr: m.ptr, size: m.size });
+        for (const w of regWaiters.get(m.kind) ?? []) w({ ptr: m.ptr, size: m.size });
+        regWaiters.delete(m.kind);
+        o.onRegister?.(m.kind, m.ptr, m.size);
+      };
+      // a structure (and what its subsystem made before it) in memory grown since the page's buffer: once the I/O worker
+      // sent the new buffer (memory.ts), not before, or the page reads past its buffer
+      const need = m.bytes ?? 0;
+      const buf = memory;
+      if (buf instanceof MemoryBuffer && need > buf.buffer.byteLength) void buf.until(need).then(ok => {
+        if (!ok) o.onNote?.(`[memory] a grown memory's buffer did not come in time (${Math.round(need / 1048576)} MB)`);
+        done();
+      });
+      else done();
     }
   };
 
@@ -107,22 +139,49 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     // (its lines as it starts too: playing without saving, what it copied into memory)
     io.onmessage = (e) => {
       if (e.data.t === 'io-ready') { clearTimeout(late); res(); }
-      else if (e.data.t === 'io-error') { clearTimeout(late); rej(new Error(e.data.msg)); }
+      // the memory it made (offPage): its buffer, and the line saying which size
+      else if (e.data.t === 'memory') { memory = new MemoryBuffer(e.data.buf); o.onNote?.(e.data.note); }
+      else if (e.data.t === 'io-error') {
+        clearTimeout(late);
+        io.terminate();                      // (and with it a memory it made)
+        // (a size refused: as the page's own refusal would be, for its message to the player and the log's line)
+        if (e.data.note) o.onNote?.(e.data.note);
+        rej(e.data.range ? new RangeError(e.data.msg) : new Error(e.data.msg));
+      }
       else if (e.data.t === 'log') o.onNote?.(e.data.s);
     };
-    io.postMessage({ memory, ctl: ctlBuf, rpc, cfg });
+    io.postMessage(offPage ? { tries, ctl: ctlBuf, rpc, cfg } : { memory: kept, ctl: ctlBuf, rpc, cfg });
   });
+  if (!memory) throw new Error('the I/O worker made no memory');
+  const mem: GameMemory = memory;
   io.onmessage = (e) => {
     if (e.data.t === 'saved') o.onSaved?.(e.data.path);
     else if (e.data.t === 'removed') o.onRemoved?.(e.data.path);
     else if (e.data.t === 'lost') o.onLost?.(e.data.path);
     else if (e.data.t === 'save-trouble') o.onSaveTrouble?.(e.data.error);
     else if (e.data.t === 'log') o.onNote?.(e.data.s);
+    // the Memory for a game thread where the I/O worker could not post it on a port (withMemoryPort)
+    else if (e.data.t === 'give-here') bySlot.get(e.data.slot)?.postMessage({ t: 'memory', memory: e.data.memory });
+    // the memory grew: its new buffer (where the page holds the buffer only)
+    else if (e.data.t === 'mem') {
+      if (memory instanceof MemoryBuffer && memory.grew(e.data.buf)) {
+        for (const f of growers) f(e.data.buf);
+        o.onNote?.(`[memory] ${Math.round(e.data.buf.byteLength / 1048576)} MB now (it grew)`);
+      }
+    }
     else if (e.data.t === 'save-gone')
       void Promise.resolve().then(() => o.onSaveGone?.()).catch(err => o.onNote?.(`[app] the saves could not be put back: ${err}`))
         .finally(() => io.postMessage({ t: 'save-ready' }));
   };
 
+  // the port first to the worker, then its other end to the I/O worker, which posts the Memory on it
+  const withMemoryPort = (slot: number, send: (port: MessagePort) => void) => {
+    const ch = new MessageChannel();
+    send(ch.port2);
+    io.postMessage({ t: 'give', port: ch.port1, slot }, [ch.port1]);
+  };
+  const bySlot = new Map<number, Worker>();
+  let viaPage = false;
   for (let s = 0; s < pool; s++) ctl[CTL_POOL + 4 * s] = POOL_NONE;   // each worker makes its slot idle when ready
   let started = 0, starting = 0, mostBusy = 0;
   const startWorker = () => {
@@ -132,7 +191,9 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
       w.onmessage = (e) => { if (e.data.t === 'ready') { starting--; w.onmessage = onMsg; res(); } else onMsg(e); };
     });
     w.onerror = (e) => o.onNote?.(`[pool] game worker ${s}: ${e.message}`);
-    w.postMessage({ mod: o.module, memory, ctl: ctlBuf, rpc, slot: s, pool, cfg });
+    bySlot.set(s, w);
+    if (offPage) withMemoryPort(s, port => w.postMessage({ mod: o.module, memPort: port, ctl: ctlBuf, rpc, slot: s, pool, cfg }, [port]));
+    else w.postMessage({ mod: o.module, memory: kept, ctl: ctlBuf, rpc, slot: s, pool, cfg });
     workers.push(w);
     return ready;
   };
@@ -143,12 +204,22 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     mostBusy = Math.max(mostBusy, started - starting - idle);
     for (let n = idle + starting; n < POOL_SPARE && started < pool; n++) void startWorker();
   };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(o.poolStart ?? POOL_START, pool)) }, startWorker));
+  // the first pool ready in POOL_START_MS at most: one that never is (a thread whose memory never came) is a game that
+  // does not start, said so, never a black stage for good
+  let poolLate: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([Promise.all(Array.from({ length: Math.max(1, Math.min(o.poolStart ?? POOL_START, pool)) }, startWorker)),
+      new Promise((_, no) => { poolLate = setTimeout(() => no(new Error(`the game's threads did not start in ${POOL_START_MS / 1000} s`)), POOL_START_MS); })]);
+  } catch (e) {
+    for (const w of workers) w.terminate();
+    throw e;
+  } finally { clearTimeout(poolLate); }
   // slot 0 runs the process entry
   Atomics.store(ctl, CTL_POOL, POOL_RUN_MAIN); Atomics.notify(ctl, CTL_POOL);
 
   return {
-    memory, ctl, exited,
+    memory: mem, ctl, exited,
+    onGrow(f) { growers.push(f); },
     registered(kind: number) {
       const r = regs.get(kind);
       if (r) return Promise.resolve(r);

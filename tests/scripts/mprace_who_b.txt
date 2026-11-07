@@ -1,0 +1,18 @@
+# Who can join a lobby and the cars against ours, the side that comes to it (with mprace_who_a.txt; a stage 3 career):
+# the host's lobby is there for it (no stage limit: its host is past the race's stage, as it is), its car is rated
+# from the host's car-look record (RC_EXT_RATING), and it joins.
+# Bob's log: "Ann's lobby ...: shown 1; staged 0, host past 1, cars off x...", "Ann: <car> rated <n>, against ours <k>",
+# "our car: <car> rated <n>", "mp join: asked to join Ann", then in the lobby.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 12000
++300  roam mp follow Ann 6 0
++300  roam mp lobby
++0    log LOBBY at the lobby
++0    roam mp join
++180  roam mp lobby
++0    log LOBBY DONE
++600  quit

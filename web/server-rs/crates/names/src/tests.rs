@@ -150,6 +150,58 @@ pub(crate) const BLOCKED: &[&str] = &[
     "DeathToJews",
     "g4sTh3J3ws",
     "BurnDaJews",
+    // the live server's names of 2026-11-07, made up the same ways: Nazi words spelled round the lists, nazi starting
+    // or ending a part, 1488 with signs between its digits
+    "SiegHail",
+    "Seig_Heil",
+    "ZigHeil",
+    "Heil_H",
+    "HeilAH42",
+    "55Heil",
+    "Heil_SS",
+    "Hilter420",
+    "H1tl8r_x",
+    "Reltih",
+    "MeinFurher",
+    "WaffenSS",
+    "TheThirdReich",
+    "GestapoGT",
+    "Goering_Fan",
+    "ReadMeinKampf",
+    "xXnaziXx",
+    "supernazi",
+    "nazidrift",
+    "Max14_88",
+    "Dan_1_4_8_8",
+    "Jewhater",
+    "NoJewsAllowed",
+    "Austrian_Drawer",
+    "KKK_Klansman",
+    "Heil4thReich",
+    "HolocaustDenial",
+    "Goebbelz_Fan",
+    "Big_Hitlor",
+    "AdolfWasRight",
+    "Adolf_The_Painter",
+    "White_Pride_TR",
+    "Jew_Kil",
+    "JewsKiller",
+    "YahudiSiker",
+    "Ya_Natsist",
+    "Nacista",
+    "thenigaman",
+    "Nigakill3r",
+    "FuckZyd",
+    "Adolf",
+    "MrAdolf",
+    "Adolf_42",
+    "Ad0lf",
+    "Adolph",
+    "Reich",
+    "R3ICH_TR",
+    "Holocaust_TR",
+    "SwastikaKing",
+    "Mr_Bitler",
 ];
 /// 'ñigga', 'nіgga' (Cyrillic і), fullwidth, 'ΝΙGGΑ' (Greek Ν Ι Α), combining low lines, circled, 'fаg' (Cyrillic а),
 /// 'Ηitler' (Greek Η), fullwidth, fullwidth digits
@@ -229,7 +281,6 @@ pub(crate) const ALLOWED: &[&str] = &[
     "Vitaliba_Nox",
     "Grapes",
     "Trapezio",
-    "Adolf",
     "Nazim",
     "Nazif",
     "Nygaard",
@@ -294,6 +345,40 @@ pub(crate) const ALLOWED: &[&str] = &[
     "Deadpool",
     "Bombshell",
     "Shooter",
+    // next to the words of 2026-11-07: the names that start (or are) nazi as read, l for i
+    "Nazli",
+    "NAZLI",
+    "Nazli_GS",
+    "Nazilli",
+    "Nazlican",
+    "Nazir",
+    "Nazia",
+    "Nazife",
+    "Nazik",
+    "Nazih",
+    "Nazio",
+    "Ignazio",
+    "Ignazi",
+    "Schlitter",
+    "HellsSpawn",
+    "Hellhammer",
+    "Sheila",
+    "Heilig",
+    "Casinojewel",
+    "Waffen",
+    "Panzer",
+    "Reichert",
+    "Car14_89",
+    "Nazl\u{131}",
+    "Nazib",
+    "Shitlord",
+    "Goebel",
+    "Kaiserreich",
+    "Adolfo",
+    "Adolfinho",
+    "Swastik",
+    "Zyklon",
+    "Rudolf",
 ];
 
 // names.mjs: the lists' words, the ways round them, and not the other words
@@ -364,9 +449,11 @@ fn numbers_and_letters() {
     assert!(!blocked_name("Xni99A") && blocked_name("XNI99A") && blocked_name("Ni99A"));
     // one digit is always read as a letter, or for 2 as none: a split, the name's letters still read together
     assert!(blocked_name("f4g") && blocked_name("f2ag") && blocked_name("fa2g2") && !blocked_name("fa2g2x"));
-    // 1488 anywhere, in any run of digits, past the 255 letters too; not its digits apart
+    // 1488 anywhere, in any run of digits, past the 255 letters too, spaces, _ or - between its digits or not; not
+    // other signs between them (a lap time, a price) or other digits
     assert!(blocked_name("x1488x") && blocked_name("2281488") && blocked_name(&("x".repeat(300) + "1488")));
-    assert!(!blocked_name("14 88") && !blocked_name("1448") && !blocked_name("14_88"));
+    assert!(blocked_name("14 88") && blocked_name("14_88") && blocked_name("1-4-8-8") && blocked_name("x_14__88_"));
+    assert!(!blocked_name("1448") && !blocked_name("1:48.8") && !blocked_name("14.88") && !blocked_name("14x88"));
 }
 
 #[test]

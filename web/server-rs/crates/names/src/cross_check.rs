@@ -219,14 +219,14 @@ const NEAR: &[&str] = &[
 /// pieces of the made-up names: the lists' words, the near misses, the names this server sees most, digits
 fn pieces() -> Vec<&'static str> {
     let mut p: Vec<&str> =
-        ANYWHERE.iter().chain(WHOLE).chain(EDGE).chain(EDGE_OK_START).chain(EDGE_OK_END).chain(PID_STEMS).copied().collect();
+        ANYWHERE.iter().chain(WHOLE).chain(EDGE).chain(EDGE_OK_START).chain(EDGE_OK_END).chain(WHOLE_OK).chain(PID_STEMS).copied().collect();
     p.extend(NEAR);
     p.extend([
         "mustafa", "gs", "raccoon", "spice", "spicy", "niger", "pakize", "pakistan", "xx", "gamer", "a", "g", "dani", "hakan", "van",
         "tycoon", "trigger", "ibrahim", "99", "1995", "69", "42",
     ]);
     // the neo-Nazi code and other numbers, names with the new words' letters in them
-    p.extend(["1488", "88", "spider", "shinigami", "zuniga", "adolf"]);
+    p.extend(["1488", "88", "14", "1_4", "8-8", "spider", "shinigami", "zuniga", "adolf"]);
     // a lone n before digits, the "pid" words' surroundings, Nigeria
     p.extend(["n", "1663", "pid", "topi", "drift", "nigeria"]);
     // the hate phrases' words, and a word that starts as their group does
@@ -407,12 +407,12 @@ const SCRIPT: &str = r#"
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 const [names, corpus] = process.argv.slice(2);
-const { SLURS, EDGE_OK, PID_STEMS, HATE, blockedName } = await import(pathToFileURL(names).href);
+const { SLURS, EDGE_OK, WHOLE_OK, PID_STEMS, HATE, blockedName } = await import(pathToFileURL(names).href);
 let blocked = '';
 for (const n of JSON.parse(fs.readFileSync(corpus, 'utf8'))) blocked += blockedName(n) ? '1' : '0';
 const m = /const LOOKALIKE = (\{[\s\S]*?\});/.exec(fs.readFileSync(names, 'utf8'));
 const lookalike = m && Object.entries(Function(`return (${m[1]})`)()).map(([k, v]) => [k.codePointAt(0), v.codePointAt(0)]);
-process.stdout.write(JSON.stringify({ blocked, slurs: SLURS, edgeOk: EDGE_OK, stems: PID_STEMS, hate: HATE, lookalike }));
+process.stdout.write(JSON.stringify({ blocked, slurs: SLURS, edgeOk: EDGE_OK, wholeOk: WHOLE_OK, stems: PID_STEMS, hate: HATE, lookalike }));
 "#;
 
 /// a folder of its own under the system's temp, gone with it
@@ -454,6 +454,7 @@ fn answers_as_names_mjs() {
     assert_eq!(strings(&js["slurs"]["edge"]), EDGE, "the edge list");
     assert_eq!(strings(&js["edgeOk"]["start"]), EDGE_OK_START, "the edge list's words a part may start with");
     assert_eq!(strings(&js["edgeOk"]["end"]), EDGE_OK_END, "the edge list's words a part may end with");
+    assert_eq!(strings(&js["wholeOk"]), WHOLE_OK, "the names a part may be that read as a word of the whole list");
     assert_eq!(strings(&js["stems"]), PID_STEMS, "the English words' starts before a pid word");
     assert_eq!(strings(&js["hate"]["verbs"]), HATE_VERBS, "the hate phrases' verbs");
     assert_eq!(strings(&js["hate"]["between"]), HATE_BETWEEN, "the words between in a hate phrase");

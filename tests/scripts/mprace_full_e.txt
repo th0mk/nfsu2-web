@@ -1,5 +1,6 @@
 # Multiplayer races from free roam, a full lobby, the fifth player (with mprace_full_a.txt): waits until the lobby is
-# full, drives to it, presses Enter: it cannot join ("full" in the lobby line; the lobby stays 4 of 4).
+# full, drives to it, presses Enter: it cannot join (a full lobby is not shown: "shown 0", Enter opens one of its
+# own at a multiplayer-only spot; the lobby stays 4 of 4).
 0     bot on
 +0    waitroam 6000
 +0    bot off

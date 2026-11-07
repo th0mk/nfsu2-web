@@ -1,15 +1,16 @@
 // How many play on this server now, for the start page's Playing now panel: the server's /players (three
-// counts, whether it is full, how many wait in line for a place and whether free roam is busy, nothing else; with a Room setting, how many are in
-// free roam in that room too, and with crews how many in each).  Asked every 15 s, and only while the start page is visible and no game runs; a
+// counts, whether it is full, how many wait in line for a place and whether free roam is busy, nothing else; how many are
+// in free roam in each world too (worlds.ts), and with crews how many in each).  Asked every 15 s, and only while the start page is visible and no game runs; a
 // server without the route shows no panel.  Whether the server answered at all goes to reached() (offline mode).
 
 /** roam: driving in free roam or paused there (null, or missing from an older server: not shown);
  *  roamBusy: free roam gives fewer cars a player now (the server's hub cut its links; until 2026-11-05 the first Play
  *  did not ask about free roam then);
- *  room: of roam, those in the room asked for (/players?room=, missing without one or from an older server);
+ *  room: of roam, those in the room asked for (/players?room=: pages of before the worlds);
+ *  rooms: of roam, those in each world asked for, in the order asked (/players?rooms=, missing from an older server);
  *  crews: of roam, those in each crew asked for, in the order asked (/players?crews=, the same) */
 export interface PlayerCounts {
-  players: number; online: number | null; roam?: number | null; full?: boolean; roamBusy?: boolean; room?: number; crews?: number[];
+  players: number; online: number | null; roam?: number | null; full?: boolean; roamBusy?: boolean; room?: number; rooms?: number[]; crews?: number[];
   /** pages waiting in line for a place (missing from an older server) */
   queue?: number;
 }
@@ -74,15 +75,6 @@ const known = (k: number | null | undefined): k is number => Number.isInteger(k)
 
 /** a count as the page writes it in its language (7,592; 7.592; 7 592), '–' for one the server does not give */
 export const countText = (k: number | null | undefined): string => known(k) ? count(k) : '–';
-
-/** The Room row's line about who is there ('' for none): room is the player's Room setting while free roam is on ('' for
- *  none), where free roam shows only that room's players. */
-export function roomLine(c: PlayerCounts, room: string): string {
-  room = room.trim();
-  if (!room) return '';
-  return !known(c.room) ? t('You are in room "{room}".', { room })
-    : c.room === 0 ? t('You are in room "{room}": nobody in free roam there.', { room }) : t('You are in room "{room}": {n} in free roam there.', { room, n: c.room });
-}
 
 /** The line under the numbers while the server is full ('' while it is not): how many wait in line, and what Play does. */
 export function fullLine(c: PlayerCounts): string {
@@ -165,9 +157,26 @@ export async function serverAnswers(ms: number): Promise<Reach> {
 /** How many are in free roam in each crew asked for (their hashes, in the order asked), by hash; none from an older
  *  server (no crews in its answer) or for a count it does not give. */
 export function crewCounts(c: PlayerCounts, asked: readonly number[]): Map<number, number> {
+  return byHash(c.crews, asked);
+}
+/** How many are in free roam in each world asked for (their rooms' hashes, 0 the main world, in the order asked), by
+ *  hash; as crewCounts */
+export function worldCounts(c: PlayerCounts, asked: readonly number[]): Map<number, number> {
+  return byHash(c.rooms, asked);
+}
+function byHash(counts: number[] | undefined, asked: readonly number[]): Map<number, number> {
   const m = new Map<number, number>();
-  if (Array.isArray(c.crews)) asked.forEach((h, i) => { const n = c.crews![i]; if (Number.isInteger(n) && n >= 0) m.set(h, n); });
+  if (Array.isArray(counts)) asked.forEach((h, i) => { const n = counts[i]; if (Number.isInteger(n) && n >= 0) m.set(h, n); });
   return m;
+}
+
+/** How many are in free roam in each of these worlds now (worldCounts; their hashes: worlds.ts worldRooms), asked once
+ *  as askCrews asks: the page menu's World.  null: no answer within ms. */
+export async function askWorlds(rooms: readonly number[], ms: number): Promise<Map<number, number> | null> {
+  try {
+    const r = await fetch(`/players?rooms=${rooms.join(',')}`, { cache: 'no-store', signal: AbortSignal.timeout(ms) });
+    return r.ok ? worldCounts(await r.json() as PlayerCounts, rooms) : null;
+  } catch { return null; }
 }
 
 /** How many are in free roam in each of these crews now (crewCounts), asked once, whatever the page does, and
@@ -183,30 +192,30 @@ export async function askCrews(hashes: readonly number[], ms: number): Promise<M
   } catch { return null; }
 }
 
-/** show(counts, room, crews) at once and every 15 s while idle() and the page is visible (counts: null from a server
- *  without the route; room: the Room setting it was asked with, '' for none; crews: crewCounts); reached(whether
- *  the server answered: Reach); room(): the Room setting while free roam is on ('' for none); crews(): the Crews setting's
+/** show(counts, worlds, crews) at once and every 15 s while idle() and the page is visible (counts: null from a server
+ *  without the route; worlds: worldCounts; crews: crewCounts); reached(whether the server answered: Reach); rooms():
+ *  the worlds to count (worlds.ts worldRooms of the Room setting); crews(): the Crews setting's
  *  hashes ([] for none, at most 4); last(): the newest answer (null before the first, or from a server without
  *  the route); fresh(ms): asked now, whatever the page does (Play: whether the server is full), within ms, then the
  *  newest answer.  An answer that comes after a later question's is not shown: it was asked with the settings of
  *  before (the page's first question goes before settings.ini is read, the next one at once after it). */
-export function watchPlayers(show: (c: PlayerCounts | null, room: string, crews: Map<number, number>) => void, idle: () => boolean, reached?: (r: Reach) => void,
-                             room: () => string = () => '', crews: () => number[] = () => []) {
+export function watchPlayers(show: (c: PlayerCounts | null, worlds: Map<number, number>, crews: Map<number, number>) => void, idle: () => boolean,
+                             reached?: (r: Reach) => void, rooms: () => number[] = () => [], crews: () => number[] = () => []) {
   let gone = false, last: PlayerCounts | null = null, asked = 0;
   // quiet: a miss is not passed on (fresh: Play's short question, whose timeout says nothing about the server)
   const get = async (ms: number, quiet = false) => {
     if (gone) return;
     const n = ++asked;
     try {
-      const name = room(), hash = roomHash(name), mine = crews().slice(0, 4);
-      const q = [hash ? `room=${hash}` : '', mine.length ? `crews=${mine.join(',')}` : ''].filter(Boolean).join('&');
+      const worlds = rooms(), mine = crews().slice(0, 4);
+      const q = [worlds.length ? `rooms=${worlds.join(',')}` : '', mine.length ? `crews=${mine.join(',')}` : ''].filter(Boolean).join('&');
       const r = await fetch(q ? `/players?${q}` : '/players', { cache: 'no-store', signal: AbortSignal.timeout(ms) });
       if (!quiet || r.status < 500) reached?.(reachOf(r.status));
-      if (r.status === 404) { gone = true; last = null; show(null, '', new Map()); return; }
+      if (r.status === 404) { gone = true; last = null; show(null, new Map(), new Map()); return; }
       if (!r.ok) return;
-      const c = await r.json() as PlayerCounts, inRoom = hash ? name : '';
+      const c = await r.json() as PlayerCounts;
       if (n !== asked) return;
-      last = c; show(c, inRoom, crewCounts(c, mine));
+      last = c; show(c, worldCounts(c, worlds), crewCounts(c, mine));
     } catch { if (!quiet) reached?.(missed()); }
   };
   const ask = async () => { if (document.visibilityState === 'visible' && idle()) await get(5000); };

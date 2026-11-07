@@ -114,8 +114,8 @@ const OPT = [{ name: 'outrun', script: 'career_outrun.txt', marker: 'player comp
   seed: true, blocked: SEED ? undefined : 'needs a career save from stage 2 on: NFSU2_SAVE_SEED=<save tree>' },
 { name: 'sponsor', script: 'career_sponsor.txt', marker: 'waitfng UI_postrace.fng satisfied', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
   seed: true, blocked: SEED ? undefined : 'needs a career save in stage 2 before its sponsor: NFSU2_SAVE_SEED=<save tree>' },
-// the Bank in free roam's HUD only when it says something (runtime/hudbank.c)
-{ name: 'bankhud', script: 'roam_bank_hud.txt', marker: 'SHOT bank_after_crib', extra: '', alarm: 400,
+// the Bank and the box at the top left in free roam's HUD only when they say something (runtime/hudbank.c)
+{ name: 'bankhud', script: 'roam_bank_hud.txt', marker: 'SHOT box_left', extra: '', alarm: 400,
   seed: true, blocked: SEED ? undefined : 'needs a career save in free roam: NFSU2_SAVE_SEED=<save tree>' }];
 
 // the environment of tests/run_suite.sh + tools/autorun.sh

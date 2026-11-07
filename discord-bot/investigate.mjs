@@ -53,12 +53,15 @@ async function systemBlocks(repo, recent) {
     `Releases the bot saw (newest first):\n${recent.releases || 'none yet'}`,
     `Commits of the last days up to the live version (newest first; when made, and when they went live):\n${recent.recent || 'none'}`,
   ].join('\n\n');
+  // in the order they change, the steadiest first, as a change writes its block and every block after it again: the
+  // rules (a few times a week), the guide (with a release), the notes (~10 times a day) and the history (a release).
+  // With the notes before the guide, each change to them wrote ~59k tokens again at the 1-hour price, $0.24 a time
   return [
-    { type: 'text', text: `${rules}\n\n${notes}` },
-    // kept an hour: looks are often more than 5 minutes apart, and this part (~30k tokens) is the same for all of them
+    { type: 'text', text: rules },
+    // kept an hour: looks are often more than 5 minutes apart, and this part (~37k tokens) is the same for all of them
     { type: 'text', text: `# The player's guide (${guide}, as of the live version)\n\n${playing}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
-    // the same until the next release (~5k tokens): kept an hour too
-    { type: 'text', text: `# The code's history, up to the live version\n\n${history}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
+    // the notes and the code's history (~22k tokens): kept an hour too
+    { type: 'text', text: `${notes}\n\n# The code's history, up to the live version\n\n${history}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
   ];
 }
 
@@ -93,6 +96,17 @@ async function start(repo) {
 }
 const stamp = () => new Date().toISOString().slice(0, 16) + 'Z';
 
+// A new post once the day's money for full looks is spent (bot.mjs): before, it got nothing, then or later (on 6
+// November ~40 bug threads posted after 12:30 UTC never heard from the bot).  The cheapest model, without tools, posts
+// only what it can be sure of from the thread, its pictures and its logs' gists
+const BUDGET_PASS = 'This is a quick pass without tools: the full looks are paused for today. Reply only with what ' +
+  'you can be sure of from the thread, its pictures and the gists of its logs, with the rules above. Ask for what is ' +
+  'missing when "Decide" says ask (a crash, freeze or black screen without a log; "doesn\'t work" without what ' +
+  'happens; no device or browser). Answer only when the guide or the notes give the answer for exactly this case ' +
+  '(a code the page shows, a known problem the notes name with its thread, something that exists already and how ' +
+  'to use it), with confidence high. Anything that needs the code, a search or a closer reading of a log: none, ' +
+  'with the summary and notes as usual.';
+
 /**
  * A quick pass over a new post in a suggestion forum, with the cheapest model and no tools: most of them are wishes for
  * the developer to read, with nothing for the bot to say (120 of the 370 looks Oct 31 to Nov 2, most of them silent).
@@ -100,10 +114,10 @@ const stamp = () => new Date().toISOString().slice(0, 16) + 'Z';
  * which writes the reply.  The pass never posts.
  * -> { verdict, quiet, usage, cost }
  */
-export async function firstPass({ client, repo, guild, thread, images = [], threads = '', reports = '' }) {
+export async function firstPass({ client, repo, guild, thread, images = [], threads = '', reports = '', places = '', budget = false }) {
   const { recent, system } = await start(repo);
-  const content = opening({ now: stamp(), recent, guild, threads, reports, thread, images });
-  content.at(-1).text = content.at(-1).text.replace(/[^\n]*$/,
+  const content = opening({ now: stamp(), recent, guild, threads, reports, places, thread, images });
+  content.at(-1).text = content.at(-1).text.replace(/[^\n]*$/, budget ? BUDGET_PASS :
     'This is a first, quick pass, without tools, over a new post in a suggestion forum. When the post needs nothing ' +
     'from the bot (a wish for the developer to read: "Decide" says none), give your verdict with action none, and ' +
     'the summary, category and tags. When a reply may be worth it (what it asks for may exist already, a browser ' +
@@ -203,7 +217,7 @@ function gist(out) {
  * told each step as it happens
  * -> { verdict, usage, cost, turns, log }
  */
-export async function investigate({ client, model, effort, maxTurns = MAX_TURNS, repo, archive, workDir, guild, thread, images = [], threads = '', reports = '', places = '', threadIndex, step = () => {} }) {
+export async function investigate({ client, model, effort, maxTurns = MAX_TURNS, repo, archive, workDir, guild, thread, images = [], threads = '', reports = '', places = '', threadIndex, check, step = () => {} }) {
   const tools = new Tools({ repo, workDir, archive, threadIndex });
   const { recent, system } = await start(repo);
   step(`code at ${recent.head.split(' ')[0]}, live ${recent.live.split(' ')[0]}${recent.notLive ? `, ${recent.notLive.split('\n').length} commit(s) not live yet` : ''}; asking ${model}`);
@@ -213,11 +227,11 @@ export async function investigate({ client, model, effort, maxTurns = MAX_TURNS,
   const log = [];
   let verdict = null;
   const seen = new Set();
-  let repeats = 0, misses = 0, filled = false;
+  let repeats = 0, misses = 0, filled = false, rechecked = false;
   const stalled = () => filled || repeats >= MAX_REPEATS || misses >= MAX_MISSES;
 
-  for (let turn = 1; turn <= maxTurns && !verdict; turn++) {
-    const last = turn === maxTurns || stalled();
+  for (let turn = 1; turn <= maxTurns + (rechecked ? 1 : 0) && !verdict; turn++) {
+    const last = turn >= maxTurns || stalled() || rechecked;
     const res = await client.beta.messages.create({
       model, max_tokens: 16000, system, messages,
       tools: TOOL_DEFS,
@@ -273,6 +287,16 @@ export async function investigate({ client, model, effort, maxTurns = MAX_TURNS,
 
     const text = res.content.filter(b => b.type === 'text').map(b => b.text).join('');
     try { verdict = JSON.parse(text); } catch { log.push(`no JSON verdict: ${text.slice(0, 200)}`); step(log.at(-1)); break; }
+    // a reply the bot's code can tell is wrong (check: a link to this thread, a newer one or a closed one) is written
+    // again once, in one more turn without tools
+    const wrong = !rechecked && verdict.action !== 'none' && check?.(verdict);
+    if (wrong) {
+      rechecked = true;
+      log.push(`sent back: ${wrong}`); step(log.at(-1));
+      messages.push({ role: 'user', content: [{ type: 'text', text: `${wrong} Give your verdict again, the same but without that link: point to the right thread, or to none.` }] });
+      verdict = null;
+      continue;
+    }
     step(`verdict after ${turn} turn${turn === 1 ? '' : 's'}: ${verdict.action}${verdict.escalate ? ' + flagged' : ''}` +
       `${verdict.duplicate_of ? `, same as ${verdict.duplicate_of}` : ''} (${verdict.confidence}): ${verdict.summary}`);
   }

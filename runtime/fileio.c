@@ -252,6 +252,50 @@ static void vpack_walk(void){
 }
 /* runtime/vinylpacks.c: how many game files the vinyl packs add to */
 int fileio_vinyl_packs(void){ vpack_walk(); return g_vp.n; }
+
+/* --- mod packs (tools/modpacks.py, runtime/modpacks.c) ---------------------
+ * MODPACKS/<game path> in the game folder: what community mods add to the
+ * game, for every player alike.  A file the game folder does not have (a new
+ * rim brand's CARS/WHEELS/GEOMETRY_<BRAND>.BIN) is read from there as the
+ * game's own; one it has (CARS/WHEELS/TEXTURES.BIN) gains what the pack adds,
+ * a pack as a vinyl pack's (vp_open).  MODPACKS/PARTS.BIN is the parts' list
+ * (runtime/modpacks.c reads it).  Its list is read once, at the first look. */
+static char g_mroot[1024];
+static struct flist g_mp;
+static int g_mp_walked;
+/* A mod pack of a file whose header the game keeps in a memory file (CARS/WHEELS/TEXTURES.BIN in
+ * GLOBAL/GlobalMemoryFile.bin) moves the file's own offsets: the game must read the header from the file, which only
+ * the memory file's pack makes it do.  Such a pack says so (its header's 7th word, MP_NEEDS_MEMFILE) and is read
+ * only once the memory file's pack was (vp_open). */
+#define MP_NEEDS_MEMFILE 1u
+#define MP_MEMFILE       "global/globalmemoryfile.bin"
+static int g_mp_memfile;
+static void mpack_walk(void){
+    if (g_mp_walked) return;
+    g_mp_walked = 1;
+    if (!resolve_in(g_root, "MODPACKS", g_mroot, sizeof g_mroot)){ g_mroot[0] = 0; return; }
+    lpack_walk(&g_mp, g_mroot, "");
+    qsort(g_mp.f, (size_t)g_mp.n, sizeof *g_mp.f, lfile_cmp);
+    if (g_mp.n) fprintf(stderr, "file: MODPACKS: %d files\n", g_mp.n);
+}
+/* runtime/modpacks.c: MODPACKS/<rel>'s host path; 0 if the mod packs have no such file */
+int fileio_mod_pack(const char *rel, char *out, size_t outsz){
+    mpack_walk();
+    const struct lfile *e = flist_find(&g_mp, rel);
+    if (!e) return 0;
+    snprintf(out, outsz, "%s/%s", g_mroot, e->rel);
+    return 1;
+}
+/* a game file that the game folder does not have, from the mod packs: 1 if they have it (out: its host path) */
+static int mpack_resolve(const char *win, char *out, size_t outsz){
+    mpack_walk();
+    const struct lfile *e = flist_find(&g_mp, win);
+    if (!e) return 0;
+    snprintf(out, outsz, "%s/%s", g_mroot, e->rel);
+    static int said;
+    if (said++ < 8) fprintf(stderr, "  [file] %s: MODPACKS/%s\n", win, e->rel);
+    return 1;
+}
 /* Read: the write root if the file is there, then the language pack, otherwise the game root. */
 static int resolve(const char *win, char *out, size_t outsz){
     if (g_wroot[0] && !overlay_cannot_have(win)){
@@ -260,7 +304,10 @@ static int resolve(const char *win, char *out, size_t outsz){
             snprintf(out, outsz, "%s", w); return 1; }
     }
     if (lpack_resolve(win, out, outsz)) return 1;
-    return resolve_in(g_root, win, out, outsz);
+    if (resolve_in(g_root, win, out, outsz)) return 1;
+    char m[1024];                               /* a file only a mod pack has */
+    if (mpack_resolve(win, m, sizeof m)){ snprintf(out, outsz, "%s", m); return 1; }
+    return 0;
 }
 /* Write: ALWAYS the write root if there is one. */
 static int resolve_w(const char *win, char *out, size_t outsz){
@@ -438,28 +485,47 @@ int fileio_open_handles(void){ int n = 0; for (int k = 1; k < FH_MAX; k++) n += 
 
 /* The game file `real` (guest path win, descriptor fd) just opened for reading: with its vinyl pack if it has one
  * that fits it.  Sets f's fd2, sp_* and size (head + the game file from cut + tail); 1 if it did. */
-static int vp_open(FH *f, const char *win, const char *real, int fd){
-    vpack_walk();
+/* the pack of the game file win (a vinyl pack's, else a mod pack's): its host path, and the folder's name */
+static int vp_path(const char *win, char *p, size_t psz, const char **dir){
+    vpack_walk(); mpack_walk();
     const struct lfile *e = flist_find(&g_vp, win);
-    if (!e || !path_under(real, g_root) || (g_wroot[0] && path_under(real, g_wroot)) || (g_lroot[0] && path_under(real, g_lroot)))
+    if (e){ snprintf(p, psz, "%s/%s", g_vroot, e->rel); if (dir) *dir = "VINYLPACKS"; return 1; }
+    if ((e = flist_find(&g_mp, win))){ snprintf(p, psz, "%s/%s", g_mroot, e->rel); if (dir) *dir = "MODPACKS"; return 1; }
+    return 0;
+}
+static int vp_open(FH *f, const char *win, const char *real, int fd){
+    char p[1100]; uint8_t h[VP_HDR]; struct stat st; const char *dir = "";
+    if (!vp_path(win, p, sizeof p, &dir)) return 0;
+    if (!path_under(real, g_root) || (g_wroot[0] && path_under(real, g_wroot)) || (g_lroot[0] && path_under(real, g_lroot)) ||
+        (g_mroot[0] && path_under(real, g_mroot))){                               /* (a mod pack's own file) */
+        static int skip;
+        if (skip++ < 4 && !(g_mroot[0] && path_under(real, g_mroot)))
+            fprintf(stderr, "  [file] %s: not the game folder's (%s): its %s pack not read\n", win, real, dir);
         return 0;
-    char p[1100]; uint8_t h[VP_HDR]; struct stat st;
-    snprintf(p, sizeof p, "%s/%s", g_vroot, e->rel);
+    }
+    const char *rel = p + strlen(dir[0] == 'V' ? g_vroot : g_mroot) + 1;
     int fd2 = open(p, O_RDONLY);
     if (fd2 < 0) return 0;
     uint32_t v[8];
     int fits = pread(fd2, h, VP_HDR, 0) == (ssize_t)VP_HDR && fstat(fd, &st) == 0;
     if (fits){ memcpy(v, h, sizeof v); fits = !memcmp(h, "VPAK", 4) && v[1] == 1u && (int64_t)v[2] == (int64_t)st.st_size && v[3] <= v[2]; }
-    static int said;
+    if (fits && v[6] == MP_NEEDS_MEMFILE && !g_mp_memfile){
+        static int said_n;
+        if (said_n++ < 4) fprintf(stderr, "  [file] %s/%s not read: the memory file's pack was not (the game reads its old header)\n", dir, rel);
+        close(fd2); return 0;
+    }
+    static int said_v, said_m;
+    int *said_p = dir[0] == 'V' ? &said_v : &said_m, said = (*said_p)++;
     if (!fits){
-        if (said++ < 4) fprintf(stderr, "  [file] VINYLPACKS/%s does not fit the game's file (%lld bytes): the game's alone\n",
-                                e->rel, (long long)st.st_size);
+        if (said < 4) fprintf(stderr, "  [file] %s/%s does not fit the game's file (%lld bytes): the game's alone\n",
+                                dir, rel, (long long)st.st_size);
         close(fd2); return 0;
     }
     f->fd2 = fd2; f->sp_bsize = v[2]; f->sp_cut = v[3]; f->sp_head = v[4];
+    if (dir[0] == 'M' && !strcasecmp(rel, MP_MEMFILE)) g_mp_memfile = 1;
     f->size = (int64_t)v[4] + ((int64_t)v[2] - v[3]) + v[5]; f->pos = 0;
-    if (said++ < 4) fprintf(stderr, "  [file] %s: the game's %lld bytes with VINYLPACKS/%s (%u more)\n",
-                            win, (long long)st.st_size, e->rel, (unsigned)(f->size - st.st_size));
+    if (said < 4) fprintf(stderr, "  [file] %s: the game's %lld bytes with %s/%s (%u more)\n",
+                            win, (long long)st.st_size, dir, rel, (unsigned)(f->size - st.st_size));
     return 1;
 }
 /* len bytes of a file with a vinyl pack (f->fd2) at off, as one file: the pack's head, the game file from cut, the
@@ -681,7 +747,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
                        fstat(fd, &st) == 0 && S_ISREG(st.st_mode)){
                        int64_t size = f->fd2 >= 0 ? f->size : (int64_t)st.st_size;
                        char p2[1100] = "";
-                       if (f->fd2 >= 0){ const struct lfile *e = flist_find(&g_vp, GS(pn)); if (e) snprintf(p2, sizeof p2, "%s/%s", g_vroot, e->rel); }
+                       if (f->fd2 >= 0 && !vp_path(GS(pn), p2, sizeof p2, 0)) p2[0] = 0;
                        int i = (f->fd2 < 0 || p2[0]) ? gf_add(GS(pn), real, size) : -1;
                        if (i >= 0 && f->fd2 >= 0 && !g_gf[i].real2 && (g_gf[i].real2 = strdup(p2))){
                            g_gf[i].cut = f->sp_cut; g_gf[i].head = f->sp_head; g_gf[i].bsize = f->sp_bsize; }

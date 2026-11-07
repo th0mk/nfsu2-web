@@ -75,5 +75,7 @@ export type ToPage =
   | { t: 'exit'; code: number }
   | { t: 'trap'; tid: number; msg: string; stack?: string }
   | { t: 'ready'; slot: number }
+  // (WebKit, memory.ts) a pool worker without the Memory from its port: the page asks the I/O worker for it, through itself
+  | { t: 'memory-please'; slot: number; why: string }
   // a thread took a pool worker, or found none idle: the page starts more (process.ts)
   | { t: 'pool' };

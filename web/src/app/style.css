@@ -184,6 +184,9 @@ kbd {
 .tab { height: 36px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 24px; }
 .tab:hover { color: var(--text); }
 .tab[aria-selected="true"] { color: var(--lime); box-shadow: inset 0 -3px var(--lime); }
+/* the Friends & crews tab's dot, as a friend's envelope has it, while requests or friends' messages wait (shell.ts
+ * friendsWaiting); its count is its text, for screen readers only */
+.tab-new { display: inline-block; width: 8px; height: 8px; margin: 2px 0 0 4px; border-radius: 50%; background: var(--lime); font-size: 0; vertical-align: top; }
 
 /* a panel's own tabs as its heading (tabs.ts: the big panel's, About's): the Controls sheet's tabs at a heading's
  * size, 44 px with its 28 px line (the panes start 88 px down, as under an h2).  Where one line is too narrow for them
@@ -312,6 +315,11 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .set .linkbox { flex: none; width: 240px; }
 .set .linkbox input[type="text"] { flex: 1; min-width: 0; width: auto; height: 100%; border: 0; background: none; outline: none; box-shadow: none; }
 .set .linkbox:has(.room-link:not([hidden])) input[type="text"] { padding-right: 4px; }
+/* the World row (settings-ui.ts worldControl): the list, Own name's box under it */
+.set-world .set-control { flex-direction: column; align-items: flex-end; }
+/* (with the box the control is taller than the name and help: they stay together at the top, as the list) */
+.set-world:has(.linkbox:not([hidden])) { grid-template-rows: auto 1fr; align-items: start; }
+.set-world .linkbox[hidden] { display: none; }
 /* a choice of many: the same value box, with a chevron */
 .set select {
   appearance: none; width: 240px; height: 40px; padding: 0 36px 0 12px; border: 2px solid var(--edge); border-radius: 8px;
@@ -574,7 +582,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 /* the touch controls' size (touch.ts touchScale: the Controls sheet's choice, or auto's for the screen), set on the
  * stage: every size and gap below is so many px at 100 % times --ts; the margins from the screen's edges and the
  * picture stay as they are.  touch.ts ROOM: the most room they take at 100 % */
-.stage { --ts: 1; }
+.stage { --ts: 1; --u: 1px; }   /* (--u: one HUD unit, shell.ts placeNotices; the notes over the game take it) */
 /* the menu's button on the game (touch screens): small and dim in the top left corner, clear of a notch */
 .stage-menu {
   position: absolute; z-index: 4; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left));
@@ -689,6 +697,8 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .touch[data-alone] :is([data-ctl="horn"], [data-ctl="chat"]),
 .touch[data-no-chat] [data-ctl="chat"],
 .touch:not([data-hyd]) .hyd { display: none; }
+/* away for now in its place (touch.ts stow: Reset at speed, Pressurize and Bounce too fast to start them) */
+.touch .tc.stowed { visibility: hidden; }
 /* a race between players (touch.ts netrace): Quick chat in the first row after Reset while driving (after Pressurize
  * and Bounce in landscape when the car has hydraulics; upright those are in the second row), beside the menu's button
  * on the results (the menus' controls).  Upright, right: auto over the second row's inline start, which a Position on
@@ -740,7 +750,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   -webkit-user-select: text; user-select: text; touch-action: manipulation;
 }
 /* the notes on the game, and the frame-rate counter, go under the row of small buttons */
-.stage:has(> .touch[data-mode="drive"]) :is(.toasts, .hud-fps) { top: calc(max(12px, env(safe-area-inset-top)) + 12px + 48px * var(--ts)); }
+.stage:has(> .touch[data-mode="drive"]) :is(.toasts, .hud-fps) { top: max(calc(max(12px, env(safe-area-inset-top)) + 12px + 48px * var(--ts)), var(--under, 0px)); }
 /* a touch screen held upright: the game in a 4:5 picture at the top, as wide as the screen and at most 60% of its
  * height, and the menu's button and the touch controls in the space below it, so nothing covers the picture */
 @media (orientation: portrait) {
@@ -748,7 +758,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   html[data-touch] .stage canvas { inset: 0 auto auto 50%; width: calc(var(--pic-h) * 0.8); height: var(--pic-h); transform: translateX(-50%); }
   html[data-touch] .stage-menu { top: calc(var(--pic-h) + 12px); }
   html[data-touch] .touch { --t: calc(var(--pic-h) + 12px); }
-  html[data-touch] .stage:has(> .touch[data-mode="drive"]) :is(.toasts, .hud-fps) { top: max(16px, env(safe-area-inset-top)); }
+  html[data-touch] .stage:has(> .touch[data-mode="drive"]) :is(.toasts, .hud-fps) { top: max(16px, env(safe-area-inset-top), var(--under, 0px)); }
   html[data-touch] .toast.away { top: calc(var(--pic-h) / 2); }
   html[data-touch] .touch { --k: calc(56px * var(--ts)); --w: calc(136px * var(--ts)); }
   html[data-touch] .tc[data-ctl="status"] { left: calc(var(--l) + 224px * var(--ts)); }
@@ -807,64 +817,61 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .hud-fps dl { display: grid; grid-template-columns: auto auto; gap: 0 12px; margin-top: 4px; font: 400 12px/16px var(--font); color: var(--text); }
 .hud-fps dt { color: var(--muted); text-align: left; }
 .hud-fps dd { font-variant-numeric: tabular-nums; }
-/* the notes on the game (shell.ts toast): at the top in the middle, clear of a notch or a camera hole, as wide as their
- * text up to 560 px or the screen; a full server's place in line (players.ts queueText) over the note, however many
- * lines either takes.  On a touch screen on its side they keep clear of the menu's button in the top left corner too,
- * and over the touch controls where a small screen has a long note reach them (the controls still take the taps) */
+/* the notes on the game (shell.ts toast) in one column at the top in the middle, each in the cards' box: a friend's
+ * invite and the line while front bumpers touch first (friends.ts), then a full server's place in line (players.ts
+ * queueText), then the notes; clear of a notch or a camera hole, and in free roam under the game's own line at the top
+ * (an outrun's: --under, shell.ts placeNotices).  Each as wide as its text up to 400 HUD units or the screen.  On a
+ * touch screen on its side they keep clear of the menu's button in the top left corner too, and over the touch
+ * controls where a small screen has a long note reach them (the controls still take the taps) */
 .toasts {
   --side: max(16px, env(safe-area-inset-left), env(safe-area-inset-right));
-  position: absolute; top: max(16px, env(safe-area-inset-top)); left: var(--side); right: var(--side); z-index: 4;
-  display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+  position: absolute; top: max(16px, env(safe-area-inset-top), var(--under, 0px)); left: var(--side); right: var(--side); z-index: 4;
+  display: flex; flex-direction: column; align-items: center; gap: max(6px, calc(6 * var(--u))); pointer-events: none;
 }
 @media (orientation: landscape) {
   html[data-touch] .toasts { --side: calc(max(12px, env(safe-area-inset-left), env(safe-area-inset-right)) + 56px * var(--ts)); }
 }
-.toast {
-  max-width: 560px; padding: 8px 16px; border-radius: 8px; background: rgba(0, 0, 0, 0.8);
-  font-size: 14px; line-height: 20px; pointer-events: none; white-space: pre-line;
+.toast {   /* (the cards' box, face and size, .ov-card; --u from the stage) */
+  max-width: max(560px, calc(400 * var(--u))); padding: calc(10 * var(--u)) calc(12 * var(--u)); border-radius: 4px;
+  background: rgba(13, 13, 13, 0.78); font: 400 max(13px, calc(11 * var(--u))) / 1.4 var(--font); color: var(--text);
+  pointer-events: none; white-space: pre-line;
 }
+.toast b { font-weight: 700; color: var(--lime); }
+.toast kbd { margin-right: 0.5em; }   /* (a key and what it does, as the cards' .ov-act) */
 /* the game's pause menu: what opens the page's menu, under the game's panel (pausehint.ts places it), as a toast */
 /* the site's address under the title screen's copyright (titlemark.ts): drawn there, placed and faded by the game's status */
 .title-mark { position: absolute; z-index: 1; pointer-events: none; user-select: none; }
-.pause-hint {
+.pause-hint {   /* (the cards' box, face and size, .ov-card: --u, one HUD unit, pausehint.ts place) */
+  --u: 1px;
   position: absolute; z-index: 3; transform: translateX(-50%); width: max-content;
-  padding: 8px 16px; border: 1px solid var(--line); border-radius: 8px; background: rgba(0, 0, 0, 0.8);
-  color: var(--text); font: 400 14px/20px var(--font); text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  padding: calc(10 * var(--u)) calc(12 * var(--u)); border: 0; border-radius: 4px; background: rgba(13, 13, 13, 0.78);
+  color: var(--text); font: 400 max(13px, calc(11 * var(--u))) / 1.4 var(--font); cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.pause-hint:hover { border-color: var(--edge); }
 .pause-hint:active { color: var(--lime); }
-.pause-hint kbd {
-  min-width: 0; margin-right: 8px; padding: 0 6px; border-radius: 3px;
-  font: 700 0.85em/1.5 var(--font); vertical-align: 1px;
-}
+.pause-hint kbd { margin-right: 0.5em; }
 .pause-hint-list { color: var(--muted); }
 .pause-hint-list::before { content: " · "; }
-/* free roam's friends (friends.ts): the line while front bumpers touch, in quick chat's look over the cars (.qc-b: bold
- * italic lime, an icon first, its size with the HUD, its shadow, its pop), in the middle of the picture just above the
- * game's outrun line (friends.ts place: --y its top, --u one HUD unit), the key cap after the icon; one that offers
- * nothing (a request sent, or why not) is grey and no button.  On a touch screen on its side it keeps under the row of
- * small buttons, as the toasts do.  On the start page (and in the page menu's Friends) a line a friend: the name, where
+/* free roam's friends (friends.ts): the line while front bumpers touch, and a friend's invite over it, at the top of
+ * the column of notes (.toasts), in their box; the key cap first; one that offers nothing (a request sent, or why not)
+ * grey and no button.  On the start page (and in the page menu's Friends) a line a friend: the name, where
  * it plays after it in small text (lime while it plays; the name dimmed while it does not), the icons at its end
  * (Message an envelope, lime with a dot while messages wait to be read: messages.ts; Remove a grey can, red under the
  * pointer); the friend's own line under it */
-.friend-prompt {
-  --u: 1px;
-  position: absolute; left: 50%; top: var(--y, 16px); z-index: 4; translate: -50% 0; max-width: calc(100% - 32px);
-  display: flex; align-items: center; gap: calc(3 * var(--u)); padding: 0; border: 0; background: none;
-  font: italic 700 max(14px, calc(16 * var(--u))) / 1.2 var(--font); color: var(--lime); text-align: center;
-  text-shadow: 0 0 2px #000, 0 1px 3px #000, 0 0 calc(5 * var(--u)) rgba(0, 0, 0, 0.6);
+.friend-prompt {   /* (the cards' box, face and size, .ov-card; --u from the stage) */
+  order: -1; max-width: max(560px, calc(400 * var(--u)));
+  display: flex; align-items: center; gap: 0.5em; padding: calc(10 * var(--u)) calc(12 * var(--u)); border: 0; border-radius: 4px;
+  background: rgba(13, 13, 13, 0.78); font: 400 max(13px, calc(11 * var(--u))) / 1.4 var(--font); color: var(--text); text-align: left;
   pointer-events: none; -webkit-tap-highlight-color: transparent;
-  transform-origin: 50% 100%; animation: qc-pop 0.22s ease-out both;
 }
-.friend-prompt svg { width: 1.1em; height: 1em; flex: none; fill: currentColor; filter: drop-shadow(0 1px 2px #000); }
-.friend-prompt kbd { flex: none; min-width: 1.4em; padding: 0 0.35em; border-radius: 3px; font: italic 700 0.75em/1.45 var(--font); text-shadow: none; }
+.friend-prompt b { font-weight: 700; color: var(--lime); }
 .friend-prompt.offer { pointer-events: auto; cursor: pointer; }
-.friend-prompt.offer:active { color: var(--text); }
+.friend-prompt.offer:active { color: var(--lime); }
 .friend-prompt:not(.offer) { color: var(--muted); }
-.stage:has(> .touch[data-mode="drive"]) > .friend-prompt { top: max(var(--y, 0px), calc(max(12px, env(safe-area-inset-top)) + 12px + 48px * var(--ts))); }
-@media (orientation: portrait) {
-  html[data-touch] .stage:has(> .touch[data-mode="drive"]) > .friend-prompt { top: var(--y, 16px); }   /* the buttons are under the picture */
-}
+.friend-prompt.invite { order: -2; }
+/* what has to be answered in its time: a border round the box, lime for an offer (a friend's invite, a friend to add or
+ * a friend's request: shell.ts toast 'hot'), amber for a kick or its warning (away.ts, shell.ts netRemoved) */
+.toast.hot, .friend-prompt.offer { box-shadow: inset 0 0 0 max(2px, calc(1.5 * var(--u))) var(--lime); }
+.toast.away { box-shadow: inset 0 0 0 max(2px, calc(1.5 * var(--u))) var(--warn); }
 .fl, .dlg ul.fl { list-style: none; margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .fl li { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; min-height: 40px; }
 .fl li + li { box-shadow: inset 0 1px var(--line); }
@@ -884,11 +891,27 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .fl .fl-discord svg { fill: currentColor; stroke: none; }   /* (Discord's mark is a filled shape, the others are lines) */
 #friends > .set { box-shadow: inset 0 1px var(--line); }   /* under the Crews row, as the rows of a group */
+/* a friend's crew invite (friends.ts CrewInvites): the player's crews under the friend's line, no line between them,
+ * each a chip as the Crews row's (its dot and name) that is a button, its dot ringed in lime under the pointer */
+.fl li.fl-pick { box-shadow: none; gap: 8px; padding-bottom: 8px; }
+.fl-pick .fl-st { margin-left: 0; line-height: 24px; }   /* (centred by the 40 px chips: on the 4 px grid) */
+.crew-pick { border: 0; padding-right: 12px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.crew-pick .crew-dot { pointer-events: none; }
+.crew-pick:is(:hover, :focus-visible) .crew-dot::before { box-shadow: 0 0 0 2px var(--field), 0 0 0 4px var(--lime); }
+.fl .fl-crew[aria-expanded="true"] { color: var(--lime); }
 /* a request by name (friends.ts addField): the Crews row's box (its field's rules) under the list, a setting's 240 px
  * (the row's width on a phone), what the last one did under it */
-.fl-add { flex: none; width: 240px; }
-.friends-pop-box { margin-bottom: 16px; }
-.friends-pop-box .hint:last-child { margin-bottom: 0; }
+.fl-add, .fl-find { flex: none; width: 240px; }
+/* a list of more than a page (friends.ts FriendsPanel): Filter on the row's right, as a setting's value box (Your
+ * Discord's), the list under both; under the list Add a player and, on its line at the right, ‹ 1 of 13 › (.fl-foot):
+ * the rows' icons, the page between them as a row's state; an end's arrow dimmed */
+.fl-foot { display: flex; align-items: center; gap: 8px; }
+.fl-foot > .fl-pager { flex: none; margin-left: auto; }
+.set-list.fl-paged { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label find" "help find" "ctl ctl"; }
+.fl-paged > .fl-find { grid-area: find; }
+.fl-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 40px; }
+.fl-page { color: var(--muted); font-size: 14px; line-height: 24px; white-space: nowrap; }   /* (24: centred in the 40 px line on the 4 px grid) */
+.fl-pager .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 /* a copy button's toast (copy.ts copyToast): small, over the button (under it, .below, with no room above), in the top
  * layer as a popover (its own box and place, not the browser's), gone after a moment */
 .copy-toast {
@@ -903,24 +926,26 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
  * over the touch controls it leaves; upright, in the middle of the picture */
 .toast.away {
   position: absolute; left: 50%; top: 50%; z-index: 4; transform: translate(-50%, -50%); width: max-content;
-  max-width: min(560px, calc(100vw - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right)))); text-align: center;
+  max-width: min(max(560px, calc(400 * var(--u))), calc(100vw - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right))));
 }
-/* a full server: the place in line for one (players.ts queueText), at the top while the game waits */
-.toast.queue { text-align: center; }
-/* free roam: friends joining, leaving, going into a race; a quiet log on the left between the game's SMS
- * icon and its radar (shell.ts placeNotices: the place, and --u, one HUD unit), sized with the HUD: small
- * dim italic text, the friend's name in lime; newest at the bottom, each fading out after 5 s (when
- * notice() removes it) */
+/* free roam's log on the left between the game's SMS icon and its radar (shell.ts placeNotices: the place, and --u,
+ * one HUD unit), in the cards' face and size (.ov-card, no card behind it: a shadow under the text).  Every line alike
+ * (shell.ts roamLine): an icon in a column of its own, then the text, an even gap between lines; a friend coming and
+ * going (no icon) dim, a name in lime; newest at the bottom, each fading out after 5 s (when notice() removes it) */
 .notices {
   --u: 1px;
   position: absolute; left: 16px; top: 40%; z-index: 3; height: calc(88 * var(--u)); max-width: calc(240 * var(--u));
-  display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; gap: calc(2 * var(--u));
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: 0.3em;
   overflow: hidden; pointer-events: none;
-  font: italic 400 max(11px, calc(5.5 * var(--u))) / 1.35 var(--font); color: rgba(255, 255, 255, 0.62);
+  font: 400 max(13px, calc(11 * var(--u))) / 1.4 var(--font); color: var(--text);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 calc(3 * var(--u)) rgba(0, 0, 0, 0.5);
 }
-.notices div { animation: notice-fade 5s linear both; }
-.notices b { font-weight: 700; color: rgba(200, 240, 136, 0.9); }    /* --lime */
+.notices > div { display: flex; gap: 0.4em; align-items: flex-start; margin: 0; font: inherit; animation: notice-fade 5s linear both; }   /* (not the page's .msg) */
+.notices .ic { flex: none; display: flex; align-items: center; justify-content: center; width: 1em; height: 1.4em; }
+.notices .ic svg { width: 0.9em; height: 0.9em; }
+.notices .tx { min-width: 0; overflow-wrap: anywhere; }
+.notices div.quiet { color: var(--muted); }
+.notices b { font-weight: 700; color: var(--lime); }
 @keyframes notice-fade { 0% { opacity: 0; } 4%, 84% { opacity: 1; } 100% { opacity: 0; } }
 /* free roam's drift mode (drift.ts): the drift event's panel (HUD_Drift: Best, the multiplier and the points its next
  * level needs, Total) under the game's Bank panel and as wide, sized with the HUD (--u, one HUD unit), its rows, type
@@ -964,27 +989,19 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .drift-pop span { font: 400 calc(13 * var(--u)) / 1 var(--font); letter-spacing: 0.08em; }
 .drift-pop b { font: italic 700 calc(26 * var(--u)) / 1 var(--font); font-variant-numeric: tabular-nums; }
 @keyframes drift-pop { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
-/* quick chat's lines in the log (shell.ts chatLine), and a friend's coming into free roam (friendNotice) the same: a
- * speech balloon (a person) first, upright and brighter than the notices, as big as the race lobby card's text, 8 s */
-.notices div.chat {
-  display: flex; align-items: center; gap: calc(2 * var(--u)); animation-duration: 8s;
-  font-style: normal; font-size: max(13px, calc(11 * var(--u))); color: rgba(255, 255, 255, 0.9);
-}
-.notices div.chat svg { width: 0.9em; height: 0.9em; flex: none; fill: rgba(200, 240, 136, 0.9); }
-/* a friend's message in the log (shell.ts msgLine, messages.ts): quick chat's line with an envelope, wrapping under the
- * name (the envelope's width in), a note after the player's own in grey; on a touch screen a tap on one answers it;
- * "I Write back" under the newest, as quick chat's picker shows its keys */
-.notices div.msg { display: block; padding-left: 1.15em; text-indent: -1.15em; overflow-wrap: anywhere; }
-.notices div.msg svg { display: inline-block; vertical-align: -0.1em; margin-right: calc(2 * var(--u)); fill: none; color: rgba(200, 240, 136, 0.9); }
-.notices div.msg i { color: rgba(255, 255, 255, 0.62); }
+/* quick chat's lines in the log (shell.ts chatLine), a friend's coming into free roam (friendNotice) and a friend's
+ * message (msgLine, messages.ts): a speech balloon or an envelope, 8 s; a message's note after it dim; on a touch
+ * screen a tap on a friend's answers it; "I Write back" under the newest, the cards' key cap */
+.notices div.chat { animation-duration: 8s; }
+.notices .ic svg { fill: var(--lime); }
+.notices .msg i { font-style: normal; color: var(--muted); }
 .notices div.msg.tap { pointer-events: auto; cursor: pointer; }
-.notices div.msg-hint {
-  display: flex; align-items: center; gap: 0.4em; font-style: normal; font-size: max(11px, calc(9 * var(--u))); color: rgba(255, 255, 255, 0.62);
-}
-.notices .msg-hint kbd {
-  min-width: 1.6em; padding: 0 0.4em; text-align: center; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
-  font: 700 0.85em/1.5 var(--font); color: var(--text);
-}
+.notices div.msg-hint { color: var(--muted); }
+.notices .msg-hint kbd { margin-right: 0.5em; text-shadow: none; }   /* (the cards' key cap, .ov-act kbd) */
+/* a crew's count as free roam starts (shell.ts crewCountLine): its dot and name in the crew's colour */
+.notices div.crew-in .ic svg { fill: var(--crew); }
+.notices div.world-in .ic svg { fill: none; stroke: var(--lime); stroke-width: 2.4; }
+.notices div.crew-in b { color: var(--crew); }
 /* free roam: quick chat over the cars (quickchat.ts): the phrase in lime after a speech balloon, over the name the
  * game draws, sized with the HUD (--u, 16 units at the nearest) and scaled with the name by the line's transform
  * (quickchat.ts LINE_MIN: never below 70 %), which follows the game's marks every frame; it pops up, and fades out
@@ -1106,49 +1123,33 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
   font: italic 700 calc(80 * var(--u)) / 1 var(--font); color: var(--lime);
   text-shadow: 0 0 2px #000, 0 2px 6px #000, 0 0 calc(14 * var(--u)) rgba(0, 0, 0, 0.6);
 }
-/* quick chat's picker: on the left in the notices' place (they step aside while it is open), the race lobby's card
- * in its sizes (.lobby: its width, padding and text, the title, the places' rows, the key caps, the hint); on a touch
- * screen all sixteen at the top, big enough to tap */
-.qc-picker {
-  --u: 1px;
-  position: absolute; left: 16px; top: 40%; z-index: 4; width: calc(190 * var(--u)); min-width: 220px; pointer-events: none;
-  padding: calc(10 * var(--u)) calc(12 * var(--u)); border-left: 3px solid var(--lime); border-radius: 4px; background: rgba(13, 13, 13, 0.78);
-  font: 400 max(13px, calc(11 * var(--u))) / 1.35 var(--font); color: var(--text);
-}
+/* quick chat's picker (quickchat.ts), a card (.ov-card) on the left in the notices' place (they step aside while it is
+ * open); on a touch screen all sixteen at the top, four columns of buttons big enough to tap */
+.qc-picker { left: 16px; top: 40%; }
 .stage:has(> .qc-picker:not([hidden]):not([data-mode="touch"])) > .notices { visibility: hidden; }
-.qc-title { font-size: 1.1em; font-weight: 700; font-style: italic; text-transform: uppercase; letter-spacing: 0.02em; color: var(--lime); }
-.qc-row { display: flex; gap: 0.6em; align-items: baseline; padding: 0.12em 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
-.qc-title + .qc-row { margin-top: 0.5em; }
-.qc-row kbd {
-  min-width: 1.6em; padding: 0 0.4em; text-align: center; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
-  font: 700 0.85em/1.5 var(--font); color: var(--text);
-}
-.qc-text { font-weight: 700; font-style: italic; }
-.qc-foot { margin-top: 0.4em; font-size: 0.85em; color: var(--muted); }
-.qc-wait { margin-top: 0.4em; color: var(--muted); }
 .qc-picker[data-mode="touch"] {
   left: 50% !important; top: calc(max(12px, env(safe-area-inset-top)) + 60px) !important; transform: translateX(-50%); z-index: 5;
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: min(640px, calc(100% - 32px));
-  padding: 10px; border-left: 0; border-radius: 10px; font-size: 14px; pointer-events: auto;
+  padding: 10px; border-radius: 10px; font-size: 14px; pointer-events: auto;
 }
 @media (max-width: 520px) { .qc-picker[data-mode="touch"] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.qc-picker[data-mode="touch"] > .qc-title, .qc-picker[data-mode="touch"] > .qc-wait { grid-column: 1 / -1; }   /* (a line, not a column) */
+.qc-picker[data-mode="touch"] > .ov-block { grid-column: 1 / -1; padding: 0; border: 0; }   /* (a line, not a column) */
 .qc-group { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .qc-say {
   min-height: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--text);
-  font: italic 700 14px/1.2 var(--font); text-align: left; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  font: 400 14px/1.2 var(--font); text-align: left; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .qc-say:active { border-color: var(--lime); color: var(--lime); }
 .qc-picker .qc-msg { grid-column: 1 / -1; text-align: center; }
-/* messages between friends (messages.ts): the card is quick chat's picker, in its place and look (the log steps aside
- * as for the picker), taking clicks: the message answered, a field for the new one, the characters left; or the
- * friends to pick, where each plays on the right.  On a touch screen at the top, as the picker's sheet, its rows and
- * Send big enough to tap */
+/* messages between friends (messages.ts): the card is quick chat's picker, in its place (the log steps aside as for the
+ * picker), taking clicks: the friends to pick, where each plays on the right; or the message answered, a field for the
+ * new one, the characters left.  On a touch screen at the top, as the picker's sheet, its rows and Send big enough to
+ * tap */
 .msg-card { pointer-events: auto; outline: none; }
-.msg-quote { margin-top: 0.5em; color: var(--muted); font-style: italic; overflow-wrap: anywhere; }
-.msg-quote b { font-style: normal; color: var(--lime); }
+.msg-quote { color: var(--muted); overflow-wrap: anywhere; }
+.msg-quote b { color: var(--lime); }
 .msg-input {
-  display: block; box-sizing: border-box; width: 100%; margin-top: 0.5em; padding: 0.3em 0.5em; border: 1px solid var(--edge); border-radius: 3px;
+  display: block; box-sizing: border-box; width: 100%; padding: 0.3em 0.5em; border: 1px solid var(--edge); border-radius: 3px;
   background: var(--field); color: var(--text); font: inherit; outline: none;
 }
 .msg-input:focus { border-color: var(--lime); }
@@ -1157,60 +1158,73 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
 .msg-friend { cursor: pointer; }
 .msg-where { margin-left: auto; font-size: 0.85em; color: var(--muted); }
 .msg-where.ok { color: var(--lime); }
-.msg-card[data-mode="touch"] { display: block; width: min(440px, calc(100% - 32px)); padding: 12px 16px; font-size: 16px; }
+.msg-card[data-mode="touch"] { width: min(440px, calc(100% - 32px)); padding: 12px 16px; font-size: 16px; }
 .msg-card[data-mode="touch"] .msg-friend {
-  display: flex; width: 100%; min-height: 40px; align-items: center; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; width: 100%; min-height: 40px; align-items: center; gap: 0.5em; border: 0;
   background: none; color: var(--text); font: inherit; text-align: left; touch-action: manipulation;
 }
 .msg-card .msg-send { min-height: 40px; padding: 4px 16px; font-size: 16px; }
-.msg-card[data-mode="touch"] .msg-foot { margin-top: 8px; }
-/* free roam: the race lobby (lobby.ts): a card on the right under the game's Bank box, a little wider than it and its
- * text about the size of the HUD's (--u: one HUD unit), and over the trip to the race and back a cover of the whole
- * picture with the lobby in the middle, in the same step */
-.lobby {
+/* The page's cards over the game, in one look (cards.ts; the race lobby's, quick chat's picker, a message to a
+ * friend): a dark card about the size of the HUD's text (--u: one HUD unit), one face in two sizes (the small one only
+ * for what qualifies a line) and two weights, in blocks an even gap apart with a line between them: a title, what it
+ * is about, the keys (a key cap and what it does; with a click or a tap, a button too), one hint */
+.ov-card {
   --u: 1px;
-  position: absolute; left: 0; top: 0; z-index: 3; transform: translateX(-100%);
+  position: absolute; z-index: 4; display: flex; flex-direction: column;
   width: calc(190 * var(--u)); min-width: 220px; padding: calc(10 * var(--u)) calc(12 * var(--u));
-  border-left: 3px solid var(--lime); border-radius: 4px; background: rgba(13, 13, 13, 0.78);
-  font: 400 max(13px, calc(11 * var(--u))) / 1.35 var(--font); color: var(--text); pointer-events: none;
+  border-radius: 4px; background: rgba(13, 13, 13, 0.78);
+  font: 400 max(13px, calc(11 * var(--u))) / 1.4 var(--font); color: var(--text); pointer-events: none;
 }
-.lobby-title { font-size: 1.1em; font-weight: 700; font-style: italic; text-transform: uppercase; letter-spacing: 0.02em; color: var(--lime); }
-.lobby-sub, .lobby-hint { color: var(--muted); font-size: 0.85em; }
-.lobby-why { margin-top: 0.4em; color: var(--muted); }
-/* its host made no input lately: the seconds until the lobby closes (lobby.ts away); a lobby whose race's stage
- * usually has much faster cars than ours (outpaced) */
-.lobby-warn { margin-top: 0.3em; font-size: 0.85em; font-weight: 700; color: var(--warn); }
-.lobby-places { list-style: none; margin: 0.5em 0 0; padding: 0; }
-.lobby-places li { display: flex; gap: 0.6em; align-items: baseline; padding: 0.12em 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
-.lobby-places li.open { color: rgba(255, 255, 255, 0.35); font-style: italic; }
-.lobby-places.dim li.taken { opacity: 0.6; }
-.lobby-n { width: 1em; text-align: right; color: var(--muted); }
-.lobby-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lobby-tag { font-size: 0.75em; text-transform: uppercase; color: var(--lime); }
-/* a race that counts in a player's career (lobby.ts places, career) */
+.ov-block { display: flex; flex-direction: column; gap: 0.3em; padding-block: 0.5em; }
+.ov-block:first-child { padding-top: 0; }
+.ov-block:last-child { padding-bottom: 0; }
+.ov-block + .ov-block { border-top: 1px solid var(--line); }
+.ov-title { font-weight: 700; color: var(--lime); }
+.ov-small { font-size: 0.85em; color: var(--muted); }
+/* what is going on: waiting (dim), about to close (warn), starting (go) */
+.ov-dim { color: var(--muted); }
+.ov-warn { color: var(--warn); }
+.ov-go { font-weight: 700; color: var(--lime); }
+/* a key and what it does */
+.ov-act { display: flex; gap: 0.5em; align-items: center; }
+:is(.ov-act, .notices, .toast, .pause-hint, .friend-prompt) kbd {
+  flex: none; min-width: 1.7em; padding: 0 0.35em; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
+  font: 400 0.85em/1.5 var(--font); text-align: center; color: var(--text); text-shadow: none;
+}
+/* the card's own buttons (with a click or a tap): the card lets clicks through, these take them */
+.ov-act.tap { pointer-events: auto; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ov-act.tap:hover > span { text-decoration: underline; }
+.ov-act.tap:active { color: var(--lime); }
+html[data-touch] .ov-act.tap { min-height: 32px; }
+/* free roam: the race lobby (lobby.ts), the card on the right under the game's Bank box, a little wider than it: the
+ * race, its members, the host's settings, this lobby or the next.  Over the trip to the race and back a cover of the
+ * whole picture with the lobby in the middle, in the same step */
+.lobby { left: 0; top: 0; z-index: 3; transform: translateX(-100%); }
+/* the race and how full it is, then where it is (lobby.ts head) */
+.lobby-top { display: flex; justify-content: space-between; gap: 0.6em; }
+.lobby-race::first-letter { text-transform: uppercase; }
+.lobby-race { display: inline-block; }
+.lobby-count { font-variant-numeric: tabular-nums; color: var(--muted); }
+/* the players, the host first: friends and crew-mates in lime, ours bold (lobby.ts players) */
+.lobby-players { list-style: none; margin: 0; padding: 0; }
+.lobby-players li { display: flex; gap: 0.5em; align-items: baseline; }
+.lobby-pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-players li.me .lobby-pname { font-weight: 700; }
+.lobby-players li.mate .lobby-pname { color: var(--lime); }
+.lobby-players li.open { color: rgba(255, 255, 255, 0.35); }
+.lobby-players.dim li { opacity: 0.6; }
+/* a win counts in this player's career (lobby.ts players, head) */
 .lobby-star { color: var(--lime); }
 /* quick chat: what a player of the lobby said lately, beside their name (lobby.ts say) */
-.lobby-said { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9em; font-weight: 700; font-style: italic; color: var(--lime); }
-.lobby-act { display: flex; gap: 0.5em; align-items: center; margin-top: 0.6em; }
-.lobby-act kbd {
-  padding: 0 0.4em; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
-  font: 700 0.85em/1.5 var(--font); color: var(--text);
-}
-/* the card's own buttons (lobby.ts act with a click: the next lobby, Friends & crew only and its switch, invite,
- * leave a race joined from afar): the card lets clicks through, these take them */
-.lobby-act.tap { pointer-events: auto; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.lobby-act.tap:hover > span:not(.lobby-onoff) { text-decoration: underline; }
-.lobby-act.tap:active { color: var(--lime); }
-html[data-touch] .lobby-act.tap { min-height: 32px; }
-.lobby-onoff { padding: 0 0.45em; border: 1px solid var(--line); border-radius: 3px; background: var(--field); font-size: 0.8em; font-weight: 700;
-  text-transform: uppercase; color: var(--muted); }
-.lobby-onoff.on { border-color: var(--lime); background: var(--lime); color: #000; }
-/* the lobbies at a start: this page of how many, above the title (lobby.ts pager) */
-.lobby-pager { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6em; margin-bottom: 0.3em; }
-.lobby-dots { letter-spacing: 0.2em; font-size: 0.7em; color: var(--muted); }
-.lobby-dots .on { color: var(--lime); }
-.lobby-count { margin-top: 0.5em; font-size: 1.5em; font-weight: 700; font-style: italic; color: var(--lime); }
-.lobby-note { color: var(--text); }
+.lobby-said { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--lime); }
+/* the fastest other car against ours: a small speedometer beside its words (lobby.ts speedometer) */
+.lobby-speed { display: flex; justify-content: center; align-items: center; gap: 0.4em; font-size: 0.85em; color: var(--muted); }
+.lobby-gauge { flex: none; width: 1.9em; height: 1.1em; }
+.lobby-gauge path { fill: none; stroke-linecap: round; stroke-width: 2; }
+.lobby-gauge .track { stroke: var(--edge); }
+.lobby-gauge .red { stroke: var(--bad); }
+.lobby-gauge .needle { stroke: var(--text); }
+
 .lobby-cover {
   --u: 1px;
   position: absolute; inset: 0; z-index: 4; display: grid; place-items: center;
@@ -1218,17 +1232,22 @@ html[data-touch] .lobby-act.tap { min-height: 32px; }
   font: 400 max(16px, calc(14.5 * var(--u))) / 1.4 var(--font); color: var(--text);
 }
 .lobby-cover[hidden] { display: none; }
-.lobby-card { width: min(calc(400 * var(--u)), calc(100% - 32px)); min-width: min(300px, calc(100% - 32px)); }
-.lobby-card .lobby-title { font-size: 1.4em; }
-/* the race's results on the way back (lobby.ts results) */
-.lobby-results { margin-top: 0.8em; }
-.lobby-head { font-size: 0.75em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.lobby-card { display: flex; flex-direction: column; width: min(calc(400 * var(--u)), calc(100% - 32px)); min-width: min(300px, calc(100% - 32px)); }
+/* the race's results on the way back (lobby.ts results, standings): place, name, time or points */
+.lobby-results { margin: 0; }
+.lobby-places { list-style: none; margin: 0; padding: 0; }
+.lobby-places li { display: flex; gap: 0.6em; align-items: baseline; }
+.lobby-n { width: 1em; text-align: right; color: var(--muted); }
+.lobby-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-head { margin-bottom: 0.3em; font-weight: 700; }
 .lobby-results .lobby-places { margin-top: 0.25em; }
 .lobby-places li.mine .lobby-name { font-weight: 700; }
 .lobby-time { font-variant-numeric: tabular-nums; color: var(--muted); }
 .lobby-places li.mine .lobby-time { color: var(--text); }
+/* the site's address in the bottom right of a loading screen (titlemark.ts corner): over the trip's cover too */
+.title-mark.corner { z-index: 6; }
 .lobby-prize { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--lime); }
-.lobby-step { display: flex; gap: 0.6em; align-items: center; margin-top: 1em; color: var(--muted); }
+.lobby-step { display: flex; gap: 0.6em; align-items: center; color: var(--muted); }
 .lobby-spin {
   width: 1em; height: 1em; border: 2px solid rgba(255, 255, 255, 0.2); border-top-color: var(--lime); border-radius: 50%;
   animation: lobby-spin 0.9s linear infinite;
@@ -1251,8 +1270,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .dlg:has(.row.end[hidden]) #confirm-body > :last-child { margin-bottom: 0; }
 .dlg-field { display: flex; align-items: center; gap: 12px; }
 .dlg-field input[type="text"] { flex: 1; min-width: 0; }
-.dlg.help { width: min(560px, calc(100vw - 32px)); }
-/* the changelog (changelog.ts): the help sheet's width, the releases scrolling under the title and Close */
+/* the changelog (changelog.ts): the Controls sheet's width, the releases scrolling under the title and Close */
 .dlg.changelog { width: min(560px, calc(100vw - 32px)); }
 .dlg.changelog[open] { display: flex; flex-direction: column; overflow: hidden; }
 #changelog-body { min-height: 0; overflow: hidden auto; }
@@ -1284,14 +1302,35 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .shot-foot .hint { margin: 0 auto 0 8px; font-variant-numeric: tabular-nums; }
 .dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .dlg-head h2 { margin: 0; }
-.menu-actions { display: grid; gap: 8px; }
-.menu-radio { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); }
-.menu-radio .btn { padding: 0 80px; overflow: hidden; }
-.menu-radio .btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-inline-end: 0.2em; }
-.menu-radio .icon { position: absolute; top: 50%; translate: 0 -50%; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: inherit; }
+/* the page menu (F9, shell.ts openMenu): a list in the cards' look (cards.ts .ov-*): one face, 16 and 14 px, two
+ * weights; blocks with a line between them (what is about free roam, then the rest); each item a row, what it is on
+ * the left and its state on the right, the row under the pointer, the keyboard or a controller lime.  Esc, F9 or a
+ * controller's B close it, and Close at the top; the last save and Download log at the bottom.  A block with nothing
+ * in it (no free roam) is not drawn. */
+.dlg.menu { width: min(352px, calc(100vw - 32px)); padding: 12px 0; }
+.dlg.menu h2 { margin: 0; font: 700 16px/24px var(--font); color: var(--lime); }
+.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 8px 16px; }
+.menu-head .text-btn { text-decoration: none; }
+.menu-block { display: grid; align-content: start; padding-block: 4px; box-shadow: inset 0 1px var(--line); }
+.menu-block:not(:has(> :not([hidden]))) { display: none; }
+.menu-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 40px; padding: 8px 16px;
+  border: 0; border-radius: 0; background: none; color: var(--text); font: 400 16px/24px var(--font); text-align: left; cursor: pointer;
+}
+.menu-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-row > span:first-child { flex: none; max-width: 100%; }
+.menu-row:hover, .menu-row:focus-visible, .dlg.menu[data-pad] .menu-row:focus { outline: none; box-shadow: none; background: var(--lime-fill); color: var(--lime); }
+.menu-val { color: var(--muted); }
+.menu-row.selected .menu-val { color: var(--lime); }
+.menu-row.go { font-weight: 700; color: var(--lime); }
+.menu-row.bad { color: var(--bad); }
+.menu-dot:not(:empty) { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--lime); font-size: 0; }
+.menu-radio { position: relative; display: grid; }
+.menu-radio .menu-row { padding-right: 88px; }
+.menu-radio .icon { position: absolute; top: 50%; translate: 0 -50%; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--muted); }
 .menu-radio .icon:hover { color: var(--lime); }
-.menu-radio [data-act="radio-folder"] { right: 40px; }
-.menu-radio [data-act="playlist"] { right: 8px; }
+.menu-radio [data-act="radio-folder"] { right: 48px; }
+.menu-radio [data-act="playlist"] { right: 12px; }
 .dlg.playlist { width: min(640px, calc(100vw - 32px)); }
 #playlist-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: calc(100dvh - 220px); overflow: hidden auto; }
 .track { display: flex; align-items: center; justify-content: space-between; gap: 12px; content-visibility: auto; contain-intrinsic-size: auto 44px; }
@@ -1300,8 +1339,11 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 #playlist-shuffle { margin-bottom: 8px; }
 .track-folder { color: var(--muted); font-size: 14px; line-height: 20px; padding-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-radio svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-#menu-save { margin-top: -12px; }
-#menu-save:empty { display: none; }
+.dlg .menu-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 8px 8px 0 16px;
+  box-shadow: inset 0 1px var(--line); color: var(--muted); font-size: 14px; line-height: 20px;
+}
+.menu-foot .text-btn { flex: none; }
 /* a conversation with a friend (messages.ts ChatDialog): the messages scrolling under the name and Close, newest at
  * the bottom, each with who and when; the field and Send under them; what became of a message, and the characters
  * left, under the field */
@@ -1315,10 +1357,57 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .chat-msg.out .chat-head b { color: var(--text); }
 .chat-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
 #chat-left { margin-left: auto; font-variant-numeric: tabular-nums; }
-/* the menu's Crews popup (a game in free roam): the Crews row's control under the help, Done under it */
-.crews-pop-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-.dlg ul.crews { margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
+/* the menu's Crews and Friends (a game in free roam; shell.ts menuPage): the menu's list turns into one, ‹ and its name
+ * at the top (back to the list), its help under them, then its rows as the menu's: 40 px each, no lines between them,
+ * 16 px type, what it is on the left and its state and buttons on the right.  The Crews row's control (settings-ui.ts
+ * crewControl) and the friends' list (friends.ts) drawn into them, in the menu's look */
+.menu-back {
+  display: flex; align-items: center; gap: 4px; min-width: 0; height: 32px; margin-left: -8px; padding: 0 8px 0 4px;
+  border: 0; border-radius: 8px; background: none; color: var(--lime); font: 700 16px/24px var(--font); cursor: pointer;
+}
+.menu-back svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.menu-back span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-back:hover, .menu-back:focus-visible, .dlg.menu[data-pad] .menu-back:focus { outline: none; box-shadow: none; background: var(--lime-fill); }
+.dlg .menu-note { margin: 0; padding: 0 16px 8px; color: var(--muted); font-size: 14px; line-height: 20px; }
+/* the menu's Controls: the start page's sheet, as wide as it needs there, under its ‹ */
+.dlg.menu:has(#menu-controls:not([hidden])) { width: min(560px, calc(100vw - 32px)); }
+.menu-sheet { padding: 8px 16px 12px; box-shadow: inset 0 1px var(--line); }
+.dlg ul.crews, .menu-block ul.fl { margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .dlg p.set-note { margin: 0; }
+.menu-block .set-note { padding: 4px 16px 0; }
+/* a world: its name, how many are in free roam there, a check on the game's own (the room for one on every row, so the
+ * counts line up); Own name… turns into a field for a world's name */
+.menu-row .menu-end { display: flex; align-items: center; gap: 8px; flex: none; }
+.menu-end svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--lime); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; visibility: hidden; }
+.menu-row.selected .menu-end svg { visibility: visible; }
+.dlg .menu-field { display: block; width: auto; margin: 4px 16px; }
+/* a crew: its colour (the palette's button), its name, how many are in free roam in it, its link and Leave; the box to
+ * join one under them, and the palette (opened by a colour) under the crews */
+.menu-crews .crew-line { display: grid; gap: 0; }
+.menu-crews .crews { display: grid; }
+.menu-crews .crew { height: 40px; padding: 4px 8px; border-radius: 0; background: none; }
+.menu-crews .crew-dot::before { box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--line); }
+.menu-crews .crew-dot:hover::before, .menu-crews .crew-dot[aria-expanded="true"]::before { box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--lime); }
+.menu-crews .crew-text { flex: 1; justify-content: space-between; padding-left: 4px; }
+.menu-crews .crew-name { font-style: normal; font-weight: 400; }
+.menu-crews .crew-count { margin-right: 4px; }
+.menu-crews .crew-add { flex: none; width: auto; max-width: none; margin: 4px 16px; }
+.menu-crews .crew-colours { margin: 0 16px 4px; }
+/* a friend: its name, where it plays (a request's words lime, as the list's offers), its buttons; a friend's crews to
+ * invite it to under its row; the others in a line under the list, the box to ask one by name under that */
+.menu-block .fl li { min-height: 40px; padding: 4px 8px 4px 16px; box-shadow: none; }
+.menu-block .fl-name { display: flex; align-items: baseline; gap: 8px; font-style: normal; font-weight: 400; }
+.menu-block .fl-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.menu-block .fl-st { flex: none; margin-left: auto; color: var(--muted); }
+.menu-block .fl li:has(.fl-yes) .fl-st { color: var(--lime); }
+.menu-block .fl li.fl-pick { padding: 0 16px 8px; }
+.menu-block .fl-pick .fl-st { margin-left: 0; }
+.menu-friends > .fl:not(:last-child) { padding-bottom: 4px; box-shadow: inset 0 -1px var(--line); }
+.menu-friends > p.hint { margin: 0; padding: 8px 16px 0; }
+.menu-friends > p.hint:first-child { padding-top: 4px; }
+.menu-friends > p.hint + p.hint { padding-top: 4px; }
+.menu-friends .fl-add { width: auto; margin: 8px 16px 4px; }
+.menu-friends > .fl + .fl-add { margin-top: 12px; }
 
 /* ---------------------------------------------------------------- narrow */
 /* no room for the buttons beside the title (the longest name is Português (Brasil), the title on two lines at most):
@@ -1357,7 +1446,13 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   /* a value box fills the row, beside what stays at its own width (Listen) */
   .set-control > select, .set-control > input[type="text"], .set-control > input[type="number"], .set-control > .linkbox,
   .set-control .crew-add { flex: 1 1 160px; width: auto; min-width: 0; max-width: none; }
-  .set-control .fl-add { flex: none; width: 100%; }   /* (in the Friends row's column: no basis, which is its height) */
+  .set-control .fl-add { flex: none; width: 100%; }
+  .set-world .set-control { align-items: stretch; }
+  .set-world .set-control > select, .set-world .set-control > .linkbox { flex: none; width: 100%; }
+  .fl-foot > .fl-add { flex: 1 1 auto; width: auto; min-width: 0; }   /* (the rest of the line, beside the pages) */
+  /* (Filter under the help, the row's width, as a value box here) */
+  .set-list.fl-paged { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "help" "find" "ctl"; }
+  .fl-paged > .fl-find { width: 100%; margin-top: 8px; }   /* (in the Friends row's column: no basis, which is its height) */
   .opt { flex: 1; justify-content: center; padding: 4px 8px; text-align: center; }
   /* Reset all settings on a line of its own, under the text editor's line (and the editor, when open) */
   .raw { display: flex; flex-direction: column; }
@@ -1370,28 +1465,11 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .tabs { gap: 16px; }
   html:not([data-touch]) .tabs { gap: 8px; }
 }
-/* a phone on its side (a short window): the page menu in as many columns as the dialog's width gives it, so no label is
- * cut (the fixed two columns cut "Contador de FPS: desactivad…", and the radio's 80 px of icons left it "R…"), and a
- * label too long for its button takes a second line as a row's button does on a narrow screen.  The radio and its two
- * icons keep a line of their own, and dense placement fills the cells the row before it leaves empty.  The dialog takes
- * the room the game's picture has there, and its margins tighten, so a landscape phone's menu (and Quit game) is in
- * sight without scrolling. */
+/* a phone on its side (a short window): the page menu's two blocks side by side, so all of it is in sight */
 @media (max-height: 479px) {
-  .dlg.menu { width: min(760px, calc(100vw - 32px)); padding: 16px; }
-  .dlg.menu h2 { margin-bottom: 4px; }
-  .dlg.menu .hint { margin-bottom: 8px; }
-  .dlg.menu #menu-save { margin-top: -8px; }
-  .menu-actions { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); grid-auto-flow: dense; gap: 4px; }
-  .menu-actions > .btn { height: auto; min-height: 40px; padding-block: 6px; white-space: normal; text-align: center; }
-  .menu-radio { grid-column: 1 / -1; }
-}
-/* the smallest phones: the radio's two icons take less of its button, so "Radio: desactivado" is whole too (its longest
-   word is 92 px, and 80 px each side left 72 on a 320 px screen) */
-@media (max-width: 399px) {
-  .menu-radio .btn { padding: 0 56px; }
-  .menu-radio .icon { width: 24px; height: 24px; }
-  .menu-radio [data-act="radio-folder"] { right: 32px; }
-  .menu-radio [data-act="playlist"] { right: 4px; }
+  .dlg.menu { width: min(640px, calc(100vw - 32px)); }
+  .menu-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .menu-body > .menu-block + .menu-block { box-shadow: inset 0 1px var(--line), inset 1px 0 var(--line); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }

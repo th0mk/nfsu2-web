@@ -1,0 +1,42 @@
+# Crash damage in free roam (runtime/damage.c, RC_MSG_DENTS), instance A (crashes): new career -> prologue free
+# roam; A jumps to the car lot's door and drives full throttle into the wall at the street's end (~47 m), backs off
+# and hits it again, then stands while B (damage_roam_b.txt, play page) looks at A's car.
+#   node web/tools/roam-pair.mjs --page play --play-only Bo --a Al:damage_roam_a.txt --b Bo:damage_roam_b.txt \
+#        --env NFSU2_DAMAGE=1 --env NFSU2_DAMAGE_LOG=1
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++900  log crash_go
++0    roam shopgo CC_CAR_LOT_1
++180  log crash_drive
++0    down UP
++420  up UP
++0    log crash_1
++0    down DOWN
++150  up DOWN
++60   down UP
++200  up UP
++0    log crash_2
++0    down DOWN
++40   up DOWN
++0    log stand
++0    roam mp status
++3600 roam mp status
++10   quit

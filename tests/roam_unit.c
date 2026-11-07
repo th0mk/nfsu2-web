@@ -356,7 +356,17 @@ static void t_roundtrip(void){
       r2[n2 - 3] = 77;                                       /* as an older core reads it: skipped */
       CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && d2.has_perf && !d2.has_horn, "horn extension skipped as unknown");
       cp.has_perf = 0; n2 = rc_carcfg_encode(&cp, r2, sizeof r2);
-      CHECK(n2 == n + 3 && rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_perf && d2.has_horn && d2.horn == 6, "horn extension alone"); }
+      CHECK(n2 == n + 3 && rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_perf && d2.has_horn && d2.horn == 6, "horn extension alone");
+      /* and the car's rating after them (a core before it skips it) */
+      cp.has_perf = 1; cp.has_rating = 1; cp.rating_cls = 2; cp.rating = 316; n2 = rc_carcfg_encode(&cp, r2, sizeof r2);
+      CHECK(n2 == 27 + 9 * RC_PART_SLOTS + 2 + RC_PERF_BYTES + 3 + 5 && r2[n - 1] == 3 && r2[n2 - 5] == RC_EXT_RATING && r2[n2 - 4] == 3,
+            "car record with the rating extension: %d bytes", n2);
+      CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && d2.has_rating && d2.rating_cls == 2 && d2.rating == 316 && d2.has_horn && d2.has_perf,
+            "rating extension round trip");
+      r2[n2 - 5] = 77;                                       /* as an older core reads it: skipped */
+      CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_rating && d2.has_horn, "rating extension skipped as unknown");
+      r2[n2 - 5] = RC_EXT_RATING; r2[n2 - 1] = 0x40;         /* a rating past 5000: none */
+      CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_rating, "a rating past 5000 is none"); }
     CHECK(rc_carcfg_decode(rec, n, &c2) == RC_OK && c2.type_hash == cc.type_hash && !strcmp(c2.type_name, "350Z") && c2.n_parts == RC_PART_SLOTS &&
           !memcmp(c2.part, cc.part, sizeof cc.part), "car record round trip");
     /* record: version 1, type hash 4, name 16, ride bytes 4, count 1 = 26, then 9 per part */
@@ -467,6 +477,7 @@ static int node_of(uint32_t ip, uint16_t port){ if (ip != 0x7f000001u) return -1
 static int g_bcast_calls;
 static int g_cfg_tx[NN];                    /* CFG datagrams each node sent */
 static int g_ping_tx[NN][NN], g_hello_tx[NN][NN];   /* PINGs and HELLOs each node sent each other one */
+static int g_dents_tx[NN][NN], g_have_tx[NN][NN];   /* DENTS (STATE) and their HAVEs each node sent each other one */
 /* a stand-in for the server's free-roam hub (web/server-rs/crates/roam): it
  * counts what each node sends it and, while on, lists g_hub_link[i] for node
  * i every second */
@@ -499,6 +510,7 @@ static void net_send(void *u, uint32_t ip, uint16_t port, const uint8_t *buf, in
     if (len > 5 && buf[5] == RC_MSG_CFG) g_cfg_tx[from]++;
     if (to >= 0 && len > 5 && buf[5] == RC_MSG_PING) g_ping_tx[from][to]++;
     if (to >= 0 && len > 5 && buf[5] == RC_MSG_HELLO) g_hello_tx[from][to]++;
+    if (to >= 0 && len > 16 && buf[5] == RC_MSG_DENTS){ if (buf[16] == RC_DENTS_STATE) g_dents_tx[from][to]++; else g_have_tx[from][to]++; }
     if (to >= 0 && len > 15 && buf[5] == RC_MSG_SNAP){ if (buf[14] & RC_HF_STATEX) g_snapx_rx[to]++; else g_snap_rx[to]++; g_snap_tx[from][to]++; }
     if (to < 0 || g_drop[from][to]) return;
     if (to == g_nocrew_from && len > 15 && buf[5] == RC_MSG_HELLO){ rc_msg d; if (rc_decode(buf, len, &d) == RC_OK && d.u.hello.n_crews) g_crew_to_old++; }
@@ -1982,6 +1994,139 @@ static void t_say(void){
           "say inbox: %d kept, %u dropped, %d taken", kept, g_n[1].say_dropped, taken);
 }
 
+/* ---- 4g. crash damage: DENTS only to a peer that shows it and is near, until it says it has it ------------------------ */
+static int dents_dgram(uint8_t *b, uint32_t sender, uint8_t op, uint16_t rev, int n, int extra){
+    /* a DENTS by hand (n dents of RC_DMG_BYTES, then `extra` bytes): what a game that keeps to no rules may send */
+    rc_msg m; memset(&m, 0, sizeof m); m.h.type = RC_MSG_DENTS; m.h.sender = sender;
+    static uint8_t d[(RC_DMG_MAX + 1) * RC_DMG_BYTES];
+    for (int i = 0; i < (int)sizeof d; i++) d[i] = (uint8_t)(i * 7 + 3);
+    m.u.dents.op = RC_DENTS_STATE; m.u.dents.rev = rev; m.u.dents.epoch = 4; m.u.dents.first = 9; m.u.dents.n = 1; m.u.dents.data = d;
+    int len = rc_encode(&m, b, RC_MAX_DGRAM);
+    /* rebuild from the encoded header with the op, n and tail asked for */
+    int at = RC_HDR; b[at++] = op; b[at++] = (uint8_t)rev; b[at++] = (uint8_t)(rev >> 8);
+    if (op == RC_DENTS_STATE){ b[at++] = 4; b[at++] = 9; b[at++] = 0; b[at++] = (uint8_t)n;
+        for (int i = 0; i < n * RC_DMG_BYTES; i++) b[at++] = d[i]; }
+    for (int i = 0; i < extra; i++) b[at++] = 0xEE;
+    len = at + RC_CRC; b[6] = (uint8_t)len; b[7] = (uint8_t)(len >> 8);
+    uint32_t c = rc_crc32(b, (uint32_t)at); for (int k = 0; k < 4; k++) b[at + k] = (uint8_t)(c >> (8 * k));
+    return len;
+}
+static void t_dents(void){
+    /* the message: a round trip, its bounds */
+    { uint8_t d[RC_DMG_MAX * RC_DMG_BYTES], b[RC_MAX_DGRAM]; for (int i = 0; i < (int)sizeof d; i++) d[i] = (uint8_t)(i * 13 + 5);
+      rc_msg m, o; memset(&m, 0, sizeof m); m.h.type = RC_MSG_DENTS; m.h.sender = 0x77;
+      m.u.dents.op = RC_DENTS_STATE; m.u.dents.rev = 300; m.u.dents.epoch = 200; m.u.dents.first = 65000; m.u.dents.n = RC_DMG_MAX; m.u.dents.data = d;
+      int n = rc_encode(&m, b, sizeof b);
+      CHECK(n == RC_HDR + 7 + RC_DMG_MAX * RC_DMG_BYTES + RC_CRC && n <= RC_MAX_DGRAM, "DENTS of %d dents: one datagram of %d bytes", RC_DMG_MAX, n);
+      CHECK(rc_decode(b, n, &o) == RC_OK && o.u.dents.op == RC_DENTS_STATE && o.u.dents.rev == 300 && o.u.dents.epoch == 200 &&
+            o.u.dents.first == 65000 && o.u.dents.n == RC_DMG_MAX && !memcmp(o.u.dents.data, d, sizeof d), "DENTS round trip");
+      m.u.dents.n = RC_DMG_MAX + 1;
+      CHECK(rc_encode(&m, b, sizeof b) < 0, "DENTS of %d dents: not encoded", RC_DMG_MAX + 1);
+      m.u.dents.n = 0; m.u.dents.rev = 0;
+      CHECK(rc_encode(&m, b, sizeof b) < 0, "DENTS of revision 0: not encoded");
+      m.u.dents.op = RC_DENTS_HAVE; m.u.dents.rev = 301; n = rc_encode(&m, b, sizeof b);
+      CHECK(n == RC_HDR + 3 + RC_CRC && rc_decode(b, n, &o) == RC_OK && o.u.dents.op == RC_DENTS_HAVE && o.u.dents.rev == 301, "HAVE round trip (%d bytes)", n);
+      int k = dents_dgram(b, 0x77, RC_DENTS_STATE, 5, RC_DMG_MAX + 1, 0);
+      CHECK(rc_decode(b, k, &o) == RC_E_FIELD, "a DENTS of %d dents: refused", RC_DMG_MAX + 1);
+      k = dents_dgram(b, 0x77, RC_DENTS_STATE, 5, 3, 0); b[RC_HDR + 6] = 4;   /* says 4, has 3 (CRC fixed) */
+      { uint32_t c = rc_crc32(b, (uint32_t)k - 4); for (int q = 0; q < 4; q++) b[k - 4 + q] = (uint8_t)(c >> (8 * q)); }
+      CHECK(rc_decode(b, k, &o) == RC_E_SHORT, "a DENTS cut short: refused");
+      k = dents_dgram(b, 0x77, RC_DENTS_STATE, 0, 1, 0);
+      CHECK(rc_decode(b, k, &o) == RC_E_FIELD, "a DENTS of revision 0: refused");
+      k = dents_dgram(b, 0x77, RC_DENTS_STATE, 5, 2, 9);
+      CHECK(rc_decode(b, k, &o) == RC_OK && o.u.dents.n == 2, "a DENTS with a newer core's bytes after it: read, the bytes skipped");
+      k = dents_dgram(b, 0x77, 9, 5, 0, 20);
+      CHECK(rc_decode(b, k, &o) == RC_OK && o.u.dents.op == 9, "a DENTS of an op of a newer core: read as such (the session skips it)"); }
+
+    /* sessions: node 0's damage; node 1 shows friends' damage, node 2 does not (damage off, or a game before it) */
+    mesh(3, 8);
+    g_n[0].conf.dents = 1; g_n[1].conf.dents = 1;
+    for (int i = 1; i < 3; i++){ rc_add_peer(&g_n[0], node_ip(i), node_port(i), 1, g_now); rc_add_peer(&g_n[i], node_ip(0), node_port(0), 1, g_now); }
+    drive(3, g_now + 3000000);
+    int p1 = peer_of(0, 0x501), p2 = peer_of(0, 0x502), q1 = peer_of(1, 0x500), q2 = peer_of(2, 0x500);
+    CHECK(est(0) == 2 && p1 >= 0 && p2 >= 0 && q1 >= 0 && q2 >= 0 && g_n[0].peer[p1].dents && !g_n[0].peer[p2].dents,
+          "the HELLO's flag says who shows friends' damage (%d %d)", p1 >= 0 && g_n[0].peer[p1].dents, p2 >= 0 && g_n[0].peer[p2].dents);
+    memset(g_dents_tx, 0, sizeof g_dents_tx); memset(g_have_tx, 0, sizeof g_have_tx);
+    uint32_t bad2 = g_n[2].rx_bad;
+    uint8_t d[RC_DMG_MAX * RC_DMG_BYTES]; for (int i = 0; i < (int)sizeof d; i++) d[i] = (uint8_t)(i * 31 + 1);
+    rc_set_dents(&g_n[0], 5, 100, 40, d, g_now);
+    net_run(g_now + 20000, 3);
+    const rc_peer *r1 = &g_n[1].peer[q1];
+    CHECK(r1->dents_rev == 1 && r1->dents_epoch == 5 && r1->dents_first == 100 && r1->dents_n == 40 && r1->dents_gen == 1 &&
+          !memcmp(r1->dent, d, 40 * RC_DMG_BYTES), "the dents arrive at the peer that shows them (rev %u, %u dents)", r1->dents_rev, r1->dents_n);
+    CHECK(g_dents_tx[0][2] == 0 && g_n[2].peer[q2].dents_rev == 0 && g_n[2].rx_bad == bad2,
+          "none to the peer that does not show them (%d sent; its bad count +%u)", g_dents_tx[0][2], g_n[2].rx_bad - bad2);
+    CHECK(g_n[0].peer[p1].dents_have == 1 && g_have_tx[1][0] == 1, "its HAVE comes back (%u)", g_n[0].peer[p1].dents_have);
+    drive(3, g_now + 6000000);
+    CHECK(g_dents_tx[0][1] == 1, "once had, no repeats (%d sent in 6 s)", g_dents_tx[0][1]);
+    rc_set_dents(&g_n[0], 5, 100, 40, d, g_now);
+    CHECK(g_n[0].dents_rev == 1, "the same damage again: no new revision (%u)", g_n[0].dents_rev);
+    /* the more than RC_DMG_MAX: the newest */
+    { uint8_t big[(RC_DMG_MAX + 4) * RC_DMG_BYTES]; for (int i = 0; i < (int)sizeof big; i++) big[i] = (uint8_t)(i * 3);
+      rc_set_dents(&g_n[0], 5, 100, RC_DMG_MAX + 4, big, g_now); net_run(g_now + 20000, 3);
+      CHECK(r1->dents_rev == 2 && r1->dents_n == RC_DMG_MAX && r1->dents_first == 104 && !memcmp(r1->dent, big + 4 * RC_DMG_BYTES, RC_DMG_MAX * RC_DMG_BYTES),
+            "more than %d dents: the newest go (first %u)", RC_DMG_MAX, r1->dents_first); }
+    /* lost on the way: again after a second, then the peer has it */
+    memset(g_dents_tx, 0, sizeof g_dents_tx);
+    g_drop[0][1] = 1;
+    rc_set_dents(&g_n[0], 6, 0, 0, d, g_now);                 /* a repair: no dents, a new epoch */
+    drive(3, g_now + 500000);
+    g_drop[0][1] = 0;
+    drive(3, g_now + 3000000);
+    CHECK(r1->dents_rev == 3 && r1->dents_epoch == 6 && r1->dents_n == 0 && g_dents_tx[0][1] == 2 && g_n[0].peer[p1].dents_have == 3,
+          "a DENTS lost on the way goes again (%d sent), the repair arrives (epoch %u, %u dents)", g_dents_tx[0][1], r1->dents_epoch, r1->dents_n);
+    /* never answered (a game that keeps quiet): again less and less often (1, 2, 4, 8, 8 s) */
+    memset(g_dents_tx, 0, sizeof g_dents_tx);
+    g_drop[1][0] = 1;
+    rc_set_dents(&g_n[0], 6, 0, 2, d, g_now);
+    for (int64_t t = g_now; g_now < t + 9000000;){ drive(3, g_now + 1000000); g_n[0].peer[p1].last_rx_us = g_now; }   /* (the link kept) */
+    g_drop[1][0] = 0;
+    CHECK(g_dents_tx[0][1] >= 3 && g_dents_tx[0][1] <= 5, "unanswered: %d sends in 9 s", g_dents_tx[0][1]);
+    drive(3, g_now + 9000000);
+    CHECK(g_n[0].peer[p1].dents_have == g_n[0].dents_rev, "answered at last");
+    /* far away (past RC_FAR_M): none until it comes near */
+    memset(g_dents_tx, 0, sizeof g_dents_tx);
+    float x[3] = { 0.f, 500.f, 2.f };
+    drive_at(3, g_now + 1000000, x, -1);
+    rc_set_dents(&g_n[0], 6, 2, 3, d, g_now);
+    drive_at(3, g_now + 3000000, x, -1);
+    CHECK(g_dents_tx[0][1] == 0 && r1->dents_n == 2, "a peer 500 m away gets none (%d)", g_dents_tx[0][1]);
+    x[1] = 20.f;
+    drive_at(3, g_now + 500000, x, -1);
+    CHECK(g_dents_tx[0][1] == 1 && r1->dents_n == 3 && r1->dents_first == 2, "...and gets them as it comes near (%d)", g_dents_tx[0][1]);
+    /* by hand: to a game that shows none, kept from it and not answered; a flood of one revision answered rarely; a bad
+     * one counted bad and not kept */
+    uint8_t b[RC_MAX_DGRAM]; int k = dents_dgram(b, 0x500, RC_DENTS_STATE, 900, 5, 0);
+    memset(g_have_tx, 0, sizeof g_have_tx);
+    rc_receive(&g_n[2], node_ip(0), node_port(0), b, k, g_now);
+    CHECK(g_n[2].peer[q2].dents_rev == 0 && g_have_tx[2][0] == 0, "a game that shows no damage keeps none and answers none");
+    int64_t t0 = g_now;
+    for (int i = 0; i < 100; i++){ rc_receive(&g_n[1], node_ip(0), node_port(0), b, k, g_now); g_now += 10000; }
+    CHECK(r1->dents_rev == 900 && r1->dents_n == 5 && g_have_tx[1][0] >= 1 && g_have_tx[1][0] <= 3,
+          "a flood of one DENTS: kept once, %d answers in %lld ms", g_have_tx[1][0], (long long)(g_now - t0) / 1000);
+    uint32_t gen = r1->dents_gen, bad1 = g_n[1].rx_bad;
+    k = dents_dgram(b, 0x500, RC_DENTS_STATE, 901, RC_DMG_MAX + 1, 0);
+    rc_receive(&g_n[1], node_ip(0), node_port(0), b, k, g_now);
+    k = dents_dgram(b, 0x500, 9, 902, 0, 30);
+    rc_receive(&g_n[1], node_ip(0), node_port(0), b, k, g_now);
+    /* a core of before sees a DENTS as a type it does not know: refused, the sender stays (a type past ours here) */
+    k = dents_dgram(b, 0x500, RC_DENTS_STATE, 903, 2, 0); b[5] = 0x7E;
+    { uint32_t c = rc_crc32(b, (uint32_t)k - 4); for (int q = 0; q < 4; q++) b[k - 4 + q] = (uint8_t)(c >> (8 * q)); }
+    { rc_msg o; CHECK(rc_decode(b, k, &o) == RC_E_TYPE, "a message of a type the core does not know: refused as such"); }
+    rc_receive(&g_n[1], node_ip(0), node_port(0), b, k, g_now);
+    CHECK(r1->dents_gen == gen && r1->dents_rev == 900 && g_n[1].rx_bad == bad1 + 2 && g_n[1].peer[q1].state == RC_PS_EST,
+          "too many dents: bad, not kept; an op it does not know: skipped; a type it does not know: bad; the peer stays "
+          "(bad +%u)", g_n[1].rx_bad - bad1);
+    /* a restart of the peer (a new session at its end): it has none of ours, so it gets them again */
+    memset(g_dents_tx, 0, sizeof g_dents_tx);
+    rc_config c1 = g_n[1].conf; c1.self_id = 0x5A1; rc_io io1 = g_n[1].io; rc_session_init(&g_n[1], &c1, &io1);
+    rc_add_peer(&g_n[1], node_ip(0), node_port(0), 1, g_now);
+    drive(3, g_now + 3000000);
+    int q1b = peer_of(1, 0x500);
+    CHECK(q1b >= 0 && g_n[1].peer[q1b].dents_rev == g_n[0].dents_rev && g_n[1].peer[q1b].dents_n == 3 && g_dents_tx[0][1] >= 1,
+          "a peer that restarted gets the damage again (%d sent)", g_dents_tx[0][1]);
+}
+
 int main(int argc, char **argv){
     long fuzz = argc > 1 ? atol(argv[1]) : 200000;
     printf("roam_unit: core %d, protocol %d\n", RC_CORE_VER, RC_PROTO_VER);
@@ -2000,6 +2145,7 @@ int main(int argc, char **argv){
     t_duel_hub();
     t_lobby();
     t_say();
+    t_dents();
     t_statex();
     t_crews();
     t_room();

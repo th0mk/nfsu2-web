@@ -291,6 +291,14 @@ fn earlier(recs: &[Record], now: i64) -> Vec<String> {
     t
 }
 
+/// A ban as `App::ban_by` made it: the ban, how many connections on the switch it reached at once (removed or out of
+/// races), and the operator's answer
+pub(super) struct Made {
+    pub ban: Ban,
+    pub reached: usize,
+    pub text: String,
+}
+
 /// The handles of the `[cheat]` lines of races (nfsu2-online's, and nfsu2-roam's race results), which `ban` takes
 /// for a week (nfsu2-bans marks): the hosts' console lines go through `tag`.  Free roam's lines get none: cheating
 /// there is let be.  The switch is given once it is made, after the hosts.
@@ -314,13 +322,20 @@ impl Marker {
     /// same player's earlier lines under other names, and its bans since, follow the handle (`tagged`).
     pub fn tag(&self, line: &str) -> Option<String> {
         let (vip, name) = race_cheat(line)?;
+        self.mark_of(vip, name).map(|m| tagged(line, &m))
+    }
+
+    /// The mark of the player a race's `[cheat]` line (or the server's own race ban: autoban.rs) names by its address
+    /// and name, made or kept up (its handle, its earlier names, the bans made of it); None when the switch knows no
+    /// one of it, or nothing to name it by.
+    pub fn mark_of(&self, vip: u32, name: &str) -> Option<nfsu2_bans::Marked> {
         let at = self.lan.get()?.who_at(vip);
         let k = keys_of(&self.bans, pick_marked(&at, name)?);
         if k.is_empty() {
             return None;
         }
         match self.bans.mark(name, k, now_ms()) {
-            Ok(m) => Some(tagged(line, &m)),
+            Ok(m) => Some(m),
             Err(e) => {
                 log::error(&format!("bans.json: {e}"));
                 None
@@ -549,6 +564,12 @@ impl App {
 
     /// `ban` and `raceban`: a ban of `kind` of the player `sel` names, for `len`, with `msg`
     async fn ban(&self, kind: Kind, sel: &str, len: &str, msg: &str, now: i64) -> Result<String, String> {
+        self.ban_by(kind, sel, len, msg, now, "").await.map(|m| m.text)
+    }
+
+    /// A ban as `ban` makes it (the operator's: `by` ""; the server's own, autoban.rs: what its log line says of why,
+    /// after the message): the ban, and the answer `ban` gives
+    pub(super) async fn ban_by(&self, kind: Kind, sel: &str, len: &str, msg: &str, now: i64, by: &str) -> Result<Made, String> {
         let until = parse_for(len)?.map(|ms| now + ms);
         let all = self.lan.who().await;
         let p = self.player(&all, sel, now)?;
@@ -565,7 +586,7 @@ impl App {
         let instead = if replaced.is_empty() { String::new() } else { format!("; in place of {}", numbers(&replaced)) };
         let log_what = if kind == Kind::Races { "race ban #" } else { "#" };
         log::line(&format!(
-            "[ban] {log_what}{} {who} {}{}{instead}; {}",
+            "[ban] {log_what}{} {who} {}{}{instead}{by}; {}",
             ban.id,
             how_long(until, now),
             quoted(&msg),
@@ -582,9 +603,10 @@ impl App {
                 None => "not on the switch now".into(),
             });
         }
+        let reached_now = removed.len() + out.len();
         t.extend(reached);
         t.extend(earlier(&before, now));
-        Ok(t.join("\n"))
+        Ok(Made { ban, reached: reached_now, text: t.join("\n") })
     }
 
     /// `rename`: the names of the player `sel` names taken away from everyone, its page asked for another.  The name

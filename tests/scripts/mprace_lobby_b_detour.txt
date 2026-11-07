@@ -1,0 +1,56 @@
+# mprace_lobby_b.txt after a visit to the Online menu that leaves its icons off Lobby (a player had opened Options
+# there; the trip's Enter in the LAN menu later took Options, sat out its time and the host's race left without
+# them, 2026-11-05): the trip must still reach the host's lobby, to the first icon first (runtime/mprace.c, UI_OLMAIN)
+# or back out of the screen it opened ("[mprace] ... UI_OLMAIN's Enter opened ..., not the Lobby: back").
+#   with mprace_lobby_a.txt, as mprace_lobby_b.txt
+0     bot on
++0    waitfng GarageMain.fng 3000
++0    bot off
++300  tap RIGHT
++60   tap RIGHT
++120  tap RETURN                      # Online
++0    waitfng UI_OLMAIN.fng 1800
++600  tap RIGHT
++60   tap RIGHT
++60   tap RETURN                      # an icon two right of where it opened
++400  dump detour_screen
++0    tap ESCAPE
++300  tap ESCAPE
++200  tap LEFT
++60   tap RETURN                      # leave Online: Yes
++0    waitfe UI_Main.fng 3000
++120  tap LEFT
++60   tap LEFT
++60   tap LEFT                        # the main menu back on Career (Online, Split Screen, Quick Race, Career)
++120  log DETOUR DONE
++0    bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    roam mp lobby
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    dump join_line
++0    log LOBBY join
++0    tap RETURN
++60   roam mp lobby
++0    roam mp waitlobby 2 3000
++0    log LOBBY keys while the trip drives
++120  nstap ESCAPE
++60   nstap RETURN
++60   nstap LEFT
++120  nstap ESCAPE
++120  nstap RETURN
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++600  nstap X
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

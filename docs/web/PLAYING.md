@@ -84,7 +84,8 @@ While you drive:
   Nitro and the handbrake trade places.
 - **Gears:** with a manual gearbox (the race's Transmission choice, and always in a drag race), gear down and gear up
   above the steering.
-- **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages,
+- **Small buttons** along the top: pause, camera (held: look back), reset (only while the car goes slower than about
+  30 km/h, as when it is stuck or after a crash; its place stays empty at speed); in free roam also the map, messages,
   **Drift** (drift mode, the game's drift icon, lit while it is on), the career status (the game's Career Status, as
   D-pad Down on a controller, T or F4 on a keyboard), and the horn and quick chat (not with quick chat off)
   while another player's car is within a horn's reach. In a race with other players quick chat shows after reset
@@ -94,8 +95,9 @@ While you drive:
 - **Hydraulics:** with a car that has them (the Hydraulics part, Car Specialties), **Pressurize** and **Bounce** join
   the small buttons (in free roam after the career status, upright in the second row; in a race after reset). A tap
   turns one on (lit, as H or J held on a keyboard), another tap turns it off, or the other one on. While one is on,
-  the steering and Gas and Brake pick the corners instead of driving, under 10 mph as with H and J; turned on faster,
-  it starts working once the car is that slow.
+  the steering and Gas and Brake pick the corners instead of driving, under 10 mph as with H and J. Both show only
+  while the car is that slow (or one is on): a second after it goes faster their places are empty, so the other
+  buttons stay where they are.
 - **HUD:** a phone starts with the game's 4:3 HUD layout (Game, Display, HUD layout), which keeps the minimap and
   the speedometer between the thumbs instead of under the steering and Brake.
 - **Sizes**, in the Controls sheet's Touch tab and kept in this browser: **Control size** for the touch controls, and
@@ -131,7 +133,7 @@ While you drive:
 | F10 | Hide the HUD while you drive, and show it again: the names and quick chat lines over other players' cars go with it; the pause menu, the map, messages and a race's results still show. Free roam and races; off again at each Play; no touch button. Another key, or none, in Controls, Site |
 | **F7** | Next song: the game's next EA Trax song, or with Radio on the folder's next track (not while the game is paused) |
 | **F8** | Frame-rate counter: off, on, detailed |
-| **F9** | The page menu: when the game last saved, full screen, counter, ghost mode (off, players, everything) and crews (in free roam), radio, controls, log, **Quit game**, and Stop waiting: play offline while you wait in line; on a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
+| **F9** | The page menu, a list with each item's state on the right: World (the one you are in), Ghost mode (off, players, everything), Crews and Friends (in free roam; a lime dot on Friends while a request waits), Radio, Full screen, Controls (a page of the menu: ‹ goes back to the list) and **Quit game**, and Stop waiting: play offline while you wait in line; at the bottom when the game last saved, and Download log. Esc, F9, Close or a controller's B close it. On a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
 | **Hold Esc** | Leave full screen (a short press still goes to the game) |
 
 The start page shows these keys under **Controls**, and F9, Controls shows them while you play.
@@ -273,7 +275,9 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Sound** starts with the Play click. If the browser still keeps it off, a note says so, and a click on the game or
   a key press turns it on. A controller button cannot: the browser does not count it.
 - **Firefox and Safari:** Esc leaves full screen at once (they have no keyboard lock); in full screen, pause with P.
-- **Quit** from the game's main menu, or with F9, Quit game. Both let the game save and close. If a loading screen
+- **Quit** from the game's main menu, or with F9, Quit game. Both let the game save and close. When the game saved
+  nothing in the last 10 minutes (or nothing yet in this game), F9's Quit game asks first and says how to save: stop
+  the car, press Esc and choose Save. If a loading screen
   ignores the request, the same menu item then reads "Close the game now". As a last resort it reads "Stop the
   game". Closing the tab asks first, because a save in progress could be cut short.
 
@@ -283,16 +287,16 @@ The start page's big panel has six tabs: **Saves**, **Online**, **Friends & crew
 **Controls**. Online, the crews, Game, Mods and the Controller part of Controls hold this browser's `settings.ini`,
 the same file and keys as the Mac app; Game ends with the game data on this device, the file as text and Reset all
 settings. Each change is saved at once and applies the next time you press Play. Under Play, **Playing now** shows how
-many play on this server now: in total, in free roam, and in the game's Online mode (its races and lobbies); with a
-Room set, the Room row says how many are in that room.
+many play on this server now: in total, in free roam, and in the game's Online mode (its races and lobbies); the
+World row's list says how many are in each world.
 
 | Where | Settings |
 |---|---|
-| Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
+| Online | free roam with others, your name (in free roam and online), your horn, world (Main world, World 1 to 4, or a name of your own), ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, music in drag and drift races, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
-| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
+| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover, Crash Damage, Rubberbanding (original, no boost or off), Transmission Whine; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -340,6 +344,23 @@ Room set, the Room row says how many are in that room.
   and 8 stars in stages 1 to 4, 10 from stage 5), so every cover shoot of the stage is offered the next time free roam
   loads, and pays by that rating. The shops show no Visual Rating box. Turned off again, the next free-roam load
   offers the shoots by your car's own rating; the ones shot and paid stay.
+- **Crash Damage** (Mods): off by default. Chrystian Farias's Crashing Foreign Cars: the racers' cars, yours and the
+  AI's, dent where they are hit, scratch, break their lights and lose loose parts, which lie on the road for a while.
+  Looks only: the cars drive as in the original game. In free roam, players who have it on see each other's damage;
+  with it off you see every car undamaged and yours is shown undamaged to everyone. The game's own repair (a race's
+  start, the garage) takes it away. Its scratches are a download of about 1 MB, fetched only when it is on.
+- **Rubberbanding** (Mods): Original by default. In a career race the game slows the opponents who are ahead of you
+  and gives the ones behind you more power, grip and top speed, more the farther back they are: up to 22% to 37%
+  (more for a better driver) at 320 m behind, while one 320 m ahead of you drives 10% to 15% slower. No boost keeps
+  the waiting but never lets an opponent behind beat its own pace; Off drops both, as a Quick Race with Catch Up off.
+  Only your own career races: Quick Race keeps its own Catch Up option, and LAN and online races have no computer
+  opponents.
+- **Transmission Whine** (Mods): off by default. On, as ropi's
+  [Underground 2 Transmission Whine](https://nfsmods.xyz/mod/5927) has it, your car gets NFS Carbon's gearbox whine
+  (the BMW M3 GTR's, the mod's sounds) over the game's sound: a whine rising with your speed and gear, a second layer
+  louder the faster you go, a short pause at each upshift and a whine of its own in reverse. Every car has it (in split
+  screen and co-op each player's), as loud as the game's Engine Volume (times Master) makes it; the world paused, it
+  is silent. Its sounds (half a megabyte) download once it is on.
 - **Upscaled HUD and Detailed Map** (Mods): Original (the default) is the game's own. Upscaled shows LunicAura106's
   [Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the
   server has their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times
@@ -406,6 +427,10 @@ Room set, the Room row says how many are in that room.
   say: for 20 s after your bank changes (a race's or an outrun's prize, a purchase, a money icon), for 10 s when free
   roam starts, and for 8 s after the pause menu, the map or a shop. In the original game it is always there. The
   magazine and DVD cover rewards show as before.
+- **The box at the top left in free roam:** the box with the D-pad and its icons (the envelope of an SMS waiting,
+  Engage, an outrun) shows the same way: for 20 s after a new message, while your car is at a race marker, a shop's
+  door or an outrun's tuner, for 10 s when free roam starts, and for 8 s after the pause menu, the map or a shop. In the
+  original game it is always there.
 - **Exposure and White Level:** for eyes that a bright picture tires. The game's Options, Display (also the pause
   menu's) has two sliders after Level Of Detail. Exposure makes the whole picture darker or brighter, from half to
   twice as bright (the middle, the default, is the game's own). White Level is the brightest the picture gets, from
@@ -521,7 +546,7 @@ or use a Room to keep to a group.
 
 Good to know:
 
-- **How many:** up to 16000 players on a server set up with `web/deploy/` (2000 with the older Node server), 128 on
+- **How many:** up to 24000 players on a server set up with `web/deploy/` (2000 with the older Node server), 128 on
   one started by hand (its owner can change that). Only free roam and the LAN and Online screens take a place;
   single-player takes none. When it is full, you wait in line for a place, first come first served: the top of the
   screen shows your place and, once a few went in, about how long it takes. You play alone meanwhile and join the
@@ -557,7 +582,8 @@ Good to know:
   them, and the tuner you race in an outrun is solid while it runs, as in the game. An outrun with another player is
   solid only when you both have Ghost mode Off; with Players or Everything you two drive through each other.
   Traffic and tuners are in your game only, so this changes nothing for the others. The page menu (F9) switches
-  between the three while you play, at once, and keeps it for your next games. With Off, a car that appears on top
+  between the three while you play, at once, and keeps it for your next games. In **World 4** Ghost mode is Off for
+  everyone: the page holds it there (the menu's Ghost mode says it stays off), and yours comes back when you leave. With Off, a car that appears on top
   of yours, at a garage or after a jump, lets you through until you are apart. Each
   player's own game moves their car: a car you hit is pushed in its owner's game, and moves on your screen as it does
   there. A hit is shared between the two cars by their models' weight (0.96 t for the Peugeot 106 to 2.9 t for the
@@ -573,9 +599,9 @@ Good to know:
   the stage's other events): within 20 m of it you drive through every car, and every car through yours, so nobody
   blocks it; for players who don't have that event it is an ordinary spot. A player on an older version doesn't know
   about your events or your Ghost mode setting, and collides with you there as before.
-- **Keep right:** a new career starts in the airport's car park, and every new player drives out of it into the
-  others. As your car leaves that spot, the top of the screen says "Please keep right to help avoid crashes" for 15 s
-  (while other players are in free roam).
+- **Ghost mode hint:** a new career starts in the airport's car park, and every new player drives out of it into the
+  others. As your car leaves that spot with Ghost mode off (while other players are in free roam), a note at the top
+  says to turn on Ghost mode in the menu (F9; ☰ on a touch screen, Home on a controller), for 15 s (not in World 4).
 - **Names over the cars** follow the game's own player-names option, as in its LAN races: Show Player Names in the
   game's Options, Gameplay (also the pause menu's) turns them off. A player who paused shows as "paused" there.
 - **Horn:** hold N to honk, or click the controller's left stick (on a car with hydraulics that click works the
@@ -695,26 +721,43 @@ Good to know:
     none while a story task runs, and none where the game has something of its own to enter at the same place (a race
     open in your career there, a cover shoot): Enter is the game's there, and an open race's card asks Solo or
     Multiplayer as above.
-  - **Multiplayer opens a lobby** at the start: the panel shows it, its race, career stage, track and laps and its six
-    places (drag 4, 3 on the three-lane track) with the players in them, the host first and yours marked. The players
-    near see "Ann's circuit (1/6)" over the start (from about 250 m; several lobbies at one start stack there, a line
-    each, the fuller first, at most four and then "+2 more"); everyone in free roam sees its race's icon on
-    the world map (M), and the nearest four lobbies their words beside it ("Circuit 1/6") where these cover no other
-    icon (the legend's Players' races row hides them). They join at the start:
-    within 15 m of it the panel shows the lobby and Enter joins (at an open race: its card's Accept, then **Join**).
-    **Several lobbies at one start:** the panel shows one at a time ("Lobby 1 of 3"), **E** (or a click or tap on
-    "Next lobby") the next, and after them "New lobby", where Enter opens one of your own beside them. It starts on
-    the lobby Enter would pick for you: one a friend or crew-mate of yours is in first, then a race that counts in
-    your career, then the fullest. Up to 6 players; at a full one, or one that keeps you out (below), the panel says
-    so, and Enter starts another. Drive more than 40 m from the start to leave a lobby; the host leaving calls it off, and a lobby nobody joins closes after 5 minutes. A host who seems
+  - **Multiplayer opens a lobby** at the start. Its panel has four parts, a line between them: the race ("Sprint",
+    "Lobby 3/6"), its stage, track and laps, and ★ when a win counts in your career; its players, the host first
+    and marked, ★ beside each player a win counts for, friends and crew-mates in lime, you in bold, then its open
+    places (6; drag 4, 3 on the three-lane track), and under them a small speedometer: the fastest other car against
+    yours with the engines evened out, counting most of what the race does (the engine is not all of a car: a car
+    rated 1.35 times yours shows as 1.07 times, 1.8 times as 1.15; straight up: as fast as yours; in the red from 1.25
+    times, from about 2.5 times rated, a stock car against a maxed one; Street X and drift races, not evened out, as
+    rated); the host's settings (who can join, invite friends); then this lobby or the next (the keys,
+    what is going on, how to leave). The players near see "Ann's circuit (1/6)" over the start (from about 250 m;
+    several lobbies at one start stack there, a line each, the fuller first, at most four and then "+2 more");
+    everyone in free roam sees its race's icon on the world map (M), and the nearest four lobbies their words beside it
+    ("Circuit 1/6") where these cover no other icon (the legend's Players' races row hides them). They join at the
+    start: within 15 m of it the panel shows the lobby and Enter joins (at an open race: its card's Accept, then
+    **Join**).
+    **Several lobbies at one start:** the panel shows one at a time, **E** (or a click or tap on "Lobby 2 of 3") the
+    next, and **B** ("New lobby") opens one of your own beside them, from any of them. It starts on the lobby Enter
+    would pick for you: one a friend or crew-mate of yours is in first, then a race that counts in your career, then
+    one on your side of the race's stage (its host past that stage if you are, or not if you are not), then the one
+    whose cars are nearest yours, then the fullest. Up to 6 players. A lobby you can't join is not shown to you
+    anywhere (at the start, over it, on the world map): a full one, one on its way to the race, one that keeps you
+    out (below); Enter there opens a lobby of your own. Drive more than 40 m from the start to leave a lobby; the host leaving calls it off, and a lobby nobody joins closes after 5 minutes. A host who seems
     away (none of the game's keys or controller buttons and no driving for 2 minutes while others wait) gets a
     30-second countdown on every panel of the lobby, then it closes; one of those keys keeps it. A lobby is within
-    your Room, as everything in free roam. At a race's start Enter is for the race: no outrun is offered there.
-  - **Friends & crew only:** the host's **V** (or a click or tap on its line in the panel) switches it on or off
-    while the lobby waits. Then only the host's friends and crew-mates see it, at the start, over it and on the world
-    map, and only they can join; the players already in it stay.
+    your world, as everything in free roam. At a race's start Enter is for the race: no outrun is offered there.
+  - **On a controller** the panel shows the D-pad in place of the keys: up (the game's Engage) joins, starts the race
+    or opens a lobby; left held a second opens a new lobby beside the others, goes round who can join (the host) or
+    leaves a lobby joined from afar; right held is the next lobby. A short press of left or right stays the game's
+    (World Map, SMS), as with D-pad down's hold; a direction you put another of the game's controls on stays the
+    game's. Invites are in the menu's Friends.
+  - **Who can join:** the host's **V** (or a click or tap on its line in the panel) goes round its choices while the
+    lobby waits. **Stage 2 and below can join** (the host's own stage; the default) keeps out players past it, but
+    the host's friends and crew-mates. **Friends & crew can join:** only the host's friends and crew-mates see it,
+    at the start, over it and on the world map, and only they can join; the players already in it stay. **Everyone
+    can join.** A
+    lobby whose race counts in its host's career has no Everyone.
   - **Inviting friends:** the host's **Z** (or "Invite friends" in the panel) opens the menu's Friends, where each
-    friend in free roam in your Room has an Invite (a flag) while your lobby has room. The friend gets a line over
+    friend in free roam in your world has an Invite (a flag) while your lobby has room. The friend gets a line over
     the game, "Ann invites you to a circuit (2/6)", for 20 seconds; their **Z**, a click or a tap joins from wherever
     they are, without driving to the start (a lobby they were in is left for it). Their race leaves from where they
     are and brings them back there; driving away does not take them out, their **Z** ("Leave" in the panel) does.
@@ -766,10 +809,10 @@ Good to know:
     for you too, when you finish the race; any other place than 1st leaves the race to win ("Only a win counts in your
     career", after the race). The panel marks each player the race counts for with ★ ("A win counts in your career"), and the
     words over such a lobby or spot and beside its world-map icon end in "- career". A lobby whose race counts for the
-    player who opened it takes players up to that race's stage and the opener's friends and crew-mates: a car of a later stage would
-    win it most of the time, however the cars are evened out. Past that stage you see why at the spot ("A career race
-    for players up to stage 2 and ...'s friends and crew"), and Enter opens a lobby of your own beside it. Solo stays as
-    it always was.
+    player who opened it always takes players up to that race's stage and the opener's friends and crew-mates (any
+    other lobby does unless its host picks Everyone): a car of a later stage would win it most of the time, however
+    the cars are evened out. Past that stage you don't see such a lobby (at the
+    start, over it, on the world map), and Enter opens a lobby of your own beside it. Solo stays as it always was.
   - **Any other race** pays only prize money: 1st gets what a normal race of your stage pays (stages 1 to 3 $400,
     stage 4 $1,200, stage 5 $2,000), 2nd to 4th three quarters, half and a quarter of that (never less than $300, $200
     and $100), 5th and 6th nothing. **Quitting the race**
@@ -792,34 +835,50 @@ Good to know:
   other names, and their minimap arrows and world-map markers (with their names beside them) are in the crew's colour.
   You can be in up to 4 crews; each has its own colour (cyan, magenta, violet, red unless you tap its dot to pick
   another), and the crew list shows how many of each are in free roam now (in the page menu, you count too once you
-  drive). A crew of more than 64 players in one room is too big to pair first: they see each other only nearby, and
+  drive). A crew of more than 64 players in one world is too big to pair first: they see each other only nearby, and
   the list says so (pick a less common name). Capitals and spaces don't count ("Blue Room" is "blueroom"); a name that
-  reads as a slur is no crew. Everyone else is still there, unlike a Room. Not private: anyone who types the same name
+  reads as a slur is no crew. Everyone else is still there, unlike a world. Not private: anyone who types the same name
   joins, but other players never learn your crews: the server tells each game which players near it share one. A
-  player on an older version is in no crew.
+  player on an older version is in no crew. A few seconds after you start driving in free roam, the
+  log on the left has a line for each of your crews with others in free roam ("Night Owls 3 in free roam", in the
+  crew's colour; you count too).
+- **Inviting a friend to a crew:** a friend who is in free roam now has a crew icon (two people) on their line, on the
+  start page (Friends & crews) and in the page menu's Friends, while you are in a crew: with one crew it invites them
+  to it, with more your crews open under the line and you pick one; a toast at the icon says it was sent, or why not
+  (not in free roam now). The friend gets a note at the top, with a lime border, "Ann invites you to crew "Night
+  Owls"": the race invite's key (**Z**, set on the start page under Controls, Site), a click or a tap joins the crew
+  and your world (crew-mates meet only in one world; your settings keep both, as an invite link's Join does). Under a
+  race invite when both show, Z takes the race. Not taken within 20 seconds, it waits in the page menu's Crews (✓
+  joins, ✕ declines) until that game ends; with 4 crews already, Join says so and it waits there beside your crews'
+  Leave. Only the friend and the server see the crew's name, and the server keeps
+  it nowhere and never logs it; six invites at once, then one every 5 seconds (race and crew invites together).
 - **Friends:** touch front bumpers with another player (nose to nose, both cars' fronts) for 3 seconds, solid or in
-  ghost mode, and a line above the outrun one offers **Add Bo as a friend**: press **F**, click or tap the
+  ghost mode, and a note at the top, with a lime border, offers **Add Bo as a friend**: press **F**, click or tap the
   line, or use the page menu (F9, ☰, or Home on a controller). The other player's line then says **Al wants to be
   friends: accept**; once both said yes you are friends. Touching the side or the back of a car offers nothing, nor
   does a race, an outrun or a race lobby. Both of you need a claimed name ("Your name": a claim needs cloud saves);
   without one the line says so. Your friends are listed in the start page's **Friends & crews** tab, one line
-  each: where each one plays now after the name (free roam and its room, the game's Online lobby, offline),
-  with a Join arrow to drive in their room, Discord's mark when they gave their Discord username (a click copies it,
+  each: where each one plays now after the name (free roam and its world, the game's Online lobby, offline),
+  with a Join arrow to drive in their world, Discord's mark when they gave their Discord username (a click copies it,
   for Discord's Add Friend), an envelope for your messages (lime with a dot while some are unread) and a grey bin to
-  remove them; a request you could not answer in the game waits there (30 days), with ✓ and ✕, and one
-  you sent has a ✕ to take it back. Under the list, **Add a player by name** sends a request to a player who is not
-  near you: type their name (a claimed one) and press Enter or +; they get it in the game, or there, and answer it.
+  remove them; a request you did not answer in the game waits there (30 days), with ✓ and ✕, and one
+  you sent has a ✕ to take it back; a lime dot on the tab says requests or unread messages wait. Under the list,
+  **Add a player** sends a request to a player who is not near you: type their name (a claimed one) and press
+  Enter or +. If they are driving in free roam, their line says **Al wants to be friends: accept** for 15 seconds
+  (**F**, a click or a tap, or the page menu, accepts); a request that waited shows there at the next game's start.
   **Your Discord**, under it, is your Discord username for your friends (and nobody else) to add you on Discord: only
   a username as Discord has them fits (2 to 32 small letters, digits, _ or .), and an empty field takes it away.
   In free roam the server pairs friends first, as crew-mates, so you see each other however busy it is: a friend's
   name over the car shows at any distance, in a pale lime white (a friend in one of your crews has the crew's colour),
   and so do their arrows on the minimap and the world map. When a friend comes into free roam, the notices on the left
-  say so; the page menu then has **Friends**: who is in free roam, with **Join** for one in another room and Discord's
-  mark to copy one's Discord username. A friend is a
-  friend in the game's Online mode too (EA Messenger), up to 50. In free roam the server takes a request only between
-  two players whose cars are within 30 m of each other; by name, from the start page, five at once and then one every
+  say so (with **I Message** under it when they are in your world). The page menu has **Friends** in every game in
+  free roam with other players: the requests to answer (✓ and ✕), who is in free roam, with **Join** for one in
+  another world and Discord's mark to copy one's Discord username, the others in a line, and **Add a player**;
+  with no friends yet, it says how to add one. A friend is a
+  friend in the game's Online mode too (EA Messenger), up to 250. In free roam the server takes a request only between
+  two players whose cars are within 30 m of each other; by name, from the start page or the page menu, five at once and then one every
   30 seconds (a player you block in EA Messenger never sends you one again). Your friends see the name of
-  the room you play in, nobody else (it is told to the server only once you have a friend, and kept in memory only).
+  the world you play in, nobody else (it is told to the server only once you have a friend, and kept in memory only).
 - **Messages to friends:** a friend's message shows in the log on the left, where quick chat's phrases show, with an
   envelope, and **I Write back** under it. In free roam press **I**: a card in quick chat's place answers the newest
   message, or, with none to answer, lists your friends (where each one plays) for **1** to **9** to pick one. Type
@@ -833,9 +892,18 @@ Good to know:
   no one (three in ten minutes turn your messages off for ten minutes), and Remove or Block stops a friend's. The
   server keeps a message only until it is delivered; your conversations are kept in your browser (the last 40 with
   each friend).
-- **Rooms:** set the same "Room" to see only some of the players' cars. A room is a filter between players, not
-  privacy: every browser on the server still sees your name ("Your name", or the profile name), whether you are in
-  the menus or driving, and the room, and someone with their own tools could join it. Play on a server only with
+- **Worlds:** free roam is split into worlds, and you see only the players in yours. **Main world** is everyone's
+  (the default, and the busiest); **World 1** to **World 4** are for anyone who wants a quieter free roam, and
+  **World 4** has Ghost mode off for everyone in it; **Own name…** makes a world of a name you type, shared by
+  whoever types the same (capitals and spaces don't count). Pick one in the page menu (F9, **World**: every world
+  with how many are in free roam there, yours checked; a tap switches at once, back to the game, and your settings
+  keep it), or on the start page (Online, **World**, the counts in its list). Arriving, the log on the left says the
+  world and how many are there. Friends and crew-mates meet only within one world (the menu's Friends has Join for
+  one in another), and so do race lobbies. An invite link (`#room=`) joins a world too. Worlds came with commit
+  41737add: before it is live the page has only a **Room** name box under Online (the same thing: empty is the main
+  world). A world is a filter between players, not privacy: every browser on the server still sees your name ("Your
+  name", or the profile name), whether you are in the menus or driving, and the world, and someone with their own
+  tools could join it. Play on a server only with
   people you would show your name and car to.
 - **Blocking:** Online, More online settings, **Blocked players**: names as they show over cars, separated
   by commas, up to 32 (capitals don't count). You and they never see each other in free roam, wherever you are: no

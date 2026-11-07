@@ -58,6 +58,36 @@ static void io_event(void *u, int ev, int peer, const char *t){ (void)u; (void)p
 /* the links the players ask the hub for (--links; 0: they say nothing, and get 32), before crowd_init */
 static int LINKS;
 __attribute__((export_name("crowd_links"))) void crowd_links(uint32_t n){ LINKS = (int)n; }
+/* the car's open parts (roam-crowd --open, RC_OPEN_*): sent in every state's extension (the wheels' heights out of the
+ * receiver's range: at rest) */
+static uint8_t OPEN;
+__attribute__((export_name("crowd_open"))) void crowd_open(uint32_t m){ OPEN = (uint8_t)(m & RC_OPEN_ALL); }
+/* the car's crash damage (roam-crowd --dents, RC_MSG_DENTS to the games that show it), RC_DMG_MAX dents: mode 1 once;
+ * 2 a new set, a new epoch (a repair and a crash), every `ms`; 3 as 2 with bytes at random; before crowd_init */
+static int DMG_MODE, DMG_MS = 1000; static uint32_t DMG_SEED = 1, DMG_EPOCH; static int64_t DMG_NEXT;
+static uint8_t DMG_D[RC_DMG_MAX * RC_DMG_BYTES];
+__attribute__((export_name("crowd_dents"))) void crowd_dents(uint32_t mode, uint32_t ms, uint32_t seed){
+    DMG_MODE = (int)mode; DMG_MS = (int)ms; DMG_SEED = seed | 1u; }
+static uint32_t dmg_rand(void){ DMG_SEED ^= DMG_SEED << 13; DMG_SEED ^= DMG_SEED >> 17; DMG_SEED ^= DMG_SEED << 5; return DMG_SEED; }
+static void dmg_publish(int64_t now){
+    DMG_EPOCH++;
+    for (int i = 0; i < RC_DMG_MAX; i++){
+        uint8_t *b = DMG_D + i * RC_DMG_BYTES;
+        if (DMG_MODE == 3){ for (int k = 0; k < RC_DMG_BYTES; k++) b[k] = (uint8_t)dmg_rand(); continue; }
+        /* a point on a side of the body's box (x +-2.1 m, y +-0.85 m, z 0.2..1.2 m), pushed in, 5 to 25 cm deep */
+        int side = (int)(dmg_rand() % 4u);
+        int16_t p[3];
+        p[0] = (int16_t)((int)(dmg_rand() % 4200u) - 2100); p[1] = (int16_t)((int)(dmg_rand() % 1700u) - 850);
+        p[2] = (int16_t)(200 + (int)(dmg_rand() % 1000u));
+        int8_t d[3] = { 0, 0, (int8_t)-20 };
+        if (side == 0){ p[0] = 2100; d[0] = -120; } else if (side == 1){ p[0] = -2100; d[0] = 120; }
+        else if (side == 2){ p[1] = 850; d[1] = -120; } else { p[1] = -850; d[1] = 120; }
+        memcpy(b, p, 6); b[6] = (uint8_t)d[0]; b[7] = (uint8_t)d[1]; b[8] = (uint8_t)d[2];
+        b[9] = (uint8_t)(50 + dmg_rand() % 206u); b[10] = (uint8_t)(60 + dmg_rand() % 190u);
+    }
+    rc_set_dents(&S, (uint8_t)DMG_EPOCH, 0, RC_DMG_MAX, DMG_D, now);
+    DMG_NEXT = now + (int64_t)DMG_MS * 1000;
+}
 
 /* the buffer the script writes a name or a received datagram into */
 __attribute__((export_name("crowd_io"))) uint8_t *crowd_io(void){ return IO; }
@@ -96,6 +126,7 @@ __attribute__((export_name("crowd_init"))) void crowd_init(uint32_t id, uint32_t
     uint8_t rec[RC_CFG_MAX]; int len = rc_carcfg_encode(&cc, rec, sizeof rec);
     if (len > 0) rc_set_cfg(&S, rec, len, (int64_t)now_us);
     rc_set_status(&S, RC_ST_ROAM);
+    if (DMG_MODE) dmg_publish((int64_t)now_us);
 }
 /* a datagram the script put into IO */
 __attribute__((export_name("crowd_recv"))) void crowd_recv(uint32_t ip, uint32_t port, int n, double now_us){
@@ -112,7 +143,9 @@ __attribute__((export_name("crowd_tick"))) void crowd_tick(double now_us, float 
     st.q[2] = a - a * a2 / 6.f + a * a2 * a2 / 120.f - a * a2 * a2 * a2 / 5040.f;
     st.q[3] = 1.f - a2 / 2.f + a2 * a2 / 24.f - a2 * a2 * a2 / 720.f + a2 * a2 * a2 * a2 / 40320.f;
     st.speed = rc_sqrtf(vx * vx + vy * vy); st.rpm = 2500.f; st.gear = 3; st.throttle = 0.5f;
+    if (OPEN){ st.ext = 1; st.open = OPEN; for (int w = 0; w < 4; w++) st.wz[w] = 5.f; }
     rc_push_state(&S, &st, (int64_t)now_us);
+    if (DMG_MODE >= 2 && (int64_t)now_us >= DMG_NEXT) dmg_publish((int64_t)now_us);
     rc_tick(&S, (int64_t)now_us);
 }
 /* in a race (RC_ST_EVENT) or back in free roam: a game in a race sends no

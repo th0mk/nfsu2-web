@@ -68,6 +68,8 @@ const KEPT0: Kept = {
   show: SHOW_ALL, lights: true, horns: true, weather: -1,
   shutter: 0, size: 1, shiftX: 0, shiftY: 0, lens: 0,
 };
+/** Auto-turn within this of the slider's middle is off (its track is 1200 wide: a tenth of it) */
+const SPIN_OFF = 60;
 const clamp = (v: unknown, lo: number, hi: number, d: number) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
 function loadKept(): Kept {
   try {
@@ -77,7 +79,10 @@ function loadKept(): Kept {
     if (!(k.filter in FILTERS)) k.filter = 'none';
     if (!(k.crop in CROPS)) k.crop = 'full';
     k.exposure = clamp(k.exposure, -200, 200, 0); k.vignette = clamp(k.vignette, 0, 1000, 0); k.blur = clamp(k.blur, 0, 1000, 0);
-    k.speed = clamp(k.speed, 0, 1000, 500); k.smooth = clamp(k.smooth, 0, 1000, 0); k.spin = clamp(k.spin, -600, 600, 0);
+    k.speed = clamp(k.speed, 0, 1000, 500); k.smooth = clamp(k.smooth, 0, 1000, 0);
+    // Auto-turn starts off at every visit, not as it was left: kept, a camera that turned by itself greeted the next
+    // visit and the next reload, and players took it for a bug they could not stop (2026-11-05)
+    k.spin = 0;
     k.pathS = PATH_TIMES.includes(k.pathS) ? k.pathS : 10;
     // the Cars list before the kinds' boxes: all, only mine, none, friends and crews
     if (raw.show === undefined && raw.cars !== undefined) k.show = [SHOW_ALL, SHOW_MINE, 0, SHOW_MINE | SHOW_FRIENDS | SHOW_CREWS][raw.cars] ?? SHOW_ALL;
@@ -229,7 +234,7 @@ export class PhotoMode {
       if (!b) return;
       if (b.dataset.mode) this.send(PH_MODE, +b.dataset.mode);
       else if (b.dataset.tab) this.setTab(b.dataset.tab as Tab);
-      else if (b.dataset.act === 'reset') this.send(PH_RESET);
+      else if (b.dataset.act === 'reset') this.reset();
       else if (b.dataset.act === 'shoot') void this.shoot();
       else if (b.dataset.act === 'leave') this.leave();
       else if (b.dataset.act === 'point') this.send(PH_PATH, PATH_ADD);
@@ -295,7 +300,7 @@ export class PhotoMode {
     if (pressed & 1 << PAD_A) void this.shoot();
     if (pressed & (1 << PAD_B | 1 << PAD_START)) this.leave();
     if (pressed & 1 << PAD_Y) this.send(PH_MODE, 2);
-    if (pressed & 1 << PAD_X) this.send(PH_RESET);
+    if (pressed & 1 << PAD_X) this.reset();
     if (pressed & 1 << PAD_RS && this.namesHere) this.send(PH_NAMES, 2);
     if (pressed & 1 << PAD_BACK) this.setBare(!this.bare);
     this.padBits = (on(PAD_DUP) ? HB_ZIN : 0) | (on(PAD_DDOWN) ? HB_ZOUT : 0) | (on(PAD_DLEFT) ? HB_RL : 0) |
@@ -331,8 +336,15 @@ export class PhotoMode {
   private sendCamera() {
     const k = this.kept;
     this.send(PH_SPEED, Math.round(speedOf(k.speed) * 100)); this.send(PH_SMOOTH, k.smooth);
-    this.send(PH_SPIN, Math.abs(k.spin) < 20 ? 0 : k.spin); this.send(PH_LEVEL, k.level ? 1 : 0);
+    this.send(PH_SPIN, k.spin); this.send(PH_LEVEL, k.level ? 1 : 0);
   }
+  /** Auto-turn off: the slider in its middle, the camera standing still */
+  private unturn() {
+    this.kept.spin = 0; this.sl.spin.value = '0';
+    this.sendCamera(); this.keep();
+  }
+  /** Reset: the camera back behind the car, and turning by itself no more */
+  private reset() { this.send(PH_RESET); this.unturn(); }
   private sendScene() {
     const k = this.kept;
     this.send(PH_FREEZE, k.freeze ? 1 : 0); this.send(PH_SHOW, k.show); this.send(PH_LIGHTS, k.lights ? 1 : 0);
@@ -372,7 +384,7 @@ export class PhotoMode {
       else if (x === s.vignette) k.vignette = v;
       else if (x === s.speed) k.speed = v;
       else if (x === s.smooth) k.smooth = v;
-      else if (x === s.spin) k.spin = v;
+      else if (x === s.spin) { k.spin = Math.abs(v) < SPIN_OFF ? 0 : v; if (!k.spin) x.value = '0'; }
       else if (x === s.shiftX) { k.shiftX = v; this.send(PH_SHIFT, k.shiftX, k.shiftY); }
       else if (x === s.shiftY) { k.shiftY = v; this.send(PH_SHIFT, k.shiftX, k.shiftY); }
       if (x === s.speed || x === s.smooth || x === s.spin) this.sendCamera();
@@ -494,6 +506,7 @@ export class PhotoMode {
     if (on) {
       this.input()?.releaseAll?.();                 // what the game held when the page took the keys goes up
       this.steer(0, 0, 0);
+      this.kept.spin = 0; this.sl.spin.value = '0';
       this.sendCamera(); this.sendScene(); this.sendPicture();
       this.path = -1; this.target = -1; this.pic = -1;
       this.greyed();
@@ -611,7 +624,7 @@ export class PhotoMode {
     if (e.code === 'Escape') this.leave();
     else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') void this.shoot();
     else if (e.code === 'Tab') this.send(PH_MODE, 2);
-    else if (e.code === 'KeyR') this.send(PH_RESET);
+    else if (e.code === 'KeyR') this.reset();
     else if (e.code === 'KeyF') this.send(PH_TARGET, TARGET_MIDDLE);
     else if (e.code === 'KeyK') this.send(PH_PATH, PATH_ADD);
     else if (e.code === 'KeyP') this.playPath();

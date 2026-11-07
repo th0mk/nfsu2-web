@@ -17,8 +17,9 @@ export type Place = 'display' | 'mainMenu';
 /** what changes for other players: mine, on your screen; you, sounds and menus only you get */
 export type Online = 'mine' | 'you' | 'seen' | 'career' | 'offline';
 /** what this port takes from the mod: its files, packed for the browser (data); its code, ported (code); or what it
- *  found out about the game (addresses, values), written anew (findings) */
-export type Uses = 'data' | 'code' | 'findings';
+ *  found out about the game (addresses, values), written anew (findings); or nothing, a mod made for this port in its
+ *  own source (original: no link) */
+export type Uses = 'original' | 'data' | 'code' | 'findings';
 
 /** setting: a settings.ini key (settings.ts KEYS) and the values that turn the mod on (none: a switch, on); always: no
  *  setting on the page; elsewhere: settings of its own elsewhere on the page (keys); menu: in the game's own menus */
@@ -38,7 +39,7 @@ export interface Mod {
   mod?: string;
   /** the mod's authors as its page names them */
   authors: readonly Author[];
-  /** page: its nfsmods.xyz page; source: its source code */
+  /** page: its page (nfsmods.xyz, or the site its author put it on); source: its source code */
   links: { page?: string; source?: string };
   kind: ModKind;
   uses?: Uses;
@@ -56,7 +57,9 @@ export interface Mod {
   /** a mod of several parts (NFSU2 Extra Options): each part, what it does (English, as details) and who sees it */
   parts?: readonly { name: string; text: string; online: Online }[];
   /** the mod's licence, where it states one */
-  licence?: 'MIT' | 'GPL-3.0';
+  licence?: 'MIT' | 'GPL-3.0' | 'No Rights Reserved';
+  /** its code ported by the mod's own author, in this repo's history (his commits): no licence file of its own */
+  ownPort?: true;
   /** about how much the mod's own files add to the download (a shared row's: each its own, so they add up) */
   sizeMB?: number;
   /** another default on phones (device.ts deviceDefaults) */
@@ -92,6 +95,7 @@ export const ONLINE: Readonly<Record<Online, string>> = {
 };
 
 export const USES: Readonly<Record<Uses, string>> = {
+  original: N('Built for this project'),
   data: N('Its files, packed for the browser'),
   code: N('Its code, ported'),
   findings: N('Its findings, written anew'),
@@ -171,6 +175,22 @@ export const MODS: readonly Mod[] = [
     details: 'The game updates its sounds at most every 15 ms, and then by one frame\'s time only: above 60 fps the engine\'s pitch and the gear shifts ran slow, at 120 fps at half speed. Here an update also gets the time of the frames it skipped. At 60 fps and below nothing changes.',
     online: 'you', files: ['runtime/framerate.c'],
   },
+  {
+    id: 'gps-distance', name: 'GPS Distance', authors: [{ name: 'roman01la', url: 'https://github.com/roman01la' }], links: {},
+    kind: 'screen', uses: 'original', control: { setting: 'gps_distance' },
+    line: N('Distance to your destination beneath the GPS arrow.'),
+    details: 'While the GPS arrow shows the way, the distance to its destination in a straight line, not by road, in metres or feet as Speedometer Units has it. None in races, or while the GPS finds no route.',
+    online: 'mine', files: ['runtime/gpsdistance.c', 'runtime/gpsdistance_format.h'],
+  },
+  {
+    id: 'gearbox-whine', name: 'Transmission Whine', mod: 'Underground 2 Transmission Whine',
+    authors: [{ name: 'ropi', url: 'https://github.com/ropi336' }],
+    links: { page: 'https://nfsmods.xyz/mod/5927', source: 'https://github.com/ropi336/UG2WhineGen' },
+    kind: 'screen', uses: 'code', licence: 'No Rights Reserved', control: { setting: 'gearbox_whine' },
+    line: N('NFS Carbon\'s gearbox whine on your car.'),
+    details: 'The mod\'s sounds are NFS Carbon\'s: the BMW M3 GTR\'s gearbox whine. Here they play over the game\'s own, a whine rising with the car\'s speed and gear, a second layer louder the faster it goes, a pause at each upshift and a whine of its own in reverse, as loud as the game\'s Master and Engine Volume make them. In split screen and co-op each player\'s car has its own. The sounds download once it is on.',
+    online: 'you', sizeMB: 0.5, files: ['runtime/whine.c', 'runtime/whine.h', 'tools/whinepack.py', 'licenses/UG2WhineGen.txt'],
+  },
 
   // ---- Seen by others
   {
@@ -194,13 +214,24 @@ export const MODS: readonly Mod[] = [
     online: 'seen', files: ['runtime/cameras.c', 'runtime/lightkey.c', 'runtime/regional.c', 'runtime/vinylcat.c', 'runtime/quickrace.c'],
   },
   {
-    id: 'art-factory', name: 'Art Factory 28 to 34', authors: [{ name: 'underground2.net Team & Contributors', port: true }],
-    links: { page: 'https://nfsmods.xyz/mod/2004' },
-    kind: 'shared', uses: 'data', control: { always: true },
-    line: N('Seven vinyls from the Japanese release.'),
-    details: 'Designs only the Japanese release (Sha_Do) had, after Art Factory 27 on every car. The game\'s own vinyls stay as they are.',
-    online: 'seen', files: ['runtime/vinylpacks.c', 'tools/vinylpacks.py'],
+    id: 'crash-damage', name: 'Crash Damage', mod: 'Crashing Foreign Cars', authors: [{ name: 'Chrystian Farias (FRS Mods)' }],
+    links: { page: 'https://streetsmodz.com.br/mods/underground-2/crashing-foreign-cars' },
+    kind: 'shared', uses: 'code', ownPort: true, control: { setting: 'crash_damage' },
+    line: N('Dents, loose parts and scratches.'),
+    details: 'The racers\' cars, yours and the AI\'s, dent where they are hit, scratch, break their lights and lose their bumpers, mirrors, hood, trunk lid and doors, which lie on the road for a while. Only what is seen: the car drives as in the original game. In free roam, other players who have it on see your car\'s damage; with it off you see every car undamaged. The game\'s own repair, at a race\'s start or in the garage, takes it away.',
+    online: 'seen', sizeMB: 1, files: ['runtime/damage.c', 'runtime/damagecore.cpp', 'runtime/damage/Dent.h',
+      'runtime/damage/Tessellate.h', 'runtime/damage_none.c', 'tools/damagepack.py', 'tools/damage/scratches.tpk'],
   },
+  // The rims are out for now (with settings.ts's mod_rims and others_mod_parts, settings-ui.ts's rows and
+  // runtime/modpacks.c's shop switch); back with their makers' names and link:
+  // {
+  //   id: 'mod-rims', name: 'Blitz Rims', authors: [],
+  //   links: {},
+  //   kind: 'shared', uses: 'data', control: { setting: 'mod_rims' },
+  //   line: N('New rim brands in the rim shop.'),
+  //   details: 'Blitz, a brand of 24 rims, in the rim shop. Everyone\'s game has them, so a friend\'s car with them looks the same with this off. Off, the shop offers only the game\'s own brands; rims already on your car stay. Your saves still work in the original game: there the car has a similar rim of the game\'s in the same size.',
+  //   online: 'seen', sizeMB: 1, files: ['runtime/modpacks.c', 'tools/modpacks.py'],
+  // },
 
   // ---- Game rules
   {
@@ -217,6 +248,13 @@ export const MODS: readonly Mod[] = [
     line: N('DVD covers by stage, not by your car\'s parts.'),
     details: 'In the original game a stage\'s DVD cover shoots come only once your car\'s parts rate enough stars, and pay more for more stars. On, the rating is the stage\'s: 0, 1, 3, 5.5 and 8 stars in stages 0 to 4, 10 from stage 5, so the stage\'s cover shoots come and pay by it. The shops show no Visual Rating box.',
     online: 'career', files: ['runtime/visualrep.c', 'licenses/novisualrep.txt'],
+  },
+  {
+    id: 'rubberbanding', name: 'Rubberbanding', authors: [{ name: '007hacky007', url: 'https://github.com/007hacky007' }], links: {},
+    kind: 'rules', uses: 'original', control: { setting: 'catchup', values: ['noboost', 'off'] }, off: false,
+    line: N('Career rivals that wait and catch up.'),
+    details: 'In a career race the game slows the opponents ahead of you and gives the ones behind more power and grip. Original, the default, keeps that; No boost keeps the waiting, but one behind never beats its own pace; Off drops both, as Quick Race with Catch Up off. Only in your own career races: never in Quick Race, LAN or online races.',
+    online: 'career', files: ['runtime/catchup.c'],
   },
 ];
 
@@ -284,6 +322,7 @@ export const ADDED: readonly { id: string; title: string; items: readonly Change
     { name: 'Power Units', key: '', line: 'Options, Gameplay: engine power in bhp or kW' },
     { name: 'Turn the car in the garage', key: 'right stick', line: 'The right stick or two fingers turn it' },
     { name: 'Tuning graphs', key: '', line: 'Drag the ECU and Turbo graphs\' dots' },
+    { name: 'Art Factory 28 to 34', key: '', line: 'The Japanese release\'s 7 vinyls, on every car' },
   ] },
   { id: 'controls', title: N('Controls'), items: [
     { name: 'Site keys', key: '', line: 'Set or turn off this site\'s keys and buttons' },

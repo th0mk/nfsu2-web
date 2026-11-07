@@ -1,0 +1,45 @@
+# A friend's crew invite on the player's own page, instance A (with roam_crew_invite_b.txt): Ann, in crews Night Owls
+# and Touge, and Bob, in Night Owls, park nose to nose and become friends (F, as roam_friend_app_a/b.txt); each gets
+# its crews' counts in the log as it drives ("Night Owls 2 in free roam"); then Ann invites Bob to Touge from the page
+# menu's Friends (the crew icon on Bob's line, Touge among the two), and the toast at it says so.  Bob takes it with Z
+# (roam_crew_invite_b.txt), and the server's hub marks the two crew-mates in Touge too.  The keyphrase tokens are the
+# test setting NFSU2_TEST_CLAIM; the server's state folder has names.json with Ann and Bob claimed by them.
+#   node web/tools/roam-pair.mjs --page app --base ... \
+#        --a "Ann:roam_crew_invite_a.txt:NFSU2_ROAM_COLLIDE=0,NFSU2_ROAM_CREW=Night Owls, Touge,NFSU2_TEST_CLAIM=<43 A>" \
+#        --b "Bob:roam_crew_invite_b.txt:NFSU2_ROAM_COLLIDE=0,NFSU2_ROAM_CREW=Night Owls,NFSU2_TEST_CLAIM=<43 B>"
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++900  roam teleport 1695.3 -883.6 24.6 0x4000
++300  roam teleport 1695.3 -883.6 24.6 0x4000
++0    log placed
++0    roam mp waitbump Bob 6000
++120  log SHOT a_counts                     # the crews' counts in the log
++0    log KEY KeyF                         # F acts only while the line offers something: whoever asks first,
++400  log KEY KeyF                         # the other's next F accepts
++400  log KEY KeyF
++400  log KEY KeyF
++0    roam mp waitfriend Bob 6000
++300  log FRIENDS crew Bob Touge           # the page menu's Friends: Bob's crew icon, Touge
++600  log SHOT a_invited
++0    roam mp status                       # Bob a crew-mate in Night Owls
++900  roam mp status                       # (Bob took it meanwhile: in Touge too)
++60   log SHOT a_end
++60   quit

@@ -1,0 +1,34 @@
+# Smoke must stop while the sender is backgrounded, even if its last
+# snapshot was sliding, then resume when its snapshots resume.
+# Pair with roam_mp_drift_a.txt and --hide Drv:80:8 (both pages at 60 fps):
+#   node web/tools/roam-pair.mjs --page app
+#        --a Drv:roam_mp_drift_a.txt --b Vic:roam_mp_drift_pause_b.txt --hide Drv:80:8
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp waitsolid 1 6000
++400  roam mp follow 0 8 2.5
++0    roam mp waitsmoke 0 1 3000
++180  roam mp waitsmoke 0 0 120
++0    log SHOT remote_smoke_paused
++300  roam mp follow 0 10 2.5
++0    roam mp waitsmoke 0 1 600
++20   log SHOT remote_smoke_resumed
++10   quit

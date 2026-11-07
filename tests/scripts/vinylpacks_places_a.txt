@@ -1,0 +1,23 @@
+# The vinyl packs' textures at places of their own (runtime/vinylpacks.c tex_in), in free roam with a game folder that
+# has VINYLPACKS: this player's car (a PEUGOT: the s4_perf2 save) wears two vinyls, ART FACTORY 28 (a pack's) in the
+# vinyl slot 0x40 and in 0x41 WILD 11C and WILD 1100 in turn, every 3 s; vinylpacks_places_b.txt watches, and its game
+# loads the car again at each change, both vinyls' textures at once.  PEUGOT_WILD_159C_MASK's image offset (the
+# game's: its hash rank x 0x55980) lies in ART FACTORY 28's place as the packs had it.  With NFSU2_TEST_VINYL_PLACES=1
+# on the watcher (the packs' offsets as they are) its log has "[vinyls] PEUGOT_ART_F_28's block takes in
+# PEUGOT_WILD_159C_MASK: its image 0x39a00 bytes in, 234788 bytes past the block's end" (the read past the block that
+# trapped in 0x5CE170 on a 2 GB page); without it "[vinyls] the packs' textures at places of their own, past the
+# game's" and no "takes in".  (mp setpart N: the vinyls' N-th, as "roam mp parts 40" lists them in this game.)
+#   node web/tools/roam-pair.mjs --data <game folder with VINYLPACKS> --seed <work/seed/career/s4_perf2>
+#        --a A:vinylpacks_places_a.txt --b W:vinylpacks_places_b.txt[:NFSU2_TEST_VINYL_PLACES=1]
+#        --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++600  roam mp setpart 40 736          # ART FACTORY 28
++0    roam mp setpart 41 622          # WILD 11C
++0    loop 6
++180  roam mp setpart 41 663          # WILD 1100
++180  roam mp setpart 41 622
++0    endloop
++600  log PLACES A DONE
++10   quit

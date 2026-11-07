@@ -169,14 +169,14 @@ pub struct RoamOptions {
     /// port of its own, its HELLO flagged: hub.rs `Player::seat2`), and one more for a game started again while its
     /// last start's endpoint lingers (until `gone_ms`).  A browser's endpoints are never linked with each other.
     pub max_per_vip: usize,
-    /// The players (endpoints) on the hub at most, 15360: of the switch's 16000 places (nfsu2-lan `ADDRS`, one browser
-    /// each) some two in five are in free roam at once (nfsu2.xyz, 2026-11-05: 4,968 of 13,163), a tenth of those in
-    /// co-op (desktop pages only), each with its second player an endpoint more (a restart's lingering endpoint is one
-    /// too, for a few seconds).  At most 16384 (hub.rs SLOTS_MAX: a world
-    /// map's key names a slot under it), and that far under it that a full hub's new player purges the slots of the
-    /// ones gone at most once in 1024 (else an eighth of the players, as before).  What grows with it: a player's
-    /// slot (some 1.5 KB with its links), the kept watches (one each at most), the tick (each link; a second player
-    /// asks for few, its first one fewer: their page's two together, as many as one player's).
+    /// The players (endpoints) on the hub at most, 24576: the switch's 24000 places (nfsu2-lan `ADDRS`, one browser
+    /// each), of which nearly all can be in free roam (the hub keeps those in a race, a shop or the menus too: 10,401 of
+    /// 11,571 on nfsu2.xyz, 2026-11-06), and 576 more for co-op's second players (desktop pages only) and a restart's
+    /// lingering endpoints (a few seconds each).  At most hub.rs SLOTS_MAX (25600), and that far under it that a full
+    /// hub's new player purges the slots of the ones gone at most once in 1024 (else an eighth of the players, as
+    /// before).  What grows with it: a player's slot (some 1.5 KB with its links), the kept watches (one each at most),
+    /// the tick (each link; a second player asks for few, its first one fewer: their page's two together, as many as
+    /// one player's).  The world map's keys are a pool of their own (hub.rs MAP_KEYS), for the players it shows.
     pub max_players: usize,
     pub exact_room: usize,
     pub min_degree: usize,
@@ -233,6 +233,49 @@ pub struct RoamOptions {
     /// the names the operator took away (nfsu2-bans `rename`): a player under one plays alone, as under a name another
     /// keyphrase claimed; None: none
     pub deny: Option<std::sync::Arc<nfsu2_names::Deny>>,
+    /// the cars the server race-bans a player for (hub.rs `server_bans`), and what it tells of each such race (the
+    /// app's autoban.rs: the ban); None: none (the `[cheat]` lines only)
+    pub car_bans: Option<CarBans>,
+}
+
+/// A lobby race a player raced with others in a car the server race-bans for (hub.rs `server_bans`), as its own game
+/// reported it: who (its virtual address, its name on the hub), its car, the race, how it did
+#[derive(Clone, Debug, PartialEq)]
+pub struct CarBan {
+    pub vip: u32,
+    pub name: String,
+    /// the car type's name (printable ASCII, from the report), its type, engine power (kW), weight (kg), top speed
+    /// (km/h), the game's rating
+    pub car: String,
+    pub car_type: u8,
+    pub kw: f64,
+    pub kg: f64,
+    pub kmh: f64,
+    pub rating: f64,
+    /// the race: its kind ("sprint", "drag", ...), laps, how the player did ("1st of 4", "did not finish", "quit")
+    pub kind: String,
+    pub laps: u8,
+    pub place: String,
+    pub lobby: u32,
+    pub race: u32,
+}
+
+/// The cars the server race-bans a player for: one of the player's car types at `kw` engine power or more, or rated
+/// `rating` or more (None: that figure decides nothing).  The operator's numbers (the app reads them from its
+/// environment: nothing of them in the code), past what any honest car of the lobby races' reports came near.  `call`
+/// is told of each such race, on the hub's thread: it must not wait (the app's hands the race on).
+#[derive(Clone)]
+pub struct CarBans {
+    pub kw: Option<f64>,
+    pub rating: Option<f64>,
+    pub call: std::sync::Arc<dyn Fn(CarBan) + Send + Sync>,
+}
+
+// (no numbers in Debug either: they are the operator's)
+impl std::fmt::Debug for CarBans {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CarBans")
+    }
 }
 
 impl Default for RoamOptions {
@@ -245,7 +288,7 @@ impl Default for RoamOptions {
             keep: 0.5,
             hold_ms: 5_000.0,
             max_per_vip: 3,
-            max_players: 15360,
+            max_players: 24576,
             exact_room: 256,
             min_degree: 8,
             busy_high: 0.85,
@@ -270,6 +313,7 @@ impl Default for RoamOptions {
             near_gap_ms: 150.0,
             link_threads: std::thread::available_parallelism().map_or(1, |n| (n.get() / 4).clamp(1, 4)),
             deny: None,
+            car_bans: None,
         }
     }
 }
@@ -401,8 +445,8 @@ impl RoamHub {
         self.in_roam.load(Ordering::Relaxed)
     }
 
-    /// the hub's `in_rooms()` of one room: how many browsers of the room (roam_core's rc_room_hash, not 0) drive in
-    /// free roam, or are paused there (as of the hub's last tick)
+    /// the hub's `in_rooms()` of one room: how many browsers of the room (roam_core's rc_room_hash; 0 the main world)
+    /// drive in free roam, or are paused there (as of the hub's last tick)
     pub fn in_room(&self, room: u32) -> usize {
         self.in_rooms.lock().map_or(0, |m| m.get(&room).copied().unwrap_or(0))
     }

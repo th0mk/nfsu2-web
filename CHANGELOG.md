@@ -11,9 +11,58 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-05 (1b97fcf)
+## 2026-11-07 (b0a544e)
 
-- **Vinyls:** Art Factory 28 to 34, Sha_Do's designs that only the Japanese release had, on every car after Art Factory 27 (ported to the PC by the underground2.net team).
+- **Mods:** Crash Damage, Chrystian Farias's Crashing Foreign Cars: the racers' cars dent where they are hit, scratch, break their lights and lose loose parts. Only the looks change; in free roam, players who have it on see each other's damage (off by default).
+- **Mods:** Transmission Whine, ropi's mod: NFS Carbon's gearbox whine over your car's engine, for each player's car in split screen (off by default).
+- **Mods:** Rubberbanding, by 007hacky007: your career races' catch-up as in the original game, No boost (rivals ahead still wait, none behind gets faster) or Off.
+- **Free roam:** pick a world in F9 or on the start page, with each one's player count: the main world with everyone, World 1 to 4, or your own by name. Ghost mode stays off in World 4.
+- **Page menu:** Controls open inside the F9 menu, as Crews and Friends.
+- **iPhone:** performance and stability improvements.
+- **Free roam:** a "memory access out of bounds" crash as other players' cars with Art Factory vinyls came in is fixed.
+- **Free roam:** other players' engines show under an open hood.
+- **Free roam:** when other players can't be reached, the game says why: a blocked connection, one that keeps dropping, or too many players on your network.
+- **Controllers:** the Xbox One S pad with its 2016 firmware works in Chrome on Android.
+- **Car Specialties:** Stock gauges can be picked again, and the gauge list opens on the ones fitted.
+- **Car Specialties:** leaving Trunk Audio keeps your place in the list.
+
+## 2026-11-06 (b3be4d1)
+
+- **Mods:** GPS Distance: the distance to your destination under the GPS arrow, in your Speedometer Units (off by default).
+- **Friends:** in the page menu (F9) in free roam: requests, your friends and Add a player by name. Requests from afar show at the top (F accepts).
+- **Friends:** a list holds 250 friends; the start page shows them in pages, with a filter.
+- **Crews:** invite a friend in free roam to one of your crews from Friends; they press Z to join. The Crews box says how to start one.
+- **Page menu:** F9 is a short list showing each setting's state. Quit game warns when you haven't saved in 10 minutes.
+- **Page menu:** Crews and Friends open inside the F9 menu instead of a box over it; Esc or B goes back.
+- **Free roam:** the notes over the game share one look; invites and friend requests have a lime border.
+- **Free roam:** new players with Ghost mode off are told where to turn it on.
+- **Start page:** a lime dot on Friends & crews when requests or messages wait.
+- **Loading screens:** nfsu2.xyz in the corner.
+- **iPhone and iPad:** no more one-second freeze every 10 to 20 seconds in a busy free roam.
+- **Garage:** Split Screen no longer locks career slots 6 to 10 and loses their cars.
+- **Vinyls:** Special shows Street Reaper, Japan Tuning, David Choe, Snoop Dogg and The Doors only on the cars they were made for.
+- **Controllers:** Xbox Bluetooth triggers drive and brake in Firefox on a Mac.
+- **Phones:** POCO M7 Pro and other PowerVR B-Series phones start in the window, where they don't crash.
+- **Career:** no more error 134 after trading a car when the career car was missing.
+- **Races:** the lobby speedometer counts how the race evens out the engines, so an upgraded car no longer reads deep in the red.
+- **Races:** joining a race after using Options or Car Select in the Online menu no longer hangs for 3 minutes.
+- **Photo mode:** the camera no longer spins on its own; Reset stops Auto-turn.
+- **iPhone:** turning the car with two fingers in the garage works again.
+- **Free roam:** Enter at a shop, race or cover shoot no longer stops working until a reload.
+- **Keyboard:** Alt, Shift and Ctrl work in Firefox with privacy protection on.
+- **Keyboard:** AltGr on German, French, Turkish and other layouts no longer shifts down with the nitrous.
+- **Controls:** Site keys can use the debug camera's keys, and keys whose game control you moved.
+- **Controls:** picking Xbox or PlayStation button names no longer changes the Controller setting.
+- **Controllers:** the Zikway HID gamepad's buttons work right.
+- **Free roam:** other players' cars make tyre smoke again.
+
+## 2026-11-05 (0e56c9b)
+
+- **Races:** several lobbies can wait at one start: E shows the next, B opens your own beside them, and the card starts on one a friend or crew-mate is in. Hosts can invite friends (Z), who join from wherever they are. Lobbies you can't join no longer show on the map or at the start.
+- **Races:** lobbies keep out players past the host's stage unless the host lets everyone in (V); friends and crew can always join. A cleaner lobby card with a speedometer of the fastest car against yours, and its keys on a controller's D-pad.
+- **Free roam:** the box at the top left shows only when it says something: a new message, at a race, shop or outrun, and for a moment at the start and after a menu.
+- **Touch controls:** Reset shows only when the car is slow, and Pressurize and Bounce only when they can be used; the other buttons stay where they are.
+- **Vinyls:** Art Factory 28 to 34, Sha_Do's designs that only the Japanese release had, on every car after Art Factory 27.
 - **Languages:** Czech, Slovak and Greek, the game and the start page.
 - **Music:** scrobble the songs you hear, EA Trax and the Radio, to Last.fm: Settings, Game.
 - **Controllers:** the Steam Controller (the 2015 and the 2026 one) and a Steam Deck's controls work without Steam in Chrome and Edge: Controls, Controller, Connect a Steam Controller.

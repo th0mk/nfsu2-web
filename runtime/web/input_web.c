@@ -206,7 +206,14 @@ static void key_down(const InEv *e){
     if (!dik || dik == 0xDB || dik == 0xDC) return;            /* Meta: the browser's */
     int repeat = (e->flags & IKF_REPEAT) != 0, again = 0;
     if (repeat && !g_down[dik].down){
-        if (!g_down[dik].lost) return;                              /* pressed with Meta */
+        /* pressed with Meta: the browser's; but a modifier types nothing, and its first keydown can come marked as a
+         * repeat (a program that grabs and sends modifiers again sets that bit on Windows): a player's Alt and Shift
+         * did nothing in Firefox, 2026-11-05, so a modifier's is a press (said once) */
+        if (!g_down[dik].lost && !is_modifier(dik)) return;
+        if (!g_down[dik].lost){
+            static uint8_t told[256];
+            if (!told[dik]){ told[dik] = 1; fprintf(stderr, "[key] dik=0x%02x's first keydown came as a repeat: taken as a press\n", dik); }
+        }
         repeat = 0; again = 1;                    /* held through a focus loss: down again */
     }
     if (!repeat && g_down[dik].down) repeat = 1;                  /* its key up was lost */

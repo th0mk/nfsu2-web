@@ -23,6 +23,7 @@ const MIN_CHARS = 10;                            // "up", "ty", "hello": no ques
 const DAY_MS = 86400_000, PER_DAY = 5, CHANNEL_MAX_PER_HOUR = 60;   // spam limits: a call costs ~0.05 cents
 const MAX_REPLY = 280;                           // a reply longer than this is no one-liner: none
 const MAX_TRANSLATED = MAX_REPLY * 1.5;          // the same line in another language runs longer, never this long
+const GAP_MS = 5 * 60_000;                       // a person's next answer this soon only when they reply to the bot's
 const FOLLOW_MS = 20 * 60_000;                   // their lines this soon after the bot answered them may go on from it
 const SAME_MAX = 2;                              // the same answer to a person a day: a follow-up's other part of it
 const REPEAT = 0.5;                              // a reply with this much of a line they had (word pairs) says it again
@@ -71,7 +72,7 @@ const system = questions => `You read #help, the help channel of the Discord ser
 
 - why: a few words on what [A1] asks or says.
 - asks: true when [A1] asks something of their own, or tells of a problem of their own, in their marked lines. False for chat, thanks, jokes, opinions, an answer or advice to someone else, someone else's question, or a reply to a member who is already helping them.
-- problem: true when [A1] tells of something going wrong for them, even as a question: an error or a message, a crash, a freeze, a stall, something missing, gone, locked or broken, something moving or changing by itself ("my camera keeps rotating", "the shop shows the parts locked though the message said unlocked", "other players' cars jump in races", "how do I fix this error?"). False for a how-to question about something that works.
+- problem: true when [A1] tells of something going wrong for them, even as a question: an error or a message, a crash, a freeze, a stall, something missing, gone, locked or broken, something that fails ("it won't let me delete it", a message that it could not be done), something they did as an answer says that still doesn't work ("I picked the folder but it's empty"), something moving or changing by itself ("my camera keeps rotating", "the shop shows the parts locked though the message said unlocked", "other players' cars jump in races", "how do I fix this error?"). False for a how-to question about something that works.
 - handled: true when someone in the chat already answered them with something that fits (an explanation, something to try, a question back), or they found it themselves. A joke, "same here" or "read the FAQ" alone is no answer. The bot's own answer to them (its lines are marked (bot)) doesn't count once they say after it that it didn't help, that they did it already, or ask on.
 - faq: the id of the answer that settles exactly what they ask, so they need nothing more. "" when none does, when an answer only touches it, when they ask something more specific than the answer covers, or when unsure: a wrong answer in public is worse than none.
   - The answer's own words must say what they need: a question on its topic about something it doesn't mention (how a custom song's artist and album show, when the answer only says where to add songs) gets "". A line of an answer that settles their question in its own words does, whichever question it sits under (whether a wheel gets force feedback).
@@ -82,7 +83,7 @@ const system = questions => `You read #help, the help channel of the Discord ser
   - When their words could mean two things that need different answers (the PC game's saves, or this site's saves on their PC), "".
   - The answer on reporting a bug only when they ask how or where to report one, not when they tell of one.
   - After the bot's answer to them (<earlier> lists it), when they say it didn't help, that they did it, or that they have what it asks for (their car has the stars), only a part they weren't given and haven't done fits, of that answer or another. Nothing left: "".
-- reply: when faq names an answer, one short sentence in English that answers what [A1] asks, made only of what that answer says: the part that answers them, nothing added. Keep its keys, paths and bold words as it writes them ("On the start page, Game, Display, set **Frame rate** to 30."). Write it as a sentence: never start with a list item's bold label ("Music:", "Friends:"). Never what the bot told them before. At most 25 words; no greeting, no question back, no "the FAQ says". "" when faq is "".
+- reply: when faq names an answer, one short sentence in English that answers what [A1] asks, made only of what that answer says: the part that answers them, nothing added. Keep its keys, paths and bold words as it writes them ("On the start page, Game, Display, set **Frame rate** to 30."). Write it as a sentence: never start with a list item's bold label ("Music:", "Friends:"). A yes-or-no question gets its yes or no first. Keep every step of the part you use, in order; never a step they did already, nor a setting's default as something to set. Never what the bot told them before. At most 25 words; no greeting, no question back, no "the FAQ says". "" when faq is "".
 - lang: the language their own words are written in, as a two-letter code (en, pt, es, ru, tr, pl, fr, de, it, ...). Words in English are "en", whatever the letters of their name; never a guess from their name or a screenshot.
 
 <faq>
@@ -170,8 +171,20 @@ export class Help {
     const m = p.msgs.at(-1), now = this.now();
     const today = (this.saved.answered[author] ?? []).filter(([at]) => now - at < DAY_MS);   // [ms, answer id, line]
     const recent = today.filter(([at]) => now - at < FOLLOW_MS);       // what they say now may go on from these
+    // lines that are Discord replies to another member are their talk, not a question to the bot (it answered a
+    // member's "why does he need to preload?")
+    const to = x => x.mentions?.repliedUser?.id;
+    const bot = this.client?.user?.id;
+    if (p.msgs.every(x => to(x) && to(x) !== author && to(x) !== bot)) return console.log(`[help] ${m.id} ${name(m)}: a reply to another member`);
+    // a second answer this soon only to someone who replies to the bot's (two answers to one asker in a minute)
+    if (recent.length && now - recent.at(-1)[0] < GAP_MS && !p.msgs.some(x => bot && to(x) === bot))
+      return console.log(`[help] ${m.id} ${name(m)}: answered ${Math.round((now - recent.at(-1)[0]) / 1000)} s ago`);
     if (today.length >= PER_DAY) return console.log(`[help] ${m.id} ${name(m)}: ${PER_DAY} answers today already`);
     if (this.full(m.channelId)) return console.log(`[help] ${m.id} ${name(m)}: ${CHANNEL_MAX_PER_HOUR} answers this hour already`);
+    // general.mjs's fix or pointer, or staff's or a member's, went to them today: no FAQ line on top (the same fix came
+    // twice ten minutes apart); talking it over with members: they help, the bot stays out
+    if (!recent.length && now - (this.general.saved.nudged[author] ?? 0) < DAY_MS) return console.log(`[help] ${m.id} ${name(m)}: pointed or fixed today`);
+    if (!recent.length && now - (this.general.conversing.get(author) ?? -Infinity) < FOLLOW_MS) return console.log(`[help] ${m.id} ${name(m)}: talking it over with members`);
     const questions = this.faq.questions();
     if (!questions.length) return;
     this.busy.add(author);

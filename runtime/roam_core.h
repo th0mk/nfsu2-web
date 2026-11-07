@@ -79,6 +79,13 @@
 #define RC_PERF_BYTES    52         /* car-look record extension 1 */
 #define RC_EXT_PERF      1
 #define RC_EXT_HORN      2          /* car-look record extension 2: the player's horn, 1 byte */
+#define RC_EXT_RATING    3          /* car-look record extension 3: the car's class (int8) and rating (u16), 3 bytes */
+/* a car's crash damage (damage.c) on the wire (RC_MSG_DENTS): the dents its owner's game made, oldest first, so that a
+ * friend's game makes the same ones on its copy of the car.  A dent: where (3 x int16, mm, car space), the push
+ * (3 x int8, x 127), the depth (u8, of RC_DMG_DEPTH m) and the impact's strength (u8, impulse units) */
+#define RC_DMG_BYTES     11
+#define RC_DMG_MAX       66         /* dents per DENTS at most (the newest) */
+#define RC_DMG_DEPTH     0.25f      /* a dent's depth on the wire: u8 steps of this / 255 (m) */
 #define RC_DUEL_INBOX    16         /* DUEL messages held for the game side */
 #define RC_MAP_MAX       4096       /* entries per answer at most (the hub's nearest) */
 #define RC_MAPD_GONE     0x8000u    /* a MAPD entry's key (u16: the hub's slot of the player) with this: it went */
@@ -94,7 +101,16 @@
 #define RC_NEAR_M        1000       /* a NEARREQ's radius at most (m) */
 #define RC_LOBBY_MAX     6          /* players in a race lobby: the game's network race takes 6 */
 #define RC_LOBBY_INBOX   16         /* LOBBY messages held for the game side */
-#define RC_LOBBIES_ENTRY 11         /* a LOBBIES entry: x, y (int16, m), race (u32), n, max, state (u8) */
+#define RC_LOBBIES_ENTRY 11         /* a LOBBIES entry: x, y (int16, m), race (u32), n, max, state (u8: RC_LS_*, and
+                                       RC_LOBBIES_STAGED, RC_LOBBIES_MATE) */
+/* a LOBBIES entry's state byte, past its RC_LS_* (its low 2 bits): the lobby keeps out the players past its host's
+ * stage (its advert said so: a career lobby, or its host's Who can join, roam_game.c mp_kept_out), that stage (bits
+ * 2-4, 0: an older game's, its race's), and its host is a friend or crew-mate of the player asked for (who is never
+ * kept out).  Only such a lobby's entry has them: an older core drops such an entry (a state of RC_LS__N or more), and
+ * keeps every other */
+#define RC_LOBBIES_STAGED 0x80
+#define RC_LOBBIES_MATE   0x40
+#define RC_LOBBIES_HSTAGE 2          /* the host's stage: state >> this & 7 */
 #define RC_LOBBIES_MAX   96         /* entries per LOBBIES datagram (the hub's nearest) */
 #define RC_RACEREP_BYTES 64         /* a RACEREP's payload: lobby, race (u32); mode, laps (u8); track (u16); place, players,
                                        flags, type, class (u8), 3 bytes 0; rating, field, factor, kW, kg, km/h, time (f32);
@@ -150,8 +166,22 @@ enum { RC_MSG_HELLO = 1, RC_MSG_PEERS = 2, RC_MSG_SNAP = 3, RC_MSG_CFG = 4, RC_M
         * us at most, m, RC_NEAR_M at most) only to the hub, which answers with one NEARD datagram laid out as a MAPD
         * (nparts 1): the players of our room in free roam within radius, past us and our peers, the nearest max
         * (RC_NEAR_MAX) at most, as what changed since the answer base.  A hub before it ignores the type */
-       RC_MSG_NEARREQ = 18, RC_MSG_NEARD = 19 };
+       RC_MSG_NEARREQ = 18, RC_MSG_NEARD = 19,
+       /* the car's crash damage (damage.c), only to an established peer whose HELLO carries RC_HF_DENTS (it shows
+        * friends' damage) and that gets our car, while it is near us (its snapshots: every one, within RC_FAR_M), and
+        * never in the car-look record (whose bytes say when a car is to be loaded again).  op RC_DENTS_STATE: our
+        * damage's revision (u16, nonzero: +1 at each change), its epoch (u8: +1 at every repair), the number of its
+        * first dent since that repair (u16), n (u8, RC_DMG_MAX at most), then n dents of RC_DMG_BYTES; again, less and
+        * less often, until the peer answers RC_DENTS_HAVE with that revision.  A core before it sends no flag and gets
+        * none (it would count the type as bad); bytes after these, and other ops, are a newer core's: skipped */
+       RC_MSG_DENTS = 20 };
+enum { RC_DENTS_STATE = 1, RC_DENTS_HAVE = 2 };
 /* RACEREP flags */
+/* RACEREP lobby_bits: the reporter's lobby kept out the players past its race's stage; the reporter, past that stage,
+ * was in it as its host's friend or crew-mate; its host was past the race's stage */
+#define RC_RL_STAGED     0x01
+#define RC_RL_MATE_PAST  0x02
+#define RC_RL_HOST_PAST  0x04
 #define RC_RR_HOST       0x01       /* the reporter hosted the race */
 #define RC_RR_QUIT       0x02       /* ...left it with its pause menu's Quit */
 #define RC_RR_EDITED     0x04       /* ...in a car whose game data is edited (mprace_type_edited: its type's record in
@@ -271,6 +301,9 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
  * other endpoints, marks it as nobody's friend, answers no map question of it and lets its car appear beside player
  * 1's (web/server-rs crates/roam).  An older core and an older hub ignore it */
 #define RC_HF_SEAT2      0x2000
+/* header flags (HELLO): this player shows friends' crash damage (damage.c, the start page's Crash damage): it takes
+ * RC_MSG_DENTS.  An older core, the hub and a player without the damage send none, and get none */
+#define RC_HF_DENTS      0x4000
 /* in the hub's crew marks, past the crews' bits: that player's friendship with
  * this one goes both ways (the server's friends lists, EA Messenger's); a hub
  * of before sets none, a core of before reads only the crews' bits */
@@ -397,6 +430,8 @@ typedef struct {
     int8_t   cls;                  /* the game's class: 0 fastest .. 3, -1 not rated */
     uint8_t  credit;               /* the race in the reporter's career: 0 not, 1 its win, 2 a friend's win (mprace.c MPC_*;
                                     * the first of the three spare bytes after cls: older games send 0, older servers skip it) */
+    uint8_t  stage;                /* the reporter's career stage (0: none; the second spare byte, as credit) */
+    uint8_t  lobby_bits;           /* RC_RL_*: how the reporter's lobby was (the third spare byte, as credit) */
     float    rating;               /* the game's rating of the car */
     float    field;                /* the average rating of the race's cars */
     float    factor;               /* the car's engine power times this in the race (1: as it is) */
@@ -451,6 +486,7 @@ typedef struct {
         rc_racerep racerep;
         struct { uint8_t phrase, seq, stay; } say;
         rc_raceres raceres;
+        struct { uint8_t op, epoch, n; uint16_t rev, first; const uint8_t *data; } dents;   /* data: n x RC_DMG_BYTES (STATE) */
     } u;
 } rc_msg;
 
@@ -481,6 +517,10 @@ typedef struct {
     /* extension 2 (1 byte): the horn the player picked (horn.h's kinds; a
      * record without it, from an older core: theirs is the dual horn) */
     uint8_t  has_horn, horn;
+    /* extension 3 (3 bytes): the car as the game rates it (mprace.c CarPerf: its class, 0 fastest .. 3, and its
+     * rating, rounded): a remote car is built without its physics pass, so the others' games cannot rate it.  The
+     * race lobby's card shows each car against ours (roam_game.c mp_rating) */
+    uint8_t  has_rating; int8_t rating_cls; uint16_t rating;
 } rc_carcfg;
 int rc_carcfg_encode(const rc_carcfg *c, uint8_t *out, int cap);   /* bytes, or -1 */
 int rc_carcfg_decode(const uint8_t *p, int len, rc_carcfg *c);     /* RC_OK / RC_E_* */
@@ -605,6 +645,7 @@ typedef struct {
                                       the game shows, 1 .. RC_MAX_PEERS; 0: not said (the hub's own most, 32 for a core
                                       before version 10) */
     int      seat2;                /* we are the second local player of our browser (HELLO says so: RC_HF_SEAT2) */
+    int      dents;                /* we show friends' crash damage (HELLO says so: RC_HF_DENTS) */
 } rc_config;
 
 enum { RC_PS_FREE = 0, RC_PS_CANDIDATE = 1, RC_PS_HEARD = 2, RC_PS_EST = 3 };
@@ -650,6 +691,14 @@ typedef struct {
     int      cfg_len;  uint8_t cfg[RC_CFG_MAX];
     uint32_t cfg_gen;              /* +1 for every new complete record */
     uint16_t asm_rev;  uint16_t asm_total;  uint8_t asm_mask, asm_nfrag;  uint8_t asm_buf[RC_CFG_MAX];
+    /* crash damage (RC_MSG_DENTS) */
+    uint8_t  dents;                /* its HELLO says it shows friends' damage (RC_HF_DENTS): ours goes to it */
+    uint16_t dents_have;           /* ...the revision of ours it said it has (0: none) */
+    uint16_t dents_tx_rev;  uint8_t dents_tries;  int64_t dents_tx_us;   /* ours to it: the revision last sent, how often, when */
+    int64_t  dents_have_us;        /* our HAVE to it for a revision we had already: at most every T_DENTS_HAVE */
+    uint16_t dents_rev;            /* its car's damage as its last DENTS had it (0: none came): */
+    uint8_t  dents_epoch, dents_n;  uint16_t dents_first;  uint8_t dent[RC_DMG_MAX * RC_DMG_BYTES];
+    uint32_t dents_gen;            /* +1 for every new one */
     rc_interp mo;                  /* motion: jitter buffer and smoothing */
 } rc_peer;
 
@@ -720,12 +769,15 @@ typedef struct {
     /* the hub's open lobbies of our room, with the answer to our last map
      * question (lobbies_gen +1 for each) */
     uint32_t  lobbies_gen;  int lobbies_n;  uint16_t lobbies_req;   /* (the question they answered) */
-    struct { int16_t x, y; uint32_t race; uint8_t n, max, state; } lobbies_e[RC_LOBBIES_MAX];
+    struct { int16_t x, y; uint32_t race; uint8_t n, max, state, flags, hstage; } lobbies_e[RC_LOBBIES_MAX];   /* (flags: RC_LOBBIES_STAGED, _MATE) */
     /* SAY messages from established peers, oldest first, until the game
      * side takes them (rc_take_say) */
     struct { uint32_t from; uint8_t phrase, seq, stay; } say_in[RC_SAY_INBOX];
     int       n_say_in;
     uint32_t  say_dropped;         /* the inbox was full */
+    /* our car's crash damage (rc_set_dents): its revision (0: none yet), epoch, first dent's number and dents */
+    uint16_t  dents_rev;  uint8_t dents_epoch, dents_n;  uint16_t dents_first;  uint8_t dent[RC_DMG_MAX * RC_DMG_BYTES];
+    uint32_t  dents_tx, dents_rx;  /* DENTS sent and taken (statistics) */
 } rc_session;
 
 void rc_session_init(rc_session *s, const rc_config *cfg, const rc_io *io);
@@ -805,6 +857,11 @@ int  rc_send_raceres(rc_session *s, const rc_raceres *r);
 int  rc_send_say(rc_session *s, uint8_t phrase, uint8_t seq, uint8_t stay);
 /* the oldest SAY not taken yet; 1 when there was one */
 int  rc_take_say(rc_session *s, uint32_t *from, uint8_t *phrase, uint8_t *seq, uint8_t *stay);
+/* our car's crash damage as it is now: n dents (RC_DMG_MAX at most, the newest kept) of RC_DMG_BYTES, the first of them
+ * number `first` of epoch `epoch`.  A change is a new revision, which goes (RC_MSG_DENTS) to every established peer
+ * that shows friends' damage and gets our car, near us, now and at each tick until it says it has it; a peer that
+ * comes near gets it then.  The same damage again changes nothing */
+void rc_set_dents(rc_session *s, uint8_t epoch, uint16_t first, int n, const uint8_t *dents, int64_t now_us);
 const char *rc_status_name(int st);
 
 #endif

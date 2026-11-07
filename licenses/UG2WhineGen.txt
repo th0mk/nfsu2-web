@@ -1,0 +1,5 @@
+Underground 2 Transmission Whine (UG2WhineGen). © ropsli No Rights Reserved.
+
+As the mod's readme states it, for its source (https://github.com/ropi336/UG2WhineGen), from which
+runtime/whine.c is ported.  The mod's sounds, NFS Carbon's gearbox whine, are not in this repository:
+tools/whinepack.py takes them from the mod's release into the game folder.

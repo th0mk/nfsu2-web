@@ -1,0 +1,44 @@
+# Rubberbanding (runtime/catchup.c) and the game's Replay: a career race driven by the game's autopilot for 40 s of
+# world time, then the pause menu's Replay, skipped back to the start and forward, as replay_sync.txt checks a Quick
+# Race.  The game re-drives the race and checks every car's place each frame (0x5FA770): catchup.c's factors must
+# come out the same in the replay.  Run it with NFSU2_CATCHUP=noboost or off, at 240 fps as the replay240 scenario.
+#   NFSU2_SAVE_SEED=<a career save tree> node web/tools/run-suite.mjs --base <server> --script catchup_replay.txt
+#        --marker "CATCHUP replay done" --name <name> --env CU_RACE=<a circuit> --env NFSU2_CATCHUP=noboost
+#        --env NFSU2_FPS=240 --env NFSU2_HFR_LOCKSTEP=1
+0     bot on
++0    waitroam 6000
++0    bot off
++60   careergo ${CU_RACE}
++300  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # Accept
++0    waitexpr i:0x863470 != 0 3000
++0    waitexpr i:[0x890118]+0x24 >= 2 6000
++0    waitfng HUD_SingleRace.fng 6000
++0    waitexpr i:[0x890118] == 4 3000
++0    wzero
++0    autopilot on
+40000wms tapuntil ESCAPE UI_Pause.fng 60 600
++60   fnglist
++0    tap RIGHT
++40   tap RIGHT
++40   tap RIGHT                                    # Options
++40   tap RIGHT                                    # Replay (a career race's pause menu has an item more than Quick Race's)
++40   tap RETURN
++0    waitfng UI_ReplayControl.fng 600
++0    log replay_open
++0    trace 60 scr=x:0x8363ec bad=i:[0x8650b8]+0xc wt=i:0x86518c
++900  expect x:0x8363ec != 0                      # the replay screen is still up
++0    expect i:[0x8650b8]+0xc == 0                # and never lost the race
++0    tap LBRACKET                                 # skip back
++300  tap LBRACKET                                 # and back again (the race's start)
++900  log replay_back
++0    expect x:0x8363ec != 0
++0    expect i:[0x8650b8]+0xc == 0
++0    tap RBRACKET                                 # skip forward
++900  log replay_forward
++0    expect x:0x8363ec != 0
++0    expect i:[0x8650b8]+0xc == 0
++0    untrace
++0    log CATCHUP replay done
++10   quit

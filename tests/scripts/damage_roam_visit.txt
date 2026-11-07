@@ -1,0 +1,66 @@
+# Crash damage (runtime/damage.c) and a world that goes: one player, new career -> prologue free roam; the car is driven
+# into the wall at the car lot street's end (dented, its hood loose, a lamp broken), then into the car lot (the world is
+# unloaded, the car lot's front end draws cars; the 206 bought: the way out), back out (a new world) and into the wall
+# again.  Nothing of the old world's cars may be written after it went: "[damage] the world changed: N cars' damage let
+# go" at each change, and the run must end with quit.
+#   node web/tools/roam-pair.mjs --solo --page play --a Al:damage_roam_visit.txt --env NFSU2_DAMAGE=1 --env NFSU2_DAMAGE_LOG=1
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log crash_go
++0    roam shopgo CC_CAR_LOT_1
++180  down UP
++420  up UP
++0    down DOWN
++150  up DOWN
++60   down UP
++0    down LEFT                       # the second hit on a front corner: a lamp breaks
++50   up LEFT
++150  up UP
++0    down DOWN
++40   up DOWN
++120  log crashed
++0    dump crashed
++0    status crashed
++60   log VISIT car lot
++0    roam shopgo CC_CAR_LOT_1
++300  tapuntil RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the car lot
++0    waitfng GarageMain.fng 3000
++300  dump car_lot
++0    status in_the_car_lot
++0    tap RETURN                      # buy the 206 (the way out of the car lot)
++180  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 1200
++60   tap LEFT
++30   tap RETURN                      # save: Yes
++300  tap RETURN                      # Save complete: Continue
++120  tapuntil ESCAPE HUD_SingleRace.fng 120 3000
++0    roam waitroam 4000
++300  log back in the world
++0    dump back
++0    roam shopgo CC_CAR_LOT_1
++180  down UP
++420  up UP
++0    down DOWN
++40   up DOWN
++120  dump crashed_again
++0    status crashed_again
++60   quit

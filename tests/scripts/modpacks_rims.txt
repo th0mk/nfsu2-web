@@ -1,0 +1,78 @@
+# The mods' rim brands (runtime/modpacks.c, MODPACKS) in a career Body Shop's Rims, as the player sees them: a
+# career save with everything unlocked (the game's unlock-all flag [0x838464]), CC_BODYSHOP_1, Rims (its 11th
+# category), the brands (rb_0 .. rb_6: Blitz after BBS), Blitz's rims (bz_0 .. bz_3), one bought (bz_on), out of the
+# shop, the autosave and the car in the world (bz_world): --fetch "NFS Underground 2/<profile>/<profile>" copies the
+# profile with the rim out, for modpacks_rims_save.txt.  The log's "[mods]" lines say what the car part database gained and what
+# the rim shop lists; its "[file]" lines that CARS/WHEELS/TEXTURES.BIN was read with its pack and
+# CARS/WHEELS/GEOMETRY_BLITZ.BIN from MODPACKS.  With NFSU2_MOD_RIMS=0 the brands are the game's own.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --data <game folder with MODPACKS>
+#        --seed <career save> --a Rim:modpacks_rims.txt:NFSU2_ROAM=0,NFSU2_MOD_RIMS=1
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank: room for parts
++0    poke 0x838464 1                 # unlock all
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave (the profile with the rim: --fetch it)
++60   shopgo CC_BODYSHOP_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the body shop
++1500 fnglist
++0    loop 10
++30   tap RIGHT                       # to Rims
++60   endloop
++200  dump rims
++30   tap RETURN                      # the brands
++600  fnglist
++0    dump rb_0
++30   tap RIGHT
++300  dump rb_1
++30   tap RIGHT
++300  dump rb_2
++30   tap RIGHT
++300  dump rb_3
++30   tap RIGHT
++300  dump rb_4
++30   tap RIGHT
++300  dump rb_5
++30   tap RIGHT
++300  dump rb_6
++0    loop 3
++30   tap LEFT                        # back to Blitz: the fourth
++60   endloop
++300  dump rb_blitz
++30   tap RETURN                      # its rims
++900  fnglist
++0    dump bz_0
++30   tap RIGHT
++500  dump bz_1
++30   tap RIGHT
++500  dump bz_2
++30   tap RETURN                      # this one
++600  fnglist
++0    dump bz_3
++30   tap RETURN
++600  fnglist
++0    dump bz_4
++30   tap LEFT                        # Yes, if it asks
++30   tap RETURN
++600  fnglist
++0    dump bz_on
++0    loop 5
++60   tap ESCAPE
++300  fnglist
++0    endloop
++0    dump bz_exit
++0    tap LEFT
++30   tap RETURN                      # Yes: back to Explore Mode
++0    waitfe MC_Main.fng 3000
++120  fnglist
++0    tap LEFT
++30   tap RETURN                      # the autosave: Yes
++120  fnglist
++0    tap LEFT
++30   tap RETURN
++0    waitroam 4000
++600  dump bz_world
++0    log RIMS DONE
++10   quit

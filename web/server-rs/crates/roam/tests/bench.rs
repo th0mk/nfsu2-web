@@ -3,7 +3,7 @@
 //! and the same with crews (bench_crews: crews of 2 to 6 spread over the map, and every player in 4 crews of 64, the
 //! most a crew is linked first), and with blocks (bench_blocks: 1 player in 20 blocks 10 others).  And what the
 //! minimap's questions cost the hub's thread (bench_near), and the world map's (bench_map_4096: 16 datagrams an answer
-//! or 48), and a tick from 2000 to 16000 players (bench_scale).  A
+//! or 48), and a tick from 2000 to 24000 players (bench_scale).  A
 //! tick's CPU is the process's and the hub's thread's own (the walks of a large room are read on more threads:
 //! `RoamOptions::link_threads`, BENCH_THREADS=n to set it).  Not a test: run it in release,
 //!   cargo.sh roam test --release -p nfsu2-roam --test bench -- --ignored --nocapture
@@ -64,7 +64,7 @@ fn bench_with(
 ) {
     let d = RoamOptions::default();
     let link_threads = std::env::var("BENCH_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(d.link_threads);
-    let mut k = Kit::new(RoamOptions { max_players: 16384, link_threads, ..d });
+    let mut k = Kit::new(RoamOptions { max_players: 24576, link_threads, ..d });
     let mut r = Lcg(7);
     let mut pos: Vec<[f64; 3]> =
         (0..players).map(|_| [r.unit() * area - area / 2.0, r.unit() * area - area / 2.0, r.unit() * 20.0]).collect();
@@ -428,15 +428,15 @@ fn bench_near_minimap() {
     }
 }
 
-/// 2000 to 16000 players in one room, and 8000 and 16000 in a smaller one and in 8 rooms: what a tick costs past the
-/// 12000 players of the switch (BENCH_THREADS=1: the walks on the hub's thread alone)
+/// 2000 to 24000 players in one room, and 8000 to 24000 in a smaller one and in 8 rooms: what a tick costs up to the
+/// switch's 24000 players (BENCH_THREADS=1: the walks on the hub's thread alone)
 #[test]
 #[ignore]
 fn bench_scale() {
-    for n in [2000u32, 4000, 6000, 8000, 12000, 16000] {
+    for n in [2000u32, 4000, 6000, 8000, 12000, 16000, 20000, 24000] {
         bench_links(&format!("{n} players in one room of 8 km, 15 m/s, 32 links"), n, 1, 8000.0, 15.0, 32);
     }
-    for n in [8000u32, 16000] {
+    for n in [8000u32, 16000, 24000] {
         bench_links(&format!("{n} players in one room of 3 km, 15 m/s, 32 links"), n, 1, 3000.0, 15.0, 32);
         bench_links(&format!("{n} players in 8 rooms of 4 km, 15 m/s, 32 links"), n, 8, 4000.0, 15.0, 32);
     }
