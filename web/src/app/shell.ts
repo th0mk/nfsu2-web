@@ -334,9 +334,11 @@ const language = (r: Resolved = resolved()) => (r.env.NFSU2_LANGUAGE ?? 'english
  *  and counts.  Each setting's value names its pack (ui_textures = map: none of the menus' and HUD's, uiPack) */
 const texpack = (r: Resolved = resolved()) => [uiPack(r.env.NFSU2_UI_TEXTURES), r.env.NFSU2_MAP_TEXTURES]
   .map(v => (v ?? '').toLowerCase()).filter(v => v && v !== 'original').join(',');
-/** the data the settings pick (datacache.ts Packs): the texture pack and the songs (EA's own: io-worker.ts dataFile) */
-const packs = (r: Resolved = resolved()): Packs => ({ texpack: texpack(r), songs: (r.env.NFSU2_SONGS ?? '').trim().toLowerCase() });
-const packsKey = () => { const p = packs(); return `${language()}/${p.texpack}/${p.songs}`; };
+/** the data the settings pick (datacache.ts Packs): the texture pack, the songs (EA's own: io-worker.ts dataFile) and
+ *  the crash damage's scratches */
+const packs = (r: Resolved = resolved()): Packs => ({ texpack: texpack(r), songs: (r.env.NFSU2_SONGS ?? '').trim().toLowerCase(),
+  damage: r.env.NFSU2_DAMAGE === '1' });
+const packsKey = () => { const p = packs(); return `${language()}/${p.texpack}/${p.songs}/${p.damage ? 1 : 0}`; };
 
 // ----------------------------------------------------------------- play --
 function stageCanvas(): HTMLCanvasElement {

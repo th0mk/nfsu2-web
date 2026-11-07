@@ -1495,6 +1495,8 @@ void reads_frame(CPU *c){
  * whole TEXTURES.BIN in from the front end.  roam_game.c sets this around that car's Load (0x63BC70),
  * which makes the list (0x63AE70 -> 0x6335D0 -> here); the Windows plugin has no overrides.c. */
 __attribute__((weak)) int roam_texlist_engine;
+/* damage.c: a racer's engine texture on its lists too, while the crash damage is on (a lost hood shows the engine) */
+__attribute__((weak)) int damage_texlist_engine(uint32_t ride);
 #define G_CARTYPES_TL   0x008a1cccu   /* CarTypeInfo[], 0x890 bytes: +0x20 the name its textures go by (0x631E20's %s) */
 static void texlist_add(uint32_t list, uint32_t at, uint32_t cnt, uint32_t h){
     uint32_t n = MR32(list + cnt);
@@ -1513,13 +1515,14 @@ static void texlist_engine(uint32_t list, uint32_t ride){
     for (const char *p = nm; *p; p++) h = h * 33u + (uint8_t)*p;
     texlist_add(list, 0u, 0x228u, h); texlist_add(list, 0x114u, 0x22cu, h);
     static uint8_t told[256];
-    if (!told[t]){ told[t] = 1; fprintf(stderr, "[textures] f=%ld %s on the texture lists of other players' cars of its type\n", autotest_frame(), nm); }
+    if (!told[t]){ told[t] = 1; fprintf(stderr, "[textures] f=%ld %s on the texture lists of its type's cars (other players', crash damage's racers)\n", autotest_frame(), nm); }
 }
 void sub_00631e20_orig(CPU *c);
 void sub_00631e20(CPU *c){
     static int full = -1;
     if (full < 0){ const char *e = getenv("NFSU2_TEST_TEXLIST_FULL"); full = e && *e == '1'; }
-    uint32_t esp0 = c->esp, list = MR32(esp0 + 4u), ride = MR32(esp0 + 8u), eng = roam_texlist_engine ? 1u : 0u;
+    uint32_t esp0 = c->esp, list = MR32(esp0 + 4u), ride = MR32(esp0 + 8u);
+    uint32_t eng = roam_texlist_engine || (damage_texlist_engine && damage_texlist_engine(ride)) ? 1u : 0u;
     uint32_t seen[56], off[56], offp[56]; int nd = 0, noff = 0;
     for (uint32_t z = 0; z < 7u; z++){
         if (!MR32(ride + RIDE_DECALZONES + 4u * z)) continue;

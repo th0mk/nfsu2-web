@@ -210,8 +210,8 @@ export const MODS: readonly Mod[] = [
     kind: 'shared', uses: 'code', ownPort: true, control: { setting: 'crash_damage' },
     line: N('Dents, loose parts and scratches.'),
     details: 'The racers\' cars, yours and the AI\'s, dent where they are hit, scratch, break their lights and lose their bumpers, mirrors, hood, trunk lid and doors, which lie on the road for a while. Only what is seen: the car drives as in the original game. In free roam, friends who have it on see your car\'s damage. The game\'s own repair, at a race\'s start or in the garage, takes it away.',
-    online: 'seen', files: ['runtime/damage.c', 'runtime/damagecore.cpp', 'runtime/damage/Dent.h', 'runtime/damage/Tessellate.h',
-      'runtime/damage/scratches.tpk', 'runtime/damage_none.c'],
+    online: 'seen', sizeMB: 1, files: ['runtime/damage.c', 'runtime/damagecore.cpp', 'runtime/damage/Dent.h',
+      'runtime/damage/Tessellate.h', 'runtime/damage_none.c', 'tools/damagepack.py', 'tools/damage/scratches.tpk'],
   },
   // The rims are out for now (with settings.ts's mod_rims and others_mod_parts, settings-ui.ts's rows and
   // runtime/modpacks.c's shop switch); back with their makers' names and link:

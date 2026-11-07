@@ -16,11 +16,11 @@
  *   Render's draws of the body, exhausts and     HOOK_SITE at each call (Body's matrix; the clone of
  *     plates (calls redirected)                    that tip or plate swapped in) and at the next
  *                                                  instruction (the original put back)
- *   UpdateCameraMovers call 0x581493 (main loop) the main-loop hook (roam.c): the scratches' texture pack,
- *                                                  built into the module (dmg_scratches below)
- *   (none: not in the .asi)                      HOOK_SITE in the car loader (0x63AFEF): the engine's
- *                                                  texture, <CAR>_ENGINE, loaded with the car's others, so the
- *                                                  engine a lost hood shows is not black (on Windows too)
+ *   UpdateCameraMovers call 0x581493 (main loop) the main-loop hook (roam.c): the scratches' texture pack, a file
+ *                                                  of the game folder's mod packs (dmg_scratches_read below)
+ *   (none: not in the .asi)                      overrides.c's car texture lists (0x631E20) name a racer's
+ *                                                  engine texture, <CAR>_ENGINE, too (damage_texlist_engine), so
+ *                                                  the engine a lost hood shows is not black
  *
  * Only what is seen: dents, folds, loose and lost parts (lying on the road, the
  * doors hitting walls and cars), scratches, broken lights, the game's own window
@@ -61,18 +61,35 @@ void dmg_main_loop(void);
 uint32_t dmg_net_rev(void);
 int  dmg_net_mine(uint8_t *epoch, uint16_t *first, uint8_t *dents, int max);
 void dmg_net_car(int k, uint32_t car, uint32_t peer, uint8_t epoch, uint16_t first, int n, const uint8_t *dents);
-void dmg_car_textures(uint32_t used, uint32_t name);
 
 /* the scratches: Crashing Foreign Cars' own DAMAGE_SCRATCH1..4 (FRS Mods' tools/build_pack.py, the bare metal
- * with the scratches in the alpha, four strengths), DXT5, as a raw texture pack (TPK) the game's LoadChunks takes;
- * damagecore.cpp loads it once (dmg_main_loop) */
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wc23-extensions"
-const unsigned char dmg_scratches[] = {
-#embed "damage/scratches.tpk"
-};
-#pragma clang diagnostic pop
-const unsigned dmg_scratches_len = sizeof dmg_scratches;
+ * with the scratches in the alpha, four strengths), DXT5, as a raw texture pack (TPK) the game's LoadChunks takes:
+ * MODPACKS/DAMAGE/SCRATCHES.TPK in the game folder (tools/damagepack.py), a mod pack's file (fileio.c), which the
+ * browser fetches only when it is opened, here, with the damage on.  Read into a block of the guest heap, its data
+ * 128-aligned as the pack's textures are (damagecore.cpp gives it to LoadChunks once: dmg_main_loop); the block, or 0
+ * without the file (the dents then come without scratches) */
+int fileio_mod_pack(const char *rel, char *out, size_t outsz);
+#define SCRATCHES_REL "DAMAGE/SCRATCHES.TPK"
+#define TPK_CHUNK     0xb3300000u
+uint32_t dmg_scratches_read(uint32_t *data, uint32_t *size){
+    char path[1200];
+    *data = 0; *size = 0;
+    if (!fileio_mod_pack(SCRATCHES_REL, path, sizeof path)) return 0;
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    long n = fseek(f, 0, SEEK_END) == 0 ? ftell(f) : -1;
+    uint32_t block = n >= 8 && n <= (16l << 20) && fseek(f, 0, SEEK_SET) == 0 ? gheap_alloc(1, (uint32_t)n + 128u, 0) : 0;
+    uint32_t d = (block + 127u) & ~127u;
+    if (!block || fread(g_mem + d, 1, (size_t)n, f) != (size_t)n || MR32(d) != TPK_CHUNK || MR32(d + 4u) + 8u != (uint32_t)n){
+        fclose(f);
+        if (block) gheap_free(1, block);
+        fprintf(stderr, "[damage] MODPACKS/" SCRATCHES_REL ": not a texture pack as tools/damagepack.py writes it\n");
+        return 0;
+    }
+    fclose(f);
+    *data = d; *size = (uint32_t)n;
+    return block;
+}
 
 #define APPLY_IMPULSE   0x005a0b00u
 #define VT_APPLY_IMPULSE 0x50u        /* its vtable slot */
@@ -150,9 +167,6 @@ int damage_hook(CPU *c, uint32_t ip){
     case HOOK_SITE(0x00625a27):   /* a plate's draw */
         if (on()){ g_c = c; dmg_marker_pre(33, MR32(c->esp), MR32(c->esp + 4u)); }
         return 1;
-    case HOOK_SITE(0x0063afef):   /* a car's textures, before the loader asks for them: ebx the list, ebp the car's name */
-        if (on()){ g_c = c; dmg_car_textures(c->ebx, c->ebp); }
-        return 1;
     case HOOK_SITE(0x00624c57):   /* back from those draws */
     case HOOK_SITE(0x00625a2c):
         if (on()){ g_c = c; dmg_marker_post(); }
@@ -180,6 +194,21 @@ void damage_net_car(CPU *c, int k, uint32_t car, uint32_t peer, uint8_t epoch, u
  * right door) */
 int dmg_part_lost(uint32_t cri, int part);
 int damage_part_lost(uint32_t ri, int part){ return on() && dmg_part_lost(ri, part); }
+
+/* overrides.c's car texture lists (0x631E20): a racer's engine texture on them, so that the engine a lost hood leaves
+ * in sight has it (the game never opens a car's hood out in a race, so it never loads it: drawn black).  Not a traffic
+ * car's (CarTypeInfo +0x844, its use: 2 traffic): those have no damage.  Other players' cars in free roam get it from
+ * roam_game.c either way. */
+#define G_CARTYPES_D  0x008a1cccu
+#define CT_SIZE_D     0x890u
+#define CT_USE_D      0x844u
+#define N_TYPES_D     46u
+int damage_texlist_engine(uint32_t ride){
+    if (!on() || !ride || !mem_is_committed(ride)) return 0;
+    uint32_t types = MR32(G_CARTYPES_D), t = MR32(ride);
+    return types && t < N_TYPES_D && mem_is_committed(types + t * CT_SIZE_D + CT_USE_D) &&
+           MR32(types + t * CT_SIZE_D + CT_USE_D) != 2u;
+}
 
 /* roam.c's main-loop hook, once a frame */
 void damage_frame(CPU *c){

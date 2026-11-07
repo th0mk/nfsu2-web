@@ -2,7 +2,8 @@
 //   node --test web/test/texpacks.test.mjs
 // - ui_textures = uhud turns on the maps' pack too (NFSU2_MAP_TEXTURES = detailed), unless NFSU2_MAP_TEXTURES says
 //   otherwise; map only the maps' (uiPack: no pack of the menus' and HUD's); original turns on neither
-// - the preload fetches each pack picked and its .tracks, and no other pack
+// - the preload fetches each pack picked and its .tracks, and no other pack; the crash damage's scratches
+//   (MODPACKS/DAMAGE/) only with crash_damage on
 // The modules are bundled from web/src with esbuild, as web/test/songs.test.mjs does.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,4 +46,13 @@ test('the preload fetches the packs picked and their .tracks', () => {
   assert.deepEqual(ahead('uhud'), ['TEXPACKS/uhud.pak', 'TRACKS/L4RA.BUN']);
   assert.deepEqual(ahead('uhud,detailed'), ['TEXPACKS/detailed.pak', 'TEXPACKS/detailed.tracks', 'TEXPACKS/uhud.pak', 'TRACKS/L4RA.BUN']);
   assert.deepEqual(ahead('detailed'), ['TEXPACKS/detailed.pak', 'TEXPACKS/detailed.tracks', 'TRACKS/L4RA.BUN'], 'Map only');
+});
+
+test('the preload fetches the crash damage\'s scratches only with it on, the other mod packs always', () => {
+  const files = ['MODPACKS/DAMAGE/SCRATCHES.TPK', 'MODPACKS/PARTS.BIN', 'TRACKS/L4RA.BUN'].map(p => ({ path: p, size: 10, mtime: 1 }));
+  const ahead = (damage) => D.aheadFiles(files, 'english', { texpack: '', songs: '', damage }).map(x => x.path).sort();
+  assert.deepEqual(ahead(false), ['MODPACKS/PARTS.BIN', 'TRACKS/L4RA.BUN']);
+  assert.deepEqual(ahead(undefined), ['MODPACKS/PARTS.BIN', 'TRACKS/L4RA.BUN'], 'a page of before: none');
+  assert.deepEqual(ahead(true), ['MODPACKS/DAMAGE/SCRATCHES.TPK', 'MODPACKS/PARTS.BIN', 'TRACKS/L4RA.BUN']);
+  assert.equal(S.resolveEnv('crash_damage = on\n', {}, {}).env.NFSU2_DAMAGE, '1', 'the setting the page reads');
 });

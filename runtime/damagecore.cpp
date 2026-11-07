@@ -26,10 +26,13 @@
 #include <time.h>
 
 #include <algorithm>
+#include <cmath>
 #include <deque>
 #include <initializer_list>
+#include <memory>
 #include <iterator>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "damage/Dent.h"
@@ -49,8 +52,7 @@ void dmg_free(uint32_t p);
 int dmg_committed(uint32_t a, uint32_t n);
 uint32_t dmg_va_free(void);                    // the guest address space still free, bytes
 int dmg_big_memory(void);                      // the guest heap has its window above the runtime (a computer's browser)
-extern const unsigned char dmg_scratches[];   // damage.c: runtime/damage/scratches.tpk
-extern const unsigned dmg_scratches_len;
+uint32_t dmg_scratches_read(uint32_t* data, uint32_t* size);   // damage.c: MODPACKS/DAMAGE/SCRATCHES.TPK, 0 without it
 }
 
 namespace {
@@ -850,13 +852,17 @@ void ForEachPartModel(void* renderInfo, F f) {
 
 size_t g_tessCacheBytes = 64u << 20;           // results kept (least recently used dropped beyond): dmg_init's
 constexpr int kPrewarmPerFrame = 6;              // source meshes copied per frame
-constexpr double kRefineMsPerFrame = 3.0;        // refinement per frame ahead of the impacts
+constexpr double kRefineMsPerFrame = 3.0;        // refinement per frame ahead of the impacts (a step past it at most)
+constexpr int kRefineStep = 16;                  // edges split between two looks at the clock (well under 1 ms)
+constexpr size_t kMaxRefinedOnSpot = 4000;       // a part not refined ahead, refined at its impact: fewer vertices
+                                                 // (32,000: ~30 ms natively; 4000: ~2.5 ms), the whole one queued
 
 struct TessJob {
     bool done = false;
     TessMesh mesh;          // the source until done, then the refined mesh
     size_t bytes = 0;       // of the refined mesh
     uint32_t lastUse = 0;   // frame
+    std::unique_ptr<Tessellator> work;   // its refinement under way (RunPrewarm: a few steps a frame)
 };
 
 std::unordered_map<uint64_t, TessJob> g_tessCache;   // by SourceKey
@@ -919,20 +925,26 @@ void Finish(TessJob& job) {
     g_tessBytes += job.bytes;
 }
 
-// Replaces the source `t` with its refined shape: from the cache when it is there, otherwise refined here.
+// Replaces the source `t` with its refined shape: from the cache when it is there, otherwise refined here to fewer
+// vertices (kMaxRefinedOnSpot, so that an impact's frame stays short), and the whole refinement queued for the next
+// clones of it (RunPrewarm).
 void Refine(TessMesh& t) {
     const uint64_t key = SourceKey(t);
-    TessJob& job = g_tessCache[key];
-    if (job.done) {
-        job.lastUse = Frame();
-        t = job.mesh;
+    auto it = g_tessCache.find(key);
+    if (it != g_tessCache.end() && it->second.done) {
+        it->second.lastUse = Frame();
+        t = it->second.mesh;
         g_refinedAhead++;
         return;
     }
-    Tessellate(t, g_settings.maxEdge, kMaxRefinedVerts);
+    if (it == g_tessCache.end()) {
+        TessJob& job = g_tessCache[key];
+        job.mesh = t;
+        job.lastUse = Frame();
+        g_tessQueue.push_back(key);
+    }
+    Tessellate(t, g_settings.maxEdge, kMaxRefinedOnSpot);
     g_refinedNow++;
-    job.mesh = t;
-    Finish(job);
 }
 
 // Queues the refinement of one model's source mesh, unless it is known (then it is kept from being dropped).
@@ -964,16 +976,26 @@ void PrewarmModel(uint8_t* model) {
     g_tessQueue.push_back(key);
 }
 
-// Refines queued sources for a few milliseconds.
+// Refines queued sources for a few milliseconds: a few edges at a time, a big one over several frames.
 void RunPrewarm() {
     const double t0 = NowMs();
     while (!g_tessQueue.empty() && NowMs() - t0 < kRefineMsPerFrame) {
-        const uint64_t key = g_tessQueue.front();
+        auto it = g_tessCache.find(g_tessQueue.front());
+        if (it == g_tessCache.end() || it->second.done) {   // dropped (never: only done ones are)
+            g_tessQueue.pop_front();
+            continue;
+        }
+        TessJob& job = it->second;
+        if (!job.work) {
+            job.work.reset(new Tessellator);
+            job.work->Begin(job.mesh, g_settings.maxEdge, kMaxRefinedVerts);
+        }
+        bool done = false;
+        while (!(done = job.work->Step(job.mesh, kRefineStep)) && NowMs() - t0 < kRefineMsPerFrame) {}
+        if (!done) break;   // the rest next frame
+        job.work.reset();
+        Finish(job);
         g_tessQueue.pop_front();
-        auto it = g_tessCache.find(key);
-        if (it == g_tessCache.end() || it->second.done) continue;   // dropped, or refined at an impact
-        Tessellate(it->second.mesh, g_settings.maxEdge, kMaxRefinedVerts);
-        Finish(it->second);
     }
 }
 
@@ -1053,7 +1075,6 @@ Clone* MakeClone(uint8_t* model, void* renderInfo, int slot, int row, int lod, i
     const uint32_t vbBytes = c->count * kStride * copies, ibBytes = (uint32_t)(indexCount * 2 * copies);
     const int texCount = At<int8_t>(original, kSolidTexCount), lmCount = At<int8_t>(original, kSolidLmCount);
     c->verts = (Vertex36*)GAlloc(c->count * kStride);
-    c->rest = t.verts;
     c->scratch.assign(c->count, 0.0f);
     c->crack.assign(c->count, 0);
     c->overlayUv.resize(c->count * 2);
@@ -1612,10 +1633,11 @@ void Forget(void* renderInfo, bool alive) {
 }
 
 // The car's damage taken off (the game's repair, or a friend's car's let go): its clones out, the original solids back
-// on its models and its lights back on, only while the car is live; otherwise nothing of the car's is touched.
-void RepairRenderInfo(void* renderInfo) {
+// on its models and its lights back on, only while the car is live; otherwise nothing of the car's is touched.  The car:
+// its state's, else the caller's (the render info's own memory may be gone with its car: never read here).
+void RepairRenderInfo(void* renderInfo, uint8_t* car) {
     auto st = g_cars.find(renderInfo);
-    uint8_t* car = st != g_cars.end() ? st->second->car : At<uint8_t*>(renderInfo, kCriCar);
+    if (st != g_cars.end()) car = st->second->car;
     if (!CarLive(car, renderInfo)) {   // (its clones go once its models no longer draw them: OnFrame)
         Forget(renderInfo, false);
         return;
@@ -1647,7 +1669,10 @@ void WorldWatch() {
     g_markerDraws.clear();
     g_prewarmed.clear();
     NetForgetAll();
-    if (cars || clones) Log("the world changed: %d cars' damage let go (%d clones), none of their memory touched", cars, clones);
+    if (cars || clones)
+        Log("the world changed: %d cars' damage let go (%d clones), none of their memory touched; %d broken lights not put "
+            "back since the last change (no longer on their car's list, or moved)", cars, clones, g_lightsKept);
+    g_lightsKept = 0;
 }
 
 void SetCar(CarState& state, uint8_t* car) {
@@ -2286,15 +2311,22 @@ void OnFrame() {
     }
 
     // A friend's car whose dents are being made (a few a frame) is drawn as it was until they are all made. A clone
-    // not drawn last frame (another LOD of the part is) waits until it is: drawn once as it was, then uploaded.
+    // not drawn last frame (another LOD of the part is) waits until it is: drawn once as it was, then uploaded. One
+    // never drawn waits too where another copy of its part (a LOD, a row) was seen drawn: Render draws the part, just
+    // not this copy (most of a car's copies: every part has 4 LODs). A part never seen drawn by Render's part loop has
+    // its copies uploaded at each change, as no draw would say when.
     void* held[kNetSlots];
     const int nheld = NetHeld(held);
+    const auto partKey = [](const Clone* c) { return (uint64_t)A(c->renderInfo) << 8 | (uint8_t)c->slot; };
+    std::unordered_set<uint64_t> partsDrawn;
+    for (auto& kv : g_clones)
+        if (kv.second->drawnAt && kv.second->instance < 0) partsDrawn.insert(partKey(kv.second));
     for (auto& kv : g_clones) {
         Clone* c = kv.second;
         bool hold = false;
         for (int k = 0; k < nheld && !hold; k++) hold = c->renderInfo == held[k];
         if (hold) continue;
-        if (c->drawnAt && frame - c->drawnAt > 1) continue;
+        if (c->drawnAt ? frame - c->drawnAt > 1 : c->instance < 0 && partsDrawn.count(partKey(c))) continue;
         if (c->overlayDirty) RebuildOverlay(c);
         if (c->dirty) Upload(c);
     }
@@ -2590,7 +2622,7 @@ bool NetBox(uint8_t* car, Vec3& lo, Vec3& hi) {
 // to put back (RepairRenderInfo touches nothing of a car that is not live): its clones are no longer live, and
 // OnFrame lets them go.
 void NetDrop(NetSlot& s) {
-    if (s.renderInfo && (HasClones(s.renderInfo) || g_cars.count(s.renderInfo))) RepairRenderInfo(s.renderInfo);
+    if (s.renderInfo && (HasClones(s.renderInfo) || g_cars.count(s.renderInfo))) RepairRenderInfo(s.renderInfo, G(s.car));
     s.any = s.busy = false;
     s.next = 0;
 }
@@ -2723,6 +2755,8 @@ extern "C" void dmg_impulse(uint32_t bodyAddr, uint32_t impulseAddr, uint32_t po
         return;
     const float* impulse = (const float*)G(impulseAddr);
     const float* point = (const float*)G(pointAddr);
+    for (int i = 0; i < 3; i++)   // (a NaN point would break every lamp and bend the wheels' matrices into NaNs)
+        if (!std::isfinite(impulse[i]) || !std::isfinite(point[i])) return;
     uint8_t* car = At<uint8_t*>(body, kBodyCar);
     if (!car || !dmg_committed(A(car), kCarDamage + 4) || !At<void*>(car, kCarDamage)) return;   // racers only
     if (IsRemote(A(car))) return;   // a friend's car (free roam): its player's game makes its damage
@@ -2752,6 +2786,9 @@ extern "C" void dmg_impulse(uint32_t bodyAddr, uint32_t impulseAddr, uint32_t po
     dent.direction = Normalize({Dot(j, ax), Dot(j, ay), Dot(j, az)});
     dent.depth = dents ? (magnitude - g_settings.impulseThreshold) * g_settings.depthPerImpulse : 0.0f;
     if (dent.depth > g_settings.maxDepthPerHit) dent.depth = g_settings.maxDepthPerHit;
+    if (!std::isfinite(magnitude) || !std::isfinite(dent.depth) || !std::isfinite(dent.point.x + dent.point.y + dent.point.z) ||
+        !std::isfinite(dent.direction.x + dent.direction.y + dent.direction.z))
+        return;   // (the car's own body gone wrong: nothing made of it)
     const Vec3 contact = dent.point;
     const bool snapped = SnapToSurface(renderInfo, dent, 0.15f) || SnapToSurface(renderInfo, dent, 0.4f);
 
@@ -2819,7 +2856,7 @@ extern "C" void dmg_zero(uint32_t carDamage, uint32_t caller) {
     void* renderInfo = At<void*>(car, kCarRenderInfo);
     if (renderInfo && renderInfo == g_mine.renderInfo) NetReset(renderInfo);   // friends see the repair
     if (renderInfo && g_cars.count(renderInfo)) {
-        RepairRenderInfo(renderInfo);
+        RepairRenderInfo(renderInfo, car);
         if (g_settings.logHits) Log("car %08X repaired by the game", A(car));
     }
 }
@@ -2930,42 +2967,22 @@ extern "C" void dmg_marker_post(void) {
     g_swapModel = nullptr;
 }
 
-// The car loader (0x63AED0), right before it asks the car's TEXTURES.BIN for the textures its parts use: the
-// engine's own, <CAR>_ENGINE, joins them. The game never shows the engine (its part is off under the hood), so it
-// never loads that texture, and the engine a lost hood leaves in sight was drawn with the default texture: black.
-constexpr size_t kUsedTexList = 0x08, kUsedTexCount = 0x230;   // u32 hashes, and how many
-constexpr int kUsedTexMax = (0x11C - 0x08) / 4;                // 69, the list's room
-extern "C" void dmg_car_textures(uint32_t used, uint32_t nameAddr) {
-    if (!dmg_committed(used, kUsedTexCount + 4) || !dmg_committed(nameAddr, 32)) return;
-    char name[64];
-    snprintf(name, sizeof name, "%.40s_ENGINE", (const char*)G(nameAddr));
-    const uint32_t hash = HashName(name);
-    uint32_t* list = &At<uint32_t>(G(used), kUsedTexList);
-    int& count = At<int>(G(used), kUsedTexCount);
-    if (count < 0 || count >= kUsedTexMax) return;
-    for (int i = 0; i < count; i++)
-        if (list[i] == hash) return;
-    list[count++] = hash;
-    if (g_settings.logHits) Log("car textures: %s added (%d in all)", name, count);
-}
-
-// The main loop, once a frame: the scratches' texture pack (runtime/damage/scratches.tpk, built into the module by
-// damage.c: Crashing Foreign Cars' own DAMAGE_SCRATCH1..4, DXT5), given once to the game's LoadChunks from a block of
-// the guest heap, 128-aligned as the pack's textures are; it is permanent (the game keeps pointers into it).
+// The main loop, once a frame: the scratches' texture pack (Crashing Foreign Cars' own DAMAGE_SCRATCH1..4, DXT5: the
+// game folder's MODPACKS/DAMAGE/SCRATCHES.TPK, read by damage.c), given once to the game's LoadChunks from a block of
+// the guest heap, 128-aligned as the pack's textures are; it is permanent (the game keeps pointers into it).  Without
+// it the dents come without scratches (MakeClone finds no DAMAGE_SCRATCH texture and draws no overlay).
 extern "C" void dmg_main_loop(void) {
     static bool tried = false;
     WorldWatch();
     NetFrame();
     if (tried) return;
     tried = true;
-    const uint32_t size = dmg_scratches_len;
-    const uint32_t block = size ? dmg_alloc(size + 128u) : 0;
-    if (!block) {
-        Log("scratches' pack: no memory for it: no scratches");
+    uint32_t data = 0, size = 0;
+    if (!dmg_scratches_read(&data, &size)) {
+        Log("scratches' pack: none (MODPACKS/DAMAGE/SCRATCHES.TPK in the game folder, or no memory for it): dents "
+            "without scratches");
         return;
     }
-    const uint32_t data = (block + 127u) & ~127u;
-    memcpy(G(data), dmg_scratches, size);
     static const char kName[] = "Crash damage scratches";
     const uint32_t name = dmg_alloc(sizeof kName);
     if (!name) return;
