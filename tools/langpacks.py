@@ -135,9 +135,15 @@ the fonts' glyph records for the Greek letters, LanguageTextures.bin and GLOBALA
 those letters drawn into the fonts' textures, and the memory-card texts.  Greek takes
 English's place as Polish does.
 Rerunning it copies only what changed, each as a new file (a copy of the game
-folder made of hard links keeps its own).  Prints what each pack holds.
+folder made of hard links keeps its own).  Prints what each pack holds.  Each
+file the game reads as a chunk file (.bin, .bun, .lzc) is checked as the game
+reads it (tools/packcheck.py: its chunks, texture packs and texts) before it is
+written; one that fails stops it, not written.
 """
 import argparse, filecmp, gzip, json, os, re, shutil, struct, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import packcheck  # noqa: E402
 
 LANGS = ['french', 'german', 'italian', 'spanish', 'dutch', 'swedish', 'danish',
          'korean', 'chinese', 'japanese', 'russian', 'thai']
@@ -264,6 +270,13 @@ class Pack:
     def target(self, rel):
         return os.path.join(self.root, game_name(self.game, rel))
 
+    def check(self, rel, data=None, src=None):
+        """stops before a file the game would read wrong is written (tools/packcheck.py)"""
+        if not rel.lower().endswith(packcheck.CHUNKED): return
+        key = f'LANGPACKS/{os.path.basename(self.root)}/{game_name(self.game, rel)}'
+        bad = packcheck.check(self.game, {key: data if data is not None else src})
+        if bad: sys.exit(f'{key}: not written, tools/packcheck.py says: ' + '; '.join(why for _, why in bad))
+
     def same_as_game(self, rel, data=None, src=None):
         g = find(self.game, rel)
         if not g or os.path.getsize(g) != (len(data) if data is not None else os.path.getsize(src)): return False
@@ -273,6 +286,7 @@ class Pack:
     def add_file(self, src, rel):
         if self.same_as_game(rel, src=src): return
         dst = self.target(rel)
+        self.check(rel, src=src)
         if not (os.path.exists(dst) and filecmp.cmp(src, dst, shallow=False)):
             os.makedirs(os.path.dirname(dst), exist_ok=True); shutil.copyfile(src, dst + '.new'); os.replace(dst + '.new', dst)
         self.files += 1; self.bytes += os.path.getsize(dst); self.made.add(dst)
@@ -280,6 +294,7 @@ class Pack:
     def add_data(self, data, rel):
         if self.same_as_game(rel, data=data): return
         dst = self.target(rel)
+        self.check(rel, data=data)
         if not (os.path.exists(dst) and os.path.getsize(dst) == len(data) and open(dst, 'rb').read() == data):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             with open(dst + '.new', 'wb') as f: f.write(data)

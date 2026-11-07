@@ -56,6 +56,8 @@ entry: its levels XOR the base's, deflated.  The Detailed Map's 115 maps are
 six maps (Bayview, the airport, two drift places, two Street X places) with a
 race's route drawn on: 2048x2048 DXT5 with mipmaps, 610 MB as they are, about
 20 MB this way.  A player's browser keeps what it fetches as the pack has it.
+A pack is checked as the runtime reads it (tools/packcheck.py) before it is
+written.
 """
 import argparse, os, re, struct, sys, zlib
 
@@ -417,6 +419,11 @@ def write(path, ents, data, version=1):
             out += struct.pack('<II', base + b['off'], b['size']) if b else bytes(8)
     out += names
     out += bytes(base - len(out))
+    # as runtime/web/texrep_web.c reads it (tools/packcheck.py): never written otherwise
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import packcheck
+    bad = packcheck.check(None, {f'TEXPACKS/{os.path.basename(path)}': bytes(out) + bytes(data)})
+    if bad: sys.exit(f'{path}: not written, tools/packcheck.py says: ' + '; '.join(why for _, why in bad[:20]))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + '.part'
     with open(tmp, 'wb') as f:

@@ -17,6 +17,9 @@ You copy your own NFS Underground 2 folder to the VPS yourself.
    `ssh root@<vps> chmod -R u=rwX,go=rX /srv/nfsu2/game`
    The other languages' voices and movies, if you built them (`LANGPACKS`), the same
    way: `rsync -rlt LANGPACKS root@<vps>:/srv/nfsu2/game/`, then the `chmod` again.
+   Before you copy any packs (`LANGPACKS`, `VINYLPACKS`, `MODPACKS`, `TEXPACKS`), check them as the game reads
+   them, from the repository: `python3 tools/packcheck.py "<your game folder>"`. It names each file that is wrong
+   and exits with 1; copy them only when it says `all good`.
 4. **TLS**, in one of these ways:
    - Caddy in front: `deploy/Caddyfile`. Simplest: a Let's Encrypt certificate,
      renewed by Caddy.

@@ -39,12 +39,16 @@ PARTS.BIN (little-endian):
   strings  NUL-terminated; a part's strings are offsets into them, 0xFFFFFFFF none
 Every string a part names is an offset into strings; runtime/modpacks.c puts
 them into the part database's own string table.
+
+All of it is checked as the game reads it (tools/packcheck.py) before any of
+it is written; nothing is written when a file fails.
 """
 import argparse, os, struct, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from texpacks import bstring_hash, chunks, find, jdlz, tpks  # noqa: E402
 from vinylpacks import read_tpk, splice, parse_tpk, jdlz_pack, jdlz_game, MAGIC, VERSION as VPAK_VERSION  # noqa: E402
+import packcheck  # noqa: E402
 
 PART_MAGIC, PART_VERSION = b'MPRT', 1
 PART_SZ = 4 + 4 + 4 + 4 + 4 + 4 + 32 + 4 + 64 + 4
@@ -377,15 +381,10 @@ def main():
         v = vents[h]
         if virt[v[1]:v[1] + v[2]] != base[e[1]:e[1] + e[2]] or v[3] != e[3]: sys.exit('a texture of the game\'s moved wrong')
     out = os.path.join(a.out or a.game, 'MODPACKS')
-    os.makedirs(os.path.join(out, 'CARS', 'WHEELS'), exist_ok=True)
+    made = {}                                          # what is written once all of it passes tools/packcheck.py
 
-    def put(rel, data):
-        dst = os.path.join(out, *rel.split('/'))
-        tmp = dst + '.new'
-        with open(tmp, 'wb') as f: f.write(data)
-        os.replace(tmp, dst)
+    def put(rel, data): made[rel] = data
 
-    os.makedirs(os.path.join(out, 'GLOBAL'), exist_ok=True)
     # (its 7th word 1: read only with the memory file's pack, which makes the game read this one's header from it)
     put('CARS/WHEELS/TEXTURES.BIN', struct.pack('<4s7I', MAGIC, VPAK_VERSION, len(base), cut, len(head), len(tail), 1, 0) + head + tail)
     # the brands' icons: in the packs the game keeps loaded whole (a compressed one's textures are unpacked only when
@@ -404,7 +403,6 @@ def main():
     mem = find(a.game, 'GLOBAL/GlobalMemoryFile.bin')
     mcut, mhead, hit = unlisted(mem, [('CARS/WHEELS/TEXTURES.BIN', len(base))])
     if not hit: sys.exit(f'{mem}: CARS/WHEELS/TEXTURES.BIN is not in it (the game\'s is)')
-    os.makedirs(os.path.join(out, 'GLOBAL'), exist_ok=True)
     put('GLOBAL/GlobalMemoryFile.bin', struct.pack('<4s7I', MAGIC, VPAK_VERSION, os.path.getsize(mem), mcut, len(mhead), 0, 0, 0) + mhead)
     for brand, path in geo: put(f'CARS/WHEELS/GEOMETRY_{brand}.BIN', open(path, 'rb').read())
     body = bytearray(struct.pack('<4s7I', PART_MAGIC, PART_VERSION, len(mods), len(parts), len(texts), len(S.b), 0, 0))
@@ -421,6 +419,17 @@ def main():
     body += S.b
     assert len(body) == 32 + 32 * len(mods) + PART_SZ * len(parts) + 8 * len(texts) + len(S.b)
     put('PARTS.BIN', bytes(body))
+    # the files as the game reads them, with the rest of MODPACKS (the crash damage's and the whine's, if there)
+    mine = {f'MODPACKS/{k}': v for k, v in made.items()}
+    have = {k: v for k, v in packcheck.walk([a.out or a.game]).items()
+            if k.startswith('MODPACKS/') and k.lower() not in {m.lower() for m in mine}}
+    bad = packcheck.check(a.game, {**have, **mine})
+    if bad: sys.exit('nothing written: tools/packcheck.py says\n' + '\n'.join(f'  {k}: {why}' for k, why in bad))
+    for rel, data in made.items():
+        dst = os.path.join(out, *rel.split('/'))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst + '.new', 'wb') as f: f.write(data)
+        os.replace(dst + '.new', dst)
     print(f'{len(geo)} rim brand{"s" if len(geo) != 1 else ""} ({", ".join(b for b, _ in geo)}): {len(parts)} parts '
           f'({sum(1 for p in parts if p.get("stand"))} with a look-alike), '
           f'{len(new)} textures ({len(tail) / 1e6:.2f} MB: {", ".join(sorted(g[0] for g in got.values()))}), '

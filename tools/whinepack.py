@@ -17,8 +17,9 @@ from to the game folder.  Writes:
   MODPACKS/WHINE/car_whine.wav           the whine
   MODPACKS/WHINE/car_whine_2.wav         its second layer
   MODPACKS/WHINE/car_whine_reverse.wav   the whine in reverse
-Each sound is checked: a 16-bit mono PCM WAV; and the 1.0.2 release's own
-(SHA-256), unless --any (another release's, or a sound of your own).
+Each sound is checked: a 16-bit mono PCM WAV of at most 4 MB (tools/packcheck.py,
+as runtime/whine.c reads it); and the 1.0.2 release's own (SHA-256), unless
+--any (another release's, or a sound of your own).
 """
 import argparse, hashlib, os, struct, sys, zipfile
 
@@ -86,6 +87,11 @@ def main():
             sys.exit(f'{a.mod}: snd/{n}: {why}')
         if hashlib.sha256(got[n]).hexdigest() != SHA256[n] and not a.any:
             sys.exit(f'{a.mod}: snd/{n} is not the 1.0.2 release\'s (--any takes it all the same)')
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import packcheck                                   # (here: it reads wav_check from this file)
+    bad = packcheck.check(None, {f'MODPACKS/WHINE/{n}': got[n] for n in NAMES})
+    if bad:
+        sys.exit('not written, tools/packcheck.py says: ' + '; '.join(f'{k}: {why}' for k, why in bad))
     out = os.path.join(a.folder, 'MODPACKS', 'WHINE')
     os.makedirs(out, exist_ok=True)
     for n in NAMES:
