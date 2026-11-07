@@ -11,6 +11,11 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
+## 2026-11-07 (4d158a7)
+
+- **Free roam:** when other players can't be reached, the game says why: a blocked connection, one that keeps dropping, or too many players on your network.
+- **Controllers:** the Xbox One S pad with its 2016 firmware works in Chrome on Android.
+
 ## 2026-11-06 (b3be4d1)
 
 - **Mods:** GPS Distance: the distance to your destination under the GPS arrow, in your Speedometer Units (off by default).
