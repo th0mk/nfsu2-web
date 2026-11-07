@@ -22,7 +22,7 @@ LDOPT="${LDOPT} -mmacosx-version-min=$MINOS"
 WHICH="${1:-both}"
 case "$WHICH" in both|orig|hd) ;; *) echo "usage: ./link.sh [orig|hd]"; exit 1 ;; esac
 
-CSRC="mem dispatch genexec heap watchdog win32 win32_ext com debug res fileio overrides d3dx_hle vsemu enhance perflog autotest lifecycle widescreen framerate dinput_pad dikeys keyboard dinput_kbd career intro oracle drifttest discord roam roam_core roam_bsd roam_game mprace mpcredit horn hornmenu optslider tonemenu radio powerunits drift carsfx racehorn racenet racecars winsock online netrace net_vlan module modheap headlights language sms sponsors lobbyclick olfilter tunegraph menusize regional garage sndlead carshadow hiddenraces visualrep carspot walls movie photo look savegame uniques showoff quickrace cameras vinylcat vinylpacks modpacks lightkey trafficcars shownames hudbank engage gpsdistance"
+CSRC="mem dispatch genexec heap watchdog win32 win32_ext com debug res fileio overrides d3dx_hle vsemu enhance perflog autotest lifecycle widescreen framerate dinput_pad dikeys keyboard dinput_kbd career intro oracle drifttest discord roam roam_core roam_bsd roam_game mprace mpcredit horn hornmenu optslider tonemenu radio powerunits drift carsfx racehorn racenet racecars winsock online netrace net_vlan module modheap headlights language sms sponsors lobbyclick olfilter tunegraph menusize regional garage sndlead carshadow hiddenraces visualrep carspot walls movie photo look savegame uniques showoff quickrace cameras vinylcat vinylpacks modpacks specialties lightkey trafficcars shownames hudbank engage gpsdistance"
 CSRC="$CSRC splitscreen coop"
 MSRC="metal audio bundle gamepad keyboard_mac fpscounter texrep"
 # Unicorn 2.1.4 (native arm64, x86 target only) for the two test builds,
