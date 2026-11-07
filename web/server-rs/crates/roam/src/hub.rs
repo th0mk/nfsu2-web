@@ -22,7 +22,7 @@ use crate::links::{
 use crate::results::{self, Results};
 use crate::watch::{self, Seen, Watch};
 use crate::wire::{self, F_DATA, KIND_UDP, Msg};
-use crate::{PeerEntry, ROAM_HUB_VIP, RoamOptions};
+use crate::{CarBan, CarBans, PeerEntry, ROAM_HUB_VIP, RoamOptions};
 
 /// no slot, no place in a room
 const NONE: u32 = u32::MAX;
@@ -436,6 +436,23 @@ fn over_the_game(r: &wire::RaceRep) -> bool {
     r.kw >= CAR_KW || r.kmh >= CAR_KMH || r.rating >= CAR_RATING
 }
 
+/// the player's car types (CarTypeInfo 0..30, mprace.c N_PLAYER_TYPES); traffic's come after them (free roam lets a
+/// player drive a bus or a fire truck, whose figures are no tuning's)
+const PLAYER_TYPES: u8 = 31;
+
+/// Whether a race report's car is one the server race-bans its player for (`RoamOptions::car_bans`): raced with others,
+/// one of the player's car types, at the operator's engine power or rating or more.  The figures are the car's own, as
+/// its game rated it before the race evened the cars out (mprace.c: the report's car is taken before `balance_race`
+/// scales the engines), so no lobby's evening out makes them.  Its top speed decides nothing (in the live reports every
+/// car past the honest ones' top speed was past their power or rating too).  (nfsu2.xyz, 2026-11-01..07,
+/// 1,464,225 lobby race reports: every car far past the honest ones' best was an edited save, an edited GlobalB, or a
+/// game whose engine a tool had made 2, 3, 4 or 5 times as strong between two races, the rating left as it was.)
+fn server_bans(c: &CarBans, r: &wire::RaceRep) -> bool {
+    r.players >= 2
+        && r.car_type < PLAYER_TYPES
+        && (c.kw.is_some_and(|kw| r.kw >= kw) || c.rating.is_some_and(|rating| r.rating >= rating))
+}
+
 /// the honest times of the lobbies' races an edited car's is compared with (`Times`): the last TIMES_KEPT of each race
 /// (its id and laps), of at most TIMES_RACES races since the start
 const TIMES_KEPT: usize = 1024;
@@ -562,6 +579,25 @@ fn edited_car_line(who: &str, r: &wire::RaceRep, c: Option<&Compared>) -> (Optio
         why.join("; ")
     );
     (Some(line), String::new())
+}
+
+/// a race the server race-bans its player for (`server_bans`), as `RoamOptions::car_bans` is told of it
+fn car_ban(vip: u32, name: &str, r: &wire::RaceRep) -> CarBan {
+    CarBan {
+        vip,
+        name: name.to_string(),
+        car: r.name.iter().map(|&c| c as char).collect(),
+        car_type: r.car_type,
+        kw: r.kw,
+        kg: r.kg,
+        kmh: r.kmh,
+        rating: r.rating,
+        kind: results::mode_name(r.mode).to_string(),
+        laps: r.laps,
+        place: place_word(r),
+        lobby: r.lobby,
+        race: r.race,
+    }
 }
 
 /// how a race report's player did: "2nd of 4", "did not finish", "quit"
@@ -864,6 +900,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         near_gap_ms: f(o.near_gap_ms, d.near_gap_ms),
         link_threads: n(o.link_threads, d.link_threads).min(64),
         deny: o.deny,
+        car_bans: o.car_bans,
     }
 }
 
@@ -894,6 +931,8 @@ struct Stats {
     race_reports: u64,
     /// `[cheat]` lines logged
     cheat_lines: u64,
+    /// races the server race-banned a player for (`server_bans`), told on
+    car_bans: u64,
     /// the minimap's answers (NEARD) sent
     nears: u64,
 }
@@ -1488,6 +1527,7 @@ impl Hub {
         let mut ask_near = None;
         let mut report = None;
         let mut edited = None;
+        let mut banned = None;
         let mut seen = [None, None];
         let mut res = None;
         let mut heard = None;
@@ -1577,6 +1617,9 @@ impl Hub {
                 self.times.add(&r);
                 report = Some(race_line(&p.name, &r) + &note);
                 edited = line;
+                if self.o.car_bans.as_ref().is_some_and(|c| server_bans(c, &r)) {
+                    banned = Some(car_ban(p.vip, &p.name, &r));
+                }
             }
             // (a URL race of heats: one a heat of the lobby, at once)
             Msg::RaceRes(r)
@@ -1610,6 +1653,11 @@ impl Hub {
         if let Some(line) = edited {
             self.st.cheat_lines += 1;
             (self.log)(&line);
+        }
+        // (after its lines: the ban names its player by the [cheat] line's handle when there is one)
+        if let (Some(b), Some(c)) = (banned, &self.o.car_bans) {
+            self.st.car_bans += 1;
+            (c.call)(b);
         }
         for s in seen.into_iter().flatten() {
             self.cheat(slot, s, now);
@@ -2810,6 +2858,7 @@ impl Hub {
             "nearGone": self.s.ow.gone.to_vec(),
             "raceReports": st.race_reports,
             "cheatLines": st.cheat_lines,
+            "carBans": st.car_bans,
             "nears": st.nears,
             "threadBusy": num(self.thread_busy),
             "watchesKept": self.kept.len(),

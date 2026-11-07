@@ -1096,6 +1096,124 @@ async fn race_bans_renames_and_history_through_the_control_socket() {
     assert!(!lines.iter().any(|l| l.contains("192.0.2")), "no client address in the log: {lines:?}");
 }
 
+/// A RACEREP datagram (roam_core.h): the player's own report of a lobby sprint, 1st of `players`, in a car of this
+/// type, rating, engine power (kW)
+fn race_report(sender: u32, lobby: u32, players: u8, car_type: u8, rating: f32, kw: f32) -> Vec<u8> {
+    let mut p = vec![0u8; 64];
+    p[0..4].copy_from_slice(&lobby.to_le_bytes());
+    p[4..8].copy_from_slice(&0x1757_408Bu32.to_le_bytes());
+    p[8] = 1;
+    p[9] = 1;
+    p[10..12].copy_from_slice(&4104u16.to_le_bytes());
+    p[12] = 1;
+    p[13] = players;
+    p[15] = car_type;
+    for (k, v) in [rating, 600.0, 1.0, kw, 1338.0, 381.0, 107.4].iter().enumerate() {
+        p[20 + 4 * k..24 + 4 * k].copy_from_slice(&v.to_le_bytes());
+    }
+    p[48..55].copy_from_slice(b"SKYLINE");
+    dgram(14, sender, &p)
+}
+
+/// A stand-in for Discord's webhook: each request's head and body, answered 200 (as Discord's with `wait=true`)
+async fn webhook() -> (String, Arc<Mutex<Vec<(String, String)>>>) {
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://127.0.0.1:{}/api/webhooks/1/secret-token", l.local_addr().unwrap().port());
+    let got: Arc<Mutex<Vec<(String, String)>>> = Default::default();
+    let g = got.clone();
+    tokio::spawn(async move {
+        while let Ok((mut s, _)) = l.accept().await {
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 4096];
+            let (head, body) = loop {
+                let n = s.read(&mut chunk).await.unwrap_or(0);
+                if n == 0 {
+                    break (String::new(), String::new());
+                }
+                buf.extend_from_slice(&chunk[..n]);
+                let Some(end) = buf.windows(4).position(|w| w == b"\r\n\r\n") else { continue };
+                let head = String::from_utf8_lossy(&buf[..end]).to_string();
+                let len = head
+                    .lines()
+                    .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap()))
+                    .unwrap_or(0);
+                if buf.len() >= end + 4 + len {
+                    break (head, String::from_utf8_lossy(&buf[end + 4..end + 4 + len]).to_string());
+                }
+            };
+            g.lock().unwrap().push((head, body));
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await;
+        }
+    });
+    (url, got)
+}
+
+// The server's own race ban (app/autoban.rs, the operator's numbers in NFSU2_CAR_BANS: the test's own here): a player
+// who reports a lobby race with others in a car past them is race-banned for two weeks by its [cheat] line's handle,
+// as `raceban c1 2w` would: its page hears why at once, it stays on the switch, and the ban is posted to the webhook
+// (Discord's Components V2, the webhook's address never in the log); an honest car's player is let be
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_car_past_the_operators_numbers_is_race_banned_by_the_server() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (data, wasm) = game_folder(tmp.path());
+    let (port, state) = (free_port(), tmp.path().join("state"));
+    let (url, posts) = webhook().await;
+    let mut cmd = command(&data, &wasm, port, &state, &["--online", "off"]);
+    cmd.env("NFSU2_CAR_BANS", "kw=1500,rating=3000").env("NFSU2_BAN_WEBHOOK", &url);
+    let mut srv = Server::spawn(cmd, port);
+    srv.ready().await;
+    let host = format!("localhost:{port}");
+    let open = |xff: &'static str, name: &'static str, id: &'static str, roam: u32| {
+        let host = host.clone();
+        async move {
+            let b = Browser::open_from(&host, port, "", None, None, Some(xff)).await;
+            b.text(&serde_json::json!({ "t": "hello", "name": name, "id": id }).to_string());
+            b.binary(to_hub(&roam_hello_named(roam, name.as_bytes())));
+            b
+        }
+    };
+    let evl = open("192.0.2.1", "Evl", "page-evl", 11).await;
+    let ann = open("192.0.2.2", "Ann", "page-ann", 12).await;
+    sleep(300).await;
+    let races = |g: &Got| g.ctl.iter().rev().find(|m| m["t"] == "races").cloned();
+
+    ann.binary(to_hub(&race_report(12, 0xA1, 4, 27, 735.0, 505.0)));
+    evl.binary(to_hub(&race_report(11, 0xA1, 4, 27, 1451.0, 2829.0)));
+    assert_eq!(evl.until_ms(5000, races).await["msg"], "Cheating in multiplayer races");
+    assert!(wait_for(5000, || !posts.lock().unwrap().is_empty()).await, "posted");
+    sleep(300).await;
+    assert!(evl.is_open() && ann.is_open(), "a race ban removes nobody");
+    assert!(races(&ann.got()).is_none(), "the honest car's player is let be");
+    let b = ctl(&state, &["bans"]).1;
+    assert!(b.starts_with("#1 ") && b.contains("\"Evl\"") && b.contains("race ban until "), "{b}");
+    assert_eq!(b.lines().count(), 1, "one ban: {b}");
+
+    let posted = posts.lock().unwrap().clone();
+    assert_eq!(posted.len(), 1, "{posted:?}");
+    let (head, body) = &posted[0];
+    assert!(head.starts_with("POST /api/webhooks/1/secret-token?wait=true&with_components=true HTTP/1.1"), "{head}");
+    assert!(head.to_ascii_lowercase().contains("content-type: application/json"), "{head}");
+    let v: Value = serde_json::from_str(body).unwrap();
+    assert_eq!(v["flags"], 32768);
+    let parts = v["components"][0]["components"].as_array().unwrap();
+    assert_eq!(parts[0]["content"], "### Race ban #1 · Evl\nRaced a car no tuning makes: **SKYLINE**, **2829 kW**, rated 1451, 1338 kg, 381 km/h");
+    let foot = parts[2]["content"].as_str().unwrap();
+    assert!(foot.starts_with("-# Automatic · lobby sprint, 1st of 4 · 2 weeks, until <t:") && foot.ends_with(":D> · c1 · out of races now"), "{foot}");
+
+    assert_eq!(srv.stop().await, Some(0));
+    let lines = srv.lines();
+    let has = |start: &str| lines.iter().any(|l| l.starts_with(start));
+    assert!(has("[ban] race bans by the server, for 2w: a car of 1500 kW or more or a rating of 3000 or more; posted to Discord"), "{lines:?}");
+    assert!(lines.iter().any(|l| l.starts_with("[cheat] ") && l.contains("\"Evl\": raced in the race of lobby 000000a1") && l.ends_with("(ban c1)")), "{lines:?}");
+    assert!(
+        lines.iter().any(|l| l.starts_with("[ban] race ban #1 \"Evl\" (c1) for 14 d (until ")
+            && l.contains(": \"Cheating in multiplayer races\"; by the server: its SKYLINE (type 27): 2829 kW, 1338 kg, 381 km/h, rated 1451, in a lobby sprint, 1st of 4 (lobby 000000a1, race 1757408b); out of races now: ")),
+        "{lines:?}"
+    );
+    assert!(!lines.iter().any(|l| l.contains("secret-token")), "the webhook's address is no line: {lines:?}");
+    assert!(!lines.iter().any(|l| l.contains("\"Ann\"") && l.starts_with("[ban]")), "{lines:?}");
+}
+
 // The control socket's file (app/control.rs): a stale one, as a server that died without its stop leaves it, is
 // replaced at the start; a SIGTERM takes it away.  Of two servers on one state folder (the next one started before
 // the one before stops), the later one's socket stays when the earlier one stops.

@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use kit::*;
 use nfsu2_claims::owner_of_token;
-use nfsu2_roam::{Hosted, RoamOptions};
+use nfsu2_roam::{CarBan, CarBans, Hosted, RoamOptions};
+use parking_lot::Mutex;
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
@@ -518,6 +519,78 @@ fn a_car_of_edited_game_data_in_a_race_is_a_cheat_line_when_it_gained() {
     assert_eq!(lines.len(), 1, "alone in its race: the [race] line only, {lines:?}");
     assert!(!lines[0].contains("GlobalB"), "{lines:?}");
     assert_eq!(k.info("cheatLines"), 2.0);
+}
+
+/// a RACEREP of a car: its type, rating, engine power (kW) and top speed (km/h), 1st of `players`, no time
+fn racerep_car(sender: u32, lobby: u32, players: u8, car_type: u8, rating: f32, kw: f32, kmh: f32) -> Vec<u8> {
+    let mut p = vec![0u8; 64];
+    p[0..4].copy_from_slice(&lobby.to_le_bytes());
+    p[4..8].copy_from_slice(&0x0BADF00Du32.to_le_bytes());
+    p[8] = 1; // sprint
+    p[9] = 1;
+    p[10..12].copy_from_slice(&4104u16.to_le_bytes());
+    p[12] = 1;
+    p[13] = players;
+    p[15] = car_type;
+    p[16] = 0;
+    for (k, v) in [rating, 500.0, 1.0, kw, 1338.0, kmh, 0.0].iter().enumerate() {
+        p[20 + 4 * k..24 + 4 * k].copy_from_slice(&v.to_le_bytes());
+    }
+    p[48..55].copy_from_slice(b"SKYLINE");
+    dgram(14, sender, &p)
+}
+
+// the operator's cars to race-ban for (RoamOptions::car_bans; these numbers are the test's own): a lobby race in one
+// of the player's car types at that engine power or rating or more, with others, is told on once, after its lines,
+// with the player, its car and how it did; under both, alone in its race, a traffic car's figures, or top speed alone
+// is none
+#[test]
+fn a_car_past_the_operators_numbers_is_told_for_a_race_ban() {
+    let told: Arc<Mutex<Vec<CarBan>>> = Default::default();
+    let t = told.clone();
+    let call = Arc::new(move |c: CarBan| t.lock().push(c));
+    let mut k = Kit::new(RoamOptions { car_bans: Some(CarBans { kw: Some(1500.0), rating: Some(3000.0), call }), ..Default::default() });
+    k.from(W(0), &hello_with(100, &HelloOpts { core: 5, name: b"Evl", ..Default::default() }));
+    let mut lobby = 0xC0;
+    let mut race = |k: &mut Kit, players: u8, car_type: u8, rating: f32, kw: f32, kmh: f32| {
+        k.step(25000.0);
+        lobby += 1;
+        k.from(W(0), &racerep_car(100, lobby, players, car_type, rating, kw, kmh));
+        lobby
+    };
+    for (what, players, car_type, rating, kw, kmh) in [
+        ("an honest car", 4, 27, 735.0, 505.0, 362.0),
+        ("under both numbers", 4, 27, 2999.0, 1499.0, 381.0),
+        ("alone in its race", 1, 27, 1451.0, 2829.0, 381.0),
+        ("a traffic car (a fire truck)", 4, 37, 0.0, 2829.0, 381.0),
+        ("top speed alone", 4, 27, 735.0, 505.0, 1999.0),
+    ] {
+        race(&mut k, players, car_type, rating, kw, kmh);
+        assert!(told.lock().is_empty(), "{what}: none");
+    }
+    let lines_before = k.lines.lock().len();
+    let at_kw = race(&mut k, 4, 27, 1451.0, 2829.0, 381.0);
+    {
+        let t = told.lock();
+        assert_eq!(t.len(), 1, "at the power: told once");
+        let c = &t[0];
+        assert_eq!((c.vip, c.name.as_str(), c.car.as_str(), c.car_type), (W(0), "Evl", "SKYLINE", 27));
+        assert_eq!((c.kw, c.kg, c.kmh, c.rating), (2829.0, 1338.0, 381.0, 1451.0));
+        assert_eq!((c.kind.as_str(), c.laps, c.place.as_str(), c.lobby, c.race), ("sprint", 1, "1st of 4", at_kw, 0x0BADF00D));
+    }
+    assert!(k.lines.lock().len() > lines_before, "its lines first");
+    // the same race again: one report a race, none told
+    k.from(W(0), &racerep_car(100, at_kw, 4, 27, 1451.0, 2829.0, 381.0));
+    assert_eq!(told.lock().len(), 1);
+    race(&mut k, 2, 3, 3000.0, 400.0, 381.0);
+    assert_eq!(told.lock().len(), 2, "at the rating: told");
+    assert_eq!(told.lock()[1].place, "1st of 2");
+    assert_eq!(k.info("carBans"), 2.0);
+    // without the operator's numbers: none, whatever the car
+    let mut k = Kit::new(RoamOptions::default());
+    k.from(W(0), &hello_with(100, &HelloOpts { core: 5, name: b"Evl", ..Default::default() }));
+    k.from(W(0), &racerep_car(100, 0xD1, 4, 27, 5000.0, 9999.0, 381.0));
+    assert_eq!(k.info("carBans"), 0.0);
 }
 
 // the wire: roam_core's report is the hub's line

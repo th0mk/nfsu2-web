@@ -49,6 +49,10 @@ services:
       # a Last.fm API account's key and shared secret (last.fm/api/account/create) for scrobbling the songs (none: off)
       NFSU2_LASTFM_KEY: ${NFSU2_LASTFM_KEY:-}
       NFSU2_LASTFM_SECRET: ${NFSU2_LASTFM_SECRET:-}
+      # the server's own race bans of cars past these numbers (kw=<n>,rating=<n>; none: off), and a Discord webhook
+      # each is posted to (web/server-rs/src/app/autoban.rs); keep both in .env only
+      NFSU2_CAR_BANS: ${NFSU2_CAR_BANS:-}
+      NFSU2_BAN_WEBHOOK: ${NFSU2_BAN_WEBHOOK:-}
     volumes:
       - ${NFSU2_DATA:-./game}:/game:ro
       - ${NFSU2_MODULE:-./module}:/module:ro

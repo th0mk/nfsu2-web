@@ -233,6 +233,49 @@ pub struct RoamOptions {
     /// the names the operator took away (nfsu2-bans `rename`): a player under one plays alone, as under a name another
     /// keyphrase claimed; None: none
     pub deny: Option<std::sync::Arc<nfsu2_names::Deny>>,
+    /// the cars the server race-bans a player for (hub.rs `server_bans`), and what it tells of each such race (the
+    /// app's autoban.rs: the ban); None: none (the `[cheat]` lines only)
+    pub car_bans: Option<CarBans>,
+}
+
+/// A lobby race a player raced with others in a car the server race-bans for (hub.rs `server_bans`), as its own game
+/// reported it: who (its virtual address, its name on the hub), its car, the race, how it did
+#[derive(Clone, Debug, PartialEq)]
+pub struct CarBan {
+    pub vip: u32,
+    pub name: String,
+    /// the car type's name (printable ASCII, from the report), its type, engine power (kW), weight (kg), top speed
+    /// (km/h), the game's rating
+    pub car: String,
+    pub car_type: u8,
+    pub kw: f64,
+    pub kg: f64,
+    pub kmh: f64,
+    pub rating: f64,
+    /// the race: its kind ("sprint", "drag", ...), laps, how the player did ("1st of 4", "did not finish", "quit")
+    pub kind: String,
+    pub laps: u8,
+    pub place: String,
+    pub lobby: u32,
+    pub race: u32,
+}
+
+/// The cars the server race-bans a player for: one of the player's car types at `kw` engine power or more, or rated
+/// `rating` or more (None: that figure decides nothing).  The operator's numbers (the app reads them from its
+/// environment: nothing of them in the code), past what any honest car of the lobby races' reports came near.  `call`
+/// is told of each such race, on the hub's thread: it must not wait (the app's hands the race on).
+#[derive(Clone)]
+pub struct CarBans {
+    pub kw: Option<f64>,
+    pub rating: Option<f64>,
+    pub call: std::sync::Arc<dyn Fn(CarBan) + Send + Sync>,
+}
+
+// (no numbers in Debug either: they are the operator's)
+impl std::fmt::Debug for CarBans {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CarBans")
+    }
 }
 
 impl Default for RoamOptions {
@@ -270,6 +313,7 @@ impl Default for RoamOptions {
             near_gap_ms: 150.0,
             link_threads: std::thread::available_parallelism().map_or(1, |n| (n.get() / 4).clamp(1, 4)),
             deny: None,
+            car_bans: None,
         }
     }
 }
