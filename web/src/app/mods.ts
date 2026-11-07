@@ -57,7 +57,7 @@ export interface Mod {
   /** a mod of several parts (NFSU2 Extra Options): each part, what it does (English, as details) and who sees it */
   parts?: readonly { name: string; text: string; online: Online }[];
   /** the mod's licence, where it states one */
-  licence?: 'MIT' | 'GPL-3.0';
+  licence?: 'MIT' | 'GPL-3.0' | 'No Rights Reserved';
   /** its code ported by the mod's own author, in this repo's history (his commits): no licence file of its own */
   ownPort?: true;
   /** about how much the mod's own files add to the download (a shared row's: each its own, so they add up) */
@@ -183,12 +183,13 @@ export const MODS: readonly Mod[] = [
     online: 'mine', files: ['runtime/gpsdistance.c', 'runtime/gpsdistance_format.h'],
   },
   {
-    id: 'gearbox-whine', name: 'Transmission Whine', mod: 'UG2WhineGen', authors: [{ name: 'ropsli' }],
-    links: { source: 'https://github.com/ropi336/UG2WhineGen' },
-    kind: 'screen', uses: 'data', control: { setting: 'gearbox_whine' },
+    id: 'gearbox-whine', name: 'Transmission Whine', mod: 'Underground 2 Transmission Whine',
+    authors: [{ name: 'ropi', url: 'https://github.com/ropi336' }],
+    links: { page: 'https://nfsmods.xyz/mod/5927', source: 'https://github.com/ropi336/UG2WhineGen' },
+    kind: 'screen', uses: 'code', licence: 'No Rights Reserved', control: { setting: 'gearbox_whine' },
     line: N('NFS Carbon\'s gearbox whine on your car.'),
-    details: 'The mod\'s own sounds over the game\'s: a whine rising with your speed and its gear, a second layer louder the faster you go, a pause at each upshift and a whine of its own in reverse. As loud as the game\'s Engine Volume makes it. Every car has it, as the mod\'s default (in split screen and co-op each player\'s), and its sounds download once it is on.',
-    online: 'you', sizeMB: 0.5, files: ['runtime/whine.c', 'runtime/whine.h', 'tools/whinepack.py'],
+    details: 'The mod\'s sounds are NFS Carbon\'s: the BMW M3 GTR\'s gearbox whine. Here they play over the game\'s own, a whine rising with the car\'s speed and gear, a second layer louder the faster it goes, a pause at each upshift and a whine of its own in reverse, as loud as the game\'s Master and Engine Volume make them. In split screen and co-op each player\'s car has its own. The sounds download once it is on.',
+    online: 'you', sizeMB: 0.5, files: ['runtime/whine.c', 'runtime/whine.h', 'tools/whinepack.py', 'licenses/UG2WhineGen.txt'],
   },
 
   // ---- Seen by others

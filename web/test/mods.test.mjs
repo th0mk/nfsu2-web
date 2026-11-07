@@ -66,7 +66,8 @@ const PAGES = [/^https:\/\/nfsmods\.xyz\/mod\/\d+$/, /^https:\/\/streetsmodz\.co
 /** licences/ files that are not a mod's: the flags' pictures (flags.ts) */
 const NOT_MOD_LICENCES = ['licenses/flag-icons.txt'];
 /** a licence as a source names it, and its text's first line */
-const LICENCES = { MIT: [/\bMIT\b/, /^(The )?MIT License/], 'GPL-3.0': [/\bGPL-3\.0\b/, /^\s*GNU GENERAL PUBLIC LICENSE\s+Version 3/] };
+const LICENCES = { MIT: [/\bMIT\b/, /^(The )?MIT License/], 'GPL-3.0': [/\bGPL-3\.0\b/, /^\s*GNU GENERAL PUBLIC LICENSE\s+Version 3/],
+  'No Rights Reserved': [/\bNo Rights Reserved\b/, /^.*\bNo Rights Reserved\./] };
 
 const exists = (p) => fs.existsSync(path.join(ROOT, p));
 const texts = (m) => [m.name, m.mod, m.line, m.details, ...m.authors.map(a => a.name), ...(m.parts ?? []).flatMap(p => [p.name, p.text])].filter(Boolean);

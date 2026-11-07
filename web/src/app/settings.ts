@@ -212,7 +212,8 @@ export const KEYS: readonly KeyDef[] = [
   // look-alikes, else the stock ones; free roam's cars and the race's).  Not in bundle.m's table: there a lower-case
   // key, so it reaches the runtime as NFSU2_OTHERS_MOD_PARTS all the same
   // { key: 'others_mod_parts', env: 'NFSU2_OTHERS_MOD_PARTS', kind: 'enum', vals: 'shown|original', scope: 'web' },
-  // the player's gearbox whine over the game's sound, as ropsli's UG2WhineGen (runtime/whine.c).  Not in bundle.m's
+  // each local player's gearbox whine over the game's sound, as ropi's Underground 2 Transmission Whine (runtime/whine.c;
+  // its sounds from the game folder's MODPACKS/WHINE, read only when on: tools/whinepack.py).  Not in bundle.m's
   // table: there a lower-case key, so it reaches the runtime as NFSU2_GEARBOX_WHINE all the same
   { key: 'gearbox_whine', env: 'NFSU2_GEARBOX_WHINE', kind: 'bool', scope: 'web' },
   // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
@@ -369,10 +370,11 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # [NFSU2_CATCHUP]
 #catchup = original
 
-# NFS Carbon's transmission whine on the player's car, as ropsli's
-# UG2WhineGen (github.com/ropi336/UG2WhineGen) has it: a whine rising with
-# the speed, quiet for a moment at each upshift, and its own in reverse,
-# by the game's Engine Volume.  off = the original game.
+# NFS Carbon's transmission whine on your car, as ropi's Underground 2
+# Transmission Whine (github.com/ropi336/UG2WhineGen) has it: a whine rising
+# with the speed, quiet for a moment at each upshift, and its own in
+# reverse, by the game's Engine Volume.  Its sounds download once it is on.
+# off = the original game.
 # [NFSU2_GEARBOX_WHINE]
 #gearbox_whine = off
 

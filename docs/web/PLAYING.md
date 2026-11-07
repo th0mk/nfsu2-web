@@ -354,10 +354,12 @@ World row's list says how many are in each world.
   the waiting but never lets an opponent behind beat its own pace; Off drops both, as a Quick Race with Catch Up off.
   Only your own career races: Quick Race keeps its own Catch Up option, and LAN and online races have no computer
   opponents.
-- **Transmission Whine** (Mods): off by default. On, as ropsli's [UG2WhineGen](https://github.com/ropi336/UG2WhineGen)
-  has it, your car gets NFS Carbon's gearbox whine over the game's sound: a whine rising with your speed and gear, a
-  second layer louder the faster you go, a short pause at each upshift and a whine of its own in reverse. Every car
-  has it, and it is as loud as the game's Engine Volume (times Master) makes it; the world paused, it is silent.
+- **Transmission Whine** (Mods): off by default. On, as ropi's
+  [Underground 2 Transmission Whine](https://nfsmods.xyz/mod/5927) has it, your car gets NFS Carbon's gearbox whine
+  (the BMW M3 GTR's, the mod's sounds) over the game's sound: a whine rising with your speed and gear, a second layer
+  louder the faster you go, a short pause at each upshift and a whine of its own in reverse. Every car has it (in split
+  screen and co-op each player's), as loud as the game's Engine Volume (times Master) makes it; the world paused, it
+  is silent. Its sounds (half a megabyte) download once it is on.
 - **Upscaled HUD and Detailed Map** (Mods): Original (the default) is the game's own. Upscaled shows LunicAura106's
   [Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the
   server has their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times
