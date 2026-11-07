@@ -2109,8 +2109,14 @@ static void t_dents(void){
     rc_receive(&g_n[1], node_ip(0), node_port(0), b, k, g_now);
     k = dents_dgram(b, 0x500, 9, 902, 0, 30);
     rc_receive(&g_n[1], node_ip(0), node_port(0), b, k, g_now);
-    CHECK(r1->dents_gen == gen && r1->dents_rev == 900 && g_n[1].rx_bad == bad1 + 1 && g_n[1].peer[q1].state == RC_PS_EST,
-          "too many dents: bad, not kept; an op it does not know: skipped; the peer stays (bad +%u)", g_n[1].rx_bad - bad1);
+    /* a core of before sees a DENTS as a type it does not know: refused, the sender stays (a type past ours here) */
+    k = dents_dgram(b, 0x500, RC_DENTS_STATE, 903, 2, 0); b[5] = 0x7E;
+    { uint32_t c = rc_crc32(b, (uint32_t)k - 4); for (int q = 0; q < 4; q++) b[k - 4 + q] = (uint8_t)(c >> (8 * q)); }
+    { rc_msg o; CHECK(rc_decode(b, k, &o) == RC_E_TYPE, "a message of a type the core does not know: refused as such"); }
+    rc_receive(&g_n[1], node_ip(0), node_port(0), b, k, g_now);
+    CHECK(r1->dents_gen == gen && r1->dents_rev == 900 && g_n[1].rx_bad == bad1 + 2 && g_n[1].peer[q1].state == RC_PS_EST,
+          "too many dents: bad, not kept; an op it does not know: skipped; a type it does not know: bad; the peer stays "
+          "(bad +%u)", g_n[1].rx_bad - bad1);
     /* a restart of the peer (a new session at its end): it has none of ours, so it gets them again */
     memset(g_dents_tx, 0, sizeof g_dents_tx);
     rc_config c1 = g_n[1].conf; c1.self_id = 0x5A1; rc_io io1 = g_n[1].io; rc_session_init(&g_n[1], &c1, &io1);
