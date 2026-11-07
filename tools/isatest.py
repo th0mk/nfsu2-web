@@ -506,6 +506,9 @@ if os.environ.get('JTSWITCH', '') == '1':
     for _v, _w, _c in ((0, 10, 0x1234), (1, 20, 0x1234), (2, 99, 0x77)):   # default: ja before the mov
         T(f"switch after push/mov (eax={_v})", _JT3, {'eax':_v, 'ebx':0, 'ecx':0x77, 'esi':0x1234}, mem=_JT3M, expect={'ebx':_w, 'ecx':_c, 'esi':0x1234})
 
+# a straight run longer than discover()'s maxins (4000): the rest must still run, not return mid-body
+T("4100 x inc eax", [0x40]*4100, {'eax':0}, expect={'eax':4100})
+
 # =====================  GENERATOR / RUNNER  =====================
 BASE = 0x00401000
 def build():
