@@ -398,12 +398,42 @@ async function aheadLoop() {
   } finally { aheadLoops--; }
 }
 
+// A read whose blocks this device keeps goes from the cache file straight into the game's memory, not through a 1 MB
+// block of its own for each: in WebKit this worker collects next to nothing (it holds the game's memory: memory.ts),
+// and those blocks were ~250 MB of garbage as a crowded free roam came in (Playwright WebKit, 2026-11-07).  A
+// browser that will not read a file into shared memory (a TypeError) reads through the blocks, as before.
+let readsKept = true;
+function readKept(cf: CacheFile, pos: number, end: number, dst: { ptr: number; len: number }[], first: number, last: number): number {
+  for (let bi = first; bi <= last; bi++) if (!cf.have[bi]) return -1;
+  const mem = u8();
+  let off = pos;
+  try {
+    for (const d of dst) {
+      const k = Math.min(d.len, end - off);
+      if (k <= 0) break;
+      if (cf.h.read(mem.subarray(d.ptr, d.ptr + k), { at: off }) !== k) return -1;
+      off += k;
+    }
+  } catch (e) {
+    if (e instanceof TypeError) { readsKept = false; note(`[data] the cache files are read through blocks of their own (${e.message})`); }
+    return -1;
+  }
+  sum.local += last - first + 1;
+  return end - pos;
+}
+
 async function dataRead(n: DNode, pos: number, dst: { ptr: number; len: number }[]): Promise<number> {
   const total = dst.reduce((a, d) => a + d.len, 0);
   const end = Math.min(n.size, pos + total);
   if (end <= pos) return 0;
   const first = Math.floor(pos / BLOCK), last = Math.floor((end - 1) / BLOCK), track = isTrackStream(n);
   if (track) readAhead(n, first);
+  if (readsKept && cacheDir) {
+    dataSummary(performance.now());
+    const cf = await cacheFile(n);
+    const r = cf ? readKept(cf, pos, end, dst, first, last) : -1;
+    if (r >= 0) return r;
+  }
   const blocks = await Promise.all(Array.from({ length: last - first + 1 }, (_, i) => getBlock(n, first + i, track ? P_TRACK : P_GAME)));
   const mem = u8();
   let off = pos, di = 0, dOff = 0;
