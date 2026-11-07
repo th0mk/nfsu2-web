@@ -616,6 +616,9 @@ impl App {
         if p == "/country" {
             return self.send_country(q, s).await;
         }
+        if p == "/lan" {
+            return self.send_lan_check(q, s).await;
+        }
         if p == "/robots.txt" {
             return self.plain(q, s, 200, ROBOTS_TXT, &[], Cache::Revalidate, false).await;
         }

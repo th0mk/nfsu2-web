@@ -9,11 +9,12 @@ use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 
-use nfsu2_http::{Hold, Request, Upgraded};
+use nfsu2_headers::Cache;
+use nfsu2_http::{Hold, Request, Response, Upgraded};
 use nfsu2_lan::AttachOpts;
 use nfsu2_util::{js, log, vip_str};
 
-use super::{App, Share, url};
+use super::{App, Res, Share, finish, send, url};
 
 /// One half of a /lan connection, holding the client's share of the /lan budget and the connection's own shares (the
 /// per-client connection budget, the listener's count: nfsu2_http::Hold): given back once both halves are gone (the
@@ -69,6 +70,33 @@ fn ws_key(k: &str) -> bool {
 }
 
 impl App {
+    /// GET /lan, no upgrade: what the upgrade's checks of this client would say now, taking nothing, as
+    /// {"lan":"ok" | "busy" | "fast" | "page"} (busy: its address holds its share of /lan connections already; fast:
+    /// it opens them too fast; page: another site's page).  A browser tells a page nothing of why its WebSocket failed
+    /// before it opened (a 429 here and a network that blocks it are the same 1006), so a page whose connection keeps
+    /// failing asks (web/src/net/index.ts `check`), says why to the player and writes it in its log.
+    pub(crate) async fn send_lan_check(&self, q: &Request, s: &mut Response) -> Res {
+        let (_, key, site) = self.client(q);
+        let v = if !self.own_page(q) {
+            "page"
+        } else if !self.lan_conns.room(&key, &site) {
+            "busy"
+        } else if !self.lan_opens.check(&key, &site) {
+            "fast"
+        } else {
+            "ok"
+        };
+        let body = format!(r#"{{"lan":"{v}"}}"#);
+        let mut h = self.headers(q, Cache::Store, true);
+        h.set("content-type", "application/json");
+        h.set("content-length", body.len().to_string());
+        s.head(200, h.0);
+        if q.method != "HEAD" {
+            send(s, body.as_bytes()).await?;
+        }
+        finish(s).await
+    }
+
     /// the raw answer for code, then the connection goes (nfsu2_http::raw_refusal)
     async fn refuse(&self, up: Upgraded, code: u16) {
         nfsu2_http::raw_refusal(up.stream, self.raw_response(code)).await;
@@ -211,6 +239,65 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// a /lan upgrade from the address a trusted proxy (this machine) names: the connection and the status it got
+    async fn upgrade(kit: &super::super::testkit::Kit, ip: &str) -> (tokio::net::TcpStream, u16) {
+        use tokio::io::AsyncReadExt;
+        let mut s = tokio::net::TcpStream::connect(kit.addr).await.unwrap();
+        let req = format!(
+            "GET /lan HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nX-Forwarded-For: {ip}\r\n\
+             Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+        );
+        s.write_all(req.as_bytes()).await.unwrap();
+        let mut b = [0u8; 64];
+        let n = s.read(&mut b).await.unwrap();
+        let status = std::str::from_utf8(&b[9..12.min(n)]).unwrap_or("0").parse().unwrap_or(0);
+        (s, status)
+    }
+
+    // GET /lan without an upgrade: what an upgrade from that client would meet now, taking nothing.  Its address
+    // holding its 8 connections: "busy" (where its WebSocket gets a 429 that the browser shows its page only as a
+    // failed connection), another address "ok", and "ok" again once one of the 8 goes; opening them too fast: "fast";
+    // another site's page: "page"
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_page_can_ask_why_its_connection_fails() {
+        let kit = super::super::testkit::Kit::start(&[], |_| {}).await;
+        let ask = async |ip: &str, origin: Option<&str>| {
+            let mut h = vec![("X-Forwarded-For", ip)];
+            h.extend(origin.map(|o| ("Origin", o)));
+            let r = kit.get("/lan?check", &h).await;
+            assert_eq!((r.status, r.header("content-type")), (200, Some("application/json")));
+            assert!(r.header("cache-control").is_some_and(|c| c.contains("no-store")));
+            String::from_utf8(r.body).unwrap()
+        };
+        let (a, b) = ("203.0.113.7", "203.0.113.8");
+        assert_eq!(ask(a, None).await, r#"{"lan":"ok"}"#);
+        let mut held = Vec::new();
+        for _ in 0..super::super::limits::WS_PER_ADDRESS {
+            let (s, status) = upgrade(&kit, a).await;
+            assert_eq!(status, 101);
+            held.push(s);
+        }
+        let (_, refused) = upgrade(&kit, a).await;
+        assert_eq!(refused, 429, "the 9th from that address");
+        assert_eq!(ask(a, None).await, r#"{"lan":"busy"}"#);
+        assert_eq!(ask(b, None).await, r#"{"lan":"ok"}"#);
+        assert_eq!(kit.app.lan_conns.count(), held.len(), "asking took no share");
+        drop(held.pop());
+        super::super::testkit::eventually("a share back", || kit.app.lan_conns.count() == held.len()).await;
+        assert_eq!(ask(a, Some("http://localhost")).await, r#"{"lan":"ok"}"#);
+        assert_eq!(ask(a, Some("https://elsewhere.example")).await, r#"{"lan":"page"}"#);
+        // more opens than the burst, each closed at once: "fast" until the bucket fills again
+        let c = "203.0.113.9";
+        for _ in 0..super::super::limits::LAN_OPEN_BURST as usize {
+            let (s, status) = upgrade(&kit, c).await;
+            assert_eq!(status, 101);
+            drop(s);
+            super::super::testkit::eventually("its share back", || kit.app.lan_conns.held(c) == 0).await;
+        }
+        assert_eq!(ask(c, None).await, r#"{"lan":"fast"}"#);
+        assert_eq!(upgrade(&kit, c).await.1, 429, "as its upgrade meets it");
+    }
 
     // A client whose connection takes nothing more (its buffers full of answers it never read) when its 101 is due:
     // let go once the time is up, not waited on for good.  One that reads gets it at once.

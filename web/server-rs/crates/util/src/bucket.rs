@@ -88,12 +88,7 @@ impl Budget {
     /// one more for this client: false when it has its share
     pub fn take(&self, key: &str, site: &str) -> bool {
         let mut g = self.inner.lock();
-        let a = g.by.get(key).copied().unwrap_or(0);
-        let b = if site.is_empty() { 0 } else { g.by_site.get(site).copied().unwrap_or(0) };
-        if a >= self.per || b >= self.per_site || g.n >= self.total {
-            return false;
-        }
-        if g.n >= self.open && (a > 0 || b > 0) {
+        if !self.fits(&g, key, site) {
             return false;
         }
         // (a request takes and gives one: the key is copied only when it is new, not under the lock every time)
@@ -111,6 +106,18 @@ impl Budget {
         }
         g.n += 1;
         true
+    }
+    /// whether `take` would go through now, taking nothing
+    pub fn room(&self, key: &str, site: &str) -> bool {
+        self.fits(&self.inner.lock(), key, site)
+    }
+    fn fits(&self, g: &BudgetInner, key: &str, site: &str) -> bool {
+        let a = g.by.get(key).copied().unwrap_or(0);
+        let b = if site.is_empty() { 0 } else { g.by_site.get(site).copied().unwrap_or(0) };
+        if a >= self.per || b >= self.per_site || g.n >= self.total {
+            return false;
+        }
+        !(g.n >= self.open && (a > 0 || b > 0))
     }
     pub fn give(&self, key: &str, site: &str) {
         let mut g = self.inner.lock();
@@ -225,6 +232,24 @@ mod tests {
         s.give("x", "s");
         assert!(s.take("z", "s"), "the site has room again");
         assert!(!s.inner.lock().by.contains_key("x"), "nothing kept for a client that holds none");
+    }
+
+    #[test]
+    fn budget_room_takes_nothing() {
+        let b = Budget::new(2, 3, 100, 0.0);
+        assert!(b.room("a", "s") && b.room("a", "s"));
+        assert_eq!(b.count(), 0);
+        assert!(b.take("a", "s") && b.take("a", "s"));
+        assert!(!b.room("a", "s"), "the client has its share");
+        assert!(b.room("b", "s") && b.take("b", "s"));
+        assert!(!b.room("c", "s"), "the site has its share");
+        assert!(b.room("c", ""));
+        b.give("a", "s");
+        assert!(b.room("a", "s") && b.room("c", "s"));
+        // the free share: a client that holds some has no room in it, a newcomer has
+        let f = Budget::new(9, 9, 4, 0.25);
+        assert!(f.take("a", "") && f.take("a", "") && f.take("b", ""));
+        assert!(!f.room("a", "") && f.room("c", ""));
     }
 
     #[test]
