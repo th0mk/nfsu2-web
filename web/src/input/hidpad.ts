@@ -34,8 +34,14 @@
 // standard mapping they were no stick and nothing, LB braked and RB drove (a Mac player's: the triggers did nothing).
 // Only on a Mac: Firefox on Windows leaves the triggers out of such a pad altogether (read as before, RB still drives),
 // and on Linux the kernel's order is another.
+//
+// One with the standard mapping is read here too: Xbox's One S on Bluetooth with its 2016 firmware (045e 02e0), and
+// the pads that give its id (the AceGamer Aurora2), under Chrome on Android (oneS2016Android).
 
-import { PAD_A, PAD_B, PAD_BACK, PAD_HOME, PAD_LB, PAD_LS, PAD_RB, PAD_RS, PAD_START, PAD_X, PAD_Y } from './proto';
+import {
+  PAD_A, PAD_B, PAD_BACK, PAD_DDOWN, PAD_DLEFT, PAD_DRIGHT, PAD_DUP, PAD_HOME, PAD_LB, PAD_LS, PAD_RB, PAD_RS, PAD_START,
+  PAD_X, PAD_Y,
+} from './proto';
 import { dpadDirs, findHat, hatDirs, usbIds } from './wheel';
 
 /** how the face buttons are labelled: as Nintendo's (A right, B at the bottom) or as Xbox's (A at the bottom) */
@@ -141,5 +147,60 @@ export class HidPadReader {
     return `${who}, sticks on axes ${a.lx} ${a.ly} and ${ax(a.rx)} ${ax(a.ry)}, ` +
       `triggers L2 ${ax(a.lt)} R2 ${ax(a.rt)} (or their buttons), D-pad ${a.dpad ? `axes ${a.dpad.join(' and ')}` :
       a.hat >= 0 ? `axis ${a.hat}` : 'none'}`;
+  }
+}
+
+/**
+ * Xbox's One S on Bluetooth with its 2016 firmware (045e 02e0), and the pads that give its id (the AceGamer Aurora2),
+ * under Chrome on Android.  Android's own key layout for that id (frameworks/base data/keyboards
+ * Vendor_045e_Product_02e0.kl, since 2017) turns its report into the usual key codes already: A, B, X, Y, L1, R1,
+ * SELECT, START, THUMBL, THUMBR and MODE, the sticks on X Y and Z RZ, the triggers on LTRIGGER and RTRIGGER (a tester
+ * app shows every input right).  Chrome maps it still as if Android had not (GamepadMappings.java
+ * XboxOneS2016FirmwareMappings, 16 buttons): X from BUTTON_C, Y from BUTTON_X, LB from BUTTON_Y, RB from BUTTON_Z,
+ * View and Menu from L1 and R1, the sticks' buttons from L2 and R2, LT and RT from Z and RZ as (v + 1) / 2 once each
+ * read anything but 0, the right stick from RX and RY.  So in its standard mapping X and RB were dead, Y was X, LB Y,
+ * View and Menu LB and RB, LT and RT the right stick's X and Y (pushed down: the throttle), and its triggers, View,
+ * Menu, the sticks' buttons and Xbox were nowhere (a player's report: LT and RT did nothing, the right stick drove and
+ * braked, Y gave nitrous, X changed the camera).  Read here from where Chrome put them: A 0, B 1, X 3, Y 4, LB 8, RB
+ * 9, the D-pad 12 to 15, the left stick as it is, the right stick from the triggers' values.  What Chrome never reads
+ * no page can have: such a pad has no triggers, View, Menu, stick buttons or Xbox button in the browser (the game's
+ * Joypad Configuration can put the throttle and the brake on buttons).  On a big tablet asking for desktop sites Chrome
+ * says Linux (gamepad.ts androidLayout); Chrome on a Linux computer maps the id its own way, with 17 buttons.
+ */
+export function oneS2016Android(g: Pick<Gamepad, 'id' | 'mapping' | 'buttons'>, ua = globalThis.navigator?.userAgent ?? '',
+                                touch = globalThis.navigator?.maxTouchPoints ?? 0): boolean {
+  if (g.mapping !== 'standard' || g.buttons.length !== 16 || !/\(STANDARD GAMEPAD Vendor: 045e Product: 02e0\)$/i.test(g.id)) return false;
+  return /Android/.test(ua) || (/X11; Linux/.test(ua) && touch > 0);
+}
+
+// Chrome's places of such a pad's buttons (its standard mapping's index -> the pad's)
+const ONE_S_2016: [number, number][] = [[0, PAD_A], [1, PAD_B], [3, PAD_X], [4, PAD_Y], [8, PAD_LB], [9, PAD_RB],
+  [12, PAD_DUP], [13, PAD_DDOWN], [14, PAD_DLEFT], [15, PAD_DRIGHT]];
+
+/** Such a pad (oneS2016Android) read as the pad.  The right stick's X and Y come as Chrome's LT and RT values, 0 until
+ *  Chrome saw the stick's axis move (then (v + 1) / 2): a value counts once it has read anything but 0, until then the
+ *  stick is at rest. */
+export class OneS2016Reader {
+  private live = [false, false];             // the right stick's X (Chrome's LT), its Y (RT)
+
+  read(axes: readonly number[], buttons: readonly ({ pressed: boolean; value: number } | null | undefined)[]): { buttons: number; axes: number[] } {
+    let out = 0;
+    for (const [i, b] of ONE_S_2016) { const x = buttons[i]; if (x && (x.pressed || x.value > 0.5)) out |= 1 << b; }
+    const stick = (v: unknown) => typeof v === 'number' && isFinite(v) ? clamp(v, -1, 1) : 0;
+    const right = (k: number) => {
+      const v = buttons[6 + k]?.value;
+      if (typeof v !== 'number' || !isFinite(v)) return 0;
+      if (v !== 0) this.live[k] = true;
+      return this.live[k] ? clamp(v * 2 - 1, -1, 1) : 0;
+    };
+    return { buttons: out, axes: [stick(axes[0]), stick(axes[1]), right(0), right(1), 0, 0] };
+  }
+
+  /** a short line for the log */
+  describe(): string {
+    return 'Xbox\'s One S with its 2016 firmware under Chrome on Android: Chrome maps it as if Android had not, so its ' +
+      'buttons are read from where Chrome put them and the right stick from its trigger places; its triggers, View, ' +
+      'Menu, stick buttons and Xbox button never reach the browser (Throttle and Brake can go on buttons in the game\'s ' +
+      'Joypad Configuration)';
   }
 }

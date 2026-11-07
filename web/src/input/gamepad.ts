@@ -18,7 +18,9 @@
 // as if it had the standard mapping, but for an axis resting at an end when
 // it showed up (a pedal, a throttle, a trigger), which is no stick.  Chrome
 // on Android gives every controller the standard mapping's places, called
-// standard or not (androidLayout): those are read as they come.  Chrome
+// standard or not (androidLayout): those are read as they come, but for an
+// Xbox One S with its 2016 firmware's id, which Chrome maps wrong there
+// (hidpad.ts oneS2016Android).  Chrome
 // exposes a controller only after a button press on the page, or a stick
 // pushed past half way.  Valve's controllers (the Steam Controllers, a Steam
 // Deck's controls) are no gamepads to the browser: while the game runs,
@@ -47,7 +49,7 @@ import {
   describeMap, findHat, guessMap, hatDirs, isPedals, loadMap, loadShifter, pedalSetOf, pedalsOf, readWheel, Shifter,
   shifterGear, usbIds, WHEEL_MAP_EVENT, wheelOf, withSetUp, type OtherAxes, type ShifterMode, type WheelInfo, type WheelMap,
 } from './wheel';
-import { HidPadReader, knownPad } from './hidpad';
+import { HidPadReader, knownPad, OneS2016Reader, oneS2016Android } from './hidpad';
 import { LocalPadWriter } from './local-pads';
 import { allPads, useSteamPads } from './steampad';
 export { allPads };
@@ -116,6 +118,14 @@ export function mapHid(g: Gamepad, r: HidPadReader): PadSnapshot {
   return { connected: true, buttons, axes, family, name, index: g.index };
 }
 
+/** Xbox's One S with its 2016 firmware (or a pad with its id) under Chrome on Android, whose standard mapping Chrome
+ *  gets wrong -> the virtual pad (hidpad.ts oneS2016Android) */
+export function mapOneS2016(g: Gamepad, r: OneS2016Reader): PadSnapshot {
+  const { buttons, axes } = r.read(g.axes, g.buttons);
+  const { family, name } = familyOf(g.id);
+  return { connected: true, buttons, axes, family, name, index: g.index };
+}
+
 /**
  * Whether a controller without the standard mapping has its places all the same: Chrome on Android reads every
  * controller through Android's key codes and puts its buttons and sticks where the standard mapping has them (the
@@ -169,6 +179,7 @@ interface Seen {
   index: number; id: string; std: boolean; axes0: number[]; ends: Set<number>; wheel: WheelInfo | null; map: WheelMap | null;
   hat: number; shifter: Shifter; mode: ShifterMode; hid: HidPadReader | null;
   others: string;            // a wheel's: the other controllers its map was made with (pedalsBeside)
+  oneS: OneS2016Reader | null;   // Xbox's One S with its 2016 firmware under Chrome on Android (hidpad.ts)
 }
 
 /** the controllers besides the wheels and those with the standard mapping, which may be a wheel's pedals on their
@@ -282,6 +293,16 @@ export class PadPoller {
   private polled = false;
   /** performance.now() of a real controller's last button press (0: none yet) */
   lastPress = 0;
+  // split screen's seats (local-pads.ts) read the standard mapping, but for a pad Chrome on Android maps wrong
+  // (hidpad.ts oneS2016Android): each such one with a reader of its own
+  private localOneS = new Map<string, OneS2016Reader>();
+  private readLocal = (g: Gamepad): PadSnapshot => {
+    if (!oneS2016Android(g)) return mapStandard(g);
+    const key = `${g.index}|${g.id}`;
+    let r = this.localOneS.get(key);
+    if (!r) { if (this.localOneS.size >= 8) this.localOneS.clear(); this.localOneS.set(key, r = new OneS2016Reader()); }
+    return mapOneS2016(g, r);
+  };
   // views of the game's memory: dropped by dispose(), so nothing keeps an ended
   // process's (1 GB+) shared memory reachable or writes into its mailbox
   private h: Int32Array | null;
@@ -365,7 +386,7 @@ export class PadPoller {
     const both = this.touch ? withTouch(s, this.touch) : s;
     if (this.touch && !g) this.buzz();
     const out = this.page ? this.forPage(both, pressed) : both;
-    this.localPads?.poll(pads, mapStandard, !!globalThis.document?.hidden || !!this.page?.dialog());
+    this.localPads?.poll(pads, this.readLocal, !!globalThis.document?.hidden || !!this.page?.dialog());
     if (this.same(out)) return;
     this.publish(out, !this.last || this.last.connected !== out.connected || this.last.index !== out.index || this.last.name !== out.name);
     this.last = out;
@@ -413,8 +434,10 @@ export class PadPoller {
       const ends = new Set<number>();
       if (!std) axes0.forEach((v, i) => { if (i > 1 && Math.abs(v) >= 0.9 && Math.abs(v) <= 1.05) ends.add(i); });
       const hid = !wheel && known && !std ? new HidPadReader(known.face, axes0, known.ltFirst, known.maker) : null;
+      const oneS = !wheel && oneS2016Android(g) ? new OneS2016Reader() : null;
       k = this.seen = { index: g.index, id: g.id, std, axes0, ends, wheel, map: null, hat: std ? -1 : findHat(axes0),
-        shifter: new Shifter(), mode: 'off', hid, others: '' };
+        shifter: new Shifter(), mode: 'off', hid, others: '', oneS };
+      if (oneS) this.log(`[pad] ${g.id}: read as ${oneS.describe()}`);
       if (g.mapping !== 'standard') {
         this.log(`[pad] ${g.id}: no standard mapping in this browser; ${g.axes.length} axes at ` +
           `[${axes0.map(v => v.toFixed(2)).join(' ')}], ${g.buttons.length} buttons`);
@@ -425,6 +448,7 @@ export class PadPoller {
       }
     }
     if (k.hid) return mapHid(g, k.hid);
+    if (k.oneS) return mapOneS2016(g, k.oneS);
     if (k.hat < 0 && !k.std) {
       k.hat = findHat(g.axes);
       if (k.hat >= 0) this.log(`[pad] ${g.id}: the D-pad on axis ${k.hat}`);

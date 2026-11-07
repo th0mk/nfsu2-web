@@ -204,3 +204,84 @@ test('Xbox\'s Bluetooth controllers in Firefox on a Mac: their own layout, LT be
   // where Chrome places them by usage (no mapping of its own): LT on 3, RT on 4, as Chromium's MapperXboxBluetooth
   assert.deepEqual(D.placeHidAxes([c, c, c, -1, -1, c, 0, 0, 0, H], true), { lx: 0, ly: 1, rx: 2, ry: 5, lt: 3, rt: 4, hat: 9 });
 });
+
+// Xbox's One S with its 2016 firmware's id (045e 02e0) under Chrome on Android: Android's own key layout for the id
+// (Vendor_045e_Product_02e0.kl) gives the usual key codes, and Chrome's XboxOneS2016FirmwareMappings (GamepadMappings.java)
+// maps those as if they were the raw ones.  chromeOneS2016() is that mapping, over what the pad sends through the key
+// layout: keys by Android's names (A B X Y L1 R1 SELECT START THUMBL THUMBR MODE), the sticks x y and z rz, the
+// triggers lt rt, the hat hx hy.
+const ONE_S_2016 = 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02e0)';
+function chromeOneS2016() {
+  let lt = false, rt = false;                      // Chrome's "activated": AXIS_Z, AXIS_RZ read anything but 0
+  return ({ keys = [], x = 0, y = 0, z = 0, rz = 0, hx = 0, hy = 0 } = {}) => {
+    const k = n => keys.includes(n) ? 1 : 0, b = Array(16).fill(0);
+    if (z !== 0) lt = true;
+    if (rz !== 0) rt = true;
+    b[0] = k('A'); b[1] = k('B'); b[2] = k('C'); b[3] = k('X'); b[4] = k('Y'); b[5] = k('Z');
+    b[8] = k('L1'); b[9] = k('R1'); b[10] = k('L2'); b[11] = k('R2');
+    b[6] = lt ? (z + 1) / 2 : 0; b[7] = rt ? (rz + 1) / 2 : 0;
+    b[14] = hx < -0.5 ? 1 : 0; b[15] = hx > 0.5 ? 1 : 0; b[12] = hy < -0.5 ? 1 : 0; b[13] = hy > 0.5 ? 1 : 0;
+    // AXIS_RX and RY: nothing of the pad's goes there through the key layout
+    return { axes: [x, y, 0, 0], buttons: b.map(v => ({ pressed: v > 0.12, value: v })) };
+  };
+}
+
+test('Xbox\'s One S 2016 id under Chrome on Android: which pads are read so', () => {
+  const g = (id, mapping = 'standard', n = 16) => ({ id, mapping, buttons: Array(n).fill({ pressed: false, value: 0 }) });
+  assert.ok(D.oneS2016Android(g(ONE_S_2016), ANDROID_UA, 5));
+  assert.ok(D.oneS2016Android(g(ONE_S_2016), DESKTOP_SITE_UA, 5));          // a big tablet asking for desktop sites
+  assert.ok(!D.oneS2016Android(g(ONE_S_2016), DESKTOP_SITE_UA, 0));         // a Linux computer: Chrome's own mapping there
+  assert.ok(!D.oneS2016Android(g(ONE_S_2016, 'standard', 17), ANDROID_UA, 5)); // not that mapping (it has no Home)
+  assert.ok(!D.oneS2016Android(g(ONE_S_2016, ''), ANDROID_UA, 5));
+  assert.ok(!D.oneS2016Android(g(ONE_S_2016), 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36', 0));
+  assert.ok(!D.oneS2016Android(g('45e-2e0-Xbox Wireless Controller'), ANDROID_UA, 5));   // Firefox's id
+  for (const p of ['0b13', '0b20', '02fd'])                                   // the other Xbox ids: Chrome maps them right
+    assert.ok(!D.oneS2016Android(g(`Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: ${p})`), ANDROID_UA, 5), p);
+});
+
+test('Xbox\'s One S 2016 id under Chrome on Android: its buttons where they belong, the right stick a stick (a report: LT and RT dead, the right stick drove)', async () => {
+  const G2 = await load('web/src/input/gamepad.ts');
+  await onBrowser(ANDROID_UA, 5, async (pads) => {
+    const buf = new SharedArrayBuffer(P.IM_BYTES), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
+    const chrome = chromeOneS2016(), g = { id: ONE_S_2016, index: 0, mapping: 'standard', connected: true, ...chrome() };
+    pads.push(g);
+    const p = new G2.PadPoller(h, new Uint8Array(buf), 0, () => {}, s => logs.push(s));
+    const send = (raw) => { Object.assign(g, chrome(raw)); p.poll(); };
+    const pad = () => ({ buttons: h[P.IM_PAD_BUTTONS], axes: Array.from({ length: 6 }, (_, i) => +f[P.IM_PAD_AXIS + i].toFixed(2)) });
+    const press = (...keys) => { send({ keys }); return pad().buttons; };
+    // read as the standard mapping it was the report: X was Y, Y LB, LB View, RB Menu
+    const bare = (raw) => { const c = chromeOneS2016(); return G2.mapStandard({ ...g, ...c(raw) }); };
+    assert.equal(bare({ keys: ['X'] }).buttons, bit(P.PAD_Y));
+    assert.equal(bare({ keys: ['Y'] }).buttons, bit(P.PAD_LB));
+    assert.equal(bare({ keys: ['R1'] }).buttons, bit(P.PAD_START));
+    assert.equal(bare({ rz: 1 }).axes[P.PAD_AXIS_RT], 1);                     // the right stick down: the throttle
+    // now
+    assert.deepEqual([press('A'), press('B'), press('X'), press('Y')], [bit(P.PAD_A), bit(P.PAD_B), bit(P.PAD_X), bit(P.PAD_Y)]);
+    assert.equal(press('L1', 'R1'), bit(P.PAD_LB, P.PAD_RB));
+    send({ hx: 1 }); assert.equal(pad().buttons, bit(P.PAD_DRIGHT));
+    send({ hy: -1 }); assert.equal(pad().buttons, bit(P.PAD_DUP));
+    // what Chrome never reads: View, Menu, the sticks' buttons, Xbox
+    assert.equal(press('SELECT', 'START', 'THUMBL', 'THUMBR', 'MODE'), 0);
+    // the right stick: down and right, back to rest, all the way left and up; never a trigger
+    const axes = (rx, ry) => { const a = [0, 0, 0, 0, 0, 0]; a[P.PAD_AXIS_RX] = rx; a[P.PAD_AXIS_RY] = ry; return a; };
+    send({ z: 0.5, rz: 1 }); assert.deepEqual(pad().axes, axes(0.5, 1));
+    send({}); assert.deepEqual(pad().axes, axes(0, 0));
+    send({ z: -1, rz: -1 }); assert.deepEqual(pad().axes, axes(-1, -1));
+    // the left stick as it is
+    send({ x: -0.5, y: 0.25 });
+    assert.equal(pad().axes[P.PAD_AXIS_LX], -0.5); assert.equal(pad().axes[P.PAD_AXIS_LY], 0.25);
+    assert.equal(h[P.IM_PAD_FAMILY], P.PADF_XBOX);
+    assert.ok(logs.some(s => /read as Xbox's One S with its 2016 firmware under Chrome on Android/.test(s)));
+    p.dispose();
+  });
+});
+
+test('Xbox\'s One S 2016 id: before Chrome saw the right stick move, its trigger places at 0 are the stick at rest', () => {
+  const r = new D.OneS2016Reader(), chrome = chromeOneS2016(), none = { pressed: false, value: 0 };
+  const read = (raw) => { const c = chrome(raw); return r.read(c.axes, c.buttons).axes; };
+  assert.deepEqual(read({}), [0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(read({ rz: 0.5 }), [0, 0, 0, 0.5, 0, 0]);               // Y moved: its place counts, X's not yet
+  assert.deepEqual(read({ z: -1, rz: 0.5 }), [0, 0, 0, 0.5, 0, 0]);       // X all the way left first: 0, read as rest
+  assert.deepEqual(read({ z: -0.5, rz: 0.5 }), [0, 0, -0.5, 0.5, 0, 0]);  // until it moves
+  assert.deepEqual(r.read([0, 0], [none]).axes, [0, 0, 0, 0, 0, 0]);       // fewer buttons than it should have: no throw
+});
