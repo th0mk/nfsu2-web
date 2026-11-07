@@ -73,9 +73,9 @@ void sub_00560550(CPU *c);
 #define SLOT_CHAR       0xa6u
 #define SLOT_TRUNK      0x22u         /* TRUNK_AUDIO */
 #define ATTR_STYLE      0x311151f8u   /* a gauge's style: Stock 0 */
-#define MSG_SELECT      0x406415e3u
+#define MSG_PAD_ACCEPT  0x406415e3u   /* bStringHash("PAD_ACCEPT") */
 #define MSG_INSTALL_YES 0x51123592u
-#define PAD_ACCEPT      0x0c407210u
+#define MSG_BUTTON      0x0c407210u   /* a button pressed (the list's item chosen) */
 #define S_FLAG_SEEN     0x129u        /* gauge screen: Enter's first message seen */
 #define S_FLAG_BUSY     0x12au
 #define S_LIST          0x50u         /* gauge screen: its list; +0x54/+0x58 the first and last node, +0x5C the item */
@@ -129,7 +129,7 @@ static uint32_t key_of(uint32_t part){ return ok(part, 4u) ? MR32(part) : 0u; }
 static void hud_msg(CPU *c){
     uint32_t scr = c->ecx, msg = MR32(c->esp + 4u), stage = MR32(G_HUD_STAGE);
     int lifted = 0;
-    if (msg == MSG_SELECT && stage == 1u && MR8(scr + S_FLAG_SEEN) && !MR8(scr + S_FLAG_BUSY) && stock_item(c, scr)){
+    if (msg == MSG_PAD_ACCEPT && stage == 1u && MR8(scr + S_FLAG_SEEN) && !MR8(scr + S_FLAG_BUSY) && stock_item(c, scr)){
         MR32(G_HUD_STAGE) = 0;                   /* the game's install of a style without colours */
         lifted = 1;
         fprintf(stderr, "[shop] f=%ld Custom Gauges: Stock picked\n", autotest_frame());
@@ -175,7 +175,7 @@ static struct { int state; uint32_t at, kind; } g_trunk;   /* 1: opened from the
 
 static void ice_msg(CPU *c){
     uint32_t scr = c->ecx, msg = MR32(c->esp + 4u), it = MR32(scr + ICE_ITEM);
-    if (msg == PAD_ACCEPT && g_trunk.state != 2 && ok(scr, 0x170u) && pkg_is(MR32(scr + 4u), "UI_ICEMAIN.fng")){
+    if (msg == MSG_BUTTON && g_trunk.state != 2 && ok(scr, 0x170u) && pkg_is(MR32(scr + 4u), "UI_ICEMAIN.fng")){
         if (ok(it, 0x4cu) && MR32(it + 0x48u) == SLOT_TRUNK){
             g_trunk.state = 1; g_trunk.at = MR32(ROW_ICE_PLACE); g_trunk.kind = MR32(G_LIST_KIND);
             fprintf(stderr, "[shop] f=%ld Trunk Audio from the list's place %u (list kind %u)\n", autotest_frame(), g_trunk.at, g_trunk.kind);
