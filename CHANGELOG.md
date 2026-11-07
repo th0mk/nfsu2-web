@@ -11,8 +11,11 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-07 (b58448b)
+## 2026-11-07 (b0a544e)
 
+- **Mods:** Crash Damage, Chrystian Farias's Crashing Foreign Cars: the racers' cars dent where they are hit, scratch, break their lights and lose loose parts. Only the looks change; in free roam, players who have it on see each other's damage (off by default).
+- **Mods:** Transmission Whine, ropi's mod: NFS Carbon's gearbox whine over your car's engine, for each player's car in split screen (off by default).
+- **Mods:** Rubberbanding, by 007hacky007: your career races' catch-up as in the original game, No boost (rivals ahead still wait, none behind gets faster) or Off.
 - **Free roam:** pick a world in F9 or on the start page, with each one's player count: the main world with everyone, World 1 to 4, or your own by name. Ghost mode stays off in World 4.
 - **Page menu:** Controls open inside the F9 menu, as Crews and Friends.
 - **iPhone:** performance and stability improvements.
