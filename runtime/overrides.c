@@ -880,7 +880,10 @@ static int pc_inside(uint32_t th, uint32_t M, const float lo[3], const float hi[
     }
     return 1;
 }
+int g_carpaint_watch;                            /* carpaint.c's test aid ("roam mp paint on"): each model drawn checked */
+__attribute__((weak)) void carpaint_model(uint32_t mdl);
 void sub_005c5930(CPU *c){
+    if (g_carpaint_watch && carpaint_model) carpaint_model(MR32(c->esp + 4u));
     if (g_pc_on < 0){ const char *e = getenv("PARTCULL"); g_pc_on = e ? atoi(e) : 1; }
     uint32_t e = c->esp, item = MR32(e + 4u), fl = MR32(e + 16u);
     uint32_t W = g_pc_on && item && !(fl & 4u) ? MR32(item + 0xcu) : 0;

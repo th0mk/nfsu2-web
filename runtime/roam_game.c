@@ -9903,6 +9903,8 @@ static int du_icon_up(void){
     return 0;
 }
 static float car_mass(uint32_t car, int mine);
+/* carpaint.c's test aid (each tip's, caliper's and rim's draw: whose paint); none where it is not built in */
+__attribute__((weak)) uint64_t carpaint_report(char *out, int cap, const char *arg);
 int roam_game_cmd(CPU *c, const char *args, long *wait_start){
     (void)c;
     char sub[32] = {0}, a1[200] = {0}, a2[64] = {0}; int used = 0;
@@ -10709,6 +10711,44 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         if (have){ rlog("[roam] f=%ld mp waitoutrun %s satisfied after %ld frames\n", f, a1, f - *wait_start); *wait_start = -1; return 1; }
         if (tmo && f - *wait_start >= tmo){ rlog("[roam] f=%ld mp waitoutrun %s TIMEOUT (%s)\n", f, a1, st[g_du.st]); *wait_start = -1; return 1; }
         return 0;
+    }
+    if (!strcasecmp(sub, "paint")){
+        /* "mp paint [on|off|reset|expect|cars]": carpaint.c's check of each exhaust tip's, caliper's and rim's draw
+         * (whose paint its solid holds then: its own, or another car's); "expect": "[expect] FAIL" when one was drawn
+         * with another car's; "cars": the player's car's and each shown friend's exhaust tip (ride slot 0x10), its
+         * exhaust paint (render info +0x394) and the paint its model's solid holds (EXHAUST_TIP, solid +0x3C) */
+        if (!strcasecmp(a1, "cars")){
+            uint32_t mine_so = 0;
+            for (int k = -1; k < NSLOT; k++){
+                uint32_t car = k < 0 ? player_car() : g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
+                uint32_t ride = ok(car, 0x9e0) ? rd32(car + 0x10u) : 0, ri = ok(car, 0x9e0) ? rd32(car + 0x554u) : 0;
+                if (!ok(ride, 0x8f0) || !ok(ri, CRI_MODELS + 0x20u * 0x3fu)) continue;
+                uint32_t p = rd32(ride + 0x5d0u), pp = rd32(ride + 0x6acu), m = rd32(ri + CRI_MODELS + 0x20u * 0x10u);
+                uint32_t so = ok(m, 0x10) ? MR32(m + 0xcu) : 0, has = 0, paint = MR32(ri + 0x394u);
+                if (ok(so, 0x40)){
+                    int n = (int8_t)MR8(so + 0x1au); uint32_t t = MR32(so + 0x3cu);
+                    for (int e = 0; e < n && ok(t, 8u * (uint32_t)(e + 1)); e++) if (MR32(t + 8u * (uint32_t)e) == 0x3b3a1f8du) has = MR32(t + 8u * (uint32_t)e + 4u);
+                }
+                if (k < 0) mine_so = so;
+                char pn[48] = "-", qn[48] = "-";
+                if (ok(p, 0xe)){ uint32_t np = gcall0(c, FN_PART_NAME, p); if (np) cstr(np, pn, sizeof pn); }
+                if (ok(pp, 0xe)){ uint32_t np = gcall0(c, FN_PART_NAME, pp); if (np) cstr(np, qn, sizeof qn); }
+                uint32_t rp = MR32(ri + 0x390u), bp = MR32(ri + 0x398u);
+                rlog("[roam] f=%ld mp paint %s: tip %s (level %u), exhaust paint %s (material %08x), solid %08x%s holds %08x; "
+                     "rim paint %08x, brake paint %08x\n", f,
+                     k < 0 ? "me" : g_sl[k].name, pn, ok(p, 6) ? (uint32_t)MR8(p + 5u) >> 5 : 0u, qn,
+                     ok(paint, 0x10) ? MR32(paint + 0xcu) : 0u, so, k >= 0 && so && so == mine_so ? " (the player's)" : "",
+                     ok(has, 0x10) ? MR32(has + 0xcu) : 0u, ok(rp, 0x10) ? MR32(rp + 0xcu) : 0u, ok(bp, 0x10) ? MR32(bp + 0xcu) : 0u);
+            }
+            return 1;
+        }
+        char ln[600];
+        uint64_t bad = carpaint_report ? carpaint_report(ln, sizeof ln, a1) : 0;
+        if (!carpaint_report) snprintf(ln, sizeof ln, "not built in");
+        rlog("[roam] f=%ld mp paint: %s\n", f, ln);
+        if (!strcasecmp(a1, "expect")) rlog("[expect] %s mp paint: %llu part draw(s) with another car's paint\n", bad ? "FAIL" : "ok",
+                                            (unsigned long long)bad);
+        return 1;
     }
     if (!strcasecmp(sub, "rims")){
         /* "mp rims": each shown friend's car's rims, the shops' or its own,

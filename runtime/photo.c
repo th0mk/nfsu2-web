@@ -1392,9 +1392,13 @@ void sub_0048acb0(CPU *c){
     if (!P.game_lod && (int32_t)c->eax < SIZE_FULL) c->eax = SIZE_FULL;
 }
 void sub_006162e0_orig(CPU *c);
+__attribute__((weak)) void carpaint_draw(uint32_t ri);     /* carpaint.c: the car's tips, calipers and rims, its own paint */
+__attribute__((weak)) void carpaint_drawn(void);
 void sub_006162e0(CPU *c){
     if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0x30u; return; }
+    if (carpaint_draw) carpaint_draw(c->ecx);
     sub_006162e0_orig(c);
+    if (carpaint_drawn) carpaint_drawn();
 }
 void sub_00615630_orig(CPU *c);
 void lightkey_flares(uint32_t ri);               /* lightkey.c: whose flares these are (high beam) */

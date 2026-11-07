@@ -1,0 +1,50 @@
+# Free roam among friends whose cars share the player's exhaust tip model:
+# each car's exhaust tips, calipers and rims keep their own paint, or none
+# (runtime/carpaint.c).  The new career's prologue 350Z has the shop's ACE
+# tips (CARS\EXHAUST, level 1) without exhaust paint; 12 parked
+# web/tools/roam-crowd.mjs players drive 350Zs with ACE tips too, every other
+# one with exhaust paint, the others without (tests/scripts/
+# roam_crowd_paint.parts; all with BRAKE STYLE02 calipers and BBS rims, whose
+# draws are checked too: the painted look's caliper and rim paint do not come
+# through for a 350Z, "mp parts 46" / "49" find none of them here, so those
+# stay unpainted).  The game draws an unpainted part with whatever paint its
+# model's solid holds: before the fix the player's grey tips and the unpainted
+# friends' took the painted ones' colour.  "mp paint expect" fails when any
+# such part was drawn with another car's paint; the dump shows the player's
+# tips from behind (photo mode): grey, as alone, not a friend's paint.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --a Al:roam_crowd_paint.txt --crowd 12
+#        --crowd-args "--speed 0 --spread 12 --parts @tests/scripts/roam_crowd_paint.parts"
+#        --env ROAM_CROWD_CARS=12 --env NFSU2_ROAM_TEST_OWNCARS=1
+#   (the game's way, for an A/B: --env NFSU2_TEST_PAINT_GAMEWAY=1; the expect line then fails)
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers ${ROAM_CROWD_CARS} 6000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++0    roam mp paint on
++300  roam mp paint cars
++0    roam mp paint
++0    photo on
++30   photo drag 0 -0.06
++0    photo dolly 3
++0    photo drag 0 -0.04
++90   dump paint_mine
++0    photo off
++60   roam mp paint cars
++0    roam mp paint expect
++10   quit

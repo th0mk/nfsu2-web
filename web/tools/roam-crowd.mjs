@@ -22,7 +22,8 @@
 // --cars   the players' cars in turn (car type names, CarTypeInfo +0), or all: the game's 31 player cars, PEUGOT to
 //          IMPREZAWRX; without it every player drives --car.
 // --parts  the players' cars' parts instead of the stock ones, slot:key:owner in hex, comma-separated (or from a file): a
-//          record names every part (tests/scripts/roam_crowd_rims.parts: a 350Z with the rim shops' rims).
+//          record names every part (tests/scripts/roam_crowd_rims.parts: a 350Z with the rim shops' rims).  Several
+//          records, one a line in the file (or |-separated): the players take them in turn (roam_crowd_paint.parts).
 // --states the car states in each SNAP: 1 as the browsers send them (roam_web.c), 3 as a LAN does.
 // --open   the players' cars' open parts (RC_OPEN_*: 1 the hood, 2 the trunk, 4 and 8 the doors, 15 all), as a game
 //          sends them while its car is shown off (showoff.c): the others' games open them on these cars.
@@ -77,7 +78,7 @@ const STATES = +opt('states', 1), SPREAD = +opt('spread', 20), BUNDLE = argv.inc
 const LOOP_MS = +opt('loop-ms', 0), HOLD = +opt('hold', 0), LINKS = +opt('links', 0);
 const OPEN = +opt('open', 0);
 const DENTS = +opt('dents', 0), DENTS_MS = +opt('dents-ms', 1000);
-const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim() : p)(opt('parts', ''));
+const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim() : p)(opt('parts', '')).split(/\s*[|\n]\s*/);
 const RACE = (opt('race', '').match(/^(\d+)-(\d+):(\d+):(\d+)$/) ?? []).slice(1).map(Number);
 const PAUSED = (opt('paused', '').match(/^(\d+)-(\d+)$/) ?? []).slice(1).map(Number), PREFIX = opt('prefix', 'Bot');
 const FLAGS = opt('flags', '').split(',').filter(Boolean).map(f => f === '-' ? '' : f.toLowerCase());
@@ -299,7 +300,8 @@ class Bot {
           ws.send(JSON.stringify({ t: 'hello', name: this.name, ...(BUNDLE ? { bundle: 1 } : {}) }));
           const io = this.x.crowd_io(), m8 = this.mem();
           const flag = FLAGS.length ? FLAGS[(this.i ?? 0) % FLAGS.length] : '';
-          const b = Buffer.from(`${this.name}\0${this.car}\0${PARTS}\0${flag}\0`, 'latin1'); m8.set(b, io);
+          const parts = PARTS[(this.i ?? 0) % PARTS.length];
+          const b = Buffer.from(`${this.name}\0${this.car}\0${parts}\0${flag}\0`, 'latin1'); m8.set(b, io);
           if (LINKS) this.x.crowd_links(LINKS);
           if (OPEN) this.x.crowd_open(OPEN);
           if (DENTS) this.x.crowd_dents(DENTS, DENTS_MS, (this.id * 2654435761) >>> 0);
