@@ -11,8 +11,9 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-07 (cba97c8)
+## 2026-11-07 (8473add)
 
+- **Free roam:** a "memory access out of bounds" crash as other players' cars with Art Factory vinyls came in is fixed.
 - **Free roam:** other players' engines show under an open hood.
 - **Free roam:** when other players can't be reached, the game says why: a blocked connection, one that keeps dropping, or too many players on your network.
 - **Controllers:** the Xbox One S pad with its 2016 firmware works in Chrome on Android.
