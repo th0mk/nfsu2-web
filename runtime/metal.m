@@ -624,6 +624,8 @@ static _Atomic long g_zsweep_at = 0;
 static unsigned long g_z_swept = 0;
 void metal_z_forget(unsigned zid){
     if (zid < MAXZ){ atomic_store(&g_zdead[zid], 0); atomic_store(&g_zforget[zid], 1); } }
+/* the back buffer's samples (com.c MULTISAMPLING: browser only); the Mac's MSAA is NFSU2_MSAA's */
+void metal_set_bb_samples(unsigned n){ (void)n; }
 static id<MTLDepthStencilState> g_dss[64];
 static float    g_cur_aref   = 0.f;
 /* D3DRS_FOGENABLE(28) + D3DRS_FOGCOLOR(34).  Fog was NEVER applied: the

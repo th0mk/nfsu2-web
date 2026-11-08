@@ -28,7 +28,7 @@ import { LastGameKeeper, lastGameEnd, lastGameLine, lastGameToOffer, type LastGa
 import { androidMajor, browserBrief, deviceBrief } from './devicelog';
 import { canFullscreen, enterFullscreen, exitFullscreen, fromHomeScreen, homeScreenInstead, isFullscreen, keepScreenOn, measureRefresh, settledSize, trackCanvasSize } from './display';
 import { deviceDefaults, deviceKind, heapWindow, isPhone, markTouch, noPinchZoom, noteGraphics, padSeen, phoneScreen, touchFirst } from './device';
-import { phoneSeed, phoneUpgrade } from './phonegraphics';
+import { deviceSeed, phoneUpgrade } from './phonegraphics';
 import { markPad, padPress, pageDialog } from './padnav';
 import { controlsSheet, type ControlsSheet, type Tab } from './controls';
 import { TouchControls } from './touch';
@@ -694,11 +694,15 @@ async function startGame() {
     log.add(`[app] registry seeded from ${q.get('reg')} (page address)`);
   } else if (noSave) {
     // (the save folder's registry where it read, else the built-in defaults)
-    memory.push({ path: reg, text: isPhone() ? phoneSeed(registryDefaults) : registryDefaults });
+    memory.push({ path: reg, text: deviceSeed(deviceKind(), registryDefaults) });
   } else if (!await exists(SAVE, reg)) {
     if (r.env.NFSU2_SEED_REGISTRY === '0') log.add('[app] no registry yet, the game will run its first-run check');
-    else if (isPhone()) { await writeFile(SAVE, reg, phoneSeed(registryDefaults)); log.add(`[app] first launch, registry seeded with the built-in defaults and a phone's graphics (/save/${reg})`); }
-    else { await writeFile(SAVE, reg, registryDefaults); log.add(`[app] first launch, registry seeded with the built-in defaults (/save/${reg})`); }
+    else {
+      const kind = deviceKind();
+      await writeFile(SAVE, reg, deviceSeed(kind, registryDefaults));
+      log.add(`[app] first launch, registry seeded with the built-in defaults${kind === 'phone' ? " and a phone's graphics"
+        : kind === 'pc' ? ' and Full Scene Anti-Aliasing on' : ''} (/save/${reg})`);
+    }
   } else if (isPhone()) {
     // a phone that started before the phone graphics (phonegraphics.ts): once
     const text = await readText(SAVE, reg).catch(() => null);   // null: not read (it is there), left as it is for the next start

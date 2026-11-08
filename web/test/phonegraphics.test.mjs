@@ -1,6 +1,7 @@
 // A phone's graphics (web/src/app/phonegraphics.ts): a new phone's registry is the built-in seed with six options
 // off and the mark; a phone from before gets them once while every graphics option still has the seed's value, and
-// only the mark when one was changed; a marked registry is left alone.
+// only the mark when one was changed; a marked registry is left alone.  A new computer's registry has Full Scene
+// Anti-Aliasing on; a tablet's is the seed.
 //   node --test web/test/phonegraphics.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +12,7 @@ import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const js = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/phonegraphics.ts')], bundle: true, format: 'esm', write: false })).outputFiles[0].text;
-const { PHONE_GRAPHICS, PHONE_MARK, phoneSeed, phoneUpgrade, withDwords } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const { PHONE_GRAPHICS, PHONE_MARK, COMPUTER_GRAPHICS, deviceSeed, phoneSeed, phoneUpgrade, withDwords } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 const SEED = fs.readFileSync(path.join(ROOT, 'app/registry-defaults.txt'), 'utf8');
 
 const values = text => Object.fromEntries([...text.matchAll(/^d ([^=\n]+)=(\d+)\r?$/gm)].map(m => [m[1], +m[2]]));
@@ -64,4 +65,15 @@ test('CRLF lines keep their line ends', () => {
   const crlf = SEED.replace(/\n/g, '\r\n'), out = phoneSeed(crlf);
   assert.doesNotMatch(out.replace(/\r\n/g, ''), /\n/);
   assert.equal(values(out).g_RoadReflectionEnable, 0);
+});
+
+test("a new computer's registry: the seed with Full Scene Anti-Aliasing on; a tablet's the seed; a phone's its own", () => {
+  const s = values(SEED), pc = deviceSeed('pc', SEED), v = values(pc);
+  assert.equal(s.g_FSAALevel, 4294967295, "the seed's: off (-1), as the Mac app and tablets start");
+  assert.deepEqual(COMPUTER_GRAPHICS, { g_FSAALevel: 1 });
+  assert.equal(v.g_FSAALevel, 1);
+  for (const k of Object.keys(s)) if (k !== 'g_FSAALevel') assert.equal(v[k], s[k], k);
+  assert.equal(pc.split('\n').length, SEED.split('\n').length, 'the line replaced where it is');
+  assert.equal(deviceSeed('tablet', SEED), SEED);
+  assert.equal(deviceSeed('phone', SEED), phoneSeed(SEED));
 });

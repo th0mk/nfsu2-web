@@ -147,6 +147,7 @@ WEAK void metal_set_stage_tex(unsigned a, unsigned b, unsigned c3){ (void)a; (vo
 WEAK void metal_set_texproj(const float p[4]){ (void)p; }
 WEAK void metal_set_ui_aspect(float ax, float ay){ (void)ax; (void)ay; }
 WEAK void metal_set_zsurf(unsigned z){ (void)z; }
+WEAK void metal_set_bb_samples(unsigned n){ (void)n; }
 WEAK void metal_z_forget(unsigned z){ (void)z; }
 /* sizes: the page's canvas in device pixels (NFSU2_WIDTH/HEIGHT), else 1280x720 */
 WEAK void metal_game_size(unsigned *w, unsigned *h){ if (w) *w = g_game_w; if (h) *h = g_game_h; }

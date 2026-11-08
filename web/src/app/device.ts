@@ -37,10 +37,11 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  until 2026-11-02, and lost a fifth of their frames on fast displays).  The
  *  world map's other players: 2048 on phones, the file's 4096 elsewhere (each marker costs the open map's frames,
  *  about 7 us a frame on a busy Ryzen 5900X, a phone's several times that).  Full screen stays off on phones with
- *  PowerVR's B-Series graphics (fullScreenFails). */
+ *  PowerVR's B-Series graphics (fullScreenFails).  The game's Full Scene Anti-Aliasing is not offered on phones
+ *  (runtime/com.c MULTISAMPLING): its 4-sample screen and Z, kept between passes, take four times the screen's memory. */
 export function deviceDefaults(): Record<string, string> {
   const kind = deviceKind();
-  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: fullScreenFails() ? 'off' : 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off' };
+  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: fullScreenFails() ? 'off' : 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off', fsaa: 'off' };
   if (kind === 'tablet') return { roam_max_cars: '24', coop: 'off' };
   return { roam_max_cars: 'auto' };
 }

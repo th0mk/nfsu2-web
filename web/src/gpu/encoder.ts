@@ -45,7 +45,12 @@ interface Tex {
   filled: boolean;                 // a level has gone up (an ASTC texture's choice is made at its first upload)
   bytes: number;                   // its size on the GPU, every level and face
   face0?: GPUTextureView;          // a cube's face 0, level 0 as a 2D view (StretchRect from it), made at its first use
+  ms?: MsTwin;                     // a render target made with TF_MS: its 4-sample twin (runtime/com.c MULTISAMPLING)
 }
+
+/** a 4-sample colour texture that a target's passes draw into and resolve from (runtime/com.c MULTISAMPLING); stale:
+ *  the target was written another way (a blit, a copy, a clear pass of its own) since the twin last resolved into it */
+interface MsTwin { tex: GPUTexture; view: GPUTextureView; stale: boolean }
 
 const enum Src { TVert = 0, Raw = 1, Pool = 2 }
 const PSLOT = 768;                 // PSPar (560 bytes) at 256-aligned slots
@@ -68,8 +73,8 @@ export class Encoder {
   private regionClearPipes = new Map<string, GPURenderPipeline>();
   /** Attachment clears ignore viewports. A triangle clears only this player's
    * pixels and preserves the colour/depth belonging to the other players. */
-  private regionClearPipe(flags: number, argb: number, z: number): GPURenderPipeline {
-    const key = `${flags & 3}:${argb}:${z}`;
+  private regionClearPipe(flags: number, argb: number, z: number, ms = false): GPURenderPipeline {
+    const key = `${flags & 3}:${argb}:${z}${ms ? ':x4' : ''}`;
     let pipe = this.regionClearPipes.get(key);
     if (pipe) return pipe;
     const rgba = [(argb >>> 16 & 255) / 255, (argb >>> 8 & 255) / 255, (argb & 255) / 255, (argb >>> 24) / 255];
@@ -84,6 +89,7 @@ export class Encoder {
       vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'bgra8unorm', writeMask: flags & 1 ? 15 : 0 }] },
       primitive: { topology: 'triangle-list' },
       depthStencil: { format: 'depth32float', depthWriteEnabled: !!(flags & 2), depthCompare: 'always' },
+      ...(ms ? { multisample: { count: 4 } } : {}),
     });
     this.regionClearPipes.set(key, pipe);
     return pipe;
@@ -141,6 +147,17 @@ export class Encoder {
   screen: GPUTexture | null = null; screenView: GPUTextureView | null = null;
   /** frames that copied from the screen before drawing to it (they keep the back buffer) */
   screenReadFirst = 0;
+  // multisampling (runtime/com.c MULTISAMPLING: the game's Full Scene Anti-Aliasing): the back buffer with 4 samples
+  // (Op.BbSamples) and a render target made with TF_MS each have a 4-sample twin; their passes draw into the twin, with
+  // a 4-sample twin of their Z surface (by surface and size), and resolve into the screen or the texture at the pass's
+  // end; a blit or copy into them leaves the twin behind (stale) until the next pass that loads draws the picture into it
+  private bbSamples = 1;
+  private msScreen: MsTwin | null = null;
+  private msZ = new Map<string, { tex: GPUTexture; view: GPUTextureView }>();
+  private msZpend = new Uint8Array(64); private msZpendV = new Float32Array(64);
+  private pipesMs = new Map<number, GPURenderPipeline | null>();
+  /** passes drawn at 4 samples (resolved at their end), pictures drawn into a twin again after a blit or copy */
+  msPasses = 0; msRefreshes = 0;
 
   /** guest frames whose records are logged in full (diagnostics), and "trace every dumped frame" */
   traceSeq = new Set<number>(); traceDumps = false; logShaders = false;
@@ -258,7 +275,9 @@ export class Encoder {
           this.warmUp();
           break;
         }
-        case Op.ZForget: if (a0 < 64 && this.zTex[a0]) { this.zTex[a0]!.destroy(); this.zTex[a0] = undefined; this.zView[a0] = undefined; } break;
+        case Op.ZForget: if (a0 < 64 && this.zTex[a0]) { this.zTex[a0]!.destroy(); this.zTex[a0] = undefined; this.zView[a0] = undefined; }
+          for (const [k, z] of this.msZ) if (k.startsWith(`${a0}:`)) { z.tex.destroy(); this.msZ.delete(k); } break;
+        case Op.BbSamples: this.setBbSamples(a0); break;
         default: this.log(`[gpu] unknown resource op ${op}`);
       }
       tail = (tail + len) >>> 0;
@@ -317,14 +336,21 @@ export class Encoder {
     bytes *= cube ? 6 : 1;
     this.texBytes += bytes; if (gf.unpack) this.unpackBytes += bytes; if (gf.astc) this.astcBytes += bytes;
     this.texMade++; this.texMadeBytes += bytes;
+    // a multisampled render target (runtime/com.c MULTISAMPLING): its 4-sample twin, in the texture's own format
+    let ms: MsTwin | undefined;
+    if ((flags & P.TF_MS) && rt && !cube && levels === 1) {
+      const mt = this.device.createTexture({ label: `t${id} x4`, size: [w, h], format: gf.f, sampleCount: 4, usage: GPUTextureUsage.RENDER_ATTACHMENT });
+      ms = { tex: mt, view: mt.createView(), stale: true };
+      bytes += w * h * 4 * 4; this.texBytes += w * h * 4 * 4; this.texMadeBytes += w * h * 4 * 4;
+    }
     this.tex[id] = { serial: this.serial++, tex, fmt, w, h, levels, cube, rt, view: tex.createView(vd), rtViews, expandA8: gf.a8, bc: gf.bc,
-      unpack: !!gf.unpack, astc: !!gf.astc, filled: false, bytes };
+      unpack: !!gf.unpack, astc: !!gf.astc, filled: false, bytes, ms };
   }
 
   private texFree(id: number): void {
     const t = this.tex[id];
     if (!t) return;
-    t.tex.destroy();
+    t.tex.destroy(); t.ms?.tex.destroy();
     this.texBytes -= t.bytes; if (t.unpack) this.unpackBytes -= t.bytes; if (t.astc) this.astcBytes -= t.bytes;
     this.texFreed++; this.texFreedBytes += t.bytes;
     this.tex[id] = undefined;
@@ -424,17 +450,65 @@ export class Encoder {
     return s;
   }
 
-  private copyPipe(format: GPUTextureFormat, opaque: boolean): GPURenderPipeline {
-    const key = format + (opaque ? '/o' : '');
+  private copyPipe(format: GPUTextureFormat, opaque: boolean, ms = false): GPURenderPipeline {
+    const key = format + (opaque ? '/o' : '') + (ms ? '/x4' : '');
     let p = this.copyPipes.get(key);
     if (!p) {
       p = this.device.createRenderPipeline({ label: `copy ${key}`, layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.copyBgl] }),
         vertex: { module: this.copyMod, entryPoint: 'vs_full' },
         fragment: { module: this.copyMod, entryPoint: opaque ? 'fs_opaque' : 'fs_copy', targets: [{ format }] },
-        primitive: { topology: 'triangle-list' } });
+        primitive: { topology: 'triangle-list' }, ...(ms ? { multisample: { count: 4 } } : {}) });
       this.copyPipes.set(key, p);
     }
     return p;
+  }
+
+  /** the back buffer's samples from the next frame on (Op.BbSamples: 1 or 4) */
+  private setBbSamples(n: number): void {
+    n = n === 4 ? 4 : 1;
+    if (n === this.bbSamples) return;
+    this.bbSamples = n;
+    this.log(`[gpu] back buffer: ${n} sample${n > 1 ? 's' : ''} (the game's Full Scene Anti-Aliasing ${n > 1 ? 'on' : 'off'})`);
+    if (n === 1) {
+      if (this.msScreen) { this.destroyLater.push(this.msScreen.tex); this.msScreen = null; }
+      for (const z of this.msZ.values()) this.destroyLater.push(z.tex);
+      this.msZ.clear();
+    }
+  }
+
+  /** the screen's 4-sample twin, of the back buffer's size; a new one holds nothing yet (stale).  A new size (a window
+   *  resized with native resolution) also drops the Z surfaces' twins of other sizes: made again, cleared, if used */
+  private screenTwin(w: number, h: number): MsTwin {
+    const s = this.msScreen;
+    if (s && s.tex.width === w && s.tex.height === h) return s;
+    if (s) this.destroyLater.push(s.tex);
+    for (const [k, z] of this.msZ) if (!k.endsWith(`:${w}x${h}`)) { this.destroyLater.push(z.tex); this.msZ.delete(k); }
+    const tex = this.device.createTexture({ label: `backbuffer x4 ${w}x${h}`, size: [w, h], format: 'bgra8unorm', sampleCount: 4,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT });
+    return this.msScreen = { tex, view: tex.createView(), stale: true };
+  }
+
+  /** the 4-sample twin of Z surface zid at a pass's size (one per surface and size: the implicit Z serves the screen
+   *  and a smaller target alike); fresh: made just now, so cleared */
+  private msZView(zid: number, w: number, h: number): { view: GPUTextureView; fresh: boolean } {
+    const k = `${zid}:${w}x${h}`;
+    let z = this.msZ.get(k), fresh = false;
+    if (!z) {
+      const tex = this.device.createTexture({ label: `z${zid} x4 ${w}x${h}`, size: [w, h], format: 'depth32float', sampleCount: 4,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT });
+      this.msZ.set(k, z = { tex, view: tex.createView() }); fresh = true;
+    }
+    return { view: z.view, fresh };
+  }
+
+  /** a target's picture (src: its sampling view) drawn into its twin at every sample, before a pass that loads */
+  private msRefresh(enc: GPUCommandEncoder, twin: MsTwin, src: GPUTextureView): void {
+    const pass = enc.beginRenderPass({ colorAttachments: [{ view: twin.view, loadOp: 'clear', clearValue: [0, 0, 0, 1], storeOp: 'store' }] });
+    pass.setPipeline(this.copyPipe(twin.tex.format, false, true));
+    pass.setBindGroup(0, this.copyBg(src, this.nearest));
+    pass.draw(3);
+    pass.end();
+    twin.stale = false; this.msRefreshes++;
   }
 
   // A copy's bind group, by its source view and sampler.  Made anew for every copy, the composite alone was one a
@@ -491,7 +565,7 @@ export class Encoder {
     pass.end();
   }
 
-  private pipeDesc(key: number, blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean): GPURenderPipelineDescriptor | null {
+  private pipeDesc(key: number, blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean, ms = false): GPURenderPipelineDescriptor | null {
     // the translator's modules (vs_0 / ps_0 / ps_256 included once registered), else the built-in fallbacks
     const cube = ps >= PSCUBE;
     const vq = this.vsMods.get(vs), pq = this.psMods.get(ps);
@@ -515,25 +589,29 @@ export class Encoder {
         constants: { ALPHA_FUNC: alphaFunc(nd ? 0 : 1) } },
       primitive: { topology: 'triangle-list', frontFace: 'cw', cullMode: cull === 1 ? 'none' : cull === 2 ? 'front' : 'back' },
       depthStencil: { format: 'depth32float', depthWriteEnabled: (dm & 2) !== 0, depthCompare: (dm & 1) ? CMP[(dm >> 2) & 7] : 'always' },
+      // a pass on a 4-sample target (runtime/com.c MULTISAMPLING)
+      ...(ms ? { multisample: { count: 4 } } : {}),
     };
   }
 
   /** a pipeline needed now: created synchronously (a first use may hitch; warmUp() avoids most) */
-  private pipeline(key: number, blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean): GPURenderPipeline | null {
-    const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd);
-    if (!desc) { this.pipes.set(key, null); return null; }
+  private pipeline(key: number, blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean, ms = false): GPURenderPipeline | null {
+    const pipes = ms ? this.pipesMs : this.pipes;
+    const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd, ms);
+    if (!desc) { pipes.set(key, null); return null; }
     this.device.pushErrorScope('validation');
     const tp = performance.now();
     const p = this.device.createRenderPipeline(desc);
     const dt = performance.now() - tp;
     this.pipeMs += dt; if (dt > this.pipeMsMax) this.pipeMsMax = dt;
-    this.device.popErrorScope().then(e => { if (e) { this.log(`[gpu] pipeline ps=${ps} vs=${vs} blend=${blend.toString(16)}: ${e.message}`); this.pipes.set(key, null); } });
-    this.pipes.set(key, p);
+    this.device.popErrorScope().then(e => { if (e) { this.log(`[gpu] pipeline ps=${ps} vs=${vs} blend=${blend.toString(16)}${ms ? ' x4' : ''}: ${e.message}`); pipes.set(key, null); } });
+    pipes.set(key, p);
     this.pipelinesMade++; this.pipelinesSync++;
-    // remember it for the next session, by the modules' text hashes
+    // remember it for the next session, by the modules' text hashes (the state: blend, cull, depth mode, alpha test
+    // off, 4 samples at 2^35; an entry from before the samples has 1)
     const vh = this.vsHash.get(vs), ph = this.psHash.get(ps);
     if (vh !== undefined && ph !== undefined) {
-      const st = blend + cull * 262144 + dm * 1048576 + (nd ? 67108864 : 0), k = `${vh}:${ph}:${st}`;
+      const st = blend + cull * 262144 + dm * 1048576 + (nd ? 67108864 : 0) + (ms ? 34359738368 : 0), k = `${vh}:${ph}:${st}`;
       if (!this.warmSeen.has(k)) { this.warmSeen.add(k); this.warmList.push({ v: vh, p: ph, s: st }); this.warmDirty = true; }
     }
     return p;
@@ -566,13 +644,14 @@ export class Encoder {
     this.warmTodo = this.warmTodo.filter(e => {
       const vs = this.vsByHash.get(e.v), ps = this.psByHash.get(e.p);
       if (vs === undefined || ps === undefined) return true;
-      const blend = e.s % 262144, cull = Math.floor(e.s / 262144) % 4, dm = Math.floor(e.s / 1048576) % 64, nd = e.s >= 67108864;
+      const blend = e.s % 262144, cull = Math.floor(e.s / 262144) % 4, dm = Math.floor(e.s / 1048576) % 64;
+      const nd = Math.floor(e.s / 67108864) % 2 === 1, ms = Math.floor(e.s / 34359738368) % 2 === 1, pipes = ms ? this.pipesMs : this.pipes;
       const key = blend + ps * 262144 + vs * 268435456 + cull * 137438953472 + dm * 549755813888 + (nd ? 35184372088832 : 0);
-      if (this.pipes.has(key)) return false;
-      const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd);
+      if (pipes.has(key)) return false;
+      const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd, ms);
       if (!desc) return false;
       this.device.createRenderPipelineAsync(desc).then(p => {
-        if (!this.pipes.has(key)) { this.pipes.set(key, p); this.pipelinesMade++; this.pipelinesAsync++; }
+        if (!pipes.has(key)) { pipes.set(key, p); this.pipelinesMade++; this.pipelinesAsync++; }
       }).catch(x => this.log(`[gpu] warm-up pipeline ps=${ps} vs=${vs}: ${x}`));
       return false;
     });
@@ -594,11 +673,12 @@ export class Encoder {
     return g;
   }
 
-  private depthView(zid: number, w: number, h: number): GPUTextureView {
-    const k = `${w}x${h}`;
+  private depthView(zid: number, w: number, h: number, ms = false): GPUTextureView {
+    const k = `${w}x${h}${ms ? 'x4' : ''}`;
     let v = this.scratchZ.get(k);
     if (!v) {
-      v = this.device.createTexture({ label: `scratch-z ${k}`, size: [w, h], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT }).createView();
+      v = this.device.createTexture({ label: `scratch-z ${k}`, size: [w, h], format: 'depth32float', sampleCount: ms ? 4 : 1,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT }).createView();
       this.scratchZ.set(k, v);
     }
     void zid;
@@ -685,7 +765,9 @@ export class Encoder {
     // (viewport.ts fills them in place, so a draw allocates nothing and sets either only when it changes)
     const vpNow = [0, 0, 0, 0, 0, 1], vpDraw = [0, 0, 0, 0, 0, 1], scNow = [0, 0, 0, 0], scDraw = [0, 0, 0, 0];
     // the previous draw's pipeline (pipelines outlive passes, so this survives a pass change)
-    let lastKey = -1, lastPipe: GPURenderPipeline | null | undefined;
+    let lastKey = -1, lastMs = false, lastPipe: GPURenderPipeline | null | undefined;
+    // the pass draws at 4 samples: the screen of a multisampled back buffer, or a TF_MS target (runtime/com.c MULTISAMPLING)
+    let passMs = false;
     const b1 = this.b1, dyn = this.dyn;
     b1[0] = -1;
     let draws = 0, passes = 0, skipped = 0;
@@ -693,12 +775,17 @@ export class Encoder {
 
     const openPass = (target: number, zid: number): GPURenderPassEncoder | null => {
       let view: GPUTextureView, w: number, h: number, key: number;
-      if (!target) { view = this.screenView!; w = bbW; h = bbH; key = -1; passCube = -1; }
-      else {
+      // a 4-sample target: its twin, and the view its picture is drawn into the twin from
+      let twin: MsTwin | null = null, twinSrc: GPUTextureView | null = null;
+      if (!target) {
+        view = this.screenView!; w = bbW; h = bbH; key = -1; passCube = -1;
+        if (this.bbSamples === 4) { twin = this.screenTwin(w, h); twinSrc = view; }
+      } else {
         const t = this.tex[target & 0xFFFF], face = (target >>> 16) & 7;
         if (!t || !t.rt) { this.missingTarget++; return null; }
         view = t.cube ? t.rtViews[face ? Math.min(face - 1, 5) : 0] : t.rtViews[0];
         w = t.w; h = t.h; key = (target & 0xFFFF) * 8 + face; passCube = target & 0xFFFF;
+        if (t.ms) { twin = t.ms; twinSrc = t.view; }
       }
       passW = w; passH = h;
       vpNow[0] = 0; vpNow[1] = 0; vpNow[2] = w; vpNow[3] = h; vpNow[4] = 0; vpNow[5] = 1;
@@ -706,6 +793,34 @@ export class Encoder {
       passKey = target ? (target & 0xFFFF) : -1;
       const first = key === -1 ? !screenTouched : !touched.has(key);
       let zv: GPUTextureView | undefined, zclear = false, zval = 1;
+      passMs = !!twin;
+      if (twin) {
+        // drawn into the twin and resolved into the target at the pass's end; a twin behind its target (a blit or copy
+        // into it) first gets the target's picture when the pass loads; the Z surface's own 4-sample twin
+        if (!first && twin.stale) { this.msRefresh(enc, twin, twinSrc!); passes++; }
+        if (zid && zid < 64) {
+          const z = this.msZView(zid, w, h);
+          zv = z.view; if (z.fresh) zclear = true;
+          if (this.msZpend[zid]) { zclear = true; zval = this.msZpendV[zid]; this.msZpend[zid] = 0; }
+        }
+        realZ = !!zv;
+        const c = clearArgb;
+        const ts = this.firstPassTs; this.firstPassTs = undefined;
+        const p = enc.beginRenderPass({
+          timestampWrites: ts,
+          colorAttachments: [{ view: twin.view, resolveTarget: view, loadOp: first ? 'clear' : 'load', storeOp: 'store',
+            clearValue: { r: ((c >>> 16) & 255) / 255, g: ((c >>> 8) & 255) / 255, b: (c & 255) / 255, a: 1 } }],
+          depthStencilAttachment: zv
+            ? { view: zv, depthLoadOp: zclear ? 'clear' : 'load', depthClearValue: zval, depthStoreOp: 'store' }
+            : { view: this.depthView(0, w, h, true), depthLoadOp: 'clear', depthClearValue: 1, depthStoreOp: 'discard' },
+        });
+        twin.stale = false;
+        if (key === -1) screenTouched = true; else touched.add(key);
+        passes++; this.calls.pass++; this.msPasses++;
+        if (tr) tr.push(`  pass ${passes}: ${target ? `tex ${target & 0xFFFF}` : 'SCREEN'} x4 ${w}x${h} color ${first ? `clear ${c.toString(16)}` : 'load'}, z ${zv ? `zid ${zid} ${zclear ? `clear ${zval}` : 'load'}` : `none (zid ${zid})`}`);
+        cPipe = null; cSrc = -1; cK = -1; cP = -1; b1[0] = -1; cBcol = -1; cIx = ''; cH = -1;
+        return p;
+      }
       if (zid && zid < 64) {
         let z = this.zTex[zid];
         if (!z || z.width !== w || z.height !== h) {
@@ -757,7 +872,8 @@ export class Encoder {
           this.copyQuad(enc, sv, dv, 'bgra8unorm', this.linear);
           passes++;
         }
-        if (tgt) touched.add((tgt & 0xFFFF) * 8 + ((tgt >>> 16) & 7)); else screenTouched = true;
+        if (tgt) { touched.add((tgt & 0xFFFF) * 8 + ((tgt >>> 16) & 7)); if (dt!.ms) dt!.ms.stale = true; }
+        else { screenTouched = true; if (this.msScreen) this.msScreen.stale = true; }
         continue;
       }
       const depth = u32[w + D.depth], zid = depth >>> 8, target = u32[w + D.target];
@@ -768,7 +884,7 @@ export class Encoder {
         const z = f32[w + D.clrZ], flags = u32[w + D.clrFlags];
         if (pass && vp && Number.isFinite(z) && (flags & 3)) {
           pass.setViewport(vp[0], vp[1], vp[2], vp[3], 0, 1);
-          pass.setPipeline(this.regionClearPipe(flags, u32[w + D.clrArgb], Math.max(0, Math.min(1, z))));
+          pass.setPipeline(this.regionClearPipe(flags, u32[w + D.clrArgb], Math.max(0, Math.min(1, z)), passMs));
           pass.draw(3);
         }
         endPass(); curT = -1;
@@ -781,6 +897,8 @@ export class Encoder {
         if ((fl & 2) && zid && zid < 64) {
           const z = f32[w + D.clrZ];
           this.zpend[zid] = 1; this.zpendV[zid] = z < 0 ? 0 : z > 1 ? 1 : z;
+          // and its 4-sample twins (one Z surface for the game)
+          this.msZpend[zid] = 1; this.msZpendV[zid] = this.zpendV[zid];
           if (pass && curZ === zid) { endPass(); curT = -1; }
         }
       }
@@ -818,9 +936,9 @@ export class Encoder {
       if (psEff === 0 && t0 && this.tex[t0]?.cube) psEff = PSCUBE;
       const nd = !(aref > 0);
       const key = blend + psEff * 262144 + vsid * 268435456 + cull * 137438953472 + dm * 549755813888 + (nd ? 35184372088832 : 0);
-      let pipe = key === lastKey ? lastPipe : this.pipes.get(key);
-      if (pipe === undefined) pipe = this.pipeline(key, blend, psEff, vsid, cull, dm, nd);
-      lastKey = key; lastPipe = pipe;
+      let pipe = key === lastKey && passMs === lastMs ? lastPipe : (passMs ? this.pipesMs : this.pipes).get(key);
+      if (pipe === undefined) pipe = this.pipeline(key, blend, psEff, vsid, cull, dm, nd, passMs);
+      lastKey = key; lastMs = passMs; lastPipe = pipe;
       if (!pipe) { skipped++; if (tr) tr.push(`  #${i} draw skipped: no pipeline (ps ${psEff} vs ${vsid})`); continue; }
       if (pipe !== cPipe) { p.setPipeline(pipe); cPipe = pipe; this.calls.pipe++; }
       // the 2D UI on a screen narrower than 4:3 stays in its 4:3 band (gpu_proto.h GwDraw.clip), on the
@@ -952,7 +1070,7 @@ export class Encoder {
       const c = clearArgb;
       enc.beginRenderPass({ colorAttachments: [{ view: this.screenView!, loadOp: 'clear', storeOp: 'store',
         clearValue: { r: ((c >>> 16) & 255) / 255, g: ((c >>> 8) & 255) / 255, b: (c & 255) / 255, a: 1 } }] }).end();
-      passes++;
+      passes++; if (this.msScreen) this.msScreen.stale = true;
     }
     if (pslots) this.queue.writeBuffer(this.pBuf, 0, ps, 0, pslots * (PSLOT / 4));
     this.totalDraws += draws; this.totalPasses += passes;

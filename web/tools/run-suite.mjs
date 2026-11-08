@@ -85,6 +85,9 @@ const TABLE = [
   // Exposure and White Level (runtime/tonemenu.c): Options > Display after Level Of Detail, and the pause menu's
   ['tone', 'options_tone.txt', '[tone] white level 70 %', '', 400],
   ['tonepause', 'pause_tone.txt', '[tone] white level 90 %', '', 400],
+  // the game's Full Scene Anti-Aliasing at 4 samples (runtime/com.c MULTISAMPLING): on and off in Customize Display
+  // Settings, each a Reset
+  ['fsaa', 'options_fsaa.txt', 'com: back buffer multisampling off (type 0, quality 0)', '', 400],
   // Power Units (runtime/powerunits.c): a row of Options > Gameplay after Speedometer Units
   ['powerunits', 'options_units.txt', '[units] power in bhp', '', 400],
   // Show Player Names (runtime/shownames.c): the game's own row in Options > Gameplay, before Save

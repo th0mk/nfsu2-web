@@ -5,6 +5,10 @@
 // trails and world detail stay.  A phone that started before this gets them once too, if every graphics option there
 // still has the seed's value; one where any was changed keeps its own.  The game's Options, Display raise them again.
 // Cloud saves leave registry.txt out (vault.ts keeps), so a phone's never reaches a PC.
+//
+// A computer's new registry has the game's Full Scene Anti-Aliasing on (runtime/com.c MULTISAMPLING: 4 samples, about
+// 1 to 1.5 ms more GPU time a frame at 2560x1440 on an M4 Pro, 2026-11-08); tablets' and phones' stay as the seed
+// (off; phones are not offered it).  A registry from before keeps its own.
 
 /** the game's own options (registry DWORDs) a phone starts with */
 export const PHONE_GRAPHICS: Readonly<Record<string, number>> = {
@@ -38,6 +42,14 @@ export function withDwords(text: string, values: Record<string, number>): string
 /** the registry a phone starts with */
 export function phoneSeed(seed: string): string {
   return withDwords(seed, { ...PHONE_GRAPHICS, [PHONE_MARK]: 1 });
+}
+
+/** the game's Full Scene Anti-Aliasing level a computer starts with: on (the option's one step) */
+export const COMPUTER_GRAPHICS: Readonly<Record<string, number>> = { g_FSAALevel: 1 };
+
+/** a new player's registry on this kind of device (device.ts deviceKind) */
+export function deviceSeed(kind: 'phone' | 'tablet' | 'pc', seed: string): string {
+  return kind === 'phone' ? phoneSeed(seed) : kind === 'pc' ? withDwords(seed, COMPUTER_GRAPHICS) : seed;
 }
 
 /** a phone's registry from before the phone graphics: the text to write (the phone graphics when every graphics option,

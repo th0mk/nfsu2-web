@@ -1,0 +1,66 @@
+# Options > Display > Customize Display Settings: the game's own Full Scene
+# Anti-Aliasing (runtime/com.c MULTISAMPLING), its 15th row.  One step right
+# turns it on: the game Resets the device with NONMASKABLE quality 1 and
+# the log says "com: back buffer multisampling 4 samples (type 1, quality
+# 1)", the page "[gpu] back buffer: 4 samples"; back in, one step left
+# turns it off again: "com: back buffer multisampling off (type 0, quality
+# 0)" and "[gpu] back buffer: 1 sample".
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    waitfng GarageMain.fng 3000
++400  tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
++90   tap RETURN                                   # Options
++0    waitfng UI_OptionsMain.fng 600
++300  tap RIGHT
++120  tap RETURN                                   # Display
++300  tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN                                     # Customize Display Settings
++90   tap RETURN
++300  tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN                                     # Full Screen Anti-Aliasing
++90   dump fsaa_row
++0    tap RIGHT                                    # on
++90   dump fsaa_on
++0    tap ESCAPE                                   # back on Display, at Resolution
++600  tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++90   tap RETURN
++300  tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN
++40   tap DOWN                                     # Full Scene Anti-Aliasing
++90   tap LEFT                                     # off
++90   dump fsaa_off
++0    tap ESCAPE
++300  quit

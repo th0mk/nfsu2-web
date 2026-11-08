@@ -155,9 +155,14 @@ enum {
     GW_SHADER_VS   = 6,   /* a: id, text bytes; payload WGSL (NUL-terminated) */
     GW_SHADER_PS   = 7,   /* a: id, text bytes; payload WGSL (NUL-terminated) */
     GW_Z_FORGET    = 8,   /* a: zid */
+    GW_BB_SAMPLES  = 9,   /* a: the back buffer's samples from the next frame on, 1 or 4 (com.c MULTISAMPLING; a page
+                           * without it skips the record and draws with 1) */
 };
 #define GW_TF_RT   1u
 #define GW_TF_CUBE 2u
+#define GW_TF_MS   8u     /* with GW_TF_RT: a render target drawn at 4 samples, resolved into the texture at the end of
+                           * every pass (CreateRenderTarget with multisampling, com.c MULTISAMPLING; a page without it
+                           * draws the target with 1) */
 typedef struct { uint32_t op, len; uint32_t a[6]; } GwCmd;
 #define GW_CMD_HDR 32u
 

@@ -72,8 +72,10 @@ export const enum V { tick = 0, seq = 1, tsF64 = 1, periodF64 = 2, hz = 6, visib
 
 // resource queue
 export const CMD_HDR = 32;
-export const enum Op { Pad = 0, TexCreate = 1, TexUpload = 2, TexFree = 3, PoolGrow = 4, PoolWrite = 5, ShaderVs = 6, ShaderPs = 7, ZForget = 8 }
-export const TF_RT = 1, TF_CUBE = 2;
+export const enum Op { Pad = 0, TexCreate = 1, TexUpload = 2, TexFree = 3, PoolGrow = 4, PoolWrite = 5, ShaderVs = 6, ShaderPs = 7, ZForget = 8,
+  BbSamples = 9 }
+// TF_MS: with TF_RT, a render target drawn at 4 samples (runtime/com.c MULTISAMPLING)
+export const TF_RT = 1, TF_CUBE = 2, TF_MS = 8;
 
 // TVert (runtime/gfx.h): 28 floats
 export const TVERT_BYTES = 112;
