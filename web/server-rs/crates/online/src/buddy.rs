@@ -82,14 +82,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use indexmap::IndexMap;
-use nfsu2_util::json;
+use nfsu2_util::{Bucket, json};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::aries::{FieldMap, Fields, FrameReader, V, encode_frame};
 use crate::core::Core;
 use crate::jsx::{self, clean_text, lower, strip_at, valid_name};
-use crate::lobby::{LBucket, four_printable};
+use crate::lobby::four_printable;
 use crate::omap::OrderedMap;
 use crate::timers::{Action, TimerId};
 use crate::vhost::{ConnId, Svc};
@@ -295,8 +295,8 @@ pub struct Buddy {
     told: Option<f64>,
     presence_timer: Option<TimerId>,
     mail_timer: Option<TimerId>,
-    rate: LBucket,
-    heavy: LBucket,
+    rate: Bucket,
+    heavy: Bucket,
     tries: u32,
     reader: FrameReader,
     login_timer: Option<TimerId>,
@@ -330,7 +330,7 @@ pub struct Buddies {
     pruned: f64,
     swept: f64,
     /// client group -> bucket: new friends lists
-    made: HashMap<Arc<str>, LBucket>,
+    made: HashMap<Arc<str>, Bucket>,
     timer: Option<TimerId>,
     /// the lists (lower case) that changed since they were last written
     dirty: HashSet<String>,
@@ -1132,8 +1132,8 @@ impl Core {
                 told: None,
                 presence_timer: None,
                 mail_timer: None,
-                rate: LBucket::new(l.msg_rate, 3.0 * l.msg_rate, now),
-                heavy: LBucket::new(l.heavy_rate, 4.0, now),
+                rate: Bucket::with_burst_at(l.msg_rate, 3.0 * l.msg_rate, now),
+                heavy: Bucket::with_burst_at(l.heavy_rate, 4.0, now),
                 tries: 0,
                 reader: FrameReader::default(),
                 login_timer: Some(t),
@@ -1167,7 +1167,7 @@ impl Core {
                 return;
             }
             let now = self.bnow();
-            if !self.buddies.conns.get_mut(&b).is_some_and(|x| x.rate.take(now, 1.0)) {
+            if !self.buddies.conns.get_mut(&b).is_some_and(|x| x.rate.take_at(now, 1.0)) {
                 return self.conn_destroy(conn, "buddy: too many messages");
             }
             if !four_printable(&m.kind) {
@@ -1296,11 +1296,11 @@ impl Core {
         let l = self.buddies.l;
         if !self.buddies.made.contains_key(group) {
             if self.buddies.made.len() >= 10_000 {
-                self.buddies.made.retain(|_, x| !(x.take(now, 0.0) && x.v >= x.cap));
+                self.buddies.made.retain(|_, x| !(x.has_at(now, 0.0) && x.v >= x.cap));
             }
-            self.buddies.made.insert(group.clone(), LBucket::new(l.list_rate / 3600.0, l.list_rate, now));
+            self.buddies.made.insert(group.clone(), Bucket::with_burst_at(l.list_rate / 3600.0, l.list_rate, now));
         }
-        if !self.buddies.made.get_mut(group).expect("just made").take(now, 1.0) {
+        if !self.buddies.made.get_mut(group).expect("just made").take_at(now, 1.0) {
             return false;
         }
         self.new_list(name, now);
@@ -2034,7 +2034,7 @@ impl Core {
             "EPGT" => self.bsend(b, "EPGT", &wid(fields![("ENAB", "N"), ("ADDR", "")]), ""),
             "RGET" => {
                 let now = self.bnow();
-                if !self.buddies.conns.get_mut(&b).expect("held").heavy.take(now, 1.0) {
+                if !self.buddies.conns.get_mut(&b).expect("held").heavy.take_at(now, 1.0) {
                     return self.bsend(b, "RGET", &with_id, "full");
                 }
                 let which = list_field(f);
@@ -2220,7 +2220,7 @@ impl Core {
                 // Search: personas online now or known from their races whose name starts with the text (at most
                 // MAXR, 20)
                 let now = self.bnow();
-                if !self.buddies.conns.get_mut(&b).expect("held").heavy.take(now, 1.0) {
+                if !self.buddies.conns.get_mut(&b).expect("held").heavy.take_at(now, 1.0) {
                     return self.bsend(b, "USCH", &wid(fields![("SIZE", 0)]), "");
                 }
                 let q = jsx::slice16(&lower(strip_at(f.str("USER"))), 15).to_string();
