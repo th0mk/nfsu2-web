@@ -35,12 +35,17 @@
  *                  profile written, the rename cut: the load takes MODPARTS.NEW by its write counter (ART_F_29 on the
  *                  car) and renames it; a lone MODPARTS.NEW of another profile is not taken; a MODPARTS.DAT a page of
  *                  before wrote last (its head word 0, our head inside) wins over a MODPARTS.NEW of ours
- *   kind0-unknown  a waiting part (ART_F_28, no VINYLPACKS) on a car of a car type the game has not: written again
- *                  with it, the car as it was in the profile
+ *   kind0-unknown  a part kept beside the profile (ART_F_28) on a car of a car type the game has not: not put on it
+ *                  (the car stays as loaded), written again with it
  *   names          a profile named with a space has its file
  *   foreign        a MODPARTS.DAT of another version: never written over; a second one: kept as .OLD2 beside the
  *                  first .OLD
  *   deleted        the profile deleted: a new one of the same name in this session gets nothing of it
+ *   cut-before-profile  MODPARTS.NEW of a save written, the profile not: the load takes MODPARTS.DAT (MODPARTS.NEW's
+ *                  head names another payload's cars) and removes that MODPARTS.NEW; the next save keeps the part
+ *   new-profile    a profile made this session counts its writes from its own files; a cut rename is recovered
+ *   modded-keys    a modded car whose own keys hold a mod's rim and ART_F_28: the payload has them as loaded, and the
+ *                  game's "anything to save?" says no while nothing changed
  * Every case prints "PASS <case> ..." or "FAIL <case> ..."; exit 1 on a FAIL. */
 #include <stdint.h>
 #include <stdio.h>
@@ -370,7 +375,8 @@ int main(void){
     clean("ANN");
     car_init(CAR, SLOT1, PEUGOT, 0); MR32(CAR + R_KEY(0x40u)) = AF28;
     profile_load("ANN", 0xd000);
-    save("ANN", 0xd001);                                         /* MODPARTS.DAT: ART_F_28, write 1 */
+    save("ANN", 0xd001);                                         /* MODPARTS.DAT: ART_F_28, write k */
+    read_file("ANN", "MODPARTS.DAT", e, 1100); uint32_t wk = g_hd3;
     MR32(CAR + R_KEY(0x40u)) = AF29;
     save_as("ANN", 0xd001, 0, 0);                                /* MODPARTS.NEW written, the profile too (the same bytes), no rename */
     int both_there = there("ANN", "MODPARTS.DAT") && there("ANN", "MODPARTS.NEW");
@@ -378,7 +384,7 @@ int main(void){
     profile_load("ANN", 0xd001);
     int got29 = MR32(CAR + R_KEY(0x40u)) == AF29;
     n = read_file("ANN", "MODPARTS.DAT", e, 1100);
-    int renamed = !there("ANN", "MODPARTS.NEW") && n == 1 && e[0].w[3] == AF29 && g_hd3 == 2u;
+    int renamed = !there("ANN", "MODPARTS.NEW") && n == 1 && e[0].w[3] == AF29 && g_hd3 == wk + 1u;
     /* a lone MODPARTS.NEW of another profile (its head names BOB) */
     clean("ANN");
     { uint32_t hd[4] = { 0x504d324eu, 1u, 2u, 5u }, en[16] = { 0x4448504du, name_hash("BOB"), 5, 0, 0, 0, 0, 3,  SLOT1, PEUGOT, 0x40u, AF30, 0, 0, 0, 0 };
@@ -389,9 +395,9 @@ int main(void){
     /* a MODPARTS.DAT a page of before wrote last (head word 0, our head carried inside) beside a MODPARTS.NEW of ours */
     clean("ANN");
     { uint64_t fpc = car_fp(CAR);
-      uint32_t hd[4] = { 0x504d324eu, 1u, 2u, 0 }, en[16] = { 0x4448504du, name_hash("ANN"), 3, 0, 0, 0, 0, 3,  SLOT1, PEUGOT, 0x40u, AF12 ^ 1u, 0, (uint32_t)fpc, (uint32_t)(fpc >> 32), 0 };
+      uint32_t hd[4] = { 0x504d324eu, 1u, 2u, 0 }, en[16] = { 0x4448504du, name_hash("ANN"), 3, 0xd003, 0, 0, 0, 3,  SLOT1, PEUGOT, 0x40u, AF12 ^ 1u, 0, (uint32_t)fpc, (uint32_t)(fpc >> 32), 0 };
       write_raw("ANN", "MODPARTS.DAT", hd, en, 2);
-      uint32_t hn[4] = { 0x504d324eu, 1u, 2u, 4u }, eo[16] = { 0x4448504du, name_hash("ANN"), 4, 0, 0, 0, 0, 3,  SLOT1, PEUGOT, 0x40u, AF29, 0, (uint32_t)fpc, (uint32_t)(fpc >> 32), 0 };
+      uint32_t hn[4] = { 0x504d324eu, 1u, 2u, 4u }, eo[16] = { 0x4448504du, name_hash("ANN"), 4, 0xd003, 0, 0, 0, 3,  SLOT1, PEUGOT, 0x40u, AF29, 0, (uint32_t)fpc, (uint32_t)(fpc >> 32), 0 };
       write_raw("ANN", "MODPARTS.NEW", hn, eo, 2); }
     g_vp_have = 0;
     profile_load("ANN", 0xd003);
@@ -451,6 +457,60 @@ int main(void){
     n = read_file("ANN", "MODPARTS.DAT", e, 1100);
     CHECK(waits && n == -1, "deleted before: a part waiting %d; the new profile of its name saved: %s", waits, n == -1 ? "nothing of the old one" : "the OLD ONE'S PARTS");
     g_vp_have = 1;
+
+    /* cut-before-profile (M1): MODPARTS.NEW of a save written, the profile not (a page closed, a write failed): the
+     * load of the profile on disk takes its own MODPARTS.DAT and removes that MODPARTS.NEW (the reviewer's R1) */
+    clean("ANN");
+    car_init(CAR, SLOT1, PEUGOT, 0); MR32(CAR + R_KEY(SLOT_RIM)) = BLITZ;
+    profile_load("ANN", 0x12000);
+    save("ANN", 0x12001);                                        /* MODPARTS.DAT: BLITZ; the profile 0x12001 */
+    uint32_t keep10 = MR32(CAR + R_KEY(0x10u));
+    MR32(CAR + R_KEY(0x10u)) = 0x51000999u;                      /* a part of the game's bought */
+    save_as("ANN", 0x12002, 0, 0);                               /* MODPARTS.NEW staged; the profile never written */
+    int staged = there("ANN", "MODPARTS.NEW");
+    MR32(CAR + R_KEY(SLOT_RIM)) = AVUS; MR32(CAR + R_KEY(0x10u)) = keep10;   /* the profile on disk, 0x12001 */
+    profile_load("ANN", 0x12001);
+    int rim_back = MR32(CAR + R_KEY(SLOT_RIM)) == BLITZ, gone_new = !there("ANN", "MODPARTS.NEW");
+    save("ANN", 0x12003);
+    n = read_file("ANN", "MODPARTS.DAT", e, 1100);
+    int blitz = 0; for (int i = 0; i < n; i++) blitz += e[i].w[3] == BLITZ;
+    CHECK(staged && rim_back && gone_new && blitz == 1, "cut-before-profile the rim back from MODPARTS.DAT: %d, the unwritten save's MODPARTS.NEW "
+          "removed: %d, the next save keeps the rim: %d", rim_back, gone_new, blitz);
+    MR32(CAR + R_KEY(SLOT_RIM)) = stock_of(0, SLOT_RIM);
+
+    /* new-profile (M2): a profile made this session (never loaded) counts its own writes; a cut rename after its
+     * second save of parts loses nothing (the reviewer's R2) */
+    { char dd[700]; snprintf(dd, sizeof dd, "%s/BOB", g_dir); mkdir(dd, 0755); }
+    clean("BOB");
+    car_init(CAR, SLOT1, PEUGOT, 0);
+    save("BOB", 0x13001);
+    MR32(CAR + R_KEY(SLOT_RIM)) = BLITZ;
+    save("BOB", 0x13002);
+    read_file("BOB", "MODPARTS.DAT", e, 1100); uint32_t b1 = g_hd3;
+    MR32(CAR + R_KEY(0x40u)) = AF28;
+    save_as("BOB", 0x13003, 0, 0);                               /* MODPARTS.NEW, the profile 0x13003, the rename cut */
+    read_file("BOB", "MODPARTS.NEW", e, 1100); uint32_t b2 = g_hd3;
+    MR32(CAR + R_KEY(SLOT_RIM)) = AVUS; MR32(CAR + R_KEY(0x40u)) = 0;
+    profile_load("BOB", 0x13003);
+    CHECK(b2 == b1 + 1u && MR32(CAR + R_KEY(0x40u)) == AF28 && MR32(CAR + R_KEY(SLOT_RIM)) == BLITZ, "new-profile its writes %u then %u; after the "
+          "cut rename the vinyl %s, the rim %s", b1, b2, MR32(CAR + R_KEY(0x40u)) == AF28 ? "back" : "LOST", MR32(CAR + R_KEY(SLOT_RIM)) == BLITZ ? "back" : "LOST");
+    MR32(CAR + R_KEY(SLOT_RIM)) = stock_of(0, SLOT_RIM); MR32(CAR + R_KEY(0x40u)) = 0;
+
+    /* modded-keys (M3): a modded game's car whose own keys have a mod's rim and ART_F_28: written back with them, all
+     * 170 keys as loaded, nothing of it beside the profile, and nothing to save while nothing changed (the reviewer's R3) */
+    clean("ANN");
+    car_init(CAR2, SLOT2, PEUGOT, 0); MR8(CAR2 + 0x7f5u) = 0; car_init(CUST, TUNED0, FOCUS, 1);
+    { static uint32_t k3[0xaa]; for (uint32_t s = 0; s < 0xaau; s++) k3[s] = 0xadd00000u | s; k3[SLOT_RIM] = BLITZ; k3[0x40] = AF28;
+      addon(CAR, SLOT1, ADDON, k3, 0x7f8u);
+      profile_load("ANN", 0x14000); convert(CAR, 0x7f8u);
+      kept_payload("ANN", 0x14001);
+      int ch = modparts_changed(&g_c, 0), ch2 = modparts_changed(&g_c, 0);
+      save("ANN", 0x14002);
+      n = read_file("ANN", "MODPARTS.DAT", e, 1100);
+      CHECK(!ch && !ch2 && rec_is(&g_pay[0], ADDON, k3) && n == -1, "modded-keys something to save with nothing changed: %d, %d; the payload's car "
+            "%s; MODPARTS.DAT %s", ch, ch2, rec_is(&g_pay[0], ADDON, k3) ? "as loaded, the rim and the vinyl its own" : "NOT as loaded",
+            n == -1 ? "none" : "MADE"); }
+    car_init(CAR, SLOT1, PEUGOT, 0);
 
     char cmd[800]; snprintf(cmd, sizeof cmd, "rm -rf '%s'", g_dir); if (system(cmd)) {}
     printf(g_fail ? "modparts_unit: FAILED\n" : "modparts_unit: passed\n");

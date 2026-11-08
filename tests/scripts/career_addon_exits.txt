@@ -1,0 +1,58 @@
+# Cars of car types the game does not have, nothing done to them (tools/addoncar_seed.py's or the review's seed2.py
+# "all" tree, one of them with ART_F_28 in its own keys): the Performance Shop entered and left with nothing bought,
+# the crib entered and left: no save question (the game's "anything to save?" counts nothing: runtime/modpacks.c
+# compares as a save makes the payload, the cars as they were); then the crib with the bank changed: the save
+# (Autosave; the career bot says Yes).  Good: no "screen MC_Main.fng" between "GO the Performance Shop" and "GO the
+# crib, a save" in the log, and the saved tree's car records byte for byte as the seed's (tools/addoncar_seed.py
+# --compare), the vinyl key among them.
+#   NFSU2_SAVE_SEED=<tree> node web/tools/run-suite.mjs --base <server> --script career_addon_exits.txt
+#        --marker exits_end --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave
++0    log GO the Performance Shop, nothing bought
++0    shopgo CC_PERF_SHOP
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the shop
++0    waitfe GarageMain.fng 3000
++600  tap ESCAPE                      # leave it
++300  fnglist
++0    tap LEFT
++30   tap RETURN                      # back to Explore Mode: Yes
++0    waitroam 4000
++300  log GO the crib, nothing changed
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++120  tap RIGHT
++40   tap RIGHT
++60   tap LEFT
++40   tap LEFT
++60   tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitroam 4000
++300  log GO the crib, a save
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++120  tap RIGHT
++40   tap RIGHT
++60   tap LEFT
++40   tap LEFT
++60   poke 0x861e74 246810            # the bank: something to save
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    bot on                          # the autosave: Yes, as a player does
++0    waitroam 6000
++0    bot off
++0    expect x:0x861e74 == 246810
++60   status exits_end
++10   quit
