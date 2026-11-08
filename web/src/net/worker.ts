@@ -32,7 +32,7 @@ const LINGER_MS = 1000;
 
 // without these the page runs the link itself (remote.ts: an error before 'ready')
 if (!me.crossOriginIsolated) throw new Error('the worker is not cross-origin isolated (no shared memory)');
-if (typeof (Atomics as { waitAsync?: unknown }).waitAsync !== 'function') throw new Error('no Atomics.waitAsync in a worker');
+if (typeof Atomics.waitAsync !== 'function') throw new Error('no Atomics.waitAsync in a worker');
 
 let link: Link | null = null;
 /** the memory's buffer where the page holds only that (WebKit: host/memory.ts) */

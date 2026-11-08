@@ -12,7 +12,7 @@ const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? '/test/hos
 log(`compiled in ${(performance.now() - t0).toFixed(0)} ms`);
 if (q.has('fresh')) {
   const root = await navigator.storage.getDirectory();
-  for await (const [name] of (root as any).entries()) if (name === (q.get('save') ?? 'save-test')) await root.removeEntry(name, { recursive: true });
+  for await (const [name] of root.entries()) if (name === (q.get('save') ?? 'save-test')) await root.removeEntry(name, { recursive: true });
 }
 // ?reg=/tests/web/seed/x.txt: registry seed, copied in as /save/registry.txt
 async function preload(url: string, name: string) {

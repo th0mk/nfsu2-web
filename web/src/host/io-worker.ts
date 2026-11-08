@@ -165,8 +165,10 @@ function memPut(key: string, b: Uint8Array) {
   const budget = cacheDir && keeping ? MEM_KEPT : MEM_ALONE;
   for (const [k, v] of memBlocks) { if (memBytes <= budget) break; memBlocks.delete(k); memBytes -= v.length; }
 }
+/** this worker's global (the libraries type self as a window's) */
+const me = self as unknown as DedicatedWorkerGlobalScope;
 // a line for the game's log (F9 > Download log), as "[data] ...": what a read waited for on the server
-const note = (s: string) => (self as unknown as Worker).postMessage({ t: 'log', s });
+const note = (s: string) => me.postMessage({ t: 'log', s });
 // At most FETCHES block requests in flight (the server holds each client address to 64 requests at once, so a
 // household of players behind one address stays well inside it).  A block comes compressed when the server offers
 // it (the browser undoes the Content-Encoding), else as a byte range of the file.  A try that fails on the way (no
@@ -508,7 +510,7 @@ async function saveTrouble(what: string, err: unknown, again = false): Promise<b
   // folder itself is looked at: gone, it is made again
   if (!again && !inMemory() && await saveGone()) { await recover(); return true; }
   if (!troubleSaid.has(name)) { troubleSaid.add(name); note(`[save] ${what}: ${name}: ${(err as Error)?.message ?? err}`); }
-  if (!troubleTold) { troubleTold = true; (self as unknown as Worker).postMessage({ t: 'save-trouble', error: `${name}: ${(err as Error)?.message ?? err}` }); }
+  if (!troubleTold) { troubleTold = true; me.postMessage({ t: 'save-trouble', error: `${name}: ${(err as Error)?.message ?? err}` }); }
   return false;
 }
 /** whether this worker's save folder is gone (keys() of a folder deleted under its handle answers NotFoundError, in
@@ -539,7 +541,7 @@ async function salvage(rel: string, bytes: Uint8Array | null): Promise<boolean> 
   if (bytes) try {
     const d = await saveDirAt(p.slice(0, -1), true);
     if (d) {
-      const sh = await ((await d.getFileHandle(p[p.length - 1], { create: true })) as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' }) as FileSystemSyncAccessHandle;
+      const sh = await (await d.getFileHandle(p[p.length - 1], { create: true })).createSyncAccessHandle({ mode: 'readwrite-unsafe' });
       sh.truncate(0); sh.write(bytes, { at: 0 }); sh.flush(); sh.close();
       note(`[save] a file the game wrote as the browser deleted the save folder: written again into the new one (${bytes.length} bytes)`);
       return true;
@@ -566,7 +568,7 @@ function recover(): Promise<void> {
     const answered = await new Promise<boolean>(res => {
       saveAnswered = () => res(true);
       setTimeout(() => res(false), SAVE_WAIT_MS);
-      (self as unknown as Worker).postMessage({ t: 'save-gone' });
+      me.postMessage({ t: 'save-gone' });
     });
     saveAnswered = null;
     note(answered ? `[save] the saves are back after ${((performance.now() - t0) / 1000).toFixed(1)} s: the game saves on`
@@ -663,7 +665,7 @@ const timedOut = (e: unknown) => (e as Error)?.name === 'TimeoutError';
  *  TimeoutError (a call past its time) is thrown: none of it is used then.  whole: in a profile's folder, where any of
  *  that throws MemPartial instead (the profile is left out) */
 async function memCopy(from: FileSystemDirectoryHandle, dir: MemDir, rel: string, n: MemCount, whole = false) {
-  const it = (from as any).entries() as AsyncIterator<[string, FileSystemHandle]>;
+  const it = from.entries();
   for (;;) {
     let r: IteratorResult<[string, FileSystemHandle]>;
     try { r = await memCall(it.next(), n); } catch (e) { if (timedOut(e)) throw e; if (whole) throw new MemPartial(); n.skipped++; return; }
@@ -809,7 +811,7 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
       try { fh = e.kind ? e.h as FileSystemFileHandle : await e.parent.getFileHandle(e.name, { create: true }); }
       catch (err) { return await saveTrouble('a file of the save folder could not be made', err, again) ? op(o, a, true) : E.IO; }
       let sh: FileSystemSyncAccessHandle;
-      try { sh = await (fh as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' }); }
+      try { sh = await fh.createSyncAccessHandle({ mode: 'readwrite-unsafe' }); }
       catch (err) { return await saveTrouble('a file of the save folder could not be opened', err, again) ? op(o, a, true) : E.ACCES; }
       if (oflags & 8) sh.truncate(0);
       const fd = allocFd({ mount: 'save', kind: 'file', path: rel, pos: 0, append: !!(fdflags & 1), sh, fh, wrote: !!(oflags & 8), gen: rootGen,
@@ -836,8 +838,8 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
       // posted before the call returns, so the page hears of a save before the game can exit after it; never for one
       // that went with a deleted folder (no "Progress saved" for it)
       if (inMemory()) { /* playing without saving: the page has nothing to keep or send */ }
-      else if (f.wrote && !lost) (self as unknown as Worker).postMessage({ t: 'saved', path: f.path });
-      else if (lost) (self as unknown as Worker).postMessage({ t: 'lost', path: f.path });
+      else if (f.wrote && !lost) me.postMessage({ t: 'saved', path: f.path });
+      else if (lost) me.postMessage({ t: 'lost', path: f.path });
       return 0;
     }
     case Op.FdRead: case Op.FdPread: {
@@ -903,7 +905,7 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
       if (!f.dirents || a[3] === 0n) {
         const list: { name: string; type: number; ino: number }[] = [{ name: '.', type: FT_DIR, ino: 1 }, { name: '..', type: FT_DIR, ino: 1 }];
         if (f.mount === 'data') { const nd = f.node ?? dataLookup(f.path); for (const k of nd?.kids?.values() ?? []) list.push({ name: k.name, type: k.dir ? FT_DIR : FT_FILE, ino: k.ino }); }
-        else for await (const [name, h] of (f.dh as any).entries() as AsyncIterable<[string, FileSystemHandle]>)
+        else for await (const [name, h] of f.dh!.entries())
           list.push({ name, type: h.kind === 'directory' ? FT_DIR : FT_FILE, ino: inoOf(joinRel(f.path, name)) });
         f.dirents = list;
       }
@@ -934,7 +936,7 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
       for (const [k, f] of fds) if (f.mount === 'save' && f.path === rel && f.sh) { f.sh.close(); fds.delete(k); }
       try { await e.parent.removeEntry(e.name); } catch { return E.NOTEMPTY; }
       // a profile the game deleted (its own Delete): the page's cloud saves expect one fewer
-      if (o === Op.PathUnlinkFile && isProfilePath(rel.split('/')) && !inMemory()) (self as unknown as Worker).postMessage({ t: 'removed', path: rel });
+      if (o === Op.PathUnlinkFile && isProfilePath(rel.split('/')) && !inMemory()) me.postMessage({ t: 'removed', path: rel });
       return 0;
     }
     case Op.PathRename: {
@@ -948,7 +950,7 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
       const eb = await saveEntry(rb); if (eb?.kind === 'file') await eb.parent.removeEntry(eb.name);
       await (ea.h as any).move(pb, rb.split('/').pop());
       // a file written under another name and moved into place (the runtime's registry.txt.tmp): saved as that one
-      if (ea.kind === 'file' && !inMemory()) (self as unknown as Worker).postMessage({ t: 'saved', path: rb });
+      if (ea.kind === 'file' && !inMemory()) me.postMessage({ t: 'saved', path: rb });
       return 0;
     }
     case Op.FdRenumber: { const f = fds.get(n(0)); if (!f) return E.BADF; fds.delete(n(0)); fds.set(n(1), f); return 0; }
@@ -994,7 +996,7 @@ function memGrew() {
   const b = memory.buffer;
   if (b.byteLength <= memSaid) return;
   memSaid = b.byteLength;
-  (self as unknown as Worker).postMessage({ t: 'mem', buf: b });
+  me.postMessage({ t: 'mem', buf: b });
 }
 async function serve() {
   let seen = Atomics.load(ctl, CTL_IO_DOORBELL);
@@ -1014,7 +1016,7 @@ async function serve() {
         rpcI32[b + 2] = r; Atomics.store(rpcI32, b, RPC_DONE); Atomics.notify(rpcI32, b);
       });
     }
-    const w = (Atomics as any).waitAsync(ctl, CTL_IO_DOORBELL, seen, DOORBELL_WAIT_MS);
+    const w = Atomics.waitAsync(ctl, CTL_IO_DOORBELL, seen, DOORBELL_WAIT_MS);
     if (w.async) await w.value;
     seen = Atomics.load(ctl, CTL_IO_DOORBELL);
   }
@@ -1030,12 +1032,12 @@ onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; por
       try { e.data.port.postMessage(memory); }
       catch (x) {
         if (!gaveHere) { gaveHere = true; note(`[memory] the game threads get the memory through the page (${x instanceof Error ? x.message : x})`); }
-        (self as unknown as Worker).postMessage({ t: 'give-here', slot: e.data.slot, memory });
+        me.postMessage({ t: 'give-here', slot: e.data.slot, memory });
       }
       e.data.port.close();
     }
     // a game thread that had nothing usable on its port asked the page for the Memory (game-worker.ts memoryFrom)
-    else if (e.data.t === 'give-page') (self as unknown as Worker).postMessage({ t: 'give-here', slot: e.data.slot, memory });
+    else if (e.data.t === 'give-page') me.postMessage({ t: 'give-here', slot: e.data.slot, memory });
     return;
   }
   cfg = e.data.cfg;
@@ -1044,9 +1046,9 @@ onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; por
     try {
       const got = allocMemory(e.data.tries!);
       memory = got.memory; offPage = true;
-      (self as unknown as Worker).postMessage({ t: 'memory', buf: memory.buffer, note: got.note });
+      me.postMessage({ t: 'memory', buf: memory.buffer, note: got.note });
     } catch (err) {
-      (self as unknown as Worker).postMessage({ t: 'io-error', msg: err instanceof Error ? err.message : String(err),
+      me.postMessage({ t: 'io-error', msg: err instanceof Error ? err.message : String(err),
         range: err instanceof RangeError, note: (err as { note?: string } | null)?.note });
       return;
     }
@@ -1069,9 +1071,9 @@ onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; por
     fds.set(3, { mount: 'data', kind: 'dir', path: '', pos: 0, append: false, node: dataRoot, preopen: '/data' });
     fds.set(4, { mount: 'save', kind: 'dir', path: '', pos: 0, append: false, dh: saveRoot, preopen: '/save' });
     fds.set(5, { mount: 'dev', kind: 'dir', path: '', pos: 0, append: false, preopen: '/dev' });
-    (self as unknown as Worker).postMessage({ t: 'io-ready', files: inoNext });
+    me.postMessage({ t: 'io-ready', files: inoNext });
     void serve();
   } catch (err) {
-    (self as unknown as Worker).postMessage({ t: 'io-error', msg: String(err) });
+    me.postMessage({ t: 'io-error', msg: String(err) });
   }
 };

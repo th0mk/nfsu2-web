@@ -117,7 +117,7 @@ export function checkIsolation(): Check {
   // Play (host/memory.ts); whether the game gets its memory is Play's question
   try { new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }); }
   catch (e) { return check('isolation', label, 'fail', N('Shared WebAssembly memory is not available: {error}'), 'PAGE-NO-MEMORY', { error: String(e) }); }
-  if (typeof (Atomics as { waitAsync?: unknown }).waitAsync !== 'function') {
+  if (typeof Atomics.waitAsync !== 'function') {
     return check('isolation', label, 'fail', N('This browser is too old for the game (no Atomics.waitAsync). Update {browser}.'), 'PAGE-NO-WAITASYNC', { browser: browserName() });
   }
   // the game is built with SIMD (web/build.sh): a processor without it (before SSE4.1 on a PC, such as a Phenom II) or

@@ -49,7 +49,7 @@ log(`compiled in ${(performance.now() - t0).toFixed(0)} ms`);
 const saveDir = q.get('save') ?? 'save-play';
 if (q.has('fresh')) {
   const root = await navigator.storage.getDirectory();
-  for await (const [name] of (root as any).entries()) if (name === saveDir) await root.removeEntry(name, { recursive: true });
+  for await (const [name] of root.entries()) if (name === saveDir) await root.removeEntry(name, { recursive: true });
 }
 async function preload(url: string, name: string) {
   const txt = await (await fetch(url, { cache: 'no-store' })).text();

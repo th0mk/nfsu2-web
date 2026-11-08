@@ -313,8 +313,6 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     return bbW ? n : 1;
   };
   const pending = new Set<Promise<unknown>>();
-  const waitAsync = (Atomics as unknown as { waitAsync(a: Int32Array, i: number, v: number, t?: number):
-    { async: boolean; value: Promise<string> | string } }).waitAsync;
 
   // A frame waiting for a slot.  Firefox runs onSubmittedWorkDone callbacks only when its GPU
   // process polls the device: in every queue submit, and otherwise on a 100 ms timer
@@ -338,7 +336,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     try {
       while (alive && waitingSince) {
         device.queue.submit([]); pokes++;
-        const w = waitAsync(pokeCell, 0, 0, 1);
+        const w = Atomics.waitAsync(pokeCell, 0, 0, 1);
         if (w.async) await w.value;
       }
     } finally { poking = false; }
@@ -875,7 +873,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     while (alive) {
       const I = i32(), b = Atomics.load(I, cw + C.bell);
       pump();
-      const w = waitAsync(I, cw + C.bell, b, 500);
+      const w = Atomics.waitAsync(I, cw + C.bell, b, 500);
       if (w.async) await w.value;
     }
   })();

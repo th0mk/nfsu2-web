@@ -280,7 +280,7 @@ export async function listFiles(saveDir: string): Promise<Entry[]> {
   async function walk(parent: FileSystemDirectoryHandle, name: string, d: FileSystemDirectoryHandle, rel: string): Promise<Entry[] | null> {
     const out: Entry[] = [];
     try {
-      for await (const [n, h] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) {
+      for await (const [n, h] of d.entries()) {
         const r = rel ? rel + '/' + n : n;
         if (h.kind === 'directory') out.push(...await walk(d, n, h as FileSystemDirectoryHandle, r) ?? []);
         else if (!isStaged(n)) {
@@ -332,7 +332,7 @@ export async function clearSaveDir(saveDir: string, keep: (name: string) => bool
   const top = await saveRoot(saveDir), d = under ? await dirIn(top, parts(under)) : top;
   if (!d) return;                                                                 // not there: nothing in it
   const names: string[] = [];
-  for await (const [name] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) if (!keep(name)) names.push(name);
+  for await (const [name] of d.entries()) if (!keep(name)) names.push(name);
   for (const n of names) await d.removeEntry(n, { recursive: true });
 }
 
@@ -341,7 +341,7 @@ export async function clearSaveDir(saveDir: string, keep: (name: string) => bool
 export async function pruneSaveDir(saveDir: string, keep: (path: string) => boolean): Promise<void> {
   async function walk(d: FileSystemDirectoryHandle, rel: string): Promise<boolean> {     // true: d is empty now
     const kids: [string, FileSystemHandle][] = [];
-    for await (const e of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) kids.push(e);
+    for await (const e of d.entries()) kids.push(e);
     let empty = true;
     for (const [name, h] of kids) {
       const r = rel ? `${rel}/${name}` : name;
@@ -379,7 +379,7 @@ async function listNames(saveDir: string): Promise<number> {
   async function walk(parent: FileSystemDirectoryHandle, name: string, d: FileSystemDirectoryHandle): Promise<number> {
     let n = 0;
     try {
-      for await (const [k, h] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>)
+      for await (const [k, h] of d.entries())
         n += h.kind === 'directory' ? await walk(d, k, h as FileSystemDirectoryHandle) : 1;
     } catch (e) { if (missing(e) && !await found(parent, name, 'directory')) return 0; throw e; }
     return n;
@@ -479,7 +479,7 @@ export async function cacheBytes(): Promise<{ bytes: number; files: number }> {
   let bytes = 0, files = 0;
   try {
     const d = await (await root()).getDirectoryHandle(CACHE_DIR);
-    for await (const [name, h] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) {
+    for await (const [name, h] of d.entries()) {
       if (h.kind !== 'file' || !name.endsWith('.have')) continue;
       const have = new Uint8Array(await (await (h as FileSystemFileHandle).getFile()).arrayBuffer());
       let n = 0; for (const b of have) n += b ? 1 : 0;

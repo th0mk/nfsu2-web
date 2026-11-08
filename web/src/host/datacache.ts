@@ -100,9 +100,9 @@ export async function openCacheFile(dir: FileSystemDirectoryHandle, f: DataFile)
   const k = cacheKey(f);
   const fh = await dir.getFileHandle(k, { create: true });
   const mh = await dir.getFileHandle(k + '.have', { create: true });
-  const h = await (fh as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' }) as FileSystemSyncAccessHandle;
+  const h = await fh.createSyncAccessHandle({ mode: 'readwrite-unsafe' });
   let haveH: FileSystemSyncAccessHandle;
-  try { haveH = await (mh as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' }) as FileSystemSyncAccessHandle; }
+  try { haveH = await mh.createSyncAccessHandle({ mode: 'readwrite-unsafe' }); }
   catch (e) { h.close(); throw e; }
   const nb = blockCount(f.size);
   const have = new Uint8Array(nb);

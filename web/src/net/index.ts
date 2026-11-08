@@ -1028,7 +1028,7 @@ export class Link implements NetLink {
       const hold = this.txHold(ep);
       if (!hold) this.drainTx(ep);
       const w = !hold && Atomics.load(ep.i32, P.W_TX_HEAD) !== Atomics.load(ep.i32, P.W_TX_TAIL) ? null
-        : waitAsync(ep.i32, P.W_TX_BELL, bell, Math.min(hold || 1000, this.o.waitMs ?? 1000));
+        : Atomics.waitAsync(ep.i32, P.W_TX_BELL, bell, Math.min(hold || 1000, this.o.waitMs ?? 1000));
       if (w && w.async) { sync = 0; await w.value; }
       else if (++sync >= 32) { sync = 0; await new Promise(r => setTimeout(r, 0)); }
     }
@@ -1298,9 +1298,6 @@ function protocolOf(url: string): string {
     return e?.nextHopProtocol ?? '';
   } catch { return ''; }
 }
-// Atomics.waitAsync (ES2024; the project's TypeScript lib is ES2023)
-const waitAsync = (Atomics as unknown as { waitAsync(a: Int32Array, i: number, v: number, t?: number):
-  { async: false; value: 'not-equal' | 'timed-out' } | { async: true; value: Promise<'ok' | 'timed-out'> } }).waitAsync;
 
 /** Attach the virtual LAN to a running game process, on this thread (the page's own: remote.ts attachNetWorker
  *  runs it in a worker instead).  Returns at once; the socket opens when the runtime registers its first net mailbox

@@ -21,7 +21,9 @@ let tid = 0;
 // in ms: the runtime subtracts it from the time it held the guest lock to get
 // the guest thread's busy time (runtime/win32_ext.c, [status] gcpu)
 let blockedMs = 0;
-const post = (m: ToPage) => (self as unknown as Worker).postMessage(m);
+/** this worker's global (the libraries type self as a window's) */
+const me = self as unknown as DedicatedWorkerGlobalScope;
+const post = (m: ToPage) => me.postMessage(m);
 
 // (WebKit, host/memory.ts) the Memory comes on a port the I/O worker posts it on, not from the page; or through the
 // page ({ t: 'memory' }): where the I/O worker could not post it on the port, or where nothing usable came on it in
@@ -287,7 +289,7 @@ function hostImports(): Record<string, (...a: any[]) => any> {
   return {
     // nfsu2_host_register(kind, ptr, size): tells the page where a shared structure lives
     // (with the memory's size now: a page that holds a buffer of a smaller one waits for the grown one, host/process.ts)
-    register: (kind: number, ptr: number, size: number) => { (self as unknown as Worker).postMessage({ t: 'register', kind, ptr, size, bytes: memory.buffer.byteLength }); return 0; },
+    register: (kind: number, ptr: number, size: number) => { me.postMessage({ t: 'register', kind, ptr, size, bytes: memory.buffer.byteLength }); return 0; },
     // milliseconds since the page's time origin (same clock in every worker)
     now_ms: () => T0MS + performance.now(),
     // ms this thread has spent blocked in host waits (I/O, sleeps) so far

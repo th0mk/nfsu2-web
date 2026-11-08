@@ -25,7 +25,7 @@ async function readDump(path: string): Promise<{ files: Map<string, string>; vec
   let dir = await navigator.storage.getDirectory();
   for (const part of path.split('/').filter(Boolean)) dir = await dir.getDirectoryHandle(part);
   const files = new Map<string, string>(), vecs = new Map<string, ArrayBuffer>();
-  for await (const [name, h] of (dir as any).entries() as AsyncIterable<[string, FileSystemHandle]>) {
+  for await (const [name, h] of dir.entries()) {
     if (h.kind !== 'file') continue;
     const file = await (h as FileSystemFileHandle).getFile();
     if (name.endsWith('.wgsl')) files.set(name, await file.text());
