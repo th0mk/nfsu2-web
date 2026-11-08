@@ -235,4 +235,103 @@ static inline int name_blocked(const char *name){
     return name_hate(s, n) || name_whole_word(s, whole, whole_ok) || name_edge(s, edge, edge_ok_start, edge_ok_end);
 }
 
+/* the n characters at p are one of list, as they are */
+static inline int name_part_is(const char *p, int n, const char *const *list){
+    for (int k = 0; list[k]; k++) if ((int)strlen(list[k]) == n && !strncmp(p, list[k], (size_t)n)) return 1;
+    return 0;
+}
+/* plate (a license plate: capitals and digits, at most 8; anything else is
+ * read as a name only) reads as a slur, as a name or as a plate.  A plate
+ * has no small letters to split its parts by ("BIGFAG" is "BigFag") and
+ * its words run into each other, so:
+ *  - plate_edge: a word that ends the plate's letters, plural too
+ *    ("BIGFAG", "KILLFAGS"), unless they end with a word of plate_end_ok
+ *    (a word or name: "RACCOON", "ASPIC", "TORPEDO", König, Sehnig; one cut
+ *    to 8 or misspelled: "MIDNIG(HT)", "LIGHTNIG", "RAFAG(A)"), or that
+ *    starts them with a word of plate_rests after it, plural or not
+ *    ("FAGBOY", "NIGSKING")
+ *  - plate_anywhere: a word anywhere in its letters, unless a word of
+ *    plate_anywhere_ok holds it ("HUNGGRY", Anggraini)
+ *  - its letters as a name's, but a lone digit at its end is a number
+ *    ("MUSTAFA6", "HUZAIFA9")
+ *  - codes: a part (letters or digits in a row) that is one of plate_alone
+ *    ("KKK", "KKK77"; not "KKKK": laughter), or one of plate_marks next to
+ *    one of plate_numbers ("HH88", "88SS", "HEIL88"; not 14: "SS14" is a
+ *    car's)
+ * Picked from the live server's names read as plates (capitals and digits,
+ * the first 8), 2026-11-08; web/src/app/names.mjs PLATE is the same. */
+static inline int name_plate_blocked(const char *plate){
+    static const char *const plate_edge[] = { "fag", "coon", "spic", "paki", "kike", "kyke", "gook", "chink", "dyke", "nig", "nigr", "neger",
+        "pedo", "rtard", 0 };
+    static const char *const plate_end_ok[] = { "rafag", "tafag", "racoon", "cocoon", "tycoon", "aspic", "ospic", "uspic", "papaki", "ipaki",
+        "eepaki", "klike", "akike", "ekike", "ikike", "okyke", "ergook", "achink", "uchink", "vandyke", "oldyke", "odyke",
+        "knig", "midnig", "ghtnig", "sehnig", "anig", "enig", "inig", "onig", "unig", "reneger", "torpedo", "speedo", "ipedo",
+        "ppedo", 0 };
+    static const char *const plate_rests[] = { "boy", "boi", "lord", "king", "kid", "kill", "killer", "slayer", "hunter", "lover", "life", 0 };
+    static const char *const plate_anywhere[] = { "nggr", "jewgas", "jewsgas", "h8jew", 0 };
+    static const char *const plate_anywhere_ok[] = { "anggr", "unggr", 0 };
+    static const char *const plate_alone[] = { "KKK", 0 };
+    static const char *const plate_marks[] = { "HH", "SS", "WP", "HEIL", "SIEG", 0 };
+    static const char *const plate_numbers[] = { "88", 0 };
+    const char *p = plate ? plate : "";
+    if (name_blocked(p)) return 1;
+    int len = (int)strlen(p);
+    if (len > 8) return 0;
+    for (int i = 0; i < len; i++) if (!((p[i] >= 'A' && p[i] <= 'Z') || (p[i] >= '0' && p[i] <= '9'))) return 0;
+    /* the parts: letters or digits in a row */
+    int pa[8], pl[8], np = 0;
+    for (int i = 0; i < len; ){
+        int d = p[i] <= '9', j = i;
+        while (j < len && (p[j] <= '9') == d) j++;
+        pa[np] = i; pl[np++] = j - i; i = j;
+    }
+    for (int k = 0; k < np; k++){
+        if (name_part_is(p + pa[k], pl[k], plate_alone)) return 1;
+        if (name_part_is(p + pa[k], pl[k], plate_numbers)
+            && ((k > 0 && name_part_is(p + pa[k - 1], pl[k - 1], plate_marks))
+                || (k + 1 < np && name_part_is(p + pa[k + 1], pl[k + 1], plate_marks)))) return 1;
+    }
+    /* its letters as a name's, a lone digit at its end left out */
+    char q[9], s[9], w[64], x[64];
+    memcpy(q, p, (size_t)len + 1);
+    if (len >= 2 && q[len - 1] <= '9' && q[len - 2] >= 'A') q[len - 1] = 0;
+    int n = 0;
+    for (int i = 0; q[i]; i++){
+        int r = 0;
+        while (q[i + r] >= '0' && q[i + r] <= '9') r++;
+        if (r && name_number(q + i, r, i ? q[i - 1] : 0)){ i += r - 1; continue; }
+        if (name_letter(q[i])) s[n++] = name_letter(q[i]);
+    }
+    s[n] = 0;
+    for (int j = 0; plate_edge[j]; j++){
+        name_word(plate_edge[j], w);
+        int end = name_ends(s, w);
+        for (int k = 0; end && plate_end_ok[k]; k++){ name_word(plate_end_ok[k], x); if (name_ends(s, x)) end = 0; }
+        if (end) return 1;
+        int e = name_at(s, 0, w);
+        if (e < 0) continue;
+        const char *rest = s + e, *bare = rest;
+        while (*bare == 's') bare++;
+        for (int k = 0; plate_rests[k]; k++){
+            const char *const one[] = { plate_rests[k], 0 };
+            if (name_whole(rest, one) || name_whole(bare, one)) return 1;
+        }
+    }
+    for (int j = 0; plate_anywhere[j]; j++){
+        name_word(plate_anywhere[j], w);
+        for (int i = 0; i < n; i++){
+            int e = name_at(s, i, w), ok = 0;
+            if (e < 0) continue;
+            /* a word of plate_anywhere_ok there from s[a], a <= i, to e or past it */
+            for (int k = 0; !ok && plate_anywhere_ok[k]; k++){
+                name_word(plate_anywhere_ok[k], x);
+                int m = (int)strlen(x);
+                for (int a = i > m ? i - m : 0; a <= i && !ok; a++) ok = name_at(s, a, x) >= e;
+            }
+            if (!ok) return 1;
+        }
+    }
+    return 0;
+}
+
 #endif

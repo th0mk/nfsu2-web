@@ -79,6 +79,31 @@ export const HATE = Object.freeze({
   groups: Object.freeze(['jew', 'kike', 'colored', 'coloured', 'zyd']),
 });
 
+/** License plates (plates.ts: capitals and digits, at most 8) read as names do (blockedName), and more: a plate has
+ *  no small letters to split its parts by ("BIGFAG" is "BigFag") and its words run into each other, so:
+ *  - edge: a word that ends the plate's letters, plural too ("BIGFAG", "KILLFAGS"), unless they end with a word of
+ *    endOk (a word or name: "RACCOON", "ASPIC", "TORPEDO", König, Sehnig; one cut to 8 or misspelled: "MIDNIG(HT)",
+ *    "LIGHTNIG", "RAFAG(A)"), or that starts them with a word of rests after it, plural or not ("FAGBOY", "NIGSKING")
+ *  - anywhere: a word anywhere in its letters, unless a word of anywhereOk holds it ("HUNGGRY", Anggraini)
+ *  - its letters as a name's, but a lone digit at its end is a number ("MUSTAFA6", "HUZAIFA9")
+ *  - codes: a part (letters or digits in a row) that is one of alone ("KKK", "KKK77"; not "KKKK": laughter), or one of
+ *    marks next to one of numbers ("HH88", "88SS", "HEIL88"; not 14: "SS14" is a car's)
+ *  Picked from the live server's names read as plates (capitals and digits, the first 8), 2026-11-08. */
+export const PLATE = Object.freeze({
+  edge: Object.freeze(['fag', 'coon', 'spic', 'paki', 'kike', 'kyke', 'gook', 'chink', 'dyke', 'nig', 'nigr', 'neger',
+    'pedo', 'rtard']),
+  endOk: Object.freeze(['rafag', 'tafag', 'racoon', 'cocoon', 'tycoon', 'aspic', 'ospic', 'uspic', 'papaki', 'ipaki',
+    'eepaki', 'klike', 'akike', 'ekike', 'ikike', 'okyke', 'ergook', 'achink', 'uchink', 'vandyke', 'oldyke', 'odyke',
+    'knig', 'midnig', 'ghtnig', 'sehnig', 'anig', 'enig', 'inig', 'onig', 'unig', 'reneger', 'torpedo', 'speedo', 'ipedo',
+    'ppedo']),
+  rests: Object.freeze(['boy', 'boi', 'lord', 'king', 'kid', 'kill', 'killer', 'slayer', 'hunter', 'lover', 'life']),
+  anywhere: Object.freeze(['nggr', 'jewgas', 'jewsgas', 'h8jew']),
+  anywhereOk: Object.freeze(['anggr', 'unggr']),
+  alone: Object.freeze(['KKK']),
+  marks: Object.freeze(['HH', 'SS', 'WP', 'HEIL', 'SIEG']),
+  numbers: Object.freeze(['88']),
+});
+
 const LOOKALIKE = {
   А: 'A', а: 'a', В: 'B', в: 'b', Е: 'E', е: 'e', К: 'K', к: 'k', М: 'M', м: 'm', Н: 'H', н: 'h', О: 'O', о: 'o',
   Р: 'P', р: 'p', С: 'C', с: 'c', Т: 'T', т: 't', У: 'Y', у: 'y', Х: 'X', х: 'x', І: 'I', і: 'i', Ј: 'J', ј: 'j',
@@ -195,4 +220,42 @@ export function blockedName(name) {
     for (let i = 0; i < s.length; i++) if (at(s, i, w) >= 0 && !excused(s, i, w, starts)) return true;
     return false;
   }) || wholeWord(s) || edge(s);
+}
+
+const P_EDGE = PLATE.edge.map(word), P_END_OK = PLATE.endOk.map(word), P_RESTS = PLATE.rests.map(word);
+const P_ANY = PLATE.anywhere.map(word), P_ANY_OK = PLATE.anywhereOk.map(word);
+/** word x holds s[i..e): it is there from s[j], j <= i, to e or past it */
+function held(s, i, e, x) {
+  for (let j = Math.max(0, i - x.length); j <= i; j++) if (at(s, j, x) >= e) return true;
+  return false;
+}
+/** plate (a license plate: capitals and digits, at most 8; anything else is read as a name only) reads as a slur, as
+ *  a name or as a plate (PLATE) */
+export function blockedPlate(plate) {
+  const p = String(plate ?? '');
+  if (blockedName(p)) return true;
+  if (!/^[A-Z0-9]{0,8}$/.test(p)) return false;
+  const parts = p.match(/[A-Z]+|[0-9]+/g) ?? [];
+  if (parts.some((x, i) => PLATE.alone.includes(x) ||
+    (PLATE.numbers.includes(x) && [parts[i - 1] ?? '', parts[i + 1] ?? ''].some(y => PLATE.marks.includes(y))))) return true;
+  // its letters as a name's, a lone digit at its end left out
+  const q = /[A-Z][0-9]$/.test(p) ? p.slice(0, -1) : p;
+  let s = '';
+  for (let i = 0; i < q.length; i++) {
+    let r = 0;
+    while (digit(q[i + r])) r++;
+    if (r && number(q, i, r)) i += r - 1;
+    else s += letter(q[i]);
+  }
+  return P_EDGE.some(w => {
+    if (endsWith(s, w) && !P_END_OK.some(x => endsWith(s, x))) return true;
+    const e = at(s, 0, w);
+    return e >= 0 && P_RESTS.some(r => whole(s.slice(e), [r]) || whole(s.slice(e).replace(/^s+/, ''), [r]));
+  }) || P_ANY.some(w => {
+    for (let i = 0; i < s.length; i++) {
+      const e = at(s, i, w);
+      if (e >= 0 && !P_ANY_OK.some(x => held(s, i, e, x))) return true;
+    }
+    return false;
+  });
 }

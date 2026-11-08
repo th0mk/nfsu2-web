@@ -129,7 +129,7 @@ static double now_s(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &t
 static void take(char *dst, const char *text, const char *from){
     size_t n = text ? strlen(text) : 0;
     if (n > RC_PLATE_MAX || !rc_plate_ok(text, (uint32_t)n)){ fprintf(stderr, "[plates] %s: not a plate (capitals and digits, at most %d): none\n", from, RC_PLATE_MAX); n = 0; }
-    else if (n && name_blocked(text)){ fprintf(stderr, "[plates] %s reads as a slur: none\n", from); n = 0; }
+    else if (n && name_plate_blocked(text)){ fprintf(stderr, "[plates] %s reads as a slur: none\n", from); n = 0; }
     if (n) memcpy(dst, text, n);
     dst[n] = 0;
 }

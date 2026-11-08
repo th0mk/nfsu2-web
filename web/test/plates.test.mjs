@@ -22,8 +22,11 @@ test('a plate: capitals and digits, small letters as capitals, at most 8', () =>
   assert.equal(S.checkSetting('license_plate', ''), null);              // the game's own plate
   for (const v of ['a b', 'ABCDEFGHI', 'é', 'АBC', 'A-B', 'A_B'])
     assert.match(S.checkSetting('license_plate', v).reason, /is not a license plate \(letters A to Z and digits, at most 8\)/, v);
-  for (const v of ['n1gger', 'N1GGER', '1488'])
+  // as a name, and as only a plate does (names.mjs PLATE: no small letters to split it by)
+  for (const v of ['n1gger', 'N1GGER', '1488', 'bigfag', 'FAGBOY', 'HH88', 'KKK'])
     assert.match(S.checkSetting('license_plate', v).reason, /is not a license plate \(it reads as a slur\)/, v);
+  for (const v of ['RACCOON', 'MUSTAFA6', 'SPICY', 'KONIG', 'KKKK', 'BOSS88'])
+    assert.equal(S.checkSetting('license_plate', v).value, v);
   for (const r of [S.checkSetting('license_plate', 'a b'), S.checkSetting('license_plate', '1488')]) assert.doesNotMatch(r.reason, /ASCII/);
   assert.equal(S.plateUpper(' ab1 '), 'AB1');
   assert.ok(S.plateValid('') && S.plateValid('AB12') && !S.plateValid('ab') && !S.plateValid('123456789'));

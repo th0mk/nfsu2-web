@@ -14,7 +14,7 @@
 // noted and ignored, so a typo never silently selects something else.
 //
 // This module is pure (no DOM, no OPFS) so it can be checked under node.
-import { blockedName } from './names.mjs';
+import { blockedName, blockedPlate } from './names.mjs';
 import { onlineName } from './claim';
 import { crewsOk, rgbsOk } from './crews';
 import { groupsOk, phrasesOk } from './phrases';
@@ -941,7 +941,7 @@ export function checkSetting(key: string, val: string): Checked | Refused | null
     case 'plate':
       out = plateUpper(val);
       if (!plateValid(out)) return refuse(N('"{value}" is not a license plate (letters A to Z and digits, at most 8)'), val);
-      if (blockedName(out)) return refuse(N('"{value}" is not a license plate (it reads as a slur)'), val);
+      if (blockedPlate(out)) return refuse(N('"{value}" is not a license plate (it reads as a slur)'), val);
       break;
     case 'room':
       if (!valueOk('text', val)) return refuse(N('"{value}" is not {kind}'), val, { kind: KIND_TEXT.text! });

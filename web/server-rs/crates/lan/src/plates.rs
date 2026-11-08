@@ -4,7 +4,8 @@
 //! bundled or not) a plate HELLO goes on, but
 //!  - one whose plate is not capitals and digits, or is cut short, goes on without it (as a game's own decoder would
 //!    show none);
-//!  - one whose plate reads as a slur (nfsu2_names, as a player's name) goes on without it, and a `[plate]` line says
+//!  - one whose plate reads as a slur (nfsu2_names `blocked_plate`: as a player's name, and the words that read as one
+//!    only on a plate, "BIGFAG", "HH88") goes on without it, and a `[plate]` line says
 //!    so (once for each plate of the player): the operator's tools take the player by the name the line gives (`ctl
 //!    who`, `kick`, `ban`, as for a name).  The player is heard as before: a game whose word list is older than the
 //!    server's (a page or module of before a new round of the name filter) passes its own plate, and only the plate
@@ -147,7 +148,7 @@ pub(crate) enum Verdict {
 /// The verdict on `plate` (checked by `hello_plate`) from the player whose plates `seen` keeps, at `now` (mono ms)
 pub(crate) fn judge(seen: &Mutex<Seen>, plate: &[u8], now: i64) -> Verdict {
     let mut s = seen.lock();
-    if nfsu2_names::blocked_name(std::str::from_utf8(plate).unwrap_or("")) {
+    if nfsu2_names::blocked_plate(std::str::from_utf8(plate).unwrap_or("")) {
         let tell = s.refused.as_deref() != Some(plate);
         s.refused = Some(plate.into());
         return Verdict::Slur { tell };
@@ -246,6 +247,9 @@ mod tests {
         assert_eq!(judge(&seen, b"N1GGER", 0), Verdict::Slur { tell: true });
         assert_eq!(judge(&seen, b"N1GGER", 100), Verdict::Slur { tell: false });
         assert_eq!(judge(&seen, b"1488", 200), Verdict::Slur { tell: true });
+        // and what reads as one only on a plate (nfsu2_names blocked_plate)
+        assert_eq!(judge(&seen, b"BIGFAG", 200), Verdict::Slur { tell: true });
+        assert_eq!(judge(&seen, b"HH88", 200), Verdict::Slur { tell: true });
         assert_eq!(judge(&seen, b"ABC123", 300), Verdict::New);
         assert_eq!(judge(&seen, b"ABC123", 400), Verdict::Go);
         assert_eq!(judge(&seen, b"XYZ9", 300 + EVERY_MS - 1), Verdict::Last(b"ABC123"[..].into()));

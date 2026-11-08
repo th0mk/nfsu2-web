@@ -493,3 +493,108 @@ fn answers_as_names_mjs() {
     assert!(diff.is_empty(), "names the two read differently:\n{}", diff[..diff.len().min(40)].join("\n"));
     assert!(blocked > 10_000 && blocked < names.len() - 10_000, "both answers among the names ({blocked} blocked)");
 }
+
+/// Plates for [`blocked_plate`]: every plate of up to 3 capitals and digits, then plates of the plate lists' pieces (and
+/// the name lists' short words, numbers, near misses) with digits for letters, cut to 8, and plain capitals and digits
+/// up to 8; a few that are no plate (small letters, a space, longer than 8: read as names)
+fn plates() -> Vec<String> {
+    const AZ09: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let mut plates: Vec<String> = vec![String::new()];
+    for n in 1..=3u32 {
+        for k in 0..AZ09.len().pow(n) {
+            plates.push((0..n).map(|d| char::from(AZ09[k / AZ09.len().pow(d) % AZ09.len()])).collect());
+        }
+    }
+    let mut pieces: Vec<String> = PLATE_EDGE
+        .iter()
+        .chain(PLATE_END_OK)
+        .chain(PLATE_RESTS)
+        .chain(PLATE_ANYWHERE)
+        .chain(PLATE_ANYWHERE_OK)
+        .chain(PLATE_ALONE)
+        .chain(PLATE_MARKS)
+        .chain(PLATE_NUMBERS)
+        .chain(WHOLE)
+        .chain(EDGE)
+        .map(|w| w.to_ascii_uppercase())
+        .collect();
+    pieces.extend(
+        [
+            "big", "lil", "x", "s", "kkkk", "night", "mustafa", "nigga", "1488", "88", "14", "6", "9", "0", "1", "3", "4", "8", "42",
+            "123", "1995",
+        ]
+        .map(|w| w.to_ascii_uppercase()),
+    );
+    let mut r = Rnd(11);
+    for _ in 0..30_000 {
+        let mut n = String::new();
+        for _ in 0..1 + r.next(3) {
+            for ch in r.pick(&pieces).clone().chars() {
+                // a digit for a letter now and then (only those of a plate: no signs, no small l)
+                let digits: Vec<char> = swap(ch).iter().copied().filter(char::is_ascii_digit).collect();
+                n.push(if r.next(8) == 0 && !digits.is_empty() { *r.pick(&digits) } else { ch });
+            }
+        }
+        plates.push(n.chars().take(8).collect());
+    }
+    for _ in 0..10_000 {
+        plates.push((0..r.next(9)).map(|_| char::from(*r.pick(AZ09))).collect());
+    }
+    plates.extend(["bigfag", "BIG FAG", "BIGFAGBIGFAG", "Fag", "KKK_88"].map(String::from));
+    plates
+}
+
+/// the node script: blockedPlate of each plate, and names.mjs's PLATE lists
+const PLATE_SCRIPT: &str = r#"
+import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
+const [names, corpus] = process.argv.slice(2);
+const { PLATE, blockedPlate } = await import(pathToFileURL(names).href);
+let blocked = '';
+for (const n of JSON.parse(fs.readFileSync(corpus, 'utf8'))) blocked += blockedPlate(n) ? '1' : '0';
+process.stdout.write(JSON.stringify({ blocked, plate: PLATE }));
+"#;
+
+#[test]
+fn plates_answer_as_names_mjs() {
+    let names_mjs = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../src/app/names.mjs");
+    assert!(names_mjs.exists(), "no {}", names_mjs.display());
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+    let dir = TempDir(std::env::temp_dir().join(format!("nfsu2-plates-{}-{nanos}", std::process::id())));
+    std::fs::create_dir_all(&dir.0).expect("a temp folder");
+    let plates = plates();
+    let (script, input) = (dir.0.join("check.mjs"), dir.0.join("plates.json"));
+    std::fs::write(&script, PLATE_SCRIPT).expect("the script");
+    std::fs::write(&input, serde_json::to_string(&plates).expect("JSON")).expect("the corpus");
+    let out = match Command::new("node").arg(&script).arg(&names_mjs).arg(&input).output() {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("plates_answer_as_names_mjs skipped: no node ({e})");
+            return;
+        }
+        r => r.expect("node runs"),
+    };
+    assert!(out.status.success(), "node failed: {}", String::from_utf8_lossy(&out.stderr));
+    let js: serde_json::Value = serde_json::from_slice(&out.stdout).expect("node's JSON");
+
+    assert_eq!(strings(&js["plate"]["edge"]), PLATE_EDGE, "the plate's edge words");
+    assert_eq!(strings(&js["plate"]["endOk"]), PLATE_END_OK, "the words a plate may end with");
+    assert_eq!(strings(&js["plate"]["rests"]), PLATE_RESTS, "the words after an edge word that starts a plate");
+    assert_eq!(strings(&js["plate"]["anywhere"]), PLATE_ANYWHERE, "the plate's anywhere words");
+    assert_eq!(strings(&js["plate"]["anywhereOk"]), PLATE_ANYWHERE_OK, "the words that hold a plate's anywhere word");
+    assert_eq!(strings(&js["plate"]["alone"]), PLATE_ALONE, "the plate's parts on their own");
+    assert_eq!(strings(&js["plate"]["marks"]), PLATE_MARKS, "the codes' letters");
+    assert_eq!(strings(&js["plate"]["numbers"]), PLATE_NUMBERS, "the codes' numbers");
+
+    let answers = js["blocked"].as_str().expect("the answers").as_bytes();
+    assert_eq!(answers.len(), plates.len());
+    let diff: Vec<String> = plates
+        .iter()
+        .zip(answers)
+        .filter(|(p, a)| blocked_plate(p) != (**a == b'1'))
+        .map(|(p, a)| format!("{p:?}: names.mjs {}", *a == b'1'))
+        .collect();
+    let blocked = answers.iter().filter(|&&a| a == b'1').count();
+    eprintln!("{} plates, {blocked} blocked, {} answered otherwise", plates.len(), diff.len());
+    assert!(diff.is_empty(), "plates the two read differently:\n{}", diff[..diff.len().min(40)].join("\n"));
+    assert!(blocked > 1_000 && blocked < plates.len() - 1_000, "both answers among the plates ({blocked} blocked)");
+}

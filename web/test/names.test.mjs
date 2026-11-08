@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { SLURS, EDGE_OK, WHOLE_OK, PID_STEMS, HATE, blockedName } from '../src/app/names.mjs';
+import { SLURS, EDGE_OK, WHOLE_OK, PID_STEMS, HATE, PLATE, blockedName, blockedPlate } from '../src/app/names.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(REPO, 'out/web/test'); fs.mkdirSync(OUT, { recursive: true });
@@ -74,6 +74,18 @@ const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'musta
   'Panzer', 'Reichert', 'Car14_89', 'Nazlı', 'Nazib', 'Shitlord', 'Goebel',
   'Kaiserreich', 'Adolfo', 'Adolfinho', 'Swastik', 'Zyklon', 'Rudolf'];
 
+// license plates (PLATE): read as names, and the words that read as a slur only on a plate (it has no small letters to
+// split it by), the codes; and the plates of live names (2026-11-08) with those words' letters in them that are none
+const PLATE_BLOCKED = ['BIGFAG', 'KILLFAGS', 'FAGBOY', 'FAGSBOY', 'F4GB0Y', 'BIGF4G', 'GAYFAG', 'UGLYCOON', 'COONBOY', 'XSPIC',
+  'SPICBOY', 'PAKIBOY', 'BIGPAKI', 'MYKIKE', 'BIGGOOK', 'XCHINK', 'BIGDYKE', 'BIGNIG', 'MYNIGS', 'NIGSKING', 'LILNIGR', 'NIGR',
+  'XNEGER', 'TGPEDO', 'RTARD', 'FARTARD', 'NGGR', 'IH8NGGRS', 'JEWGAS', 'H8JEWS', 'KKK', 'KKK77', 'D0P3KKK', 'HH88', '88HH',
+  'SS88', 'HEIL88', 'WP88', 'SIEG88', 'NIGGA', 'N1GGA', '1488'];
+const PLATE_ALLOWED = ['', 'RACCOON', 'RACOON', 'TYCOON', 'COCOON', 'MUSTAFA6', 'MUSTAFA9', 'MUSTAFAG', 'HUZAIFA9', 'RAFAGA',
+  'RAFAGS', 'FAGUNDES', 'FAGNER', 'SPICY', 'SPICE', 'ASPIC', 'HOSPICE', 'PAKISTAN', 'PAKITO', 'PAPAKI', 'TSIPAKI', 'ZARAKIKE',
+  'ZACKLIKE', 'KANEKIKE', 'TOKYKEE', 'SERGOOKK', 'SACHINK', 'VANDYKE', 'ZOLDYKE', 'MIDNIGHT', 'MIDNIGH', 'XIMIDNIG', 'KNIGHT',
+  'BLUEKNIG', 'KONIG', 'HONIG', 'LIGHTNIG', 'SEHNIG', 'MOONLIG', 'PFENNIG', 'NIGRO', 'NIGRA', 'TORPEDO', 'SPEEDO', 'FELIPEDO',
+  'ANGGA', 'ANGGRAIN', 'HUNGGRY', 'KKKK', 'NAMEKKKK', 'BOSS88', 'SS14', 'HH', '88', 'AE86', 'JDM88', 'JEWEL', 'UNDRGND2'];
+
 test('names.mjs: the lists\' words, the ways round them, and not the other words', () => {
   for (const w of [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge]) assert.ok(blockedName(w), w);
   for (const v of HATE.verbs) for (const b of ['', ...HATE.between]) for (const g of HATE.groups) assert.ok(blockedName(v + b + g), v + b + g);
@@ -81,6 +93,18 @@ test('names.mjs: the lists\' words, the ways round them, and not the other words
   for (const n of ALLOWED) assert.ok(!blockedName(n), n);
   // a word of the whole list only as a part on its own
   assert.ok(!blockedName('xfagx') && blockedName('x_fag_x') && blockedName('xFagX'));
+});
+
+test('names.mjs: a plate reads as a name, and its own words, codes and the plates that are none', () => {
+  const up = w => w.toUpperCase();
+  // (not each word and each of rests: "PAKILORD" reads "pakiiord", and a word takes the run of a letter whole)
+  for (const w of PLATE.edge) for (const n of [w, 'BIG' + w, w + 'S', w + 'BOY']) assert.ok(blockedPlate(up(n)), n);
+  for (const r of PLATE.rests) assert.ok(r.length > 5 || blockedPlate(up('FAG' + r)), r);
+  for (const w of PLATE.anywhere) for (const n of [w, 'X' + w]) assert.ok(blockedPlate(up(n)), n);
+  for (const n of [...PLATE_BLOCKED, ...PLATE.alone]) assert.ok(blockedPlate(n), n);
+  for (const n of PLATE_ALLOWED) assert.ok(!blockedPlate(n), n);
+  // a plate's own rules are for plates: anything else reads as a name
+  assert.ok(!blockedPlate('bigfag') && !blockedPlate('BIGFAGBIGFAG') && blockedPlate('BIG FAG') && blockedPlate('n1gger'));
 });
 
 test('names.h has the lists of names.mjs', () => {
@@ -96,9 +120,18 @@ test('names.h has the lists of names.mjs', () => {
   assert.deepEqual(list('hate_verbs'), [...HATE.verbs]);
   assert.deepEqual(list('hate_between'), [...HATE.between]);
   assert.deepEqual(list('hate_groups'), [...HATE.groups]);
+  assert.deepEqual(list('plate_edge'), [...PLATE.edge]);
+  assert.deepEqual(list('plate_end_ok'), [...PLATE.endOk]);
+  assert.deepEqual(list('plate_rests'), [...PLATE.rests]);
+  assert.deepEqual(list('plate_anywhere'), [...PLATE.anywhere]);
+  assert.deepEqual(list('plate_anywhere_ok'), [...PLATE.anywhereOk]);
+  assert.deepEqual(list('plate_alone'), [...PLATE.alone]);
+  assert.deepEqual(list('plate_marks'), [...PLATE.marks]);
+  assert.deepEqual(list('plate_numbers'), [...PLATE.numbers]);
 });
 
-test('names.h answers as names.mjs (25,000 ASCII names)', { skip: !haveClang && 'no clang' }, () => {
+/** names.h's answers (fn: name_blocked, name_plate_blocked) for each of lines, as '0' and '1' */
+function answersOfC(fn, lines) {
   const out = fs.mkdtempSync(path.join(OUT, 'names-c-'));
   try {
     const src = path.join(out, 'names_check.c'), bin = path.join(out, 'names_check');
@@ -107,41 +140,70 @@ test('names.h answers as names.mjs (25,000 ASCII names)', { skip: !haveClang && 
 #include "names.h"
 int main(void){
     char line[512];
-    while (fgets(line, sizeof line, stdin)){ line[strcspn(line, "\\n")] = 0; putchar('0' + name_blocked(line)); }
+    while (fgets(line, sizeof line, stdin)){ line[strcspn(line, "\\n")] = 0; putchar('0' + ${fn}(line)); }
     putchar('\\n');
     return 0;
 }
 `);
     execFileSync('clang', ['-O1', '-Wall', '-Wextra', '-Werror', '-I', path.join(REPO, 'runtime'), '-o', bin, src]);
-    // the cases above, then names made of the lists' pieces with the ways round them, and plain noise
-    let seed = 7;
-    const rnd = n => { seed = (seed * 1103515245 + 12345) >>> 0; return (seed >>> 8) % n; };
-    const pick = a => a[rnd(a.length)];
-    const pieces = [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge, ...EDGE_OK.start, ...EDGE_OK.end, ...WHOLE_OK, ...PID_STEMS,
-      ...HATE.verbs, ...HATE.between, ...HATE.groups, 'jewel', 'mustafa', 'gs',
-      'raccoon', 'spice', 'niger', 'nigeria', 'pakize', 'xx', 'gamer', 'a', 'g', 'dani', 'hakan', 'van', 'n', 'pid', 'topi', 'drift',
-      '99', '1995', '1663', '69', '1488', '88', '14', '1_4', '8-8'];
-    const swap = { o: '0', i: '1!|l', e: '3', a: '4@', s: '5$', t: '7+', g: '69q', b: '8' };
-    const names = [...BLOCKED, ...ALLOWED.filter(n => /^[ -~]*$/.test(n))];
-    for (let k = 0; k < 20000; k++) {
-      let n = '';
-      for (let j = 1 + rnd(3); j > 0; j--) {
-        for (const ch of pick(pieces)) {
-          const r = rnd(10), alt = swap[ch];
-          n += r === 0 && alt ? pick([...alt]) : r === 1 ? ch.toUpperCase() : r === 2 ? ch + ch : ch;
-          if (rnd(12) === 0) n += pick([' ', '_', '-', '.', '2']);
-        }
-        if (rnd(3) === 0) n += pick(['', ' ', '_', '42']);
-      }
-      names.push(n.slice(0, 24));
-    }
-    for (let k = 0; k < 5000; k++) { let n = ''; for (let j = rnd(25); j > 0; j--) n += String.fromCharCode(32 + rnd(95)); names.push(n); }
-    const c = execFileSync(bin, { input: names.join('\n') + '\n', encoding: 'utf8', timeout: 120_000 }).trim();
-    assert.equal(c.length, names.length);
-    const js = names.map(n => (blockedName(n) ? '1' : '0')).join('');
-    const diff = names.filter((n, i) => c[i] !== js[i]);
-    assert.deepEqual(diff, [], 'names the two read differently');
-    const blocked = [...js].filter(x => x === '1').length;
-    assert.ok(blocked > 1000 && blocked < names.length - 1000, `both answers among the made-up names (${blocked} of ${names.length} blocked)`);
+    return execFileSync(bin, { input: lines.join('\n') + '\n', encoding: 'utf8', timeout: 120_000 }).trim();
   } finally { fs.rmSync(out, { recursive: true, force: true }); }
+}
+
+test('names.h answers as names.mjs (25,000 ASCII names)', { skip: !haveClang && 'no clang' }, () => {
+  // the cases above, then names made of the lists' pieces with the ways round them, and plain noise
+  let seed = 7;
+  const rnd = n => { seed = (seed * 1103515245 + 12345) >>> 0; return (seed >>> 8) % n; };
+  const pick = a => a[rnd(a.length)];
+  const pieces = [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge, ...EDGE_OK.start, ...EDGE_OK.end, ...WHOLE_OK, ...PID_STEMS,
+    ...HATE.verbs, ...HATE.between, ...HATE.groups, 'jewel', 'mustafa', 'gs',
+    'raccoon', 'spice', 'niger', 'nigeria', 'pakize', 'xx', 'gamer', 'a', 'g', 'dani', 'hakan', 'van', 'n', 'pid', 'topi', 'drift',
+    '99', '1995', '1663', '69', '1488', '88', '14', '1_4', '8-8'];
+  const swap = { o: '0', i: '1!|l', e: '3', a: '4@', s: '5$', t: '7+', g: '69q', b: '8' };
+  const names = [...BLOCKED, ...ALLOWED.filter(n => /^[ -~]*$/.test(n))];
+  for (let k = 0; k < 20000; k++) {
+    let n = '';
+    for (let j = 1 + rnd(3); j > 0; j--) {
+      for (const ch of pick(pieces)) {
+        const r = rnd(10), alt = swap[ch];
+        n += r === 0 && alt ? pick([...alt]) : r === 1 ? ch.toUpperCase() : r === 2 ? ch + ch : ch;
+        if (rnd(12) === 0) n += pick([' ', '_', '-', '.', '2']);
+      }
+      if (rnd(3) === 0) n += pick(['', ' ', '_', '42']);
+    }
+    names.push(n.slice(0, 24));
+  }
+  for (let k = 0; k < 5000; k++) { let n = ''; for (let j = rnd(25); j > 0; j--) n += String.fromCharCode(32 + rnd(95)); names.push(n); }
+  const c = answersOfC('name_blocked', names);
+  assert.equal(c.length, names.length);
+  const js = names.map(n => (blockedName(n) ? '1' : '0')).join('');
+  const diff = names.filter((n, i) => c[i] !== js[i]);
+  assert.deepEqual(diff, [], 'names the two read differently');
+  const blocked = [...js].filter(x => x === '1').length;
+  assert.ok(blocked > 1000 && blocked < names.length - 1000, `both answers among the made-up names (${blocked} of ${names.length} blocked)`);
+});
+
+test('names.h answers plates as names.mjs (25,000 plates)', { skip: !haveClang && 'no clang' }, () => {
+  // the cases above, then plates made of the lists' pieces with digits for letters, and plain capitals and digits
+  let seed = 11;
+  const rnd = n => { seed = (seed * 1103515245 + 12345) >>> 0; return (seed >>> 8) % n; };
+  const pick = a => a[rnd(a.length)];
+  const pieces = [...PLATE.edge, ...PLATE.endOk, ...PLATE.rests, ...PLATE.anywhere, ...PLATE.anywhereOk, ...PLATE.alone,
+    ...PLATE.marks, ...PLATE.numbers, ...SLURS.whole, ...SLURS.edge, 'big', 'lil', 'x', 's', 'kkkk', 'night', 'mustafa', 'nigga',
+    '1488', '88', '14', '6', '9', '0', '1', '3', '4', '8', '42', '123', '1995'].map(w => w.toUpperCase());
+  const swap = { O: '0', I: '1', E: '3', A: '4', S: '5', T: '7', G: '69', B: '8' };
+  const plates = [...PLATE_BLOCKED, ...PLATE_ALLOWED, 'bigfag', 'BIG FAG', 'BIGFAGBIGFAG'];
+  for (let k = 0; k < 20000; k++) {
+    let n = '';
+    for (let j = 1 + rnd(3); j > 0; j--) for (const ch of pick(pieces)) n += rnd(8) === 0 && swap[ch] ? pick([...swap[ch]]) : ch;
+    plates.push(n.slice(0, 8));
+  }
+  const AZ09 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  for (let k = 0; k < 5000; k++) { let n = ''; for (let j = rnd(9); j > 0; j--) n += pick([...AZ09]); plates.push(n); }
+  const c = answersOfC('name_plate_blocked', plates);
+  assert.equal(c.length, plates.length);
+  const js = plates.map(n => (blockedPlate(n) ? '1' : '0')).join('');
+  assert.deepEqual(plates.filter((n, i) => c[i] !== js[i]), [], 'plates the two read differently');
+  const blocked = [...js].filter(x => x === '1').length;
+  assert.ok(blocked > 1000 && blocked < plates.length - 1000, `both answers among the made-up plates (${blocked} of ${plates.length} blocked)`);
 });

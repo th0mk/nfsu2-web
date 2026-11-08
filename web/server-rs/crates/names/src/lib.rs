@@ -250,6 +250,29 @@ pub const HATE_VERBS: &[&str] = &[
 pub const HATE_BETWEEN: &[&str] = &["s", "the", "all", "allthe", "da", "dem", "them", "those", "every", "dirty", "to"];
 /// the groups of a hate phrase
 pub const HATE_GROUPS: &[&str] = &["jew", "kike", "colored", "coloured", "zyd"];
+/// License plates ([`blocked_plate`]): a word that ends the plate's letters (or starts them, a word of [`PLATE_RESTS`]
+/// after it)
+pub const PLATE_EDGE: &[&str] =
+    &["fag", "coon", "spic", "paki", "kike", "kyke", "gook", "chink", "dyke", "nig", "nigr", "neger", "pedo", "rtard"];
+/// the words a plate's letters may end with that would read as a [`PLATE_EDGE`] word there and are none: a word or
+/// name (raccoon, aspic, torpedo, König, Sehnig), one cut to 8 or misspelled ("MIDNIG(HT)", "LIGHTNIG", "RAFAG(A)")
+pub const PLATE_END_OK: &[&str] = &[
+    "rafag", "tafag", "racoon", "cocoon", "tycoon", "aspic", "ospic", "uspic", "papaki", "ipaki", "eepaki", "klike", "akike", "ekike",
+    "ikike", "okyke", "ergook", "achink", "uchink", "vandyke", "oldyke", "odyke", "knig", "midnig", "ghtnig", "sehnig", "anig", "enig",
+    "inig", "onig", "unig", "reneger", "torpedo", "speedo", "ipedo", "ppedo",
+];
+/// the words after a [`PLATE_EDGE`] word that starts a plate's letters ("FAGBOY", "NIGSKING")
+pub const PLATE_RESTS: &[&str] = &["boy", "boi", "lord", "king", "kid", "kill", "killer", "slayer", "hunter", "lover", "life"];
+/// words that match anywhere in a plate's letters
+pub const PLATE_ANYWHERE: &[&str] = &["nggr", "jewgas", "jewsgas", "h8jew"];
+/// the words that hold a [`PLATE_ANYWHERE`] word and are none ("HUNGGRY", Anggraini)
+pub const PLATE_ANYWHERE_OK: &[&str] = &["anggr", "unggr"];
+/// a plate with one of these as a part of its own (letters or digits in a row) is one ("KKK77"; not "KKKK": laughter)
+pub const PLATE_ALONE: &[&str] = &["KKK"];
+/// a plate with one of these as a part next to one of [`PLATE_NUMBERS`] is one ("HH88", "88SS")
+pub const PLATE_MARKS: &[&str] = &["HH", "SS", "WP", "HEIL", "SIEG"];
+/// the numbers of the codes ([`PLATE_MARKS`]; not 14: "SS14" is a car's)
+pub const PLATE_NUMBERS: &[&str] = &["88"];
 /// a name with these digits in a row in it is one too (the neo-Nazi code)
 const CODE: &[char] = &['1', '4', '8', '8'];
 
@@ -333,6 +356,11 @@ const DYKE: [Word; 1] = words(&["dyke"]);
 const VERB_WORDS: [Word; HATE_VERBS.len()] = words(HATE_VERBS);
 const BETWEEN_WORDS: [Word; HATE_BETWEEN.len()] = words(HATE_BETWEEN);
 const GROUP_WORDS: [Word; HATE_GROUPS.len()] = words(HATE_GROUPS);
+const P_EDGE_WORDS: [Word; PLATE_EDGE.len()] = words(PLATE_EDGE);
+const P_END_OK_WORDS: [Word; PLATE_END_OK.len()] = words(PLATE_END_OK);
+const P_REST_WORDS: [Word; PLATE_RESTS.len()] = words(PLATE_RESTS);
+const P_ANY_WORDS: [Word; PLATE_ANYWHERE.len()] = words(PLATE_ANYWHERE);
+const P_ANY_OK_WORDS: [Word; PLATE_ANYWHERE_OK.len()] = words(PLATE_ANYWHERE_OK);
 
 /// The anywhere words by their first letter (a to z), as bits of their index (the first 128 words in [0], the rest in
 /// [1]): a word is at s[i] only when s[i] is its first letter, so only those are looked for there (the lobby's chat
@@ -662,6 +690,68 @@ fn scan(name: &str) -> Option<Scan> {
 /// names.mjs `blockedName(name)`: the name reads as a slur (above)
 pub fn blocked_name(name: &str) -> bool {
     scan(name).is_none_or(|n| anywhere(n.s.get(), n.s.starts()) || whole_word(n.s.get()) || edge(n.s.get()))
+}
+
+/// word x holds s[i..e): it is there from s[j], j <= i, to e or past it
+fn held(s: &[u8], i: usize, e: usize, x: &[u8]) -> bool {
+    (i.saturating_sub(x.len())..=i).any(|j| at(s, j, x).is_some_and(|f| f >= e))
+}
+
+/// names.mjs `blockedPlate(plate)`: a license plate (capitals and digits, at most 8; anything else is read as a name
+/// only) reads as a slur, as a name or as a plate.  A plate has no small letters to split its parts by ("BIGFAG" is
+/// "BigFag") and its words run into each other, so:
+///  - a word of [`PLATE_EDGE`] that ends the plate's letters, plural too ("BIGFAG", "KILLFAGS"), unless they end with
+///    a word of [`PLATE_END_OK`] ("RACCOON"), or that starts them with a word of [`PLATE_RESTS`] after it, plural or
+///    not ("FAGBOY")
+///  - a word of [`PLATE_ANYWHERE`] anywhere in its letters, unless a word of [`PLATE_ANYWHERE_OK`] holds it
+///  - its letters as a name's, but a lone digit at its end is a number ("MUSTAFA6", "HUZAIFA9")
+///  - codes: a part (letters or digits in a row) of [`PLATE_ALONE`], or one of [`PLATE_MARKS`] next to one of
+///    [`PLATE_NUMBERS`] ("HH88", "88SS")
+pub fn blocked_plate(plate: &str) -> bool {
+    if blocked_name(plate) {
+        return true;
+    }
+    let p = plate.as_bytes();
+    if p.len() > 8 || !p.iter().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
+        return false;
+    }
+    let parts: Vec<&[u8]> = p.chunk_by(|a, b| a.is_ascii_digit() == b.is_ascii_digit()).collect();
+    let is = |x: &[u8], list: &[&str]| list.iter().any(|w| w.as_bytes() == x);
+    for (k, x) in parts.iter().enumerate() {
+        let marked = (k > 0 && is(parts[k - 1], PLATE_MARKS)) || parts.get(k + 1).is_some_and(|y| is(y, PLATE_MARKS));
+        if is(x, PLATE_ALONE) || (is(x, PLATE_NUMBERS) && marked) {
+            return true;
+        }
+    }
+    // its letters as a name's, a lone digit at its end left out
+    let q: Vec<char> = match p {
+        [.., a, d] if a.is_ascii_uppercase() && d.is_ascii_digit() => &p[..p.len() - 1],
+        _ => p,
+    }
+    .iter()
+    .map(|&b| char::from(b))
+    .collect();
+    let mut s = Vec::with_capacity(q.len());
+    let mut i = 0;
+    while i < q.len() {
+        let r = q[i..].iter().take_while(|c| c.is_ascii_digit()).count();
+        if r > 0 && number(&q, i, r) {
+            i += r;
+            continue;
+        }
+        s.extend(letter(q[i]));
+        i += 1;
+    }
+    let edge = P_EDGE_WORDS.iter().any(|w| {
+        (ends_with(&s, w) && !P_END_OK_WORDS.iter().any(|x| ends_with(&s, x)))
+            || at(&s, 0, w.letters()).is_some_and(|e| {
+                let (rest, bare) = (&s[e..], &s[e + s[e..].iter().take_while(|&&c| c == b's').count()..]);
+                P_REST_WORDS.iter().any(|r| whole(rest, std::slice::from_ref(r)) || whole(bare, std::slice::from_ref(r)))
+            })
+    });
+    edge || P_ANY_WORDS
+        .iter()
+        .any(|w| (0..s.len()).any(|i| at(&s, i, w.letters()).is_some_and(|e| !P_ANY_OK_WORDS.iter().any(|x| held(&s, i, e, x.letters())))))
 }
 
 /// The most one-letter words in a row read as a word of the whole list ("f a g s")

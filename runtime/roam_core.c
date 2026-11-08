@@ -601,7 +601,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
                 uint32_t pl = rc_get8(&r);
                 if (pl <= RC_PLATE_MAX && r.n + pl <= r.len){
                     rc_getb(&r, m->u.hello.plate, pl); m->u.hello.plate[pl] = 0;
-                    if (!rc_plate_ok(m->u.hello.plate, pl) || name_blocked(m->u.hello.plate)) m->u.hello.plate[0] = 0;
+                    if (!rc_plate_ok(m->u.hello.plate, pl) || name_plate_blocked(m->u.hello.plate)) m->u.hello.plate[0] = 0;
                 }
             }
             r.n = r.len;                                              /* (a newer core's additions) */
