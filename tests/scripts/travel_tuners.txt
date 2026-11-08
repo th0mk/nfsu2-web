@@ -1,0 +1,36 @@
+# Tracks (runtime/travel.c): no tuners on a race track's map.  A stage-4 career drives away from the save's start (by a
+# race spot, which holds the tuners off), goes to the Airport Circuit and drives there on the game's autopilot: the
+# outrun challengers' manager stays at state 1 (an outrun is never due there: sub_0041ace0) and `outrun` finds no tuner
+# (TIMEOUT).  Back in the city (by the start's door again, where the autopilot stays stuck: an open road instead) the
+# tuners come out again and the outrun against one starts (race type 7).
+#   roam-pair --page app --solo --seed <work/seed/career/s4_outrun> --a Ann:travel_tuners.txt --env NFSU2_ROAM=1
+#             --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    autopilot on
++900  autopilot off
++120  travel 1
++0    waitexpr i:0x89e7a0 == 4700 1800
++0    waitroam 6000
++60   travel where
++0    roam peek *0x890118+0xc40 1
++0    autopilot on
++0    outrun 0 6000                  # TIMEOUT: no tuner on the map
++0    autopilot off
++0    roam peek *0x890118+0xc40 1
++0    expect i:[0x890118]+0xc40 == 1  # the manager waits for an outrun that is never due
++0    expect i:0x89e7b0 == 0          # no outrun
++60   travel city
++0    waitexpr i:0x89e7a0 == 4000 1800
++0    waitroam 6000
++60   teleport 1695.0 -845.0 24.6 0xb82e
++120  autopilot on
++600  outrun 0 6000
++0    waitexpr i:0x89e7b0 == 7 600
++0    autopilot off
++0    expect i:0x89e7b0 == 7          # the tuners came out in the city: an outrun
++0    roam peek *0x890118+0xc40 1
++60   log TRAVEL TUNERS DONE
++10   quit

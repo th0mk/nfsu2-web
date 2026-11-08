@@ -29,7 +29,8 @@
  *    spot's key mixed in), whose count the page's Tracks asks the server for; outruns between them go as in the city
  *    (tests/scripts/travel_outrun_a.txt);
  *  - no traffic (the maps' roads are not free roam's: 0x5DCE50 finds no 4000 among a road's tracks), no career walls
- *    (walls.c looks at the city only), no events or shops: no markers there.  The Respawn key works (the map's roads).
+ *    (walls.c looks at the city only), no events or shops: no markers there.  The Respawn key works (the map's roads);
+ *  - no tuners: the outrun challengers' manager is never told an outrun is due (sub_0041ace0).
  *
  * A trip is asked by the page (IEV_TRAVEL: travel_ask, from the input thread) or a test script (travel N), and goes
  * only while the car drives alone in career free roam: a car of its own (not a new career's prologue), no outrun,
@@ -369,7 +370,17 @@ int travel_hook(CPU *c, uint32_t ip){
     return 0;
 }
 
-/* "travel near X Y": the loaded map's three road points nearest X Y with their heights (the road table 0x88A334, 2048:
+/* The outrun challengers' manager (race coordinator +0xC40, Update 0x42EDF0; roam_game.c em_update) asks at its state 1
+ * whether an outrun is due (0x41ACE0, thiscall, no arguments: the career's 0x500CB0, then its three tuners' rides set
+ * up) and sends the tuners out when so (state 3).  On a track's map the answer is no: the tuners stay in the city, and
+ * the manager waits at 1 until the car is back there */
+void sub_0041ace0_orig(CPU *c);
+void sub_0041ace0(CPU *c){
+    if (on_track()){ c->eax &= ~0xffu; POP32(c->eip); return; }
+    sub_0041ace0_orig(c);
+}
+
+/* "travel near X Y":the loaded map's three road points nearest X Y with their heights (the road table 0x88A334, 2048:
  * a road's nodes from +0x8C, 0x38 bytes, x y and the height at +0x12 in 1/8 m, as walls.c reads them), for a spot's
  * height; roads over roads show as points at the same place with other heights */
 static void near_roads(long f, float x, float y){
