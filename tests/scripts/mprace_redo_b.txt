@@ -1,0 +1,43 @@
+# Multiplayer races from free roam, the host restarts the race twice from its results, a joining side (with
+# mprace_redo_a.txt): joins A's lobby at the race's start, races it three times and goes back with the third race's
+# result.  Each time its results ask "The host has requested to restart the race." (the glue's +0x11B, 0x89D063;
+# buttons OK and Cancel, Cancel picked), a player's OK takes it (LEFT, RETURN); the trip waits meanwhile.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    mark bank0 i:0x861e74
++0    log LOBBY join
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race 1
++0    autopilot on 6000
++0    waitfng UI_PostRaceResults.fng 40000
++0    waitexpr b:0x89d063 == 1 1200                # the host asked to restart the race
++60   log LOBBY take the restart 1
++0    tap LEFT
++20   tap RETURN
++0    waitexpr i:0x8654a4 != 6 3000                # the race's world going
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race 2
++0    autopilot on 6000
++0    waitfng UI_PostRaceResults.fng 40000
++0    waitexpr b:0x89d063 == 1 1200
++60   log LOBBY take the restart 2
++0    tap LEFT
++20   tap RETURN
++0    waitexpr i:0x8654a4 != 6 3000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race 3
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

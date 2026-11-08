@@ -1,0 +1,44 @@
+# Multiplayer races from free roam, the host restarts the race twice from its results (the game's LAN race: the
+# host's Restart, the C key there), host side, with mprace_redo_b.txt: both from the same career save.  A opens a
+# lobby at a multiplayer-only spot, starts it once B is in; the race, its results, Restart (B says OK to the game's
+# question); the race again, its results, Restart; the third race, its results, and both trips go back with that
+# race's result (mprace.c race_again).  The game's AI drives each race.
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mprace_redo_a.txt --b Bob:mprace_redo_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPON_DRIFT_2 --env MP_PLAYERS=2
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    mark bank0 i:0x861e74
++0    log LOBBY open
++0    tap RETURN
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race 1
++0    autopilot on 6000
++0    waitfng UI_PostRaceResults.fng 40000
++120  log LOBBY restart 1
++0    tap C
++0    waitexpr i:0x8654a4 != 6 3000                # the race's world going
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race 2
++0    autopilot on 6000
++0    waitfng UI_PostRaceResults.fng 40000
++120  log LOBBY restart 2
++0    tap C
++0    waitexpr i:0x8654a4 != 6 3000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race 3
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit
