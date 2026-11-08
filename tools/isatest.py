@@ -510,6 +510,8 @@ if os.environ.get('JTSWITCH', '') == '1':
 # happen (the lifted test read c->zf, which a dead-flags lift never computed)
 T("cmp edx,1; cmpxchg [m],ecx; cmp eax,ebx", [0x83,0xFA,0x01, 0x0F,0xB1,0x0D]+a32(0x00C00100)+[0x39,0xD8],
   {'eax':5,'ecx':9,'ebx':5,'edx':0}, mem={0x00C00100:5}, expect={'eax':5,'zf':1}, fmem={0x00C00100:9})
+# a straight run longer than the lifter's block limit (discover()'s maxins, 4000): the rest must still run
+T("4100 x inc eax", [0x40]*4100, {'eax':0}, expect={'eax':4100})
 
 # =====================  GENERATOR / RUNNER  =====================
 BASE = 0x00401000

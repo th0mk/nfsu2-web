@@ -546,7 +546,11 @@ class Lifter:
                         continue
                     if m in ('hlt','ud2'): break
                     va=i.address+i.size
-                    if len(ins)>maxins: break
+                    if len(ins)>maxins:
+                        # a straight run longer than maxins goes on as the next block (the emitter's
+                        # fall-through goto): without it the C function returned mid-run
+                        if va not in seen: seen.add(va); q.append(va)
+                        break
                 blocks[ins[0].address if ins else va]=ins
                 if jt and ins:
                     b = self._jt_bound(ins)
