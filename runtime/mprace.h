@@ -41,6 +41,18 @@ int  mprace_quit_fee(void);
 #define MPRACE_BALANCE_SHARE (1.f / 3.f)
 #define MPRACE_BALANCE_CLOSE 0.90f
 #define MPRACE_BALANCE_CLOSE_DRAG 1.00f
+/* the Corolla's rating counts this many times in the evening out (not in a drag race): its lead is in the bends,
+ * which the rating (the engine's push alone) does not see.  The live lines of 2026-10-29 (7,153 reports): of two
+ * cars of different types rated within 10 % of each other after the evening out, in circuits, sprints and URLs the
+ * Corolla placed ahead in 77.5 % of 378 pairs, 4.9 % sooner at the finish (the next, the Celica and the RX-7, about
+ * 70 %), in every class alike; in drags 54 %.  Its data: rear wheels 1.26 times the front's (the only such car),
+ * axles 1.35 m ahead and 1.05 m behind its centre, the lightest rear-drive car (970 kg).  Counted 1.12 times, it
+ * has about 8 % less power than a car rated alike (the rating goes as power^1.16, 0.9 of the way); its handling
+ * stays the game's */
+#define MPRACE_COROLLA_WEIGHT 1.12f
+/* how many times a car of this type (its CarTypeInfo name) counts its rating in a race of this type (N_MODE; 1 where
+ * the race does not even out the cars) */
+float mprace_rating_weight(const char *type_name, int net_mode);
 
 /* the career has a car of its own, one the LAN race can take (not a new
  * career's prologue car): a trip without one would race a car made of

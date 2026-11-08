@@ -487,7 +487,8 @@ int mprace_speed_limit(uint32_t car, float mph){
  * car's info built again in the race gets the same again (balance_hold).
  * Only in the race types that the rating decides (drag, sprint,
  * circuit, URL): in Street X and drift races the better-rated cars placed
- * like the others (the live server's lines of 2026-10-23).
+ * like the others (the live server's lines of 2026-10-23).  A Corolla's
+ * rating counts MPRACE_COROLLA_WEIGHT times there, drags aside (mprace.h).
  * NFSU2_MPRACE_BALANCE (a test aid): "UP,DOWN,SHARE,CLOSE,CLOSE_DRAG" instead, 0 none. */
 static float rating_at(uint32_t pi, float f){
     uint32_t t = pi + PI_PUSH; float m = MRF32(pi + PI_MASS), k = MRF32(pi + PI_DRAG), sum = 0.f;
@@ -583,15 +584,27 @@ static void balance_hold(long f){
 /* the race types the rating decides: the network race's mode (circuit 0, sprint 1, drag 2, drift 3, URL 4,
  * Street X 10) */
 static int balanced_mode(int mode){ return mode == 0 || mode == 1 || mode == 2 || mode == 4; }
+float mprace_rating_weight(const char *type_name, int net_mode){
+    return balanced_mode(net_mode) && net_mode != 2 && type_name && !strcmp(type_name, "COROLLA") ? MPRACE_COROLLA_WEIGHT : 1.f;
+}
+/* the weight of the car whose physics info this is (its type's name, CarTypeInfo +0) */
+static float rating_weight(uint32_t pi, int mode){
+    uint32_t types = guest_rd32(G_CARTYPES), t = guest_rd32(pi + PI_TYPE);
+    if (!types || t >= 64u || !guest_ok(types + CARTYPE_SIZE * t, 0x20)) return 1.f;
+    char nm[0x20]; guest_read_str(types + CARTYPE_SIZE * t, nm, sizeof nm);
+    return mprace_rating_weight(nm, mode);
+}
 /* (our car's power factor, for the race's report: 1 when none changed) */
 static float balance_race(uint32_t ours, int mode){
-    uint32_t car[RACE_CARS_MAX], pi[RACE_CARS_MAX]; int n; float r[RACE_CARS_MAX], logs = 0.f, best = 0.f, our_f = 1.f; int k = 0;
+    uint32_t car[RACE_CARS_MAX], pi[RACE_CARS_MAX]; int n; float r[RACE_CARS_MAX], w[RACE_CARS_MAX], logs = 0.f, best = 0.f, our_f = 1.f; int k = 0;
     Balance b = balance_conf();
     g_bal.n = 0;
     race_cars(car, pi, &n);
+    /* (the target from the ratings as counted, r w; each car's goal in its own rating's terms) */
     for (int i = 0; i < n; i++){
         r[i] = pi[i] ? MRF32(pi[i] + PI_RATING) : 0.f;
-        if (r[i] > 0.f){ logs += logf(r[i]); k++; if (r[i] > best) best = r[i]; }
+        w[i] = pi[i] ? rating_weight(pi[i], mode) : 1.f;
+        if (r[i] > 0.f){ float e = r[i] * w[i]; logs += logf(e); k++; if (e > best) best = e; }
     }
     fprintf(stderr, "[mprace] f=%ld the race's Catch Up option: %u\n", autotest_frame(), guest_rd32(G_CATCHUP));
     const char *no = !b.on ? "off" : !balanced_mode(mode) ? "not in this race type" : k < 2 ? "fewer than 2 rated cars" : 0;
@@ -606,7 +619,7 @@ static float balance_race(uint32_t ours, int mode){
          * be the game's rating: in a drag race every car has 95 % of its mass, and the push and drag per kg are
          * 1/0.95 of the rating's (the live races of 2026-10-23: every drag car's power 0.957 of what it should have
          * been), so each car's goal is put in its own sum's terms) */
-        float goal = r[i] * powf(target / r[i], close), was = rating_at(pi[i], 1.f), want = was > 0.f ? goal * was / r[i] : goal;
+        float goal = r[i] * powf(target / (r[i] * w[i]), close), was = rating_at(pi[i], 1.f), want = was > 0.f ? goal * was / r[i] : goal;
         float f = balance_factor(pi[i], want, 1.f - b.down, 1.f + b.up), now = was > 0.f ? rating_at(pi[i], f) * r[i] / was : 0.f;
         float lim = MRF32(pi[i] + PI_LIMIT_MPH), n2o = MRF32(pi[i] + PI_NITROUS);
         int j = g_bal.n++;
@@ -614,8 +627,9 @@ static float balance_race(uint32_t ours, int mode){
         balance_apply(j);
         if (car[i] == ours) our_f = f;
         CarPerf p; mprace_car_perf(car[i], &p);
-        fprintf(stderr, "[mprace]   racer %d%s: %s rated %.1f (%.1f by the sum), its goal %.1f -> power x%.3f, %.0f kW, rated %.1f; governor %.0f mph "
-                "-> none, nitrous %.3f -> %.3f kN m\n", i, car[i] == ours ? " (ours)" : "", p.name, (double)r[i], (double)was, (double)goal,
+        fprintf(stderr, "[mprace]   racer %d%s: %s rated %.1f (%.1f by the sum, counted x%.2f), its goal %.1f -> power x%.3f, %.0f kW, rated %.1f; "
+                "governor %.0f mph -> none, nitrous %.3f -> %.3f kN m\n", i, car[i] == ours ? " (ours)" : "", p.name, (double)r[i], (double)was,
+                (double)w[i], (double)goal,
                 (double)f, (double)(p.power / 1000.f), (double)now, (double)lim, (double)n2o, (double)MRF32(pi[i] + PI_NITROUS));
     }
     g_bal.check_at = clk() + 60;                                               /* (balance_hold's clock) */

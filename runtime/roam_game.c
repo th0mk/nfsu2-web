@@ -6942,18 +6942,19 @@ static void js_players(MpJs *j, const MpLobby *l){
      * out at its limits) in the red; with ours and one of theirs known; not on the trip (the players' links end in
      * the menus) */
     if (!trip){
-        float r[RC_LOBBY_MAX + 1], top = 0.f; int n = 0, ours = -1;
+        /* (each rating as the race counts it: mprace_rating_weight) */
+        float r[RC_LOBBY_MAX + 1], top = 0.f; int n = 0, ours = -1, mode = l->race ? race_net_mode(l->race) : -1;
         js_key(j, "car"); js_raw(j, "[");
         for (int i = 0; i < l->n && i < RC_LOBBY_MAX; i++){
-            const char *nm; r[n] = mp_rating(l->ids[i], &nm);
+            const char *nm; r[n] = mp_rating(l->ids[i], &nm) * mprace_rating_weight(nm, mode);
             if (l->ids[i] == g_s.conf.self_id) ours = n;
             n++;
             if (i) js_raw(j, ",");
             js_val(j, nm);
         }
         js_raw(j, "]");
-        if (ours < 0){ ours = n; r[n++] = mp_rating(g_s.conf.self_id, 0); }
-        if (l->race) mprace_even_ratings(r, n, race_net_mode(l->race), MP_GAUGE_EVEN);
+        if (ours < 0){ const char *nm; ours = n; r[n] = mp_rating(g_s.conf.self_id, &nm); r[n] *= mprace_rating_weight(nm, mode); n++; }
+        if (l->race) mprace_even_ratings(r, n, mode, MP_GAUGE_EVEN);
         for (int i = 0; i < n; i++) if (i != ours && r[i] > top) top = r[i];
         if (r[ours] > 0.f && top > 0.f){ char t[24]; snprintf(t, sizeof t, ",\"vs\":%.2f", (double)(top / r[ours])); js_raw(j, t); }
     }
