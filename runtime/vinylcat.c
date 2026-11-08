@@ -34,13 +34,13 @@
 #include "guest.h"
 #include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
+#include "featurelist.h"
 #include <stdio.h>
 #include <string.h>
 
 uint32_t language_add_text(const char *name, const char *text);
 void language_game_letters(const char *utf8, char *out, size_t n);
 const char *language_name(void);
-void language_texts_frame(CPU *c);
 uint32_t language_text(uint32_t hash);
 
 #define FN_ADD_CAT     0x00545920u   /* thiscall screen (category, icon, label) */

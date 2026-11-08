@@ -112,5 +112,6 @@ int tonemenu_hook(CPU *c, uint32_t ip){
     return 1;
 }
 #else
+void tonemenu_install(void){}
 int tonemenu_hook(CPU *c, uint32_t ip){ (void)c; (void)ip; return 0; }
 #endif

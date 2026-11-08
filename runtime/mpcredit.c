@@ -100,6 +100,7 @@
 #include "guest.h"
 #include "game.h"
 #include "mpcredit.h"
+#include "featurelist.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -257,7 +258,6 @@ static uint32_t crib_name(void){
 void sub_004af3a0(CPU *c);
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
 uint32_t language_add_text(const char *name, const char *text);
-void language_texts_frame(CPU *c);
 static void crib_msg(CPU *c){
     uint32_t m = MR32(c->esp + 4u);
     if ((m == MSG_SIGN || m == MSG_NEXT) && g_ui.st == UI_ASKED){

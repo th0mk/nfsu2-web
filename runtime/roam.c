@@ -54,6 +54,7 @@
 #include "cpu.h"
 #include "guest.h"
 #include "game.h"
+#include "featurelist.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <stdlib.h>
@@ -768,7 +769,7 @@ static void run_job(CPU *c, const char *line){
         else ghost_off(c);
     }
 }
-static void roam_frame(CPU *c){
+void roam_frame(CPU *c){
     while (g_qh != g_qt){ char line[200]; snprintf(line, sizeof line, "%s", g_q[g_qh]); g_qh = (g_qh + 1) % QMAX; run_job(c, line); }
     long f = autotest_frame();
     if (rd32(G_FLOW) == 6u) g_simt += (double)MRF32(G_WORLDDT);
@@ -791,45 +792,21 @@ static void roam_frame(CPU *c){
     spawn_tick(c);
     if (g_carlog_every > 0 && f >= g_carlog_next){ g_carlog_next = f + g_carlog_every; log_cars("periodic"); }
 }
-void roam_game_frame(CPU *c);                 /* roam_game.c: the multiplayer feature */
-void racehorn_frame(CPU *c);                  /* racehorn.c: horns in races between players */
-void racenet_frame(CPU *c);                   /* racenet.c: how the other players' cars came in, at a race's end */
-void racenet_prestep(CPU *c);                 /*   and the cars' own places back before the world's step */
-void mprace_frame(CPU *c);                    /* mprace.c: a multiplayer race's trip from free roam and back */
-void mpcredit_frame(CPU *c);                  /* mpcredit.c: a multiplayer race's win that waits for the crib */
-void optslider_frame(CPU *c);                 /* optslider.c: our option sliders' copied parts (the pause menu's Horn Volume) */
-void drift_frame(CPU *c);                     /* drift.c: drift mode in free roam (F2) */
-void showoff_frame(CPU *c);                   /* showoff.c: the car's trunk, hood and doors open */
-void plates_frame(CPU *c);                    /* plates.c: license plates with the players' own text */
-void lightkey_frame(CPU *c);                  /* lightkey.c: the headlights on G (off, high beam), friends' too */
-void photo_frame(CPU *c);                     /* photo.c: photo mode (F12, the pause menu's Photo Mode) */
-void language_texts_frame(CPU *c);            /* language.c: texts of our own in the game's language table */
-void sms_frame(CPU *c);                       /* sms.c: a text message of ours on the game's phone */
-void engage_frame(CPU *c);                    /* engage.c: Engage at a marker mended when the game would refuse it for good */
-void hiddenraces_frame(void);                 /* hiddenraces.c: the career's hidden races on the map (show_hidden_races) */
-void visualrep_frame(void);                   /* visualrep.c: the visual rating by the stage (visual_rep_remover) */
-void whine_frame(void);                       /* whine.c: the gearbox whine (gearbox_whine) */
-void visualrep_meter(CPU *c);                 /* visualrep.c: ... and no Visual Rating box in the shops */
-void carspot_frame(void);                     /* carspot.c: the career's kept spot, if no place, the new career's start (issue 55) */
-void walls_frame(void);                       /* walls.c: a car past the career's walls back on the roads it can reach */
-void savegame_frame(void);                    /* savegame.c: the pause menu's Save, once its save is over */
-void reads_frame(CPU *c);                     /* overrides.c: the streamer's reads and Loading screens, for the log */
-void intro_frame(CPU *c);                     /* intro.c: the title screen's line under the copyright */
+void racenet_prestep(CPU *c);                 /* racenet.c: the cars' own places back before the world's step */
+void visualrep_meter(CPU *c);                 /* visualrep.c: no Visual Rating box in the shops */
 void gpsdistance_hud(CPU *c);
-void roam_game_hud(CPU *c);                 /* its names over friends' cars */
+void roam_game_hud(CPU *c);                 /* roam_game.c: its names over friends' cars */
 int roam_game_cmd(CPU *c, const char *args, long *wait_start);
 int coop_cmd(CPU *c, const char *args, long *wait_start);
-void coop_frame(CPU *c);
 /* the "virtual Windows friend" (roam_asipeer.c, only in out/nfsu2_asipeer):
  * the Windows plugin under Unicorn instead of roam_game.c */
 __attribute__((weak)) int roam_asipeer_frame(CPU *c){ (void)c; return 0; }
 __attribute__((weak)) int roam_asipeer_cmd(CPU *c, const char *args, long *wait_start){
     (void)c; (void)args; (void)wait_start;
     fprintf(stderr, "[roam] asi: not in this build (ASIPEER=1 ./link.sh orig makes out/nfsu2_asipeer)\n"); return 1; }
-__attribute__((weak)) void damage_frame(CPU *c);      /* damage.c: crash damage's texture pack (only where it is linked) */
 int roam_hook(CPU *c, uint32_t ip){
     switch (ip){
-    case HOOK_SITE(0x00581475): if (damage_frame) damage_frame(c); reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); visualrep_frame(); whine_frame(); carspot_frame(); walls_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); plates_frame(c); lightkey_frame(c); photo_frame(c); savegame_frame(); coop_frame(c); engage_frame(c); roam_frame(c); return 1;
+    case HOOK_SITE(0x00581475): features_frame(c); return 1;   /* every frame: the features' calls (features.c) */
     /* Player::Update's HUD step (0x600590), behind its call of the HUD
      * update (0x4EC5A0), where the game places its own LAN race labels */
     case HOOK_SITE(0x006005e0): gpsdistance_hud(c); roam_game_hud(c); return 1;

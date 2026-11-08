@@ -30,6 +30,7 @@
 #include "coop.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include "setting.h"
+#include "featurelist.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -592,7 +593,6 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
 const char *language_name(void);
 uint32_t language_add_text(const char *name, const char *text);
 void language_game_letters(const char *utf8, char *out, size_t n);
-void language_texts_frame(CPU *c);
 void sub_004c2510(CPU *c);         /* the free-roam pause menu's Resume */
 
 static const struct { const char *lang, *add, *rem, *ask, *kb, *cancel, *next, *drive, *drives, *rt, *together, *alone; } COOP_TEXTS[] = {
