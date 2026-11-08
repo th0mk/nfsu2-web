@@ -1629,5 +1629,10 @@
   "Smoother edges?": "Des bords plus lisses ?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "L'anticrénelage lisse les bords en escalier. Sur un ordinateur plus lent, il peut faire baisser la fréquence d'images. Vous pouvez le changer à tout moment dans les options Affichage du jeu.",
   "Keep off": "Laisser désactivé",
-  "Drag to compare": "Faites glisser pour comparer"
+  "Drag to compare": "Faites glisser pour comparer",
+  "{n} fixes": {
+    "one": "{n} correctif",
+    "many": "{n} correctifs",
+    "other": "{n} correctifs"
+  }
 }

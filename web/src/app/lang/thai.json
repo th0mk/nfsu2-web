@@ -1513,5 +1513,6 @@
   "Smoother edges?": "ขอบเรียบขึ้นไหม",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "แอนตี้เอเลียสซิ่งช่วยให้ขอบที่เป็นหยักดูเรียบขึ้น บนคอมพิวเตอร์ที่ช้ากว่าอาจทำให้เฟรมเรตลดลง เปลี่ยนได้ทุกเมื่อในตัวเลือกการแสดงผลของเกม",
   "Keep off": "ปิดไว้เหมือนเดิม",
-  "Drag to compare": "ลากเพื่อเปรียบเทียบ"
+  "Drag to compare": "ลากเพื่อเปรียบเทียบ",
+  "{n} fixes": "แก้ไข {n} รายการ"
 }

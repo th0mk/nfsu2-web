@@ -1658,5 +1658,11 @@
   "Smoother edges?": "Плавніші краї?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Згладжування прибирає зубчасті краї. На повільнішому комп'ютері воно може знизити частоту кадрів. Змінити його можна будь-коли в налаштуваннях «Екран» у грі.",
   "Keep off": "Залишити вимкненим",
-  "Drag to compare": "Перетягніть, щоб порівняти"
+  "Drag to compare": "Перетягніть, щоб порівняти",
+  "{n} fixes": {
+    "one": "{n} виправлення",
+    "few": "{n} виправлення",
+    "many": "{n} виправлень",
+    "other": "{n} виправлення"
+  }
 }

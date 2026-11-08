@@ -1658,5 +1658,11 @@
   "Smoother edges?": "Hladšie hrany?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Vyhladzovanie hrán odstráni zubaté okraje. Na pomalšom počítači môže znížiť počet snímok za sekundu. Zmeniť ho môžeš kedykoľvek v hre v možnostiach Obrazovka.",
   "Keep off": "Nechať vypnuté",
-  "Drag to compare": "Potiahni a porovnaj"
+  "Drag to compare": "Potiahni a porovnaj",
+  "{n} fixes": {
+    "one": "{n} oprava",
+    "few": "{n} opravy",
+    "many": "{n} opravy",
+    "other": "{n} opráv"
+  }
 }

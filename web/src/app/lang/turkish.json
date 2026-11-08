@@ -1525,5 +1525,6 @@
   "Smoother edges?": "Daha pürüzsüz kenarlar?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Kenar yumuşatma tırtıklı kenarları düzeltir. Daha yavaş bir bilgisayarda kare hızını düşürebilir. İstediğin zaman oyunun Görüntü seçeneklerinden değiştirebilirsin.",
   "Keep off": "Kapalı kalsın",
-  "Drag to compare": "Karşılaştırmak için sürükle"
+  "Drag to compare": "Karşılaştırmak için sürükle",
+  "{n} fixes": "{n} düzeltme"
 }

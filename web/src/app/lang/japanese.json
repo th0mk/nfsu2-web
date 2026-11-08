@@ -1513,5 +1513,6 @@
   "Smoother edges?": "輪郭をなめらかにしますか？",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "アンチエイリアスはギザギザの輪郭をなめらかにします。遅いパソコンではフレームレートが下がることがあります。ゲームの「画面」オプションでいつでも変更できます。",
   "Keep off": "オフのままにする",
-  "Drag to compare": "ドラッグして比較"
+  "Drag to compare": "ドラッグして比較",
+  "{n} fixes": "{n}件の修正"
 }

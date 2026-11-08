@@ -1658,5 +1658,11 @@
   "Smoother edges?": "Gładsze krawędzie?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Wygładzanie krawędzi usuwa postrzępione brzegi. Na wolniejszym komputerze może obniżyć liczbę klatek. Możesz to zmienić w każdej chwili w opcjach Ekran w grze.",
   "Keep off": "Zostaw wyłączone",
-  "Drag to compare": "Przeciągnij, aby porównać"
+  "Drag to compare": "Przeciągnij, aby porównać",
+  "{n} fixes": {
+    "one": "{n} poprawka",
+    "few": "{n} poprawki",
+    "many": "{n} poprawek",
+    "other": "{n} poprawki"
+  }
 }

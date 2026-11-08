@@ -1629,5 +1629,10 @@
   "Smoother edges?": "¿Bordes más suaves?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "El antialiasing suaviza los bordes dentados. En un ordenador más lento puede bajar la tasa de fotogramas. Puedes cambiarlo cuando quieras en las opciones de Pantalla del juego.",
   "Keep off": "Dejar desactivado",
-  "Drag to compare": "Arrastra para comparar"
+  "Drag to compare": "Arrastra para comparar",
+  "{n} fixes": {
+    "one": "{n} corrección",
+    "many": "{n} correcciones",
+    "other": "{n} correcciones"
+  }
 }

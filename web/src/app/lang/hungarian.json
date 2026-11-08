@@ -1519,5 +1519,6 @@
   "Smoother edges?": "Simább élek?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Az élsimítás eltünteti a recés éleket. Lassabb számítógépen csökkentheti a képkockasebességet. Bármikor módosíthatod a játék Képernyő beállításaiban.",
   "Keep off": "Maradjon kikapcsolva",
-  "Drag to compare": "Húzd az összehasonlításhoz"
+  "Drag to compare": "Húzd az összehasonlításhoz",
+  "{n} fixes": "{n} javítás"
 }

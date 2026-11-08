@@ -1513,5 +1513,6 @@
   "Smoother edges?": "가장자리를 더 매끄럽게 할까요?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "안티에일리어싱은 들쭉날쭉한 가장자리를 매끄럽게 해 줘요. 느린 컴퓨터에서는 프레임 레이트가 떨어질 수 있어요. 게임의 디스플레이 옵션에서 언제든 바꿀 수 있어요.",
   "Keep off": "끈 채로 두기",
-  "Drag to compare": "드래그해서 비교"
+  "Drag to compare": "드래그해서 비교",
+  "{n} fixes": "수정 {n}건"
 }

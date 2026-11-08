@@ -1513,5 +1513,6 @@
   "Smoother edges?": "讓邊緣更平滑？",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "反鋸齒會讓鋸齒狀的邊緣變得平滑。在較慢的電腦上可能會降低影格率。隨時可在遊戲的「顯示」選項中更改。",
   "Keep off": "保持關閉",
-  "Drag to compare": "拖曳以比較"
+  "Drag to compare": "拖曳以比較",
+  "{n} fixes": "{n} 項修正"
 }

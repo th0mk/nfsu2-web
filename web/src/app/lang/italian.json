@@ -1625,5 +1625,10 @@
   "Smoother edges?": "Bordi più lisci?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "L'anti-aliasing smussa i bordi seghettati. Su un computer più lento può abbassare la frequenza dei fotogrammi. Puoi cambiarlo quando vuoi nelle opzioni Video del gioco.",
   "Keep off": "Lascia disattivato",
-  "Drag to compare": "Trascina per confrontare"
+  "Drag to compare": "Trascina per confrontare",
+  "{n} fixes": {
+    "one": "{n} correzione",
+    "many": "{n} correzioni",
+    "other": "{n} correzioni"
+  }
 }

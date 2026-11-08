@@ -1600,5 +1600,9 @@
   "Smoother edges?": "Glattere kanter?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Anti-aliasing glatter takkede kanter ud. På en langsommere computer kan det sænke billedhastigheden. Du kan altid ændre det i spillets Grafik-indstillinger.",
   "Keep off": "Behold slået fra",
-  "Drag to compare": "Træk for at sammenligne"
+  "Drag to compare": "Træk for at sammenligne",
+  "{n} fixes": {
+    "one": "{n} rettelse",
+    "other": "{n} rettelser"
+  }
 }

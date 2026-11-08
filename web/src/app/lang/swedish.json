@@ -1600,5 +1600,9 @@
   "Smoother edges?": "Mjukare kanter?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Kantutjämning jämnar ut taggiga kanter. På en långsammare dator kan den sänka bildfrekvensen. Du kan ändra det när som helst i spelets Bildskärm-inställningar.",
   "Keep off": "Låt vara av",
-  "Drag to compare": "Dra för att jämföra"
+  "Drag to compare": "Dra för att jämföra",
+  "{n} fixes": {
+    "one": "{n} felrättning",
+    "other": "{n} felrättningar"
+  }
 }

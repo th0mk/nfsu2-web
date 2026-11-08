@@ -1298,6 +1298,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 #changelog-body ul { margin: 0; }
 #changelog-body li + li { margin-top: 8px; }
 #changelog-body strong { color: var(--text); font-style: italic; font-weight: 700; }
+#changelog-body summary { min-height: 40px; }          /* a day's fixes, folded under its new things */
 /* a mod's popup (mods-ui.ts): the changelog's, its makers 4 px under the title (a shared row's: under each mod's name),
  * what it does, its parts, its facts and its pages */
 .dlg.mod-info { width: min(560px, calc(100vw - 32px)); }

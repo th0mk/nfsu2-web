@@ -1540,5 +1540,9 @@
   "Smoother edges?": "Πιο ομαλές άκρες;",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Η εξομάλυνση λειαίνει τις οδοντωτές άκρες. Σε πιο αργό υπολογιστή μπορεί να μειώσει τον ρυθμό καρέ. Μπορείς να την αλλάξεις όποτε θέλεις στις επιλογές «Εικόνα» του παιχνιδιού.",
   "Keep off": "Να μείνει ανενεργή",
-  "Drag to compare": "Σύρε για σύγκριση"
+  "Drag to compare": "Σύρε για σύγκριση",
+  "{n} fixes": {
+    "one": "{n} διόρθωση",
+    "other": "{n} διορθώσεις"
+  }
 }

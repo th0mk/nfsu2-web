@@ -102,21 +102,28 @@ function flagSheet(bin, src) {
     chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 // the changelog (CHANGELOG.md at the top of the repo): /changelog.json, fetched when a player opens it (changelog.ts):
-// [{ date, commit, changes: [[area, text]] }], newest first, one release a day.  A line that looks like a release or a
-// change but is neither stops the build, so a typo never reaches the page as a missing release; so does a day twice
+// [{ date, commit, changes: [[area, text]], fixes: [[area, text]] }], newest first, one release a day, its fixes the
+// lines under its "### Fixes".  A line that looks like a release or a change but is neither stops the build, so a typo
+// never reaches the page as a missing release; so does a day twice
 fs.writeFileSync(path.join(DIST, 'changelog.json'), JSON.stringify(changelog(fs.readFileSync('../CHANGELOG.md', 'utf8'))));
 function changelog(md) {
   const out = [];
+  let list = null;
   md.split(/\r?\n/).forEach((line, i) => {
     const bad = what => { throw new Error(`CHANGELOG.md:${i + 1}: ${what}: ${line}`); };
     let m;
     if ((m = /^## (\d{4}-\d{2}-\d{2}) \(([0-9a-f]{7,40})\)$/.exec(line))) {
       if (out.some(r => r.date === m[1])) bad("a day's releases share one section");
-      out.push({ date: m[1], commit: m[2], changes: [] });
+      out.push({ date: m[1], commit: m[2], changes: [], fixes: [] });
+      list = out.at(-1).changes;
     }
-    else if (line.startsWith('#') && i > 0) bad('a release is "## <yyyy-mm-dd> (<commit>)"');
-    else if ((m = /^- (?:\*\*([^*]+):\*\* )?(\S.*)$/.exec(line))) (out.at(-1) ?? bad('a change before the first release')).changes.push([m[1] ?? '', m[2]]);
-    else if (/^\s+\S/.test(line) && out.at(-1)?.changes.length) out.at(-1).changes.at(-1)[1] += ' ' + line.trim();
+    else if (line === '### Fixes') {
+      if (list !== out.at(-1)?.changes) bad('a release has one "### Fixes", after its new things');
+      list = out.at(-1).fixes;
+    }
+    else if (line.startsWith('#') && i > 0) bad('a release is "## <yyyy-mm-dd> (<commit>)", its fixes under "### Fixes"');
+    else if ((m = /^- (?:\*\*([^*]+):\*\* )?(\S.*)$/.exec(line))) (list ?? bad('a change before the first release')).push([m[1] ?? '', m[2]]);
+    else if (/^\s+\S/.test(line) && list?.length) list.at(-1)[1] += ' ' + line.trim();
     else if (/^\s*[-*+]/.test(line)) bad('a change is "- **Area:** what changed"');
   });
   return out;

@@ -1600,5 +1600,9 @@
   "Smoother edges?": "Glattere Kanten?",
   "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Kantenglättung glättet gezackte Kanten. Auf einem langsameren Computer kann sie die Bildrate senken. Du kannst sie jederzeit in den Anzeige-Optionen des Spiels ändern.",
   "Keep off": "Aus lassen",
-  "Drag to compare": "Zum Vergleichen ziehen"
+  "Drag to compare": "Zum Vergleichen ziehen",
+  "{n} fixes": {
+    "one": "{n} Fehlerbehebung",
+    "other": "{n} Fehlerbehebungen"
+  }
 }
