@@ -78,6 +78,20 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
 @fragment fn fs_copy(i: BOut) -> @location(0) vec4f { return textureSample(src, smp, i.uv); }
 @fragment fn fs_opaque(i: BOut) -> @location(0) vec4f { return vec4f(textureSample(src, smp, i.uv).rgb, 1.0); }`;
 
+// A 4-sample twin (runtime/com.c MULTISAMPLING) into its target: the average of each pixel's 4 samples, what the GPU's
+// own resolve does, drawn instead of it (encoder.ts msResolve).  The twin is the same size as the target, so a pixel's
+// position is its texel.
+export const MS_RESOLVE = /* wgsl */`
+@group(0) @binding(0) var src: texture_multisampled_2d<f32>;
+@vertex fn vs_full(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+  return vec4f(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);
+}
+@fragment fn fs_resolve(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+  let c = vec2i(pos.xy);
+  return (textureLoad(src, c, 0) + textureLoad(src, c, 1) + textureLoad(src, c, 2) + textureLoad(src, c, 3)) * 0.25;
+}`;
+
 // The composite with Exposure and White Level (runtime/tonemenu.c, GwTone): each channel times mult (at most 1),
 // then a value above knee * white bends down so that 1 lands on white (a rational shoulder: slope 1 where it starts,
 // so no edge shows).  tone: mult, white, knee.

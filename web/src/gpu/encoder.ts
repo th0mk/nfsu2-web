@@ -22,7 +22,7 @@
 // drew them on the screen).
 import * as P from './proto';
 import { D, F, Kind, Op } from './proto';
-import { COPY, FF_FS, TONE, TVERT_VS } from './wgsl';
+import { COPY, FF_FS, MS_RESOLVE, TONE, TVERT_VS } from './wgsl';
 import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE } from './shader-abi';
 import { unpackDxt } from './dxt';
 import { drawViewport, drawScissor } from './viewport';
@@ -162,8 +162,15 @@ export class Encoder {
   // multisampling (runtime/com.c MULTISAMPLING: the game's Full Scene Anti-Aliasing): the back buffer with 4 samples
   // (Op.BbSamples) and a render target made with TF_MS each have a 4-sample twin; their passes draw into the twin, with
   // a 4-sample twin of their Z surface (by surface and size), and resolve into the screen or the texture at the pass's
-  // end; a blit or copy into them leaves the twin behind (stale) until the next pass that loads draws the picture into it
+  // end; a blit or copy into them leaves the twin behind (stale) until the next pass that loads draws the picture into it.
+  // The resolve is a pass of ours (msResolve: the samples' average), not the GPU's own (a resolveTarget): the twin is
+  // kept for the next pass that loads, and the GPU's resolve of a picture it also keeps failed on two computers'
+  // graphics on 2026-11-08 (an AMD Ryzen 5600GT's Vega in Chrome and Edge: the GPU hung at the third frame, every game;
+  // a Qualcomm Snapdragon laptop: the picture in scrambled tiles once frames had several passes on the screen)
   private bbSamples = 1;
+  // msResolve's shader, layout, pipelines by format and bind groups by twin, made at its first use
+  private msRes: { mod: GPUShaderModule; bgl: GPUBindGroupLayout; layout: GPUPipelineLayout; pipes: Map<string, GPURenderPipeline>;
+    bgs: WeakMap<GPUTexture, GPUBindGroup> } | null = null;
   private msScreen: MsTwin | null = null;
   private msZ = new Map<string, { tex: GPUTexture; view: GPUTextureView }>();
   private msZpend = new Uint8Array(64); private msZpendV = new Float32Array(64);
@@ -356,7 +363,8 @@ export class Encoder {
     // a multisampled render target (runtime/com.c MULTISAMPLING): its 4-sample twin, in the texture's own format
     let ms: MsTwin | undefined;
     if ((flags & P.TF_MS) && rt && !cube && levels === 1) {
-      const mt = this.device.createTexture({ label: `t${id} x4`, size: [w, h], format: gf.f, sampleCount: 4, usage: GPUTextureUsage.RENDER_ATTACHMENT });
+      const mt = this.device.createTexture({ label: `t${id} x4`, size: [w, h], format: gf.f, sampleCount: 4,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
       ms = { tex: mt, view: mt.createView(), stale: true };
       bytes += w * h * 4 * 4; this.texBytes += w * h * 4 * 4; this.texMadeBytes += w * h * 4 * 4;
     }
@@ -509,8 +517,33 @@ export class Encoder {
     if (s) this.destroyLater.push(s.tex);
     for (const [k, z] of this.msZ) if (!k.endsWith(`:${w}x${h}`)) { this.destroyLater.push(z.tex); this.msZ.delete(k); }
     const tex = this.device.createTexture({ label: `backbuffer x4 ${w}x${h}`, size: [w, h], format: 'bgra8unorm', sampleCount: 4,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT });
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
     return this.msScreen = { tex, view: tex.createView(), stale: true };
+  }
+
+  /** a twin's picture into its target (dst: the target's view, of the twin's size), each pixel the average of its 4
+   *  samples, in a pass of its own after the twin's (see the multisampling fields: not the GPU's own resolve) */
+  private msResolve(enc: GPUCommandEncoder, twin: MsTwin, dst: GPUTextureView): void {
+    const d = this.device;
+    const r = this.msRes ??= (() => {
+      const bgl = d.createBindGroupLayout({ entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float', multisampled: true } }] });
+      return { mod: this.module('ms-resolve', MS_RESOLVE), bgl, layout: d.createPipelineLayout({ bindGroupLayouts: [bgl] }),
+        pipes: new Map<string, GPURenderPipeline>(), bgs: new WeakMap<GPUTexture, GPUBindGroup>() };
+    })();
+    const fmt = twin.tex.format;
+    let p = r.pipes.get(fmt);
+    if (!p) r.pipes.set(fmt, p = d.createRenderPipeline({ label: `ms-resolve ${fmt}`, layout: r.layout,
+      vertex: { module: r.mod, entryPoint: 'vs_full' }, fragment: { module: r.mod, entryPoint: 'fs_resolve', targets: [{ format: fmt }] },
+      primitive: { topology: 'triangle-list' } }));
+    let g = r.bgs.get(twin.tex);
+    if (!g) r.bgs.set(twin.tex, g = d.createBindGroup({ layout: r.bgl, entries: [{ binding: 0, resource: twin.view }] }));
+    // every pixel is written: nothing of the target's to load
+    const pass = enc.beginRenderPass({ colorAttachments: [{ view: dst, loadOp: 'clear', clearValue: [0, 0, 0, 1], storeOp: 'store' }] });
+    pass.setPipeline(p);
+    pass.setBindGroup(0, g);
+    pass.draw(3);
+    pass.end();
   }
 
   /** the 4-sample twin of Z surface zid at a pass's size (one per surface and size: the implicit Z serves the screen
@@ -797,7 +830,13 @@ export class Encoder {
     const b1 = this.b1, dyn = this.dyn;
     b1[0] = -1;
     let draws = 0, passes = 0, skipped = 0;
-    const endPass = () => { if (pass) { pass.end(); pass = null; } };
+    // the twin of the pass that is open and its target's view: resolved (msResolve) as the pass ends
+    let msOut: { twin: MsTwin; dst: GPUTextureView } | null = null;
+    const endPass = () => {
+      if (!pass) return;
+      pass.end(); pass = null;
+      if (msOut) { this.msResolve(enc, msOut.twin, msOut.dst); msOut = null; passes++; }
+    };
 
     const openPass = (target: number, zid: number): GPURenderPassEncoder | null => {
       let view: GPUTextureView, w: number, h: number, key: number;
@@ -821,8 +860,8 @@ export class Encoder {
       let zv: GPUTextureView | undefined, zclear = false, zval = 1;
       passMs = !!twin;
       if (twin) {
-        // drawn into the twin and resolved into the target at the pass's end; a twin behind its target (a blit or copy
-        // into it) first gets the target's picture when the pass loads; the Z surface's own 4-sample twin
+        // drawn into the twin and resolved into the target as the pass ends (endPass); a twin behind its target (a blit
+        // or copy into it) first gets the target's picture when the pass loads; the Z surface's own 4-sample twin
         if (!first && twin.stale) { this.msRefresh(enc, twin, twinSrc!); passes++; }
         if (zid && zid < 64) {
           const z = this.msZView(zid, w, h);
@@ -834,13 +873,13 @@ export class Encoder {
         const ts = this.firstPassTs; this.firstPassTs = undefined;
         const p = enc.beginRenderPass({
           timestampWrites: ts,
-          colorAttachments: [{ view: twin.view, resolveTarget: view, loadOp: first ? 'clear' : 'load', storeOp: 'store',
+          colorAttachments: [{ view: twin.view, loadOp: first ? 'clear' : 'load', storeOp: 'store',
             clearValue: { r: ((c >>> 16) & 255) / 255, g: ((c >>> 8) & 255) / 255, b: (c & 255) / 255, a: 1 } }],
           depthStencilAttachment: zv
             ? { view: zv, depthLoadOp: zclear ? 'clear' : 'load', depthClearValue: zval, depthStoreOp: 'store' }
             : { view: this.depthView(0, w, h, true), depthLoadOp: 'clear', depthClearValue: 1, depthStoreOp: 'discard' },
         });
-        twin.stale = false;
+        twin.stale = false; msOut = { twin, dst: view };
         if (key === -1) screenTouched = true; else touched.add(key);
         passes++; this.calls.pass++; this.msPasses++;
         if (tr) tr.push(`  pass ${passes}: ${target ? `tex ${target & 0xFFFF}` : 'SCREEN'} x4 ${w}x${h} color ${first ? `clear ${c.toString(16)}` : 'load'}, z ${zv ? `zid ${zid} ${zclear ? `clear ${zval}` : 'load'}` : `none (zid ${zid})`}`);
