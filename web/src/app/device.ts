@@ -38,12 +38,14 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  world map's other players: 2048 on phones, the file's 4096 elsewhere (each marker costs the open map's frames,
  *  about 7 us a frame on a busy Ryzen 5900X, a phone's several times that).  Full screen stays off on phones with
  *  PowerVR's B-Series graphics (fullScreenFails).  The game's Full Scene Anti-Aliasing is not offered on phones
- *  (runtime/com.c MULTISAMPLING): its 4-sample screen and Z, kept between passes, take four times the screen's memory. */
+ *  (runtime/com.c MULTISAMPLING): its 4-sample screen and Z, kept between passes, take four times the screen's memory.
+ *  Anisotropic filtering where the game asks for it on computers only (gpu/encoder.ts aniso): no GPU time measured on an
+ *  M4 Pro at 2560x1440 (5.01 against 4.99 ms a frame, 2026-11-08), none measured on a phone's. */
 export function deviceDefaults(): Record<string, string> {
   const kind = deviceKind();
-  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: fullScreenFails() ? 'off' : 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off', fsaa: 'off' };
-  if (kind === 'tablet') return { roam_max_cars: '24', coop: 'off' };
-  return { roam_max_cars: 'auto' };
+  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: fullScreenFails() ? 'off' : 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off', fsaa: 'off', anisotropic: 'off' };
+  if (kind === 'tablet') return { roam_max_cars: '24', coop: 'off', anisotropic: 'off' };
+  return { roam_max_cars: 'auto', anisotropic: 'on' };
 }
 
 /** the graphics as the page's check named them (checks.ts checkGpu: "img-tec b-series ..."), '' until it has */

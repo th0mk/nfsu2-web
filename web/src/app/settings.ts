@@ -226,6 +226,9 @@ export const KEYS: readonly KeyDef[] = [
   // the game's Full Scene Anti-Aliasing offered, at 4 samples (runtime/com.c MULTISAMPLING; phones off: device.ts).  Not
   // in bundle.m's table: the Mac's MSAA is msaa's
   { key: 'fsaa', env: 'NFSU2_FSAA', kind: 'bool', scope: 'web', device: true },
+  // anisotropic filtering where the game asks for it (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
+  // aniso; phones and tablets off: device.ts).  Not in bundle.m's table: the Mac's is texture_filtering
+  { key: 'anisotropic', env: 'NFSU2_ANISOTROPIC', kind: 'bool', scope: 'web', device: true },
   // free roam's world map: the other players marked at most (runtime/roam_game.c map_update; phones 2048: device.ts).
   // Not in bundle.m's table: the Mac's free roam has no hub
   { key: 'roam_map_max', env: 'NFSU2_ROAM_MAP_MAX', kind: 'int', vals: '0..4096', ic: true, scope: 'web', device: true },
@@ -468,6 +471,10 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # graphics' work; a new player on a computer starts with it on.  off = not
 # offered (the option stays greyed out).  Phones: off.  [NFSU2_FSAA]
 #fsaa = on
+# Sharper textures in the distance (roads, their lines, building fronts):
+# anisotropic filtering where the game asks for it, which the original
+# game never got.  Phones and tablets: off.  [NFSU2_ANISOTROPIC]
+#anisotropic = on
 
 # ---- Frame rate ----------------------------------------------------------
 

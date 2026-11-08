@@ -82,6 +82,20 @@ test("free roam's players' cars shown: 16 on a phone, 24 on a tablet, Auto on ev
   assert.equal(on(mac, 5, 820, 1180, true, 8, 8), '24', 'a tablet stays at 24 whatever its cores');
 });
 
+test('anisotropic filtering where the game asks for it: computers on, phones and tablets off', () => {
+  const on = (ua, touchPoints, w, h, coarse) => {
+    Object.defineProperty(globalThis, 'navigator', { value: { userAgent: ua, maxTouchPoints: touchPoints, hardwareConcurrency: 8 }, configurable: true, writable: true });
+    globalThis.screen = { width: w, height: h };
+    globalThis.matchMedia = () => ({ matches: coarse });
+    return deviceDefaults().anisotropic;
+  };
+  const mac = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15';
+  assert.equal(on('Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1', 5, 390, 844, true), 'off');
+  assert.equal(on(mac, 5, 820, 1180, true), 'off');                                // an iPad
+  assert.equal(on(mac, 0, 1512, 982, false), 'on');                               // a Mac
+  assert.equal(on('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36', 10, 1920, 1080, false), 'on');   // a touch laptop
+});
+
 test("free roam's world map: 2048 other players on a phone, the file's 4096 on tablets and computers", () => {
   const on = (ua, touchPoints, w, h, coarse) => {
     Object.defineProperty(globalThis, 'navigator', { value: { userAgent: ua, maxTouchPoints: touchPoints, hardwareConcurrency: 8 }, configurable: true, writable: true });

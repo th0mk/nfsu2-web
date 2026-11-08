@@ -72,6 +72,11 @@ export interface RendererOptions {
   /** tests: an autotest dump labelled <name>_px also writes its frame drawn with pixelated textures, <name>_px1 (the
    *  same moment in both looks) */
   pixelatedDump?: boolean;
+  /** anisotropic filtering where the game asks for it (Encoder.aniso) */
+  aniso?: boolean;
+  /** tests: an autotest dump labelled <name>_af also writes its frame drawn again with anisotropic filtering the other
+   *  way (Encoder.aniso), <name>_af1: the same moment both ways */
+  anisoDump?: boolean;
   /** diagnostics: a slower GPU, from a pass of this many iterations of busy work for each pixel
    *  of a 512x512 target in every frame (tests frame pacing on GPUs slower than this one) */
   gpuBurn?: number;
@@ -260,6 +265,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   enc.logShaders = !!opts.logShaders;
   enc.pointTex = !!opts.pixelated;
   if (enc.pointTex) log('[gpu] pixelated textures');
+  enc.aniso = !!opts.aniso;
+  if (enc.aniso) log('[gpu] anisotropic filtering where the game asks for it');
   for (const id of opts.watchTex ?? []) enc.watchTex.add(id);
   if (opts.trace === 'dumps') enc.traceDumps = true; else for (const f of opts.trace ?? []) enc.traceSeq.add(f);
   // pipelines of earlier sessions, created asynchronously as their shaders arrive
@@ -665,6 +672,15 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       device.queue.submit([ce2.finish()]);
       enc.afterSubmit();
       enc.pointTex = false;
+    }
+    if (opts.anisoDump && lab?.endsWith('_af')) {
+      enc.aniso = !enc.aniso;
+      const ce2 = device.createCommandEncoder();
+      enc.encodeFrame(b, ce2, undefined);
+      reads.push({ name: `${dumpName}1`, rb: copyOut(ce2, enc.screen!) });
+      device.queue.submit([ce2.finish()]);
+      enc.afterSubmit();
+      enc.aniso = !enc.aniso;
     }
     if (rbId) readForGame(rbId, rbRead, U[fw + F.rbDst], U[fw + F.rbPitch], U[fw + F.rbRows]);
     // quick chat's places over the cars in this very frame (GwMarks in its constants, from a module that writes them)

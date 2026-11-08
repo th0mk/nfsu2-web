@@ -89,7 +89,7 @@ try {
     direct: q.has('direct') ? q.get('direct') !== '0' : undefined, cssScale: q.get('cssscale') !== '0', noBC: q.get('bc') === '0', noASTC: q.get('astc') === '0', poke: q.has('poke') ? q.get('poke') !== '0' : undefined,
     gpuBurn: +(q.get('gpuburn') ?? 0), maxInFlight: q.get('inflight') ? +q.get('inflight')! : undefined,
     summaryMs: q.get('summary') ? +q.get('summary')! * 1000 : undefined, pixelated: q.get('pixelated') === '1',
-    pixelatedDump: q.get('pixelated') === 'dump' });
+    pixelatedDump: q.get('pixelated') === 'dump', aniso: q.get('aniso') === '1', anisoDump: q.get('aniso') === 'dump' });
 } catch (x) { log(`renderer: ${x}`); }
 const rz = /^(\d+(?:\.\d+)?):(\d+)x(\d+)$/.exec(q.get('resizeat') ?? '');
 if (rz) setTimeout(() => {
