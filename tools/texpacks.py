@@ -118,6 +118,98 @@ def jdlz(b):
     return bytes(out)
 
 
+class _Bits:
+    """big-endian bit reader for HUFF"""
+    def __init__(self, data):
+        self.data, self.at, self.value, self.count = data, 0, 0, 0
+
+    def peek(self, size):
+        while self.count < size and self.at < len(self.data):
+            self.value = (self.value << 8) | self.data[self.at]; self.count += 8; self.at += 1
+        return self.value << (size - self.count) if self.count < size else self.value >> (self.count - size)
+
+    def get(self, size):
+        r = self.peek(size)
+        if self.count < size: raise ValueError('HUFF: truncated')
+        self.count -= size; self.value &= (1 << self.count) - 1
+        return r
+
+    def number(self):
+        width = 2
+        while not self.get(1):
+            width += 1
+            if width > 30: raise ValueError('HUFF: unbounded number')
+        return self.get(width) + (1 << width) - 4
+
+
+def huff(data, max_output_bytes=1 << 20):
+    """EA's HUFF ('HUFF' 01 10: canonical Huffman with a clue symbol for runs and literals, optional delta passes;
+    most of CARS/<car>/VINYLS.BIN's textures).  Every size and table is bounded; a bad block raises ValueError."""
+    if len(data) < 16 or data[:6] != b'HUFF\x01\x10': raise ValueError('HUFF: unknown header')
+    expected, packed = struct.unpack_from('<II', data, 8)
+    if not 0 < expected <= max_output_bytes or not 0 < packed <= len(data) - 16: raise ValueError('HUFF: sizes')
+    bits = _Bits(data[16:16 + packed])
+    kind = bits.get(16)
+    if kind & 0x100: bits.get(32 if kind & 0x8000 else 24)
+    kind &= ~0x100
+    if kind not in (0x30FB, 0x32FB, 0x34FB, 0xB0FB, 0xB2FB, 0xB4FB): raise ValueError(f'HUFF: coding {kind:04x}')
+    if bits.get(32 if kind & 0x8000 else 24) != expected: raise ValueError('HUFF: inner size')
+    clue = bits.get(8)
+    entries, base, total = [], 0, 0
+    for width in range(1, 17):
+        base <<= 1
+        n = bits.number()
+        if total + n > 256 or base + n > 1 << width: raise ValueError('HUFF: code table')
+        entries.append((width, base, n)); base += n; total += n
+        if base == 1 << width: break
+    else:
+        raise ValueError('HUFF: incomplete code table')
+    used, symbols, cur = set(), [], 255
+    for _ in range(total):
+        skip = bits.number() + 1
+        if skip > 256 - len(used): raise ValueError('HUFF: symbol order')
+        while skip:
+            cur = (cur + 1) & 255
+            if cur not in used: skip -= 1
+        used.add(cur); symbols.append(cur)
+    quick, full, k = [None] * 256, {}, 0
+    for width, start, n in entries:
+        for code in range(start, start + n):
+            sym = symbols[k]; k += 1; full[width, code] = sym
+            if width <= 8:
+                for i in range(code << (8 - width), (code + 1) << (8 - width)): quick[i] = width, sym
+    out = bytearray()
+    while True:
+        e = quick[bits.peek(8)]
+        if e is None:
+            for width in range(9, 17):
+                sym = full.get((width, bits.peek(width)))
+                if sym is not None: bits.get(width); break
+            else:
+                raise ValueError('HUFF: unknown code')
+        else:
+            width, sym = e; bits.get(width)
+        if sym != clue:
+            out.append(sym)
+        else:
+            run = bits.number()
+            if run:
+                if not out or len(out) + run > expected: raise ValueError('HUFF: run')
+                out.extend(bytes([out[-1]]) * run)
+            elif bits.get(1):
+                break
+            else:
+                out.append(bits.get(8))
+        if len(out) > expected: raise ValueError('HUFF: overrun')
+    if len(out) != expected: raise ValueError('HUFF: short')
+    if kind in (0x32FB, 0xB2FB, 0x34FB, 0xB4FB):
+        v = v2 = 0
+        for i, d in enumerate(out):
+            v = (v + d) & 255; v2 = (v2 + v) & 255
+            out[i] = v2 if kind in (0x34FB, 0xB4FB) else v
+    return bytes(out)
+
+
 def chunks(d, off, end):
     while off + 8 <= end:
         cid, sz = struct.unpack_from('<II', d, off)

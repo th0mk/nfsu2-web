@@ -5,9 +5,10 @@ read past a block, as on 2026-11-06).
 
     tools/packcheck.py <game folder> [<folder> ...]
 
-Each <folder> holds VINYLPACKS/, MODPACKS/, LANGPACKS/ or TEXPACKS/ (or is one of them); without one, the game
+Each <folder> holds VINYLPACKS/, MODPACKS/, LANGPACKS/, TEXPACKS/ or HQVINYLS/ (or is one of them); without one, the game
 folder's own.  A problem is a line "<file>: <what is wrong>", and the exit status is 1; 0 when all is well.  The
-pack tools (vinylpacks.py, modpacks.py, damagepack.py, whinepack.py, langpacks.py, texpacks.py) run the same check
+pack tools (vinylpacks.py, modpacks.py, damagepack.py, whinepack.py, langpacks.py, texpacks.py, hqvinyls.py) run
+the same check
 (check() below) on what they made before they write it.
 
 What it checks, by folder:
@@ -22,6 +23,8 @@ What it checks, by folder:
   LANGPACKS/<language>/<game file>   read in place of the game's: its chunks, texture packs and texts
   TEXPACKS/*.pak            as runtime/web/texrep_web.c reads it: its entries, their levels' sizes, version 2's
         deflated levels
+  HQVINYLS/CARS/<car>.hqv   as the runtime and the page read it (tools/hqvinyls.py): its rows sorted by hash, each
+        picture inside the file after the rows, none overlapping, each an AVIF of 1 or 3 channels
 and in every file the game reads (a spliced or replaced one): its chunks lie inside the file, inside the chunk that
 holds them; and in each texture pack (TPK, chunk 0xB3300000) in it:
   - its tables: the hash list sorted, its count the TextureInfos' (an uncompressed pack's) or the blocks' (a
@@ -49,7 +52,7 @@ replaced file must hold that file's header as it is served, at its size.
 import argparse, os, struct, sys, zlib
 from concurrent.futures import ProcessPoolExecutor
 
-KINDS = ('VINYLPACKS', 'MODPACKS', 'LANGPACKS', 'TEXPACKS')
+KINDS = ('VINYLPACKS', 'MODPACKS', 'LANGPACKS', 'TEXPACKS', 'HQVINYLS')
 TPK, TPK_INFO, TPK_DATA = 0xB3300000, 0xB3310000, 0xB3320000
 T_HASHES, T_PACKED, T_INFOS, T_PLAT = 0x33310002, 0x33310003, 0x33310004, 0x33310005
 T_PIXELS = 0x33320002
@@ -613,6 +616,31 @@ def check_texpack(d):
 
 
 # --- the packs, as the game reads them ------------------------------------------------
+HQV_MAGIC, HQV_ROW, HQV_MAX = b'HQV1', 16, 4096
+
+
+def check_hqv(d):
+    """a HQVINYLS/CARS/<car>.hqv (tools/hqvinyls.py) as the runtime and the page read it: [why]"""
+    if len(d) < 16 or d[:4] != HQV_MAGIC: return ['not a HQV1 file']
+    ver, n, start = struct.unpack_from('<III', d, 4)
+    if ver != 1: return [f'version {ver}: this reads version 1']
+    if not 0 < n <= HQV_MAX: return [f'{n} pictures: 1 to {HQV_MAX}']
+    if start < 16 + HQV_ROW * n or start > len(d): return [f'its pictures start at {start}, inside its {n} rows or past the file']
+    probs, last, spans = [], -1, []
+    for i in range(n):
+        nh, off, size, side, ch, z = struct.unpack_from('<IIIHBB', d, 16 + HQV_ROW * i)
+        if nh <= last: probs.append(f'row {i} (0x{nh:08x}): not sorted by hash'); break
+        last = nh
+        if side != 1024 or ch not in (1, 3) or z: probs.append(f'row {i} (0x{nh:08x}): side {side}, {ch} channel(s)')
+        if size < 12 or off < start or off + size > len(d): probs.append(f'row {i} (0x{nh:08x}): {size} bytes at {off}, outside the pictures'); continue
+        if d[off + 4:off + 12] not in (b'ftypavif', b'ftypavis'): probs.append(f'row {i} (0x{nh:08x}): not an AVIF')
+        spans.append((off, off + size, nh))
+    spans.sort()
+    for (a0, a1, ah), (b0, b1, bh) in zip(spans, spans[1:]):
+        if b0 < a1: probs.append(f'0x{ah:08x} and 0x{bh:08x} overlap'); break
+    return probs[:20]
+
+
 class Packs:
     """the pack files to check ({'VINYLPACKS/CARS/350Z/VINYLS.BIN': bytes, or the path of the file}) and the game
     folder (None: without it)"""
@@ -688,6 +716,8 @@ class Packs:
         """what is wrong with the pack file key: [(key, why)]"""
         kind, _, rest = key.partition('/')
         try:
+            if kind == 'HQVINYLS':
+                return [(key, p) for p in (check_hqv(self.data(key)) if key.lower().endswith('.hqv') else [])]
             if kind == 'TEXPACKS':
                 return [(key, p) for p in (check_texpack(self.data(key)) if key.lower().endswith('.pak') else [])]
             if kind == 'LANGPACKS':
@@ -771,7 +801,7 @@ def walk(folders):
 def main():
     ap = argparse.ArgumentParser(usage='tools/packcheck.py <game folder> [<folder> ...]')
     ap.add_argument('game')
-    ap.add_argument('folders', nargs='*', help='folders with VINYLPACKS/, MODPACKS/, LANGPACKS/ or TEXPACKS/ (default: the game folder)')
+    ap.add_argument('folders', nargs='*', help='folders with VINYLPACKS/, MODPACKS/, LANGPACKS/, TEXPACKS/ or HQVINYLS/ (default: the game folder)')
     ap.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     a = ap.parse_args()
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')

@@ -54,7 +54,8 @@ export function songsPath(path: string): string | null {
  *  runtime/language.c) has a file of the same path, that one; no other language's pack; of the texture packs
  *  (TEXPACKS/<name>.pak and its <name>.tracks, runtime/web/texrep_web.c) only those picked (packs.texpack: their
  *  names, comma-separated; '' for none); pfdata/original's files only with the original songs, and then in place
- *  of pfdata's; the crash damage's (MODPACKS/DAMAGE/) only with it on, and MODPACKS/WHINE only with the gearbox whine on. */
+ *  of pfdata's; the crash damage's (MODPACKS/DAMAGE/) only with it on, and MODPACKS/WHINE only with the gearbox whine on.
+ *  HQVINYLS/ never: the HQ vinyls' pictures (gpu/hqskin.ts) are read as cars are seen, 330 MB in all. */
 function gameFiles(files: DataFile[], language: string, packs: Packs): DataFile[] {
   const own = new Set(files.filter(f => { const p = parts(f); return p[0] === 'langpacks' && p[1] === language; })
     .map(f => parts(f).slice(2).join('/')));
@@ -66,6 +67,7 @@ function gameFiles(files: DataFile[], language: string, packs: Packs): DataFile[
     if (p[0] === 'texpacks') return p.length === 2 && packs.texpack.split(',').some(n => n && (p[1] === `${n}.pak` || p[1] === `${n}.tracks`));
     if (p[0] === 'modpacks' && p[1] === 'damage') return !!packs.damage;
     if (p[0] === 'modpacks' && p[1] === 'whine') return !!packs.whine;
+    if (p[0] === 'hqvinyls') return false;
     if (isOriginal(p)) return original;
     if (replaced.has(p.join('/'))) return false;
     return p[0] === 'langpacks' ? p[1] === language : !own.has(p.join('/'));

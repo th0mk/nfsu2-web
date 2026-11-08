@@ -325,6 +325,28 @@ class PackCheck(unittest.TestCase):
         self.refused({'TEXPACKS/a.pak': self.texpack(1, size_fix=-56)}, r'200 bytes of levels')
         self.refused({'TEXPACKS/b.pak': self.texpack(2, bad_z=True)}, r'do not inflate')
 
+    # --- HQVINYLS ----------------------------------------------------------------------------------------------------
+    def hqv(self, rows=((5, 1), (9, 3)), unsorted=False, overlap=False, past=False, not_avif=False):
+        """a HQVINYLS/CARS/<car>.hqv (tools/hqvinyls.py): rows (hash, channels), each picture a stand-in AVIF box"""
+        pic = lambda: struct.pack('>I', 20) + (b'ftypmif1' if not_avif else b'ftypavif') + bytes(8)
+        n = len(rows); start = (16 + 16 * n + 15) & ~15
+        head, data, at = bytearray(struct.pack('<4sIII', b'HQV1', 1, n, start)), b'', start
+        order = list(rows)[::-1] if unsorted else sorted(rows)
+        for i, (h, ch) in enumerate(order):
+            b = pic(); off = at - (8 if overlap and i else 0)
+            head += struct.pack('<IIIHBB', h, off, len(b) + (64 if past and i == n - 1 else 0), 1024, ch, 0)
+            data += b; at += len(b)
+        return bytes(head) + bytes(start - len(head)) + data
+
+    def test_hqvinyls(self):
+        self.assertEqual(self.check({'HQVINYLS/CARS/350Z.hqv': self.hqv()}), [])
+        self.refused({'HQVINYLS/CARS/350Z.hqv': self.hqv(unsorted=True)}, r'not sorted by hash')
+        self.refused({'HQVINYLS/CARS/350Z.hqv': self.hqv(overlap=True)}, r'overlap')
+        self.refused({'HQVINYLS/CARS/350Z.hqv': self.hqv(past=True)}, r'outside the pictures')
+        self.refused({'HQVINYLS/CARS/350Z.hqv': self.hqv(not_avif=True)}, r'not an AVIF')
+        self.refused({'HQVINYLS/CARS/350Z.hqv': self.hqv(rows=((5, 4),))}, r'channel')
+        self.refused({'HQVINYLS/CARS/350Z.hqv': b'HQV2' + bytes(12)}, r'not a HQV1 file')
+
     def test_cli(self):
         """the command line: a problem per line, exit 1; all good, exit 0"""
         import subprocess

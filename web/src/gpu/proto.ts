@@ -62,7 +62,7 @@ export const enum C {
 // stopped waiting for with a CAS to 0) before it writes rbDst, then stores rbDone = rbId (written) or
 // rbId | RB_FLAG (could not read it) and notifies
 export const RB_FLAG = 0x80000000;
-export const FEAT_BC = 1, FEAT_SWIZZLE = 2;
+export const FEAT_BC = 1, FEAT_SWIZZLE = 2, FEAT_HQSKIN = 4;
 // GwCtl.attached: 0 before a renderer attached, then ATTACHED, and DETACHED for good once it let go
 // (or once the game stopped waiting for one: its CAS 0 -> DETACHED after 30 s)
 export const ATTACHED = 1, DETACHED = 2;
@@ -73,7 +73,16 @@ export const enum V { tick = 0, seq = 1, tsF64 = 1, periodF64 = 2, hz = 6, visib
 // resource queue
 export const CMD_HDR = 32;
 export const enum Op { Pad = 0, TexCreate = 1, TexUpload = 2, TexFree = 3, PoolGrow = 4, PoolWrite = 5, ShaderVs = 6, ShaderPs = 7, ZForget = 8,
-  BbSamples = 9 }
+  BbSamples = 9, SkinHq = 10 }
+// GW_SKIN_HQ's recipe (GwSkinHq, runtime/hqvinyls.c -> hqskin.ts): byte offsets
+export interface GwSkinHqLayout {
+  MAGIC: number; LAYERS: number; PLANE: number; SIDE: number; size: number; magic: number; serial: number; car: number; base: number;
+  n: number; layer: number; layerSize: number; lHash: number; lMask: number; lRemap: number; lAlpha: number; lCol: number;
+}
+export const SKIN_HQ: GwSkinHqLayout = {
+  MAGIC: 0x4B535148, LAYERS: 8, PLANE: 0x100, SIDE: 512, size: 288, magic: 0, serial: 4, car: 8, base: 24, n: 28, layer: 32, layerSize: 32,
+  lHash: 0, lMask: 4, lRemap: 8, lAlpha: 12, lCol: 16,
+};
 // TF_MS: with TF_RT, a render target drawn at 4 samples (runtime/com.c MULTISAMPLING)
 export const TF_RT = 1, TF_CUBE = 2, TF_MS = 8;
 

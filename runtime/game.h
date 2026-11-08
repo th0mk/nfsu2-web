@@ -52,7 +52,18 @@
 /* ---- cars ---------------------------------------------------------------- */
 #define G_CARTYPES      0x008a1cccu   /* CarTypeInfo[] (0x890 bytes each): +0 the name, +0x20 the name its textures go by,
                                        * +0xC0 the make, +0xD0 the name's hash */
+#define CARTYPE_SIZE    0x890u        /* a CarTypeInfo's size */
+#define CARTYPE_TEXNAME 0x20u         /* ... the name its textures go by ("350Z": CARS/350Z/, 350Z_<texture>) */
 #define G_CARPARTDB     0x008a2b68u   /* the car part database */
+
+/* ---- textures ------------------------------------------------------------ */
+/* a TextureInfo: +0 its platform record (+0x18 the port's D3D texture object, com.c: +28 its GPU texture id) */
+#define TI_PLAT         0x00u
+#define TI_HASH         0x24u         /* its name's hash (bStringHash) */
+#define TI_WIDTH        0x44u         /* u16 */
+#define TI_HEIGHT       0x46u         /* u16 */
+#define PLAT_D3DTEX     0x18u
+#define D3DTEX_ID       28u
 /* a car (the World's list, [player + 4]) */
 #define CAR_FWD_SPEED   0x42cu        /* float: its speed, m/s forward */
 #define CAR_SPEED       0x430u        /* float: its speed, m/s, as the engine sound takes it */

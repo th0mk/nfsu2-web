@@ -183,6 +183,14 @@ export const MODS: readonly Mod[] = [
     online: 'mine', files: ['runtime/gpsdistance.c', 'runtime/gpsdistance_format.h'],
   },
   {
+    id: 'hq-vinyls', name: 'HQ Vinyls & Doorlines', mod: 'High Quality Vinyls & Doorlines (1024x Upscaled)',
+    authors: [{ name: 'AdrienShadow' }], links: { page: 'https://nfsmods.xyz/mod/8064' },
+    kind: 'screen', uses: 'data', control: { setting: 'hq_vinyls' },
+    line: N('Sharp vinyls and doorlines.'),
+    details: 'Every vinyl and doorline of the 31 cars redrawn at 1024x1024, so a car\'s paint stays sharp up close, with the game\'s own designs, colours and shine. A car with one of Art Factory 28 to 34 keeps the game\'s look. On a computer only: phones keep the game\'s. Each car\'s pictures download as you see it, about 100 KB.',
+    online: 'mine', files: ['runtime/hqvinyls.c', 'web/src/gpu/hqskin.ts', 'tools/hqvinyls.py'],
+  },
+  {
     id: 'gearbox-whine', name: 'Transmission Whine', mod: 'Underground 2 Transmission Whine',
     authors: [{ name: 'ropi', url: 'https://github.com/ropi336' }],
     links: { page: 'https://nfsmods.xyz/mod/5927', source: 'https://github.com/ropi336/UG2WhineGen' },

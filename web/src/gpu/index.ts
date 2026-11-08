@@ -16,6 +16,7 @@ import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
 import { MemoryBuffer } from '../host/memory';
 import * as P from './proto';
+import { avifDecodes } from './hqskin';
 import { C, F } from './proto';
 import { Encoder } from './encoder';
 import type { FromPng, ToPng, ToPngEnd, ToPngTile } from './png-worker';
@@ -280,11 +281,12 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   // canvas.width/height are when the page sizes the canvas), kept apart from canvas.width/height, which follow the
   // game's picture at a render scale below 1 (fitPicture).
   let viewW = canvas.width, viewH = canvas.height;
+  let hqSkin = false;                // HQ vinyls: this page paints the cars' skins again (hqskin.ts), set below
   const publishView = () => {
     const u = u32();
     u[cw + C.viewW] = viewW; u[cw + C.viewH] = viewH;
     u[cw + C.dpr1000] = Math.round(devicePixelRatio * 1000);
-    u[cw + C.features] = P.FEAT_BC | (device.features.has('texture-component-swizzle') ? P.FEAT_SWIZZLE : 0);
+    u[cw + C.features] = P.FEAT_BC | (device.features.has('texture-component-swizzle') ? P.FEAT_SWIZZLE : 0) | (hqSkin ? P.FEAT_HQSKIN : 0);
   };
   publishView();
   const won = Atomics.compareExchange(i32(), cw + C.attached, 0, P.ATTACHED);
@@ -316,6 +318,13 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     crop: [number, number, number, number]; mark?: boolean; name: string; resolve?: (b: Blob) => void; ended: boolean };
   let taking: Taking | null = null, bigNext = 1;
   const phone = /iPhone|iPad|Android|Mobile/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  // HQ vinyls (runtime/hqvinyls.c, hq_vinyls = on): on a PC (BC compression, not a phone: a 1024 skin is 5.6 MB) whose
+  // browser decodes AVIF; the runtime sends skins to paint only then
+  if (!phone && enc.hqCapable) void avifDecodes().then(ok => {
+    if (!ok || !alive) return;
+    enc.hqSkins((path, off, len) => proc.readData(path, off, len, true));
+    hqSkin = true; publishView();
+  });
   /** the most tiles a side this page puts together, for the back buffer's size */
   const maxTiles = () => {
     let n = phone ? 2 : 4;

@@ -185,7 +185,7 @@ test('PRIV-1: of the game folder only the game is listed and served (installer l
     const m = JSON.parse((await request(P2, { p: '/data-manifest' })).body);
     const top = [...new Set(m.files.map(f => f.p.split('/')[0]))].sort();
     console.log(`manifest: ${m.files.length} entries; top level: ${top.join(' ')}`);
-    const allowed = new Set(['speed2.exe', 'server.dll', 'server.cfg', 'cars', 'credits', 'frontend', 'global', 'langpacks', 'languages', 'memcard', 'modpacks', 'movies', 'nis',
+    const allowed = new Set(['speed2.exe', 'server.dll', 'server.cfg', 'cars', 'credits', 'frontend', 'global', 'hqvinyls', 'langpacks', 'languages', 'memcard', 'modpacks', 'movies', 'nis',
       'pfdata', 'sound', 'speech', 'subtitles', 'texpacks', 'tracks', 'vinylpacks']);
     assert.deepEqual(top.filter(t => !allowed.has(t.toLowerCase())), [], 'nothing but the game\'s own entries');
     for (const p of ['unins000.dat', 'unins000.exe', 'SAVE', 'scripts/NFSUnderground2.WidescreenFix.ini', 'dinput8.dll', 'SDATA.Backup/sdat.viv', '_How To Play!!.txt'])

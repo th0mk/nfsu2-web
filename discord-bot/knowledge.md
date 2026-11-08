@@ -106,7 +106,8 @@ misread the log's numbers:
   Crash Damage (off by default: dents, loose parts and scratches on the racers' cars, looks only; in free roam players
   who have it on see each other's damage, with it off every car shows undamaged), Rubberbanding (Original, No boost,
   Off: the career races' catch-up), Transmission Whine (ropi's: NFS Carbon's gearbox whine on your car, off by
-  default; no volume of its own, the game's Engine Volume sets it). Music in drag and drift races is the site's own
+  default; no volume of its own, the game's Engine Volume sets it), HQ Vinyls & Doorlines (AdrienShadow's: the cars'
+  vinyls and doorlines at 1024x1024, off by default, computers only; Art Factory 28 to 34 keep the game's look). Music in drag and drift races is the site's own
   setting: Game.
 - Resolution scale: 50%, 75%, 100%, 150%, 200%. 50% is the lowest (a quarter of the pixels); phones start at 75%.
 - Frame rate: Auto, 30, 60, 120, 240. Auto picks one of those from the screen's refresh rate (240 from 239 Hz, 120

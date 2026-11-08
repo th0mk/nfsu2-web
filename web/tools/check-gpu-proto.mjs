@@ -37,6 +37,9 @@ c += 'printf("K_TONE %u\\n", (unsigned)GW_K_TONE);\nprintf("TONE_BYTES %u\\n", (
 c += 'printf("K_PHOTO %u\\n", (unsigned)GW_K_PHOTO);\nprintf("PHOTO_BYTES %u\\n", (unsigned)sizeof(GwPhoto));\nprintf("PHOTO_MAGIC %u\\n", (unsigned)GW_PHOTO_MAGIC);\nprintf("PHOTO_ACK %u\\n", (unsigned)offsetof(GwPhoto, ack));\n';
 c += 'printf("PHOTO_TILE %u\\n", (unsigned)offsetof(GwPhoto, tile));\nprintf("PHOTO_WANT %u\\n", (unsigned)offsetof(GwPhoto, want));\n';
 c += 'printf("PHOTO_FOV %u\\n", (unsigned)offsetof(GwPhoto, fov));\nprintf("PHOTO_LENS %u\\n", (unsigned)offsetof(GwPhoto, lens));\n';
+c += 'printf("SKIN_MAGIC %u\\n", (unsigned)GW_SKIN_HQ_MAGIC);\nprintf("SKIN_LAYERS %u\\n", (unsigned)GW_SKIN_HQ_LAYERS);\nprintf("SKIN_PLANE %u\\n", (unsigned)GW_SKIN_HQ_PLANE);\nprintf("SKIN_SIDE %u\\n", (unsigned)GW_SKIN_HQ_SIDE);\nprintf("SKIN_OP %u\\n", (unsigned)GW_SKIN_HQ);\nprintf("SKIN_FEAT %u\\n", (unsigned)GW_FEAT_HQSKIN);\n';
+c += 'printf("SKIN size %u\\n", (unsigned)sizeof(GwSkinHq));\nprintf("SKIN magic %u\\n", (unsigned)offsetof(GwSkinHq, magic));\nprintf("SKIN serial %u\\n", (unsigned)offsetof(GwSkinHq, serial));\nprintf("SKIN car %u\\n", (unsigned)offsetof(GwSkinHq, car));\nprintf("SKIN base %u\\n", (unsigned)offsetof(GwSkinHq, base));\nprintf("SKIN n %u\\n", (unsigned)offsetof(GwSkinHq, n));\nprintf("SKIN layer %u\\n", (unsigned)offsetof(GwSkinHq, layer));\n';
+c += 'printf("SKIN layerSize %u\\n", (unsigned)sizeof(GwSkinHqLayer));\nprintf("SKIN lHash %u\\n", (unsigned)offsetof(GwSkinHqLayer, hash));\nprintf("SKIN lMask %u\\n", (unsigned)offsetof(GwSkinHqLayer, mask));\nprintf("SKIN lRemap %u\\n", (unsigned)offsetof(GwSkinHqLayer, remap));\nprintf("SKIN lAlpha %u\\n", (unsigned)offsetof(GwSkinHqLayer, alpha));\nprintf("SKIN lCol %u\\n", (unsigned)offsetof(GwSkinHqLayer, col));\n';
 c += 'printf("CAP_TILES %u\\n", (unsigned)GW_CAP_TILES);\nprintf("CAP_SHUTTER %u\\n", (unsigned)GW_CAP_SHUTTER);\nprintf("LENS_FISHEYE %u\\n", (unsigned)GW_LENS_FISHEYE);\nreturn 0; }\n';
 fs.writeFileSync(path.join(tmp, 'p.c'), c);
 execFileSync(path.join(ROOT, 'deps', wasi, 'bin/clang'), ['--target=wasm32-wasip1', '-O1', '-I', path.join(ROOT, 'runtime/web'), '-o', path.join(tmp, 'p.wasm'), path.join(tmp, 'p.c')]);
@@ -75,6 +78,11 @@ eq('GW_K_PHOTO', C['K_PHOTO'], T.K_PHOTO); eq('GwPhoto size', C['PHOTO_BYTES'], 
 eq('GwPhoto.tile', C['PHOTO_TILE'], T.PHOTO_TILE); eq('GwPhoto.want', C['PHOTO_WANT'], T.PHOTO_WANT); eq('GwPhoto.fov', C['PHOTO_FOV'], T.PHOTO_FOV);
 eq('GwPhoto.lens', C['PHOTO_LENS'], T.PHOTO_LENS); eq('GW_CAP_TILES', C['CAP_TILES'], T.CAP_TILES); eq('GW_CAP_SHUTTER', C['CAP_SHUTTER'], T.CAP_SHUTTER);
 eq('GW_LENS_FISHEYE', C['LENS_FISHEYE'], T.LENS_FISHEYE);
+eq('GW_SKIN_HQ_MAGIC', C['SKIN_MAGIC'], T.SKIN_HQ.MAGIC); eq('GW_SKIN_HQ_LAYERS', C['SKIN_LAYERS'], T.SKIN_HQ.LAYERS);
+eq('GW_SKIN_HQ_PLANE', C['SKIN_PLANE'], T.SKIN_HQ.PLANE); eq('GW_SKIN_HQ_SIDE', C['SKIN_SIDE'], T.SKIN_HQ.SIDE);
+eq('GW_SKIN_HQ', C['SKIN_OP'], 10); eq('GW_FEAT_HQSKIN', C['SKIN_FEAT'], T.FEAT_HQSKIN);
+for (const f of ['size', 'magic', 'serial', 'car', 'base', 'n', 'layer', 'layerSize', 'lHash', 'lMask', 'lRemap', 'lAlpha', 'lCol'])
+  eq(`GwSkinHq ${f}`, C[`SKIN ${f}`], T.SKIN_HQ[f]);
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(bad ? `${bad} mismatches` : `gpu proto OK: ${Object.keys(C).length} values match (layout ${C.LAYOUT.toString(16)})`);
 process.exit(bad ? 1 : 0);

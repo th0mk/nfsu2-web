@@ -1,0 +1,48 @@
+# HQ vinyls (hq_vinyls, runtime/hqvinyls.c + web/src/gpu/hqskin.ts) in a career Graphics shop: the car as it is, then
+# vinyls of the first category and of Contest put on its bottom layer one by one (the shop's preview paints the skin
+# again each time), each dumped.  Run it twice, NFSU2_HQ_VINYLS=0 and =1, for an A/B; the log's "[hqvinyls]" lines
+# say what the runtime sent, "[hqskin]" what the page painted.  Needs HQVINYLS/ in the server's game folder
+# (tools/hqvinyls.py) and a career save:
+#   node web/tools/roam-pair.mjs --solo --page play --size 1920x1080 --data <game folder with HQVINYLS> --seed <career save>
+#        --a Ex:hqvinyls_shop.txt:NFSU2_ROAM=1,NFSU2_ROAM_ROOM=<own>,NFSU2_HQ_VINYLS=1
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank: room for parts
++0    poke 0x838464 1                 # unlock all
++60   shopgo CC_GRAPHICS
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the shop
++1500 fnglist
++0    dump hq_car
++30   tap RIGHT                       # Vinyls
++120  tap RETURN
++600  fnglist
++30   tap RETURN                      # the bottom layer
++600  fnglist
++30   tap RETURN                      # the first category
++600  fnglist
++30   tap DOWN
++400  dump hq_a1
++30   tap DOWN
++400  dump hq_a2
++30   tap DOWN
++400  dump hq_a3
++30   tap ESCAPE                      # the categories
++400  fnglist
++0    loop 40
++40   tap RIGHT
++0    endloop
++40   tap LEFT
++40   tap LEFT
++30   tap RETURN                      # Contest
++600  fnglist
++30   tap DOWN
++400  dump hq_c1
++30   tap DOWN
++400  dump hq_c2
++30   tap DOWN
++400  dump hq_c3
++0    log HQ DONE
++10   quit

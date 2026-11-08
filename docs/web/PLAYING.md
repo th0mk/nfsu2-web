@@ -296,7 +296,7 @@ World row's list says how many are in each world.
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, music in drag and drift races, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
-| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover, Crash Damage, Rubberbanding (original, no boost or off), Transmission Whine; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
+| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover, Crash Damage, Rubberbanding (original, no boost or off), Transmission Whine, HQ Vinyls & Doorlines; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -360,6 +360,12 @@ World row's list says how many are in each world.
   louder the faster you go, a short pause at each upshift and a whine of its own in reverse. Every car has it (in split
   screen and co-op each player's), as loud as the game's Engine Volume (times Master) makes it; the world paused, it
   is silent. Its sounds (half a megabyte) download once it is on.
+- **HQ Vinyls & Doorlines** (Mods): off by default. On, as AdrienShadow's
+  [High Quality Vinyls & Doorlines](https://nfsmods.xyz/mod/8064) has them, every car's paint is drawn again at
+  1024x1024 from the mod's vinyls and doorlines, twice the game's size: the same designs, colours and shine, sharper
+  up close (the garage, the shops, photo mode). Only on your screen, on a computer (a phone keeps the game's). A car
+  with one of Art Factory 28 to 34, which are not the mod's, keeps the game's look. Each car's pictures download as
+  you see it, about 100 KB; offline, the cars keep the game's look.
 - **Upscaled HUD and Detailed Map** (Mods): Original (the default) is the game's own. Upscaled shows LunicAura106's
   [Upscaled HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the
   server has their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times

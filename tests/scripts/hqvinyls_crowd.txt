@@ -1,0 +1,18 @@
+# HQ vinyls (hq_vinyls) among a free-roam crowd: every friend's car's skin is painted again at 1024 (each has its
+# doorline), the 16 shown at once (gpu/encoder.ts OVER_MAX) the ones drawn latest.  The log's "[hqskin]" lines, the
+# renderer's "[gpu]" lines (WebGPU errors, slot waits) and the frames say how it goes; dumps of the crowd.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1920x1080 --data <game folder with HQVINYLS> --seed <career save>
+#        --crowd 40 --crowd-args "--cars all --spread 10" --a Ex:hqvinyls_crowd.txt:NFSU2_ROAM=1,NFSU2_ROAM_ROOM=<own>,NFSU2_HQ_VINYLS=1
+0     bot on
++0    waitroam 6000
++0    bot off
++1800 dump crowd_a
++600  photo on
++60   photo orbit
++60   photo turn 60 0
++120  dump crowd_b
++0    photo turn 120 0
++120  dump crowd_c
++0    photo off
++600  log HQ CROWD DONE
++10   quit

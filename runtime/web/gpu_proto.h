@@ -132,6 +132,7 @@ typedef struct {
 
 #define GW_FEAT_BC       1u   /* texture-compression-bc */
 #define GW_FEAT_SWIZZLE  2u   /* texture-component-swizzle */
+#define GW_FEAT_HQSKIN   4u   /* the page paints car skins again at 1024 (GW_SKIN_HQ): HQ vinyls, a PC with BC */
 
 /* The page's display clock, filled from requestAnimationFrame. */
 typedef struct {
@@ -157,6 +158,7 @@ enum {
     GW_Z_FORGET    = 8,   /* a: zid */
     GW_BB_SAMPLES  = 9,   /* a: the back buffer's samples from the next frame on, 1 or 4 (com.c MULTISAMPLING; a page
                            * without it skips the record and draws with 1) */
+    GW_SKIN_HQ     = 10,  /* a: id, recipe bytes; payload GwSkinHq, then its layers' alpha planes (runtime/hqvinyls.c) */
 };
 #define GW_TF_RT   1u
 #define GW_TF_CUBE 2u
@@ -165,6 +167,32 @@ enum {
                            * draws the target with 1) */
 typedef struct { uint32_t op, len; uint32_t a[6]; } GwCmd;
 #define GW_CMD_HDR 32u
+
+/* A car skin the game just painted at 512 (DUMMY_SKIN<n>, texture id a[0]), to be painted again at 1024 from the HQ
+ * vinyls' pictures (HQVINYLS/CARS/<car>.hqv, tools/hqvinyls.py) and shown in its place (web/src/gpu/hqskin.ts):
+ * the game's compositor's recipe (0x611F10's argument), its colours as it holds them: R, G, B, A bytes (A = gloss).
+ * A layer drawn as it is (no REMAP: a doorline, some vinyls) gives the skin its alpha, which the HQ pictures do not
+ * have: alpha = GW_SKIN_HQ_PLANE then means a 512x512 plane of the game's own (one byte a pixel) follows the
+ * recipe, the layers' planes in their order; else alpha is the layer's one alpha (or unused, with REMAP). */
+#define GW_SKIN_HQ_MAGIC  0x4B535148u     /* "HQSK" */
+#define GW_SKIN_HQ_LAYERS 8
+#define GW_SKIN_HQ_PLANE  0x100u
+#define GW_SKIN_HQ_SIDE   512u            /* the game's skins and layers */
+typedef struct {
+    uint32_t hash;        /* the layer picture's name hash (<car>_<TEXTURE>, <car>_DOORLINE...) */
+    uint32_t mask;        /* its mask's (... + "_MASK") */
+    uint32_t remap;       /* nonzero: coloured by col[0..2] by the picture's R, G, B */
+    uint32_t alpha;       /* without REMAP: the layer's alpha 0..255, or GW_SKIN_HQ_PLANE */
+    uint32_t col[4];      /* R, G, B, A bytes */
+} GwSkinHqLayer;
+typedef struct {
+    uint32_t magic;       /* GW_SKIN_HQ_MAGIC */
+    uint32_t serial;      /* the runtime's count of skins sent (a newer one for the same id wins) */
+    char     car[16];     /* the car's folder (CARS/<car>), NUL-padded */
+    uint32_t base;        /* the base paint, R, G, B, A bytes */
+    uint32_t n;           /* layers */
+    GwSkinHqLayer layer[GW_SKIN_HQ_LAYERS];
+} GwSkinHq;
 
 /* The other cars' headlights (runtime/headlights.c): every frame's VS
  * constant arena holds this block at GW_K_HL, bound as group 0 binding 3 (H)

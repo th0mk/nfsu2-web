@@ -28,6 +28,7 @@ import { unpackDxt } from './dxt';
 import { drawViewport, drawScissor } from './viewport';
 import { dxt1HasPunch, dxt1ToAstc } from './astc';
 import type { GameMemory } from '../host/memory';
+import { HqSkins, type DataReader } from './hqskin';
 
 export interface EncodeStats {
   draws: number; passes: number; skipped: number; encodeMs: number;
@@ -51,6 +52,10 @@ interface Tex {
 /** a 4-sample colour texture that a target's passes draw into and resolve from (runtime/com.c MULTISAMPLING); stale:
  *  the target was written another way (a blit, a copy, a clear pass of its own) since the twin last resolved into it */
 interface MsTwin { tex: GPUTexture; view: GPUTextureView; stale: boolean }
+/** HQ vinyls (hqskin.ts): skins painted again at 1024 shown at once, at most; the one drawn longest ago goes */
+const OVER_MAX = 16;
+/** a sampler key (encoder.sampler) with a mip filter: linear where it had none */
+const overSmp = (k: number) => ((k >> 4) & 3) ? k : (k & ~(3 << 4)) | (2 << 4);
 
 const enum Src { TVert = 0, Raw = 1, Pool = 2 }
 const PSLOT = 768;                 // PSPar (560 bytes) at 256-aligned slots
@@ -105,6 +110,13 @@ export class Encoder {
 
   // resources
   private tex: (Tex | undefined)[] = [];
+  // HQ vinyls: the 1024 skins shown in the game's skins' places (texFor), by the game's texture id; the latest paint
+  // asked for each id (a newer one, the game painting it again or freeing it: an older paint is dropped)
+  private hq: HqSkins | null = null;
+  private over = new Map<number, Tex & { drawn: number }>();
+  private hqWant = new Map<number, number>();
+  private hqSeq = 0;
+  private drawClock = 0;
   private serial = 1;
   private white!: Tex; private whiteCube!: Tex;
   private zTex: (GPUTexture | undefined)[] = [];
@@ -282,6 +294,7 @@ export class Encoder {
         case Op.ZForget: if (a0 < 64 && this.zTex[a0]) { this.zTex[a0]!.destroy(); this.zTex[a0] = undefined; this.zView[a0] = undefined; }
           for (const [k, z] of this.msZ) if (k.startsWith(`${a0}:`)) { z.tex.destroy(); this.msZ.delete(k); } break;
         case Op.BbSamples: this.setBbSamples(a0); break;
+        case Op.SkinHq: this.skinHq(a0, a1, a2, data); break;
         default: this.log(`[gpu] unknown resource op ${op}`);
       }
       tail = (tail + len) >>> 0;
@@ -352,6 +365,7 @@ export class Encoder {
   }
 
   private texFree(id: number): void {
+    if (this.hqWant.size) this.overGone(id);
     const t = this.tex[id];
     if (!t) return;
     t.tex.destroy(); t.ms?.tex.destroy();
@@ -365,6 +379,7 @@ export class Encoder {
   private unpackBuf = new Uint8Array(0);           // DXT unpacked or rewritten as ASTC for an upload (no texture-compression-bc)
   private texUpload(id: number, level: number, face: number, lw: number, lh: number, pitch: number, rows: number, data: number): void {
     let t = this.tex[id];
+    if (level === 0 && this.hqWant.size) this.overGone(id);      // the game painted it again: its own until the new paint
     if (t && this.traceDumps) this.uploads.set(t.serial, (this.uploads.get(t.serial) ?? 0) + 1);
     if (!t || level >= t.levels) return;
     if (t.astc) {
@@ -730,6 +745,7 @@ export class Encoder {
    * the same passes, one full-screen copy fewer. */
   encodeFrame(b: number, enc: GPUCommandEncoder, direct?: GPUTexture): EncodeStats {
     const t0 = performance.now();
+    this.drawClock++;
     this.views();
     const u32 = this.u32, i32 = this.i32, f32 = this.f32, dev = this.device;
     const fw = this.ctlW + P.C.frame + b * (P.FRAME_BYTES >> 2);
@@ -1003,6 +1019,13 @@ export class Encoder {
       const t1 = u32[w + D.tex1], t2 = u32[w + D.tex2], t3 = u32[w + D.tex3];
       let s0 = u32[w + D.smp], s1 = u32[w + D.smp + 1], s2 = u32[w + D.smp + 2], s3 = u32[w + D.smp + 3];
       const v0 = this.texFor(t0, cube, passCube), v1 = this.texFor(t1, false, passCube), v2 = this.texFor(t2, false, passCube), v3 = this.texFor(t3, false, passCube);
+      // a 1024 skin (HQ vinyls) has its mipmaps: sampled with them, whatever the game's 512 one (one level) asked for
+      if (this.over.size) {
+        if (this.over.get(t0) === v0) s0 = overSmp(s0);
+        if (this.over.get(t1) === v1) s1 = overSmp(s1);
+        if (this.over.get(t2) === v2) s2 = overSmp(s2);
+        if (this.over.get(t3) === v3) s3 = overSmp(s3);
+      }
       if (this.pointTex) { s0 = this.pointKey(s0, v0); s1 = this.pointKey(s1, v1); s2 = this.pointKey(s2, v2); s3 = this.pointKey(s3, v3); }
       else if (this.aniso) { s0 = this.anisoKey(s0, v0); s1 = this.anisoKey(s1, v1); s2 = this.anisoKey(s2, v2); s3 = this.anisoKey(s3, v3); }
       // the same textures and samplers as the previous draw (the common case): nothing to do
@@ -1126,7 +1149,62 @@ export class Encoder {
     const t = id ? this.tex[id] : undefined;
     if (!t || t.cube !== cube) return cube ? this.whiteCube : this.white;
     if (id === passTex) { this.conflicts++; return cube ? this.whiteCube : this.white; }
+    if (this.over.size) { const o = this.over.get(id); if (o) { o.drawn = this.drawClock; return o; } }
     return t;
+  }
+
+  // ------------------------------------------------------------ HQ vinyls
+  /** this page paints skins again at 1024 (GW_FEAT_HQSKIN): BC compression (a PC's GPU), and a reader of the game data */
+  get hqCapable(): boolean { return this.feat.bc; }
+  hqSkins(read: DataReader): void {
+    if (this.hq || !this.feat.bc) return;
+    this.hq = new HqSkins(this.device, read, this.log, (enc, tex) => this.mipChain(enc, tex), P.SKIN_HQ);
+  }
+  get hqStats(): { painted: number; failed: number; shown: number } {
+    return { painted: this.hq?.painted ?? 0, failed: this.hq?.failed ?? 0, shown: this.over.size };
+  }
+
+  /** each level of tex drawn from the one above it */
+  private mipChain(enc: GPUCommandEncoder, tex: GPUTexture): void {
+    for (let l = 1; l < tex.mipLevelCount; l++)
+      this.copyQuad(enc, tex.createView({ baseMipLevel: l - 1, mipLevelCount: 1 }), tex.createView({ baseMipLevel: l, mipLevelCount: 1 }),
+        'bgra8unorm', this.linear);
+  }
+
+  /** the game painted (or freed) texture id: its 1024 one goes, and any paint of it still under way is dropped */
+  private overGone(id: number): void {
+    if (!this.hqWant.has(id)) return;
+    this.hqWant.set(id, ++this.hqSeq);
+    const o = this.over.get(id);
+    if (o) { this.over.delete(id); this.texBytes -= o.bytes; this.destroyLater.push(o.tex); }
+  }
+
+  /** GW_SKIN_HQ: the game painted texture id at 512 from this recipe (+ alpha planes); paint it at 1024 */
+  private skinHq(id: number, recipeBytes: number, nplanes: number, data: number): void {
+    const t = this.tex[id];
+    if (!this.hq || !t || t.cube || t.w !== P.SKIN_HQ.SIDE || t.h !== P.SKIN_HQ.SIDE || recipeBytes !== P.SKIN_HQ.size || nplanes > P.SKIN_HQ.LAYERS) return;
+    const token = ++this.hqSeq, serial = t.serial, plane = P.SKIN_HQ.SIDE * P.SKIN_HQ.SIDE;
+    this.hqWant.set(id, token);
+    // the payload is the queue's only until drain returns: copied
+    const recipe = this.u8.slice(data, data + recipeBytes), planes = this.u8.slice(data + recipeBytes, data + recipeBytes + nplanes * plane);
+    const current = () => this.hqWant.get(id) === token && this.tex[id]?.serial === serial;
+    void this.hq.paint({ id, recipe, planes, nplanes, game: () => current() ? this.tex[id]!.view : null }).then(out => {
+      if (!out) return;
+      if (!current()) { out.destroy(); return; }
+      const old = this.over.get(id);
+      if (old) { this.over.delete(id); this.texBytes -= old.bytes; this.destroyLater.push(old.tex); }
+      if (this.over.size >= OVER_MAX) {
+        let far = -1, at = Infinity;
+        for (const [k, o] of this.over) if (o.drawn < at) { at = o.drawn; far = k; }
+        const o = this.over.get(far)!;
+        this.over.delete(far); this.texBytes -= o.bytes; this.destroyLater.push(o.tex);
+      }
+      const bytes = Math.round(out.width * out.height * 4 * 4 / 3);
+      this.texBytes += bytes;
+      this.over.set(id, { serial: this.serial++, tex: out, fmt: P.Fmt.A8R8G8B8, w: out.width, h: out.height, levels: out.mipLevelCount,
+        cube: false, rt: false, view: out.createView(), rtViews: [], expandA8: false, bc: false, unpack: false, astc: false, filled: true,
+        bytes, drawn: this.drawClock });
+    });
   }
 
   /** after the frame's submit: drop what the frame may still have referenced */

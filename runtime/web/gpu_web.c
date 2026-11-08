@@ -568,6 +568,24 @@ static void shader_put(int op, int id, const char *src){
     memcpy((uint8_t *)c + GW_CMD_HDR, src, n);
     rq_commit(c);
 }
+/* ---- HQ vinyls (runtime/hqvinyls.c) ---------------------------------------
+ * The page paints a skin again at 1024 (web/src/gpu/hqskin.ts) when it says it
+ * can (GW_FEAT_HQSKIN: a PC with BC compression).  The recipe, then the
+ * 512x512 alpha planes its layers without REMAP need, in one record. */
+int gw_hqskin_ok(void){
+    return g_on && g_ctl && (g_ctl->features & GW_FEAT_HQSKIN) != 0;
+}
+void gw_skin_hq(unsigned id, const GwSkinHq *r, const uint8_t *const *planes, unsigned nplanes){
+    if (!gw_hqskin_ok() || !id) return;
+    const uint32_t plane = GW_SKIN_HQ_SIDE * GW_SKIN_HQ_SIDE;
+    GwCmd *c = rq_begin(GW_SKIN_HQ, (uint32_t)sizeof *r + nplanes * plane);
+    if (!c) return;
+    c->a[0] = id; c->a[1] = (uint32_t)sizeof *r; c->a[2] = nplanes;
+    uint8_t *p = (uint8_t *)c + GW_CMD_HDR;
+    memcpy(p, r, sizeof *r);
+    for (unsigned k = 0; k < nplanes; k++) memcpy(p + sizeof *r + k * plane, planes[k], plane);
+    rq_commit(c);
+}
 void metal_register_vs(int id, const char *src){
     gw_init();
     if (id <= 0 || id >= MAXVSF || !src || g_vs_ok[id]) return;

@@ -13,7 +13,7 @@
 //          settings.ini, logs).  Closing a file the game wrote there tells
 //          the page ({ t: 'saved', path }: "Progress saved", F9's last save).
 import {
-  CTL_IO_BEAT, CTL_IO_DOORBELL, E, IO_SLOW_MS, MAX_THREADS, Op, opName, RPC_DONE, RPC_POSTED, RPC_SLOT, RPC_TAKEN, type BootConfig,
+  CTL_IO_BEAT, CTL_IO_DOORBELL, E, IO_SLOW_MS, MAX_THREADS, Op, opName, RPC_DONE, RPC_POSTED, RPC_SLOT, RPC_TAKEN, type BootConfig, type ReadAnswer, type ReadAsk,
 } from './proto';
 import { BLOCK, CACHE_DIR, av1Path, songsPath, blockRuns, cacheKey, cacheOpen, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
 import { movieClose, movieDecode, movieOpen } from './movie';
@@ -1023,8 +1023,42 @@ async function serve() {
 }
 
 let gaveHere = false;
-onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; port: MessagePort; slot: number } | { t: 'give-page'; slot: number }>) => {
+/** bytes [off, off + len) of a game-folder file for the page (its renderer's HQ vinyls, gpu/hqskin.ts): through the
+ *  same block cache as the game's reads (kept, and there offline), or with exact those bytes alone from the server (an
+ *  HQ vinyl's two pictures are ~30 KB, a block 1 MiB) */
+async function pageRead(m: ReadAsk): Promise<void> {
+  try {
+    const n = dataFile(m.path);
+    if (!n || n.dir) throw new Error('not in the game folder');
+    const end = Math.min(n.size, m.off + m.len);
+    if (m.off < 0 || end <= m.off) throw new Error(`no bytes at ${m.off} (${n.size} in the file)`);
+    if (m.exact) {
+      for (let k = 1; ; k++) {
+        const r = await fetchOnce(dataUrl(cfg.dataBase, n.path), m.off, end - m.off, true, false);
+        if (r instanceof Uint8Array) {
+          const out = new Uint8Array(r.length); out.set(r);
+          me.postMessage({ t: 'read', id: m.id, bytes: out } satisfies ReadAnswer, [out.buffer]);
+          return;
+        }
+        if (!r.again || k >= 3) throw new Error(r.why);
+        await new Promise(res => setTimeout(res, 500 * k));
+      }
+    }
+    const out = new Uint8Array(end - m.off), first = Math.floor(m.off / BLOCK), last = Math.floor((end - 1) / BLOCK);
+    const blocks = await Promise.all(Array.from({ length: last - first + 1 }, (_, i) => getBlock(n, first + i, P_GAME)));
+    for (let bi = first; bi <= last; bi++) {
+      const b = blocks[bi - first], s = Math.max(m.off, bi * BLOCK), e = Math.min(end, bi * BLOCK + b.length);
+      out.set(b.subarray(s - bi * BLOCK, e - bi * BLOCK), s - m.off);
+    }
+    me.postMessage({ t: 'read', id: m.id, bytes: out } satisfies ReadAnswer, [out.buffer]);
+  } catch (x) {
+    me.postMessage({ t: 'read', id: m.id, error: x instanceof Error ? x.message : String(x) } satisfies ReadAnswer);
+  }
+}
+
+onmessage = async (e: MessageEvent<Init | { t: 'save-ready' } | { t: 'give'; port: MessagePort; slot: number } | { t: 'give-page'; slot: number } | ReadAsk>) => {
   if ('t' in e.data) {
+    if (e.data.t === 'read') { void pageRead(e.data); return; }
     if (e.data.t === 'save-ready') saveAnswered?.();
     // the Memory for a game thread, on the port the page gave it
     else if (e.data.t === 'give') {

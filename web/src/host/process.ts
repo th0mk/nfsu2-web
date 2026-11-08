@@ -1,6 +1,6 @@
 // Starting the game process from the page: the shared memory, the control
 // and RPC blocks, the I/O worker and a pool of game-thread workers.
-import { CTL_EXIT, CTL_INTS, CTL_NEXT_TID, CTL_POOL, MAX_THREADS, POOL_IDLE, POOL_NONE, POOL_RUN_MAIN, RPC_BYTES, type BootConfig, type ToPage } from './proto';
+import { CTL_EXIT, CTL_INTS, CTL_NEXT_TID, CTL_POOL, MAX_THREADS, POOL_IDLE, POOL_NONE, POOL_RUN_MAIN, RPC_BYTES, type BootConfig, type ReadAnswer, type ReadAsk, type ToPage } from './proto';
 import { tzEnv } from './tz';
 import { movieCodec } from './movie';
 import { allocMemory, memoryOffPage, memoryTries, MemoryBuffer, type GameMemory } from './memory';
@@ -42,6 +42,9 @@ export interface GameProcess {
   terminate(): void;
   /** resolves with the structure a subsystem published (runtime/web/host_abi.h) */
   registered(kind: number): Promise<{ ptr: number; size: number }>;
+  /** bytes [off, off + len) of a game-folder file, through the game data's cache (the I/O worker); exact: those bytes
+   *  alone from the server, not kept */
+  readData(path: string, off: number, len: number, exact?: boolean): Promise<Uint8Array<ArrayBuffer>>;
 }
 
 function memoryPagesOf(mod: WebAssembly.Module): number | null {
@@ -154,8 +157,15 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   });
   if (!memory) throw new Error('the I/O worker made no memory');
   const mem: GameMemory = memory;
+  const reads = new Map<number, { res: (b: Uint8Array<ArrayBuffer>) => void; rej: (e: Error) => void }>();
+  let readId = 0;
   io.onmessage = (e) => {
-    if (e.data.t === 'saved') o.onSaved?.(e.data.path);
+    if (e.data.t === 'read') {
+      const a = e.data as ReadAnswer, r = reads.get(a.id);
+      reads.delete(a.id);
+      if (r) { if (a.bytes) r.res(a.bytes); else r.rej(new Error(a.error ?? 'no bytes')); }
+    }
+    else if (e.data.t === 'saved') o.onSaved?.(e.data.path);
     else if (e.data.t === 'removed') o.onRemoved?.(e.data.path);
     else if (e.data.t === 'lost') o.onLost?.(e.data.path);
     else if (e.data.t === 'save-trouble') o.onSaveTrouble?.(e.data.error);
@@ -224,6 +234,13 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
       const r = regs.get(kind);
       if (r) return Promise.resolve(r);
       return new Promise(res => { const l = regWaiters.get(kind) ?? []; l.push(res); regWaiters.set(kind, l); });
+    },
+    readData(path: string, off: number, len: number, exact?: boolean) {
+      return new Promise<Uint8Array<ArrayBuffer>>((res, rej) => {
+        const id = ++readId;
+        reads.set(id, { res, rej });
+        io.postMessage({ t: 'read', id, path, off, len, exact } satisfies ReadAsk);
+      });
     },
     terminate() { for (const w of workers) w.terminate(); if (!Atomics.load(ctl, CTL_EXIT)) resolveExit(-1); },
   };

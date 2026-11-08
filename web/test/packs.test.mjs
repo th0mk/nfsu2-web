@@ -28,7 +28,7 @@ function packFolders() {
   const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: ROOT, encoding: 'utf8' });
   const roots = [ROOT, ...(common.status === 0 ? [path.dirname(common.stdout.trim())] : [])];
   const out = [];
-  for (const kind of ['vinylpacks', 'modpacks', 'langpacks', 'texpacks']) {
+  for (const kind of ['vinylpacks', 'modpacks', 'langpacks', 'texpacks', 'hqvinyls']) {
     const hit = roots.map(r => path.join(r, 'out', 'web', kind)).find(d => fs.existsSync(d));
     if (hit) out.push(hit);
   }

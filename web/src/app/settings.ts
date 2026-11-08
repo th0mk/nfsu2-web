@@ -220,6 +220,10 @@ export const KEYS: readonly KeyDef[] = [
   // its sounds from the game folder's MODPACKS/WHINE, read only when on: tools/whinepack.py).  Not in bundle.m's
   // table: there a lower-case key, so it reaches the runtime as NFSU2_GEARBOX_WHINE all the same
   { key: 'gearbox_whine', env: 'NFSU2_GEARBOX_WHINE', kind: 'bool', scope: 'web' },
+  // the cars' skins painted again at 1024 from AdrienShadow's HQ Vinyls & Doorlines (runtime/hqvinyls.c, the page's
+  // gpu/hqskin.ts; its pictures from the game folder's HQVINYLS/, read as cars are seen: tools/hqvinyls.py).  Not in
+  // bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_HQ_VINYLS all the same
+  { key: 'hq_vinyls', env: 'NFSU2_HQ_VINYLS', kind: 'bool', scope: 'web' },
   // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
   // pointTex).  Not in bundle.m's table
   { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
@@ -387,6 +391,13 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # off = the original game.
 # [NFSU2_GEARBOX_WHINE]
 #gearbox_whine = off
+
+# The cars' vinyls and doorlines at 1024x1024, as AdrienShadow's High
+# Quality Vinyls & Doorlines has them: the game's designs and colours,
+# sharper up close.  On a computer only; each car's pictures download as
+# it is seen, about 100 KB.  off = the original game.
+# [NFSU2_HQ_VINYLS]
+#hq_vinyls = off
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"
