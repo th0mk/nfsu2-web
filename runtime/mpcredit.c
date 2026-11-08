@@ -79,9 +79,10 @@
  *     Return to Explore Mode's save and the world: the crib's message once
  *     the save is over (0x251BF83E; with nothing to save 0x9A3B571D) is held
  *     in its patched handler, the movie plays (the names at 0x8382A0,
- *     IG_PlayMovie.fng added over the others by 0x555E80, as 0x4C57C0 adds
- *     PC_Loading; its end mode [0x838568] 5: in the front end it takes
- *     itself away, 0x558F00, and nothing follows), then the crib's handler
+ *     IG_PlayMovie.fng put after the front end's other screens, 0x555D00,
+ *     so that it is drawn over them: the crib's stay until the world comes;
+ *     its end mode [0x838568] 5: in the front end it takes itself away,
+ *     0x558F00, and nothing follows), then the crib's handler
  *     gets 0x9A3B571D: the world, as it goes there with no save to make.
  *     A playing movie puts the front end's screens away: after it nothing
  *     there takes keys and the crib's own objects are freed (the held
@@ -143,7 +144,10 @@ int career_fe_active(const char *name);
 #define G_MOVIES        0x008382a0u   /* the movies to play: 4 names of 0x40 */
 #define G_MOVIE_AT      0x0083856cu   /* ...the one playing */
 #define G_MOVIE_MODE    0x00838568u   /* what follows the movie screen (0x54AF80): 5 nothing */
-#define FN_FE_ADD       0x00555e80u   /* cdecl (package, 0): the package added, over the others */
+#define FN_FE_QUEUE     0x00555d00u   /* thiscall cFEng (how, package, beside, 0xFF, arg), ret 0x14: a screen into its
+                                       * list, which is the order they are drawn in (how & 6: 0 the list's head, 4
+                                       * after the screen named beside, the list's end with none of that name) */
+#define FN_FE_RUN       0x0052cdd0u   /* thiscall cFEng: as 0x555E80 after it */
 #define FN_MOVIE_PREP   0x0043b640u   /* thiscall 0x827E88: as 0x53D7A0 before its movie */
 #define MSG_CRIB_GO     0x451e768eu   /* to the crib: "Return to Explore Mode?" Yes (0x4AF360: the save, if any) */
 #define MSG_SAVE_WORLD  0x461a18eeu   /* to the crib from the memory card, its save over: on to the world (first) */
@@ -342,17 +346,59 @@ static int ui_ask(CPU *c){
             g_ui.lab_sign, g_ui.lab_next);
     return 1;
 }
+/* While the race's movie plays, the front end's other screens take no keys.  A key goes to the screens in the order
+ * of the front end's list, each that its input mask (the package's +0x1C .. +0x28, 0 none) lets have it; the crib's
+ * menu (0xFF) before the movie (1) took Enter, opened its "Return to Explore Mode?" under the movie, and the movie was
+ * not skipped (measured).  Their masks are kept here, 0 while it plays, and given back before the crib's way to the
+ * world goes on (as the screens are then, the crib's own too; a screen gone is left) */
+#define PKG_NEXT        0x04u         /* a front-end package (cFEng +8: its lists at +0xE4 and +0xF4): the next */
+#define PKG_NAME        0x0cu
+#define PKG_MASK        0x1cu         /* ... its input masks, 4 dwords */
+#define MASKED_MAX      8
+static struct { uint32_t pkg, m[4]; } g_masked[MASKED_MAX];
+static int g_nmasked;
+static int pkg_listed(uint32_t mg, uint32_t q){
+    for (uint32_t head = 0xe4u; head <= 0xf4u; head += 0x10u){
+        uint32_t p = guest_rd32(mg + head);
+        for (int k = 0; p && k < 64 && guest_ok(p, PKG_MASK + 15u); k++, p = guest_rd32(p + PKG_NEXT)) if (p == q) return 1;
+    }
+    return 0;
+}
+static void movie_keys(int only){
+    uint32_t fe = guest_rd32(G_FENG), mg = fe ? guest_rd32(fe + 8u) : 0;
+    if (!only){
+        for (int i = 0; mg && i < g_nmasked; i++)
+            if (pkg_listed(mg, g_masked[i].pkg)) for (uint32_t k = 0; k < 4; k++) MR32(g_masked[i].pkg + PKG_MASK + 4u * k) = g_masked[i].m[k];
+        g_nmasked = 0;
+        return;
+    }
+    for (uint32_t head = 0xe4u; mg && head <= 0xf4u; head += 0x10u){
+        uint32_t p = guest_rd32(mg + head);
+        for (int n = 0; p && n < 64 && guest_ok(p, PKG_MASK + 15u); n++, p = guest_rd32(p + PKG_NEXT)){
+            uint32_t nm = guest_rd32(p + PKG_NAME);
+            int seen = 0;
+            for (int i = 0; i < g_nmasked; i++) seen |= g_masked[i].pkg == p;
+            if (seen || (guest_ok(nm, 16) && !strcasecmp((const char *)(g_mem + nm), "IG_PlayMovie.fng")) || g_nmasked >= MASKED_MAX) continue;
+            g_masked[g_nmasked].pkg = p;
+            for (uint32_t k = 0; k < 4; k++){ g_masked[g_nmasked].m[k] = MR32(p + PKG_MASK + 4u * k); MR32(p + PKG_MASK + 4u * k) = 0; }
+            g_nmasked++;
+        }
+    }
+}
 /* the race's movie over the crib, as 0x53D7A0 plays its own (the names, mode 5 nothing after it; 0x43B640 on
- * 0x827E88 first: without it the movies stopped after about 2.5 s; the package added over the others, 0x555E80, as
- * 0x4C57C0 adds PC_Loading) */
+ * 0x827E88 first: without it the movies stopped after about 2.5 s).  The game's own takes the place of the screen it
+ * is played from (0x5377A0); here the crib's screens stay (the held messages go to the crib), so the movie goes
+ * after them, drawn last.  At the list's head (0x555E80, as 0x4C57C0 adds PC_Loading) it is drawn first, and the
+ * crib's menu shows over it, see-through, the whole movie long (a player's report; tests/scripts/mpcredit_movie.txt) */
 static int ui_movie(CPU *c){
     if (!ui_ready(c) || !guest_rd32(G_FENG)) return 0;
     for (uint32_t k = 0; k < 4; k++) MR8(G_MOVIES + 0x40u * k) = 0;
     for (int k = 0; k < g_ui.nscene; k++) gs(G_MOVIES + 0x40u * (uint32_t)k, g_ui.scene[k], 0x40);
     MR32(G_MOVIE_AT) = 0; MR32(G_MOVIE_MODE) = 5; MR32(G_MOVIES_DONE) = 0;
     call(c, FN_MOVIE_PREP, 0x00827e88u, 0, 0);
-    uint32_t a[2] = { S_PLAYMOVIE, 0 };
-    call(c, FN_FE_ADD, 0, 2, a);
+    uint32_t fe = guest_rd32(G_FENG), a[5] = { 4u, S_PLAYMOVIE, S_PLAYMOVIE, 0xffu, 0u };   /* (beside: none yet) */
+    call(c, FN_FE_QUEUE, fe, 5, a);
+    call(c, FN_FE_RUN, fe, 0, 0);
     fprintf(stderr, "[mpcredit] f=%ld the race's movie: %s%s%s\n", autotest_frame(), g_ui.scene[0], g_ui.nscene > 1 ? ", then " : "",
             g_ui.nscene > 1 ? g_ui.scene[1] : "");
     return 1;
@@ -392,8 +438,9 @@ static void ui_frame(CPU *c){
          * never comes, or one still up after 10 minutes.  Then the held messages to the crib's handler, as they
          * came: the world.  (0x5404A0 called alone, with the crib's message not held, loaded the world twice: half
          * loaded, or a crash in the sound's streams; the world's loading under a playing movie cut it after 2 s) */
-        if (movie) g_ui.seen = 1;
+        if (movie){ g_ui.seen = 1; movie_keys(1); }
         if ((!movie && (g_ui.seen || guest_rd32(G_MOVIES_DONE) == 1u || f - g_ui.at > 300)) || f - g_ui.at > 60 * 600){
+            movie_keys(0);
             fprintf(stderr, "[mpcredit] f=%ld the race's movie %s: the world, as the crib goes there\n", f,
                     g_ui.seen || guest_rd32(G_MOVIES_DONE) == 1u ? "is over" : "did not play");
             g_ui.st = UI_NONE; g_ui.leaving = 0; g_ui.nscene = 0;
@@ -627,6 +674,7 @@ void mpcredit_frame(CPU *c){
                                             && !career_fe_active("UI_CareerCrib.fng"));
         if (gone){
             fprintf(stderr, "[mpcredit] f=%ld the crib is gone: its %s left\n", autotest_frame(), g_ui.st == UI_WAIT ? "movie" : "sponsor question");
+            movie_keys(0);
             g_ui.st = UI_NONE; g_ui.leaving = 0;
             return;
         }

@@ -1,0 +1,43 @@
+# A multiplayer race's win that plays the race's movie (runtime/mpcredit.c): from a stage 2 career save, "mpcredit"
+# marks the win of ${MPC_RACE} (S2_URL_1: SCENE08) for the next crib, the car goes into the crib, Return to Explore
+# Mode and its save (the Save option at Prompt: are you sure, overwrite, "Save complete."), the movie over the crib,
+# skipped with Enter after about 8 s, then free roam.  The dumps need /test/play.html:
+#   node web/tools/roam-pair.mjs --solo --page play --seed <s2_start> --a Al:mpcredit_movie.txt
+#        --env NOMOVIES=0 --env MPC_RACE=S2_URL_1
+# Good: movie_2s and movie_6s show the movie alone (with the movie first in the front end's list, "fe packages:
+# IG_PlayMovie.fng GarageMain.fng ...", the crib's menu is drawn over it, see-through, the whole movie long), the crib's
+# screens' masks 0 meanwhile ("fe packages: ... UI_CareerCrib.fng[01000000 mask 00000000] ... IG_PlayMovie.fng"),
+# "[mpcredit] ... the race's movie is over" right after the skip with no GenericDialog_SMALL (the crib's "Return to
+# Explore Mode?") under it, and free roam after it (roam).
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x00844ad8 0x00010001       # the game's Save option: Prompt
++60   careerlist
++0    mpcredit ${MPC_RACE} 3
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++300  dump crib
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 900
++120  tap LEFT
++30   tap RETURN                      # are you sure: Yes
++150  tap LEFT
++30   tap RETURN                      # overwrite: Yes
++150  dump saved
++0    tap RETURN                      # Save complete: Continue
++0    waitfe IG_PlayMovie.fng 600
++120  dump movie_2s
++0    fnglist x
++240  dump movie_6s
++120  tap RETURN                      # skip it
++0    waitroam 6000
++120  dump roam
++0    careerlist
++0    log MPC done
++10   quit
