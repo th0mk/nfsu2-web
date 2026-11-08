@@ -20,7 +20,7 @@
 
 import registryDefaults from '../../../app/registry-defaults.txt';
 import { browserName, check, checkBrowser, checkGpu, checkIsolation, checkStorage, fmtBytes, NO_JIT, noJit, type Check } from './checks';
-import { codeOf, dateLocale, language as pageLanguage, lastLanguage, LANGUAGES, listOf, live, LOCALE, N, NATIVE, onLanguage, setLanguage, t, T, tn, tvars, type Msg } from './i18n';
+import { browserLanguage, codeOf, dateLocale, language as pageLanguage, lastLanguage, LANGUAGES, listOf, live, LOCALE, N, NATIVE, onLanguage, setLanguage, t, T, tn, tvars, type Msg } from './i18n';
 import { loadGame, serverRev, type Loaded } from './loader';
 import { claimInstance } from './instance';
 import { LogRing, downloadBlob, stamp } from './logs';
@@ -102,6 +102,7 @@ function takeParams(dev: boolean): string[] {
   if (!given.length || !dev) return given;
   q = addr;
   DEVICE.roam = 'off';
+  DEVICE.language = 'english';      // the same screens on every computer, whatever its browser's language
   // never the game data's own OPFS folder, nor the page id's file (savefs keeps names to one segment)
   const save = (q.get('save') || 'save').replace(/[^A-Za-z0-9._-]/g, '_');
   SAVE = save === 'cache' || save === PAGE_ID_FILE || /^\.+$/.test(save) ? 'save-test' : save;
@@ -324,9 +325,11 @@ async function editSettings(edit: (text: string) => string): Promise<string> {
   return text;
 }
 /** the page's own defaults, below settings.ini and the page address: free roam with others on (2026-11-05; until then
- *  off, and the first Play asked; the game's own default stays off), and this device's (a phone's: device.ts).  A test
- *  page keeps free roam off (takeParams): its tools set NFSU2_ROAM where they want it */
-const DEVICE: Record<string, string> = { roam: 'on', ...deviceDefaults() };
+ *  off, and the first Play asked; the game's own default stays off), the browser's language where the game has it,
+ *  else English (i18n.ts browserLanguage: the game's and the page's, until the player picks one), and this device's
+ *  (a phone's: device.ts).  A test page keeps free roam off and the game English (takeParams): its tools set
+ *  NFSU2_ROAM and NFSU2_LANGUAGE where they want them */
+const DEVICE: Record<string, string> = { roam: 'on', language: browserLanguage(), ...deviceDefaults() };
 function resolved(host: Record<string, string> = {}): Resolved { return resolveEnv(settingsText, ENVIRONMENT, host, DEVICE); }
 /** the game's language (runtime/language.c): which language pack the page fetches ahead and counts */
 const language = (r: Resolved = resolved()) => (r.env.NFSU2_LANGUAGE ?? 'english').toLowerCase();
@@ -936,8 +939,9 @@ function menuName(): string {
 }
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-/** The page in the game's language (settings.ini language, the page address's on a development server): English until
- *  the player picks another, in Settings or in the list at the top.  A tab that does not own the saves follows the file. */
+/** The page in the game's language (settings.ini language, the page address's on a development server): the browser's
+ *  language where the game has it, else English (DEVICE), until the player picks one, in Settings or in the list at
+ *  the top.  A tab that does not own the saves follows the file. */
 function applyLanguage() {
   void setLanguage(language(resolveEnv(settingsText ?? settings.text, ENVIRONMENT, {}, DEVICE)), logLine);
   syncPicker();
