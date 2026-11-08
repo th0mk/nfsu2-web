@@ -24,6 +24,11 @@
 //! block not kept yet is answered as above and queued to be kept; a shared cache may keep that answer EDGE_WHILE
 //! only, then asks again and keeps the kept one for good.  The addresses are /data-blocks/v2/ (v2 since blocks are
 //! kept, so that no shared cache's copy of an answer from before is ever asked for again).
+//!
+//! With o and l in place of b and n, the answer is bytes o .. o+l-1 of the file as they are, a 200 with exactly them:
+//! the page's HQ vinyls (gpu/hqskin.ts) read a car's pictures that way, ~30 KB each where a block is 1 MiB.  Kept for
+//! good by a shared cache on the same terms (the address names this version), so every player after the first gets
+//! them from the CDN, under the same Cache Rule.
 
 use std::io::{self, Write};
 use std::os::unix::fs::{FileExt, MetadataExt};
@@ -124,6 +129,17 @@ impl Encoder {
     }
 }
 
+/// a query value of 1 to max digits
+fn digits(x: &str, max: usize) -> bool {
+    !x.is_empty() && x.len() <= max && x.bytes().all(|c| c.is_ascii_digit())
+}
+
+/// whether the address names this version of the file: m and s, the manifest's mtime and size
+fn names_version(u: &Url, md: &std::fs::Metadata) -> bool {
+    u.param("m").as_deref() == Some(etag::num(etag::mtime_s(md)).as_str())
+        && u.param("s").as_deref() == Some(etag::num(md.size() as f64).as_str())
+}
+
 /// buf filled from the file at off, as far as the file goes
 pub fn read_full_at(f: &std::fs::File, buf: &mut [u8], off: u64) -> io::Result<usize> {
     let mut got = 0;
@@ -195,8 +211,10 @@ impl App {
             None => None,
         };
         let Some((file, md, real)) = opened else { return self.not_found(q, s).await };
+        if u.param("o").is_some() {
+            return self.send_exact(q, s, file, &md, u).await;
+        }
         let (b, n) = (u.param("b").unwrap_or_default(), u.param("n").unwrap_or_default());
-        let digits = |x: &str, max: usize| !x.is_empty() && x.len() <= max && x.bytes().all(|c| c.is_ascii_digit());
         if !digits(&b, 7) || !digits(&n, 2) {
             return self.bad_request(q, s).await;
         }
@@ -210,9 +228,7 @@ impl App {
         if start >= size {
             return self.plain(q, s, 416, "Range not satisfiable", &[], Cache::Store, true).await;
         }
-        // the version: m and s
-        let named = u.param("m").as_deref() == Some(etag::num(etag::mtime_s(&md)).as_str())
-            && u.param("s").as_deref() == Some(etag::num(size as f64).as_str());
+        let named = names_version(u, &md);
         let accept = q.headers.get("accept-encoding");
         // one block to a client that takes br: as kept.rs keeps it, if it does yet
         let kept = match &self.kept {
@@ -289,6 +305,37 @@ impl App {
         let r = finish(s).await;
         drop(held);
         r
+    }
+
+    /// `?o=&l=`: the file's bytes o .. o+l-1 (as far as it goes) as they are, at most a run's; kept for good by a
+    /// shared cache when the address names this version
+    async fn send_exact(&self, q: &Request, s: &mut Response, file: std::fs::File, md: &std::fs::Metadata, u: &Url) -> Res {
+        let (o, l) = (u.param("o").unwrap_or_default(), u.param("l").unwrap_or_default());
+        if !digits(&o, 12) || !digits(&l, 8) {
+            return self.bad_request(q, s).await;
+        }
+        let (o, l): (u64, u64) = (o.parse().unwrap_or(0), l.parse().unwrap_or(0));
+        if !(1..=BLOCK * BLOCKS_MAX).contains(&l) {
+            return self.bad_request(q, s).await;
+        }
+        let size = md.size();
+        if o >= size {
+            return self.plain(q, s, 416, "Range not satisfiable", &[], Cache::Store, true).await;
+        }
+        let end = size.min(o + l);
+        let mut h = self.headers(q, Cache::Store, true);
+        h.set("content-type", "application/octet-stream");
+        if names_version(u, md) {
+            h.set("cdn-cache-control", EDGE_KEEP);
+            h.set("cloudflare-cdn-cache-control", EDGE_KEEP);
+        }
+        h.set("content-length", (end - o).to_string());
+        Sent::count(&self.sent.as_is);
+        s.head(200, h.0);
+        if q.method != "HEAD" {
+            stream_range(s, Arc::new(file), o, end).await?;
+        }
+        finish(s).await
     }
 
     /// a kept block: its brotli stream as it is on the disk, with its length (kept for good by a shared cache when

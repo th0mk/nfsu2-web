@@ -15,7 +15,7 @@
 import {
   CTL_IO_BEAT, CTL_IO_DOORBELL, E, IO_SLOW_MS, MAX_THREADS, Op, opName, RPC_DONE, RPC_POSTED, RPC_SLOT, RPC_TAKEN, type BootConfig, type ReadAnswer, type ReadAsk,
 } from './proto';
-import { BLOCK, CACHE_DIR, av1Path, songsPath, blockRuns, cacheKey, cacheOpen, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
+import { BLOCK, CACHE_DIR, av1Path, songsPath, blockRuns, cacheKey, cacheOpen, dataUrl, exactUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
 import { movieClose, movieDecode, movieOpen } from './movie';
 import { allocMemory, type MemoryTry } from './memory';
 
@@ -1025,7 +1025,8 @@ async function serve() {
 let gaveHere = false;
 /** bytes [off, off + len) of a game-folder file for the page (its renderer's HQ vinyls, gpu/hqskin.ts): through the
  *  same block cache as the game's reads (kept, and there offline), or with exact those bytes alone from the server (an
- *  HQ vinyl's two pictures are ~30 KB, a block 1 MiB) */
+ *  HQ vinyl's two pictures are ~30 KB, a block 1 MiB), at an address Cloudflare keeps (exactUrl); the third try as a
+ *  byte range of /data/, as a block's does when the connection keeps dropping */
 async function pageRead(m: ReadAsk): Promise<void> {
   try {
     const n = dataFile(m.path);
@@ -1034,7 +1035,9 @@ async function pageRead(m: ReadAsk): Promise<void> {
     if (m.off < 0 || end <= m.off) throw new Error(`no bytes at ${m.off} (${n.size} in the file)`);
     if (m.exact) {
       for (let k = 1; ; k++) {
-        const r = await fetchOnce(dataUrl(cfg.dataBase, n.path), m.off, end - m.off, true, false);
+        const ranged = k === 3;
+        const r = await fetchOnce(ranged ? dataUrl(cfg.dataBase, n.path) : exactUrl(runs.url, n.path, m.off, end - m.off, n),
+          m.off, end - m.off, ranged, false);
         if (r instanceof Uint8Array) {
           const out = new Uint8Array(r.length); out.set(r);
           me.postMessage({ t: 'read', id: m.id, bytes: out } satisfies ReadAnswer, [out.buffer]);

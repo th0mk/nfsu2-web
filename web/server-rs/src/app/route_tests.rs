@@ -162,6 +162,45 @@ fn version(kit: &Kit, rel: &str) -> String {
     format!("m={}&s={}", super::etag::num(super::etag::mtime_s(&md)), md.len())
 }
 
+// o and l in place of b and n: those bytes as they are, with their length, kept for good by a shared cache only when
+// the address names this version; past the end as far as the file goes, from past it 416, numbers that are not 400
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn exact_ranges_come_back_as_they_are() {
+    let kit = Kit::start(&[], |root| {
+        std::fs::write(root.join("game/TRACKS/pics.bin"), data((1 << 20) + 5000, true)).unwrap();
+    })
+    .await;
+    let raw = std::fs::read(kit.path("game/TRACKS/pics.bin")).unwrap();
+    let v = version(&kit, "TRACKS/pics.bin");
+    let all = [("Accept-Encoding", "zstd, br, gzip")];
+    let url = |o: usize, l: usize, v: &str| format!("/data-blocks/v2/TRACKS/pics.bin?o={o}&l={l}&{v}");
+    for (o, l) in [(0, 16), (16, 30000), ((1 << 20) - 100, 4000), (raw.len() - 10, 10)] {
+        let a = kit.get(&url(o, l, &v), &all).await;
+        assert_eq!(a.status, 200, "o={o} l={l}");
+        assert_eq!(a.header("content-encoding"), None);
+        assert_eq!(a.header("content-length"), Some(l.to_string().as_str()));
+        assert_eq!(a.body, &raw[o..o + l], "o={o} l={l}");
+        assert_eq!(a.header("cloudflare-cdn-cache-control"), Some(nfsu2_headers::EDGE_KEEP));
+        assert_eq!(a.header("cdn-cache-control"), Some(nfsu2_headers::EDGE_KEEP));
+    }
+    let a = kit.get(&url(raw.len() - 10, 100, &v), &all).await;
+    assert_eq!((a.status, a.body.as_slice()), (200, &raw[raw.len() - 10..]));
+    // no version, or another one: never kept by a shared cache
+    for other in ["", "m=1&s=16"] {
+        let a = kit.get(&url(0, 16, other), &all).await;
+        assert_eq!((a.status, a.header("cloudflare-cdn-cache-control")), (200, Some("no-store")), "{other}");
+        assert_eq!(a.body, &raw[..16]);
+    }
+    let head = kit.request("HEAD", &url(16, 30000, &v), &all, b"").await;
+    assert_eq!((head.status, head.header("content-length")), (200, Some("30000")));
+    assert!(head.body.is_empty());
+    assert_eq!(kit.get(&url(raw.len(), 1, &v), &all).await.status, 416);
+    for bad in ["o=0&l=0", "o=0", "o=x&l=1", "o=-1&l=1", "o=0&l=8388609", "o=1234567890123&l=1"] {
+        assert_eq!(kit.get(&format!("/data-blocks/v2/TRACKS/pics.bin?{bad}"), &all).await.status, 400, "{bad}");
+    }
+    assert_eq!(kit.get("/data-blocks/v2/TRACKS/none.bin?o=0&l=16", &all).await.status, 404);
+}
+
 // One block to a client that takes br: compressed as it is sent and kept by a shared cache for a while only, until
 // its block is kept at brotli's best; then that, with its length, kept for good.  Noise is sent as it is, a run of
 // more blocks and a client without br as before.

@@ -33,6 +33,10 @@ export function blockRuns(m: Manifest): { url: string; max: number } {
  *  good. */
 export const runUrl = (base: string, path: string, first: number, n: number, f: { mtime: number; size: number }) =>
   `${dataUrl(base, path)}?b=${first}&n=${n}&m=${f.mtime}&s=${f.size}`;
+/** bytes off .. off+len-1 of a file as they are: a 200 of exactly those bytes, which Cloudflare keeps for good like a
+ *  run (the file's mtime and size in the address).  The HQ vinyls' pictures (gpu/hqskin.ts), ~30 KB each. */
+export const exactUrl = (base: string, path: string, off: number, len: number, f: { mtime: number; size: number }) =>
+  `${dataUrl(base, path)}?o=${off}&l=${len}&m=${f.mtime}&s=${f.size}`;
 export interface DataFile { path: string; size: number; mtime: number }
 export interface CacheFile { h: FileSystemSyncAccessHandle; have: Uint8Array; haveH: FileSystemSyncAccessHandle }
 
