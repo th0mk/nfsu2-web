@@ -11,7 +11,7 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-08 (038d2f7)
+## 2026-11-08 (a79bffd)
 
 - **Mods:** Crash Damage, Chrystian Farias's Crashing Foreign Cars: the racers' cars dent where they are hit, scratch, break their lights and lose loose parts. Only the looks change; in free roam, players who have it on see each other's damage (off by default).
 - **Mods:** Transmission Whine, ropi's mod: NFS Carbon's gearbox whine over your car's engine, for each player's car in split screen (off by default).
@@ -19,6 +19,8 @@ not guessed.
 - **Free roam:** your own license plate: up to 8 letters and digits in Settings, Online, on your car for everyone in free roam. Races between players keep the game's plates.
 - **Free roam:** error 134 at a race's results, or after an hour in a busy free roam, when other players' cars opened their hoods, trunks and doors is fixed.
 - **Free roam:** exhaust tips keep their own colour instead of taking on other players' paint as their cars drive by.
+- **Saves:** a profile from a modded game shows its cars this game doesn't have as stock cars, and your save keeps them as they were unless you change them here.
+- **Saves:** Art Factory 28 to 34 vinyls are kept beside your profile, so the profile holds only what the PC game knows; here they come back.
 
 ## 2026-11-07 (b58448b)
 
