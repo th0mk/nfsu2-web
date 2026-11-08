@@ -247,6 +247,18 @@ test('two browsers on one keyphrase: made, loaded, synced both ways', async () =
   assert.equal(a.sync.state.s, 'synced');
 });
 
+test('a conflict\'s sums: a profile\'s with the files beside it (a stance or slots 6-10 changed only there)', () => {
+  const ann = profile('ANN');
+  const side = (mp, garage) => V.sideOf([{ path: at('ANN'), data: ann }, ...mp ? [{ path: `${DIR}/ANN/MODPARTS.DAT`, data: mp }] : [],
+    ...garage ? [{ path: `${DIR}/ANN/garage.dat`, data: garage }] : []]).sums.ann;
+  const a = side(null, null), b = side(enc.encode('N2MP one'), null), c = side(enc.encode('N2MP two'), null);
+  assert.ok(a !== b && b !== c, 'MODPARTS.DAT changed only: another sum');
+  assert.equal(side(enc.encode('N2MP one'), null), b, 'the same files: the same sum');
+  assert.notEqual(side(null, enc.encode('N2GA')), a, 'GARAGE.DAT (any case) counts too');
+  assert.equal(V.sideOf([{ path: at('ANN'), data: ann }, { path: `${DIR}/BOB/MODPARTS.DAT`, data: enc.encode('x') }]).sums.ann, a,
+    'another profile\'s file beside it does not');
+});
+
 test('a conflict, settled either way; the same change on both sides is none', async () => {
   const srv = server(), a = browser(srv), b = browser(srv);
   seed(a, 1000);

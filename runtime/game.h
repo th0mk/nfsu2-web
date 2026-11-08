@@ -46,6 +46,8 @@
 #define G_PROFILE_NAME  0x0083a9e0u   /* player 1's profile (FEDatabase +0x10): +0 its name (32 bytes), +0x20 1: one is loaded */
 #define G_VOLUMES       0x0083aa28u   /* the Audio options' volumes (floats 0 .. 1): +0 Master, +0x10 Sound Effects, +0x14 Engine */
 #define G_QR_CAR        0x0083aab8u   /* each player's car handle in Quick Race, LAN, Online (+4 player 2) */
+#define G_FE_RIDE       0x008392c0u   /* the front end's ride of the car: +0 car type, +0x590 + 4 x slot its parts */
+#define G_FECARS_SZ     0xab4cu       /* a player's front-end cars: player 2's G_FECARS + this (garage.c CARS_SZ) */
 #define G_FECARS        0x0083ad90u   /* player 1's front-end cars (FEDatabase +0x3C0): +0x9BD8 0x5B record pointers,
                                        * a record's +8 its handle */
 
@@ -77,6 +79,7 @@
 #define FN_PKG_FIND     0x00517f80u   /* thiscall package (hash) -> its object, 0: none */
 #define FN_FE_SETSTR    0x00535fe0u   /* thiscall string object (char*): its text */
 #define FN_FE_HIDE      0x0050ca00u   /* cdecl (FE object, 0: none) */
+#define FN_FE_SHOW      0x0050ca50u   /* cdecl (FE object, 0: none): shown again */
 #define FN_ITEM         0x0051f670u   /* thiscall (icon, label, 0; ret 0xC): a menu item's constructor */
 #define FN_RIDE_INIT    0x00610270u   /* thiscall ride (car type, 0 or 1, 0, 0) */
 #define FN_RIDE_SKINS   0x0061c280u   /* thiscall ride (n): DUMMY_SKIN<n>, WHEEL, SPINNER */

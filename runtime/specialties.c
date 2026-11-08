@@ -56,10 +56,8 @@ void sub_00560550(CPU *c);
 #define FN_ATTR         0x0061b500u   /* thiscall part (hash, default) -> attribute */
 #define FN_LIST_SELECT  0x005386a0u   /* thiscall list (item) */
 #define FN_HUD_SHOW     0x00548d20u   /* thiscall gauge screen (): the current item's labels and preview */
-#define FN_SHOW         0x0050ca50u   /* cdecl (object) */
 #define FN_PART_FIRST   0x0061ba30u   /* thiscall parts (car type, slot, 0, -1): the slot's first part */
 #define G_HUD_STAGE     0x00838560u
-#define G_FE_RIDE       0x008392c0u   /* the front end's ride of the car: +0 car type, +0x590 + 4 x slot its parts */
 #define G_COL_BACKING   0x00839c24u   /* the gauge screen's colours: slot 164 */
 #define G_COL_CHAR      0x00839c28u   /* ... 166 */
 #define G_COL_NEEDLE    0x00839c2cu   /* ... 165 */
@@ -147,8 +145,8 @@ static void hud_new(CPU *c){
     gcall(c, FN_HUD_SHOW, scr, 0, 0);
     uint32_t up = MR32(scr + S_UP), down = MR32(scr + S_DOWN);
     uint32_t first = MR32(scr + S_LIST + 4u) - 4u, last = MR32(scr + S_LIST + 8u) - 4u;
-    gcall(c, FN_SHOW, 0, 1, &up);
-    gcall(c, FN_SHOW, 0, 1, &down);
+    gcall(c, FN_FE_SHOW, 0, 1, &up);
+    gcall(c, FN_FE_SHOW, 0, 1, &down);
     if (item == first) gcall(c, FN_FE_HIDE, 0, 1, &up);
     else if (item == last) gcall(c, FN_FE_HIDE, 0, 1, &down);
     fprintf(stderr, "[shop] f=%ld Custom Gauges: the list on the gauge fitted\n", autotest_frame());

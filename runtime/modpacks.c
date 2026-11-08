@@ -40,6 +40,7 @@
 #include "guest.h"
 #include "game.h"
 #include "setting.h"
+#include "stance.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -417,7 +418,10 @@ void sub_0050e960(CPU *c){
  * before), then count entries of 8 words: {handle, car type, slot, the mod
  * part's key, the stand-in's key, the car's fingerprint (2 words), kind};
  * kind 0 a slot's part, kind 3 the head {'MPHD', bStringHash of the
- * profile's name in capitals, the write counter, 0 ..., 3} (a page of before
+ * profile's name in capitals, the write counter, 0 ..., 3}, kind 4 a car's
+ * stance (stance.c: {handle, car type, its camber, its offset, its tires'
+ * width, the car's fingerprint (2 words), 4}: taken only for a car as it was
+ * saved, as a part; the car as the game draws it where there is none) (a page of before
  * keeps it as another kind; one there with a head word 0 is that page's
  * write: the newest).  An entry of another kind (a later page's) is kept as
  * it is and written again; a file this page cannot read (another version,
@@ -446,6 +450,7 @@ int vinylpacks_have(void);                              /* ... the car part data
 #define CARS0_OF(p)   (G_FECARS + (uint32_t)(p) * 0xab4cu)   /* a player's cars (garage.c's G_FECARS, CARS_SZ) */
 #define K_PART        0u            /* an entry's kind: a slot's part */
 #define K_HEAD        3u            /* ... the file's head: its profile, its write counter */
+#define K_STANCE      STANCE_KIND   /* ... a car's stance (stance.c) */
 #define HEAD_MAGIC    0x4448504du   /* "MPHD" */
 #define ADDON_MAX     40            /* (20 Customize cars, 10 slots, 6 presets a player) */
 #define CARTYPE_SZ    0x890u
@@ -545,11 +550,16 @@ static uint32_t car_of(uint32_t db, uint32_t handle, uint32_t type){
     for (int i = 0; i < n; i++) if (MR32(r[i] + R_HANDLE) == handle && MR32(r[i] + R_PARTS + 8u) == type) return r[i];
     return 0;
 }
+/* two entries for "anything to save?": a part by its car, slot and key; a stance by its car, car type and values (its car's
+ * fingerprint aside: a payload's has the stand-ins in, the cars now the mods' parts); an entry of another kind whole */
+static int entry_differs(const MPart *a, const MPart *b){
+    if (E_KIND(a) != E_KIND(b) || E_HANDLE(a) != E_HANDLE(b) || E_SLOT(a) != E_SLOT(b) || E_KEY(a) != E_KEY(b)) return 1;
+    if (E_KIND(a) == K_STANCE) return a->w[1] != b->w[1] || a->w[4] != b->w[4];
+    return E_KIND(a) != K_PART && memcmp(a->w, b->w, sizeof a->w);
+}
 static int lists_differ(const MList *a, const MList *b){
     if (a->n != b->n) return 1;
-    for (int i = 0; i < a->n; i++)
-        if (E_HANDLE(&a->e[i]) != E_HANDLE(&b->e[i]) || E_SLOT(&a->e[i]) != E_SLOT(&b->e[i]) || E_KEY(&a->e[i]) != E_KEY(&b->e[i]) ||
-            E_KIND(&a->e[i]) != E_KIND(&b->e[i])) return 1;
+    for (int i = 0; i < a->n; i++) if (entry_differs(&a->e[i], &b->e[i])) return 1;
     return 0;
 }
 static int is_foreign(const char *name){
@@ -618,15 +628,26 @@ static void reconvert(void){
     }
     g_nunc = 0;
 }
+/* stance.c: the car type player p's record r is saved with (a car of a car type this game has not: its own, not the
+ * stand-in's it has here) */
+uint32_t modparts_car_type(int p, uint32_t r){
+    int i = p >= 0 && p <= 1 ? addon_of(p, r) : -1;
+    return i >= 0 ? g_add[p].a[i].orig : MR32(r + R_PARTS + 8u);
+}
 /* garage.c: player p's car of the record r (its handle h) has left it (traded; a new car in its place, 0x516B90,
  * 0x52A710): nothing kept for it any more */
 void modparts_car_gone(int p, uint32_t r, uint32_t h){
     if (p < 0 || p > 1) return;
     int i = addon_of(p, r), k = 0, n = 0;
     if (i >= 0){ fprintf(stderr, "[mods] the car 0x%08x of car type 0x%08x has gone: saved as the record now is\n", h, g_add[p].a[i].orig); addon_drop(p, i); }
-    for (int j = 0; h && j < g_wait[p].n; j++){ if (!E_KIND(&g_wait[p].e[j]) && E_HANDLE(&g_wait[p].e[j]) == h){ n++; continue; } g_wait[p].e[k++] = g_wait[p].e[j]; }
+    for (int j = 0; h && j < g_wait[p].n; j++){
+        uint32_t kd = E_KIND(&g_wait[p].e[j]);
+        if ((kd == K_PART || kd == K_STANCE) && E_HANDLE(&g_wait[p].e[j]) == h){ n++; continue; }
+        g_wait[p].e[k++] = g_wait[p].e[j];
+    }
     if (h) g_wait[p].n = k;
-    if (n) fprintf(stderr, "[mods] the car 0x%08x has gone: its %d waiting part%s not kept any more\n", h, n, n == 1 ? "" : "s");
+    if (n) fprintf(stderr, "[mods] the car 0x%08x has gone: its %d waiting entr%s (parts, stance) not kept any more\n", h, n, n == 1 ? "y" : "ies");
+    stance_car_gone(p, h);
 }
 /* garage.c (Trade Car): player p's car of the record from (its handle hf) is now in the record to (handle ht), as it
  * was, byte for byte */
@@ -635,7 +656,9 @@ void modparts_car_moved(int p, uint32_t from, uint32_t hf, uint32_t to, uint32_t
     modparts_car_gone(p, to, 0);
     int i = addon_of(p, from);
     if (i >= 0) g_add[p].a[i].r = to;
-    for (int j = 0; j < g_wait[p].n; j++) if (!E_KIND(&g_wait[p].e[j]) && E_HANDLE(&g_wait[p].e[j]) == hf) E_HANDLE(&g_wait[p].e[j]) = ht;
+    for (int j = 0; j < g_wait[p].n; j++)
+        if ((E_KIND(&g_wait[p].e[j]) == K_PART || E_KIND(&g_wait[p].e[j]) == K_STANCE) && E_HANDLE(&g_wait[p].e[j]) == hf) E_HANDLE(&g_wait[p].e[j]) = ht;
+    stance_car_moved(p, hf, ht);
 }
 
 /* --- the parts kept beside the profile */
@@ -662,15 +685,24 @@ static void collect(CPU *c, uint32_t db, int p, MList *l, int hide){
         }
     }
     if (full) fprintf(stderr, "[mods] %d mod part%s more than MODPARTS.DAT holds: the stock ones in the profile, not kept\n", full, full == 1 ? "" : "s");
+    {   /* the cars' stances (each one's record there: stance.c keeps them by its handle and car type) */
+        uint32_t st[STANCE_CARS][8];
+        int ns = stance_entries(p, st, STANCE_CARS);
+        for (int i = 0; i < ns && l->n < MP_MAX; i++){
+            if (!car_of(db, st[i][0], st[i][1])) continue;
+            MPart *e = &l->e[l->n++]; memset(e, 0, sizeof *e); memcpy(e->w, st[i], sizeof e->w);
+        }
+    }
     for (int i = 0; i < g_wait[p].n && l->n < MP_MAX; i++){
         const MPart *w = &g_wait[p].e[i];
         if (E_KIND(w) == K_HEAD) continue;                                         /* (each file its own) */
+        if (E_KIND(w) == K_STANCE && stance_has(p, E_HANDLE(w))) continue;         /* (a stance set here since: that one) */
         if (E_KIND(w)){ l->e[l->n] = *w; l->e[l->n++].wait = 1; continue; }        /* another kind: as it was */
         uint32_t car = car_of(db, E_HANDLE(w), E_TYPE(w));
         if (car && MR32(KEY_AT(car, E_SLOT(w))) == E_STAND(w)){ l->e[l->n] = *w; l->e[l->n++].wait = 1; }
     }
     for (int i = 0; i < l->n; i++){
-        if (E_KIND(&l->e[i])) continue;
+        if (E_KIND(&l->e[i]) != K_PART && (E_KIND(&l->e[i]) != K_STANCE || l->e[i].wait)) continue;   /* (a waiting one: as it was) */
         uint32_t car = car_of(db, E_HANDLE(&l->e[i]), E_TYPE(&l->e[i]));
         uint64_t fp = car ? car_fp(car) : 0;
         l->e[i].w[5] = (uint32_t)fp; l->e[i].w[6] = (uint32_t)(fp >> 32);
@@ -855,10 +887,12 @@ void modparts_written(const char *path, uint64_t fp, const char *name){
         return;
     }
     if (!finish(name, f, t, path)) return;
-    int best = newest_built(fp, name), parts = 0, n = best >= 0 ? g_mb[best].l.n : 0;
-    for (int i = 0; i < n; i++) parts += E_KIND(&g_mb[best].l.e[i]) == K_PART;
-    fprintf(stderr, "[mods] %s: kept in %s: %d part%s (the profile has their stand-ins)%s\n", name, MP_FILE, parts, parts == 1 ? "" : "s",
-            n > parts ? ", and entries of a later page's" : "");
+    int best = newest_built(fp, name), parts = 0, stances = 0, n = best >= 0 ? g_mb[best].l.n : 0;
+    for (int i = 0; i < n; i++){ parts += E_KIND(&g_mb[best].l.e[i]) == K_PART; stances += E_KIND(&g_mb[best].l.e[i]) == K_STANCE; }
+    char st[40] = "";
+    if (stances) snprintf(st, sizeof st, ", %d %s", stances, stances == 1 ? "car's stance" : "cars' stances");
+    fprintf(stderr, "[mods] %s: kept in %s: %d part%s (the profile has their stand-ins)%s%s\n", name, MP_FILE, parts,
+            parts == 1 ? "" : "s", st, n > parts + stances ? ", and entries of a later page's" : "");
 }
 /* a MODPARTS file at path: 1 read (l, without its head; its write counter, its head's name hash and payload's cars'
  * fingerprint, 0 for none), 0 none, -1 one this page cannot read */
@@ -930,11 +964,17 @@ void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const
     else if (!name_ok(name)) return;                     /* (no profile's: nothing of it changed) */
     else { if (read_mp(name, fp, &l) <= 0) l.n = 0; g_wait[p].n = 0; }
     if (name_ok(name)) snprintf(g_wait_name[p], sizeof g_wait_name[p], "%s", name);
-    int back = 0, wait = 0, gone = 0;
+    stance_loaded(p, name);                              /* (the cars' stances: the file's, none without) */
+    int back = 0, wait = 0, gone = 0, stances = 0;
     static uint32_t at[MP_MAX];
     for (int i = 0; i < l.n; i++){                       /* each against its car as loaded (a car's several, first) */
         const MPart *e = &l.e[i];
         at[i] = 0;
+        if (E_KIND(e) == K_STANCE){                      /* a stance: its car as it was saved (1), changed elsewhere (2) */
+            uint32_t car = car_of(db, E_HANDLE(e), E_TYPE(e));
+            at[i] = !car ? 0 : car_fp(car) == E_FP(e) ? 1u : 2u;
+            continue;
+        }
         if (E_KIND(e)) continue;
         uint32_t car = car_of(db, E_HANDLE(e), E_TYPE(e));
         at[i] = car ? KEY_AT(car, E_SLOT(e)) : 0;
@@ -943,6 +983,10 @@ void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const
     for (int i = 0; i < l.n; i++){
         const MPart *e = &l.e[i];
         if (E_KIND(e) == K_HEAD) continue;
+        /* a stance of a car changed elsewhere (another car of that handle and type, or the same one with other parts:
+         * the PC game, a page of before) is not drawn, but waits as it is (a stance set here later takes its place) */
+        if (E_KIND(e) == K_STANCE && at[i] == 1u && stance_load(p, e->w)){ stances++; continue; }
+        if (E_KIND(e) == K_STANCE && at[i] == 2u) gone++;
         if (E_KIND(e)){ if (g_wait[p].n < MP_MAX) g_wait[p].e[g_wait[p].n++] = *e; continue; }   /* another kind: kept */
         if (!at[i]) continue;
         /* (a car of a car type this game has not stays as loaded: its part waits, and the payload has it as it was) */
@@ -954,10 +998,12 @@ void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const
             back, back == 1 ? "" : "s");
     if (wait) fprintf(stderr, ", %d this game has not (MODPACKS, VINYLPACKS): the stand-ins meanwhile, kept for later", wait);
     if (gone) fprintf(stderr, ", %d whose car changed elsewhere: as it is", gone);
+    if (stances) fprintf(stderr, ", %d car%s with a stance of its own", stances, stances == 1 ? "" : "s");
     fprintf(stderr, "\n");
 }
 /* garage.c: the profile name deleted: nothing of it waits any more (a new one of that name starts as new) */
 void modparts_deleted(const char *name){
+    stance_deleted(name);
     for (int p = 0; p < 2; p++){
         if (strcasecmp(g_wait_name[p], name)) continue;
         g_wait[p].n = 0; g_wait_name[p][0] = 0;

@@ -34,6 +34,7 @@ static const struct { const char *name; void (*install)(void); unsigned builds; 
     { "garage",      garage_install,      FT_ALL },   /* the career garage's slots 6-10 and Trade Car */
     { "vinylpacks",  vinylpacks_install,  FT_ALL },   /* the Japanese release's Art Factory 28-34 (VINYLPACKS) */
     { "specialties", specialties_install, FT_ALL },   /* Car Specialties: Stock gauges again, Trunk Audio's Back */
+    { "stance",      stance_install,      FT_ALL },   /* the Body Shop's Stance: its page's messages */
     { "showoff",     showoff_install,     FT_ALL },   /* the animation library's heap: room for show-off's animations, its end checked */
     { "carshadow",   carshadow_install,   FT_ALL },   /* a car's shadow 1.5 cm above the road, not 4: off its wheels */
     /* the next three on the Mac at their first use, from their hooks; tonemenu's pass is the page's only */
@@ -57,6 +58,7 @@ static const struct { const char *name; int (*hook)(CPU *c, uint32_t ip); } k_ho
     { "regional",    regional_hook },      /* the AI racers' cars */
     { "garage",      garage_hook },        /* the shop's buy for a car in slots 6-10 */
     { "vinylcat",    vinylcat_hook },      /* the hidden vinyls' category in the vinyl shop */
+    { "stance",      stance_hook },        /* Stance in the Body Shop, its page of sliders */
     { "sndlead",     sndlead_hook },       /* the sound's usual delay soon after a load */
     { "drift",       drift_hook },         /* drift mode's and race_music's music */
     { "quickrace",   quickrace_hook },     /* Quick Race's laps and opponents */
@@ -93,6 +95,7 @@ static const struct { const char *name; void (*frame)(CPU *c); } k_frames[] = {
     { "racehorn",    racehorn_frame },         /* horns in races between players */
     { "racenet",     racenet_frame },          /* how the other players' cars came in, at a race's end */
     { "optslider",   optslider_frame },        /* our option sliders' copied parts (the pause menu's Horn Volume) */
+    { "stance",      stance_frame },           /* the Stance page's look */
     { "drift",       drift_frame },            /* drift mode in free roam (F2) */
     { "showoff",     showoff_frame },          /* the car's trunk, hood and doors open */
     { "plates",      plates_frame },           /* license plates with the players' own text */

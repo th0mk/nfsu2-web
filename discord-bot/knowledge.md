@@ -103,6 +103,10 @@ misread the log's numbers:
 - The mods' settings are on their rows in Mods, named by the mod (no "More" step): Upscaled HUD and Detailed Map
   (Original, Map only, Upscaled), English Subtitles Fixed (off: no movie subtitles in any language), Uncensored &
   Restored Soundtrack (the songs: Uncensored or Original), Show Hidden Races Mod, Visual Reputation Remover,
+  Mods on other cars (Shown or Original: other players' cars with the stance they set, or as the original game draws
+  them), Stance (off by default; on, the garage's Body Shop has a Stance entry after Rims: sliders for each car's front
+  and rear camber, front and rear offset and tire width, looks only; friends in free roam see it unless they set Mods
+  on other cars to Original; kept beside the profile in MODPARTS.DAT, the PC game loads the profile as stock),
   Crash Damage (off by default: dents, loose parts and scratches on the racers' cars, looks only; in free roam players
   who have it on see each other's damage, with it off every car shows undamaged), Rubberbanding (Original, No boost,
   Off: the career races' catch-up), Transmission Whine (ropi's: NFS Carbon's gearbox whine on your car, off by

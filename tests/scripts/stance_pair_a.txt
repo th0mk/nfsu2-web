@@ -1,0 +1,26 @@
+# Stance between players (runtime/stance.c, roam_core.c RC_EXT_STANCE), instance A, with stance_pair_b.txt: a new
+# career's prologue free roam, A's car with a stance (NFSU2_TEST_STANCE_MINE), standing still while B looks at it.
+#   roam-pair --page play --a Ann:stance_pair_a.txt:NFSU2_STANCE=1,NFSU2_TEST_STANCE_MINE=120,80,40,40,115
+#             --b Bob:stance_pair_b.txt --c Cat:stance_pair_b.txt:NFSU2_OTHERS_MOD_PARTS=original
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 2 6000
++0    roam mp waitcars 2 3000
++3000 roam mp status
++10   quit

@@ -46,6 +46,16 @@
  *   new-profile    a profile made this session counts its writes from its own files; a cut rename is recovered
  *   modded-keys    a modded car whose own keys hold a mod's rim and ART_F_28: the payload has them as loaded, and the
  *                  game's "anything to save?" says no while nothing changed
+ *   stance-*       a car's stance (runtime/stance.c, kind 4): basic (saved with its car's fingerprint, back after the
+ *                  load), elsewhere (another car of the same handle and car type, or the car with other parts: not
+ *                  drawn, kept in the file), replaced (a stance set here takes its place), addon (a car of a car type
+ *                  the game has not: saved with its own type, back after the load), split (split screen
+ *                  loads another profile's cars into player 1's and puts them back: the stance saved all the same),
+ *                  noprofile (set with no profile, then one made: saved with it), deleted (none for a new one of
+ *                  the name), order and changed ("anything to save?": a stance reset and set again is nothing, a value
+ *                  changed is something), later (a later page's values out of this one's ranges: carried, not
+ *                  drawn), trade (Trade Car: with the car), modrim (a car with a mod's rim: back after the load, and
+ *                  nothing to save while nothing changed), reset-all (no stance left: no MODPARTS.DAT)
  * Every case prints "PASS <case> ..." or "FAIL <case> ..."; exit 1 on a FAIL. */
 #include <stdint.h>
 #include <stdio.h>
@@ -126,6 +136,25 @@ void dispatch_indirect(CPU *c, uint32_t addr){
     }
 }
 #include "../runtime/modpacks.c"
+/* runtime/stance.c in the same unit (its stances are kind-4 entries of MODPARTS.DAT): what it needs besides */
+long autotest_frame(void){ return 0; }
+const char *language_name(void){ return "english"; }
+void language_game_letters(const char *u, char *o, size_t n){ snprintf(o, n, "%s", u); }
+void dispatch_patch(uint32_t a, void (*f)(CPU *)){ (void)a; (void)f; }
+int plates_fe_ours(void){ return 1; }
+const char *plates_fe_screen(void){ return ""; }
+void sub_00566490(CPU *c){ (void)c; }
+void sub_0049c690(CPU *c){ (void)c; }
+#include "../runtime/optslider.h"
+void optslider_add(CPU *c, uint32_t scr, uint32_t fn, OptSlider *s){ (void)c; (void)scr; (void)fn; (void)s; }
+uint32_t coop_p2_car(void){ return 0; }
+int coop_racing_together(void){ return 0; }
+uint32_t garage_find(uint32_t db, uint32_t h){                  /* garage.c's: the list's record of handle h */
+    uint32_t r[64]; int n = garage_records(db, r, 64);
+    for (int i = 0; h && i < n; i++) if (MR32(r[i] + 8u) == h) return r[i];
+    return 0;
+}
+#include "../runtime/stance.c"
 
 #define R_TYPE  (0x18u + 8u)
 #define R_KEY(s) (0x18u + 0xcu + 4u * (s))
@@ -513,6 +542,136 @@ int main(void){
             "%s; MODPARTS.DAT %s", ch, ch2, rec_is(&g_pay[0], ADDON, k3) ? "as loaded, the rim and the vinyl its own" : "NOT as loaded",
             n == -1 ? "none" : "MADE"); }
     car_init(CAR, SLOT1, PEUGOT, 0);
+
+    /* stance-*: runtime/stance.c's entries (kind 4), as its menu sets them (set_mine) */
+    commit(G_PROFILE_NAME, 0x40); commit(G_GAMEMODE, 4); commit(G_CAREER_CAR, 4); commit(G_QR_CAR, 8);
+    setenv("NFSU2_STANCE", "1", 1);
+    MR32(G_GAMEMODE) = 1u; MR32(G_CAREER_CAR) = SLOT1;
+    car_init(CAR, SLOT1, PEUGOT, 0); car_init(CAR2, SLOT2, PEUGOT, 0); MR8(CAR2 + 0x7f5u) = 1; car_init(CUST, TUNED0, FOCUS, 1);
+    {   StanceV v1 = { 50, 20, 10, 20, 110 }, v2 = { 30, 0, -10, 0, 90 }, v3 = { 0, 60, 0, 40, 120 };
+        #define PROFILE(nm) do { memset(g_mem + G_PROFILE_NAME, 0, 0x24); if (nm){ snprintf((char *)g_mem + G_PROFILE_NAME, 32, "%s", (const char *)(nm)); MR8(G_PROFILE_NAME + 0x20u) = 1; } } while (0)
+        #define SHOWN(h) (entry(0, (h)) != 0)
+        #define HAS(h) ({ int _h = 0; for (int _i = 0; _i < g_cars[0].n; _i++) _h |= g_cars[0].e[_i].handle == (h); _h; })
+        #define KIND4(nm, h) ({ static Ent _e[1100]; int _n = read_file((nm), "MODPARTS.DAT", _e, 1100), _k = 0; \
+                                for (int _i = 0; _i < _n; _i++) _k += _e[_i].w[7] == 4u && _e[_i].w[0] == (h); _n < 0 ? -1 : _k; })
+        char nm[8];
+        for (int i = 0; i < 3; i++){ snprintf(nm, sizeof nm, "%s", i == 0 ? "ANN" : i == 1 ? "BOB" : "CAT"); clean(nm); }
+
+        /* basic */
+        PROFILE("ANN"); profile_load("ANN", 0x15000);
+        set_mine(0, SLOT1, &v1); save("ANN", 0x15001);
+        n = read_file("ANN", "MODPARTS.DAT", e, 1100);
+        int fp_ok = n == 1 && e[0].w[7] == 4u && (e[0].w[5] | e[0].w[6]) && ((uint64_t)e[0].w[5] | (uint64_t)e[0].w[6] << 32) == car_fp(CAR);
+        g_cars[0].n = 0; profile_load("ANN", 0x15001);
+        CHECK(fp_ok && SHOWN(SLOT1) && !memcmp(&entry(0, SLOT1)->v, &v1, sizeof v1), "stance-basic saved with its car's fingerprint %d, back "
+              "after the load %d", fp_ok, SHOWN(SLOT1));
+
+        /* elsewhere: another ANN's car of the same handle and car type (a restore over it), or this one with a part changed
+         * in the PC game: not drawn, but kept waiting in the file; a stance set here then takes its place */
+        g_cars[0].n = 0;
+        MR32(CAR + R_KEY(0x10u)) = 0x51000999u;
+        profile_load("ANN", 0x15777);
+        int drawn = SHOWN(SLOT1);
+        save("ANN", 0x15778);
+        int kept = KIND4("ANN", SLOT1);
+        CHECK(!drawn && kept == 1, "stance-elsewhere the stance %s on a car changed elsewhere, %s in the file", drawn ? "TAKEN" : "not taken",
+              kept == 1 ? "kept" : "LOST");
+        set_mine(0, SLOT1, &v2); save("ANN", 0x15779);
+        n = read_file("ANN", "MODPARTS.DAT", e, 1100);
+        CHECK(n == 1 && e[0].w[4] == v2.tw, "stance-replaced a stance set here takes the waiting one's place: %d entr%s", n, n == 1 ? "y" : "ies");
+        MR32(CAR + R_KEY(0x10u)) = stock_of(0, 0x10u);
+
+        /* split: split screen (garage.c's keep and end) with a load of BOB's cars into player 1's meanwhile */
+        clean("ANN"); clean("BOB");
+        PROFILE("BOB"); profile_load("BOB", 0x15100); set_mine(0, SLOT1, &v2); save("BOB", 0x15101);
+        PROFILE("ANN"); profile_load("ANN", 0x15200); set_mine(0, SLOT1, &v1); save("ANN", 0x15201);
+        stance_split_keep();
+        profile_load("BOB", 0x15101);                                /* (player 1's cars from BOB's profile, the name still ANN's) */
+        stance_split_back();                                        /* (the mode's end: ANN's cars back, no load) */
+        save("ANN", 0x15201);
+        CHECK(KIND4("ANN", SLOT1) == 1 && SHOWN(SLOT1) && entry(0, SLOT1)->v.tw == v1.tw, "stance-split ANN's stance after split screen: %s",
+              KIND4("ANN", SLOT1) == 1 ? "kept" : "LOST");
+
+        /* noprofile: set in Customize with no profile, then a profile made of that state (no load) and saved */
+        clean("BOB"); g_cars[0].n = 0; g_cars[0].name[0] = 0;
+        PROFILE(0); MR32(G_GAMEMODE) = 2u; MR32(G_QR_CAR) = TUNED0;
+        set_mine(0, TUNED0, &v3);
+        PROFILE("BOB"); save("BOB", 0x15301);
+        CHECK(KIND4("BOB", TUNED0) == 1, "stance-noprofile saved with the profile made after: %s", KIND4("BOB", TUNED0) == 1 ? "yes" : "NO");
+        MR32(G_GAMEMODE) = 1u;
+
+        /* deleted: CAT deleted, a new CAT made in the session: none of the old one's */
+        clean("CAT"); PROFILE("CAT"); profile_load("CAT", 0x15400); set_mine(0, SLOT1, &v1); save("CAT", 0x15401);
+        clean("CAT"); modparts_deleted("CAT");
+        CHECK(!HAS(SLOT1), "stance-deleted the deleted CAT's stance %s", HAS(SLOT1) ? "STILL KEPT" : "gone");
+
+        /* order, changed: "anything to save?" */
+        clean("ANN"); PROFILE("ANN"); profile_load("ANN", 0x15500);
+        set_mine(0, SLOT1, &v1); set_mine(0, SLOT2, &v2); set_mine(0, TUNED0, &v3);
+        kept_payload("ANN", 0x15501);
+        int c0 = modparts_changed(&g_c, 0);
+        set_mine(0, SLOT1, 0); set_mine(0, SLOT1, &v1);
+        int c1 = modparts_changed(&g_c, 0);
+        CHECK(!c0 && !c1, "stance-order something to save: %d with nothing changed, %d after a stance reset and set again as it was", c0, c1);
+        kept_payload("ANN", 0x15502);
+        StanceV v1b = v1; v1b.tw = 115; set_mine(0, SLOT1, &v1b);
+        CHECK(modparts_changed(&g_c, 0) == 1, "stance-changed a tire width changed: something to save");
+
+        /* later: a later page's kind 4 on SLOT2 (values out of this page's ranges): carried as it was, not drawn */
+        clean("ANN"); PROFILE("ANN");
+        {   uint64_t f2 = car_fp(CAR2);
+            uint32_t hd[4] = { 0x504d324eu, 1u, 2u, 5u };
+            uint32_t ent[16] = { 0x4448504du, name_hash("ANN"), 5u, 0x700, 0, 0, 0, 3u,
+                                 SLOT2, PEUGOT, 300u, 0, 100u, (uint32_t)f2, (uint32_t)(f2 >> 32), 4u };
+            write_raw("ANN", "MODPARTS.DAT", hd, ent, 2); }
+        g_cars[0].n = 0; profile_load("ANN", 0x700);
+        save("ANN", 0x701);
+        n = read_file("ANN", "MODPARTS.DAT", e, 1100);
+        CHECK(n == 1 && e[0].w[2] == 300u && !SHOWN(SLOT2), "stance-later carried %d, drawn %d", n == 1 && e[0].w[2] == 300u, SHOWN(SLOT2));
+
+        /* trade: Trade Car of slot 1 (slot 2's car moved into slot 1's record) */
+        clean("ANN"); PROFILE("ANN"); profile_load("ANN", 0x15600);
+        set_mine(0, SLOT1, &v1); set_mine(0, SLOT2, &v2);
+        modparts_car_gone(0, CAR, SLOT1); modparts_car_moved(0, CAR2, SLOT2, CAR, SLOT1);
+        CHECK(SHOWN(SLOT1) && entry(0, SLOT1)->v.tw == v2.tw && !HAS(SLOT2), "stance-trade slot 2's stance now slot 1's");
+
+        /* modrim: a car with a mod's rim (its stand-in in the payload) and a stance: back after the load, nothing to save */
+        clean("ANN"); PROFILE("ANN"); profile_load("ANN", 0x15700);
+        MR32(CAR + R_KEY(SLOT_RIM)) = BLITZ; set_mine(0, SLOT1, &v1); save("ANN", 0x15701);
+        g_cars[0].n = 0; MR32(CAR + R_KEY(SLOT_RIM)) = AVUS;        /* (the profile as saved: the look-alike in the slot) */
+        profile_load("ANN", 0x15701);
+        int back = SHOWN(SLOT1) && MR32(CAR + R_KEY(SLOT_RIM)) == BLITZ;
+        kept_payload("ANN", 0x15701);
+        CHECK(back && !modparts_changed(&g_c, 0), "stance-modrim the rim and the stance back %d; something to save with nothing changed %d",
+              back, modparts_changed(&g_c, 0));
+        MR32(CAR + R_KEY(SLOT_RIM)) = stock_of(0, SLOT_RIM);
+
+        /* addon: a car of a car type this game has not (its stand-in here): a stance set on it is saved with its own car type,
+         * and back after the load */
+        clean("ANN"); PROFILE("ANN");
+        {   static uint32_t k6[0xaa]; for (uint32_t s6 = 0; s6 < 0xaau; s6++) k6[s6] = 0xadd00000u | s6;
+            addon(CAR, SLOT1, ADDON, k6, 0x7f8u);
+            g_cars[0].n = 0; profile_load("ANN", 0x15900); convert(CAR, 0x7f8u);
+            MR32(G_CAREER_CAR) = SLOT1; set_mine(0, SLOT1, &v2);
+            int drawn6 = SHOWN(SLOT1) && stance_mine(0) != 0;
+            save("ANN", 0x15901);
+            int k6n = KIND4("ANN", SLOT1);
+            addon(CAR, SLOT1, ADDON, k6, 0x7f8u);                   /* (the profile as saved: the car as it was) */
+            g_cars[0].n = 0; profile_load("ANN", 0x15901); convert(CAR, 0x7f8u);
+            CHECK(drawn6 && k6n == 1 && stance_mine(0) && stance_mine(0)->tw == v2.tw, "stance-addon drawn on the stand-in %d, saved %d, "
+                  "back after the load %d", drawn6, k6n, stance_mine(0) != 0); }
+        car_init(CAR, SLOT1, PEUGOT, 0);
+
+        /* reset-all: a profile whose only entries are stances, all set back to the game's: no MODPARTS.DAT */
+        clean("ANN"); PROFILE("ANN"); profile_load("ANN", 0x15800);
+        set_mine(0, SLOT1, &v1); save("ANN", 0x15801);
+        set_mine(0, SLOT1, 0); save("ANN", 0x15802);
+        CHECK(!there("ANN", "MODPARTS.DAT"), "stance-reset-all MODPARTS.DAT %s", there("ANN", "MODPARTS.DAT") ? "STILL THERE" : "removed");
+        #undef PROFILE
+        #undef SHOWN
+        #undef HAS
+        #undef KIND4
+    }
 
     char cmd[800]; snprintf(cmd, sizeof cmd, "rm -rf '%s'", g_dir); if (system(cmd)) {}
     printf(g_fail ? "modparts_unit: FAILED\n" : "modparts_unit: passed\n");

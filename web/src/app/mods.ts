@@ -222,6 +222,14 @@ export const MODS: readonly Mod[] = [
     online: 'seen', files: ['runtime/cameras.c', 'runtime/lightkey.c', 'runtime/regional.c', 'runtime/vinylcat.c', 'runtime/quickrace.c'],
   },
   {
+    id: 'stance', name: 'Stance', mod: 'Stance Mod', authors: [{ name: 'Archie (AR4I)' }],
+    links: { page: 'https://nfsmods.xyz/mod/1687', source: 'https://github.com/ArchieGoldmill/NFSU2_StanceMod' },
+    kind: 'shared', uses: 'findings', control: { setting: 'stance' },
+    line: N('Camber, offset and tire width for each car.'),
+    details: 'Body Shop, Stance (after Rims): each car\'s camber front and rear, how far its wheels stand out and how wide its tires are, on sliders with the car in view. Only what is seen changes: the car drives as in the original game. In free roam other players see your car\'s stance, unless they set Mods on other cars to Original. Your saves still work in the original game: the stance is kept beside the profile, and stays there while this is off.',
+    online: 'seen', files: ['runtime/stance.c', 'runtime/stance.h'],
+  },
+  {
     id: 'crash-damage', name: 'Crash Damage', mod: 'Crashing Foreign Cars', authors: [{ name: 'Chrystian Farias (FRS Mods)' }],
     links: { page: 'https://streetsmodz.com.br/mods/underground-2/crashing-foreign-cars' },
     kind: 'shared', uses: 'code', ownPort: true, control: { setting: 'crash_damage' },

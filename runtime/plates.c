@@ -172,6 +172,7 @@ static int ours(uint32_t car){
 /* The front end draws one car, the one its screen is about: ours in the garage and the shops, the car lot's, a car
  * select's or another player's (Online) elsewhere.  It wears our plate from a screen of ours on, until a screen of
  * others' (any other screen: a dialog, the help bar, changes nothing) */
+static char g_fe_screen[64];                    /* the newest screen of either list (fe_follow) */
 static int screen_in(const char *s, const char *const *list){
     for (int i = 0; list[i]; i++) if (!strncasecmp(s, list[i], strlen(list[i]))) return 1;
     return 0;
@@ -184,7 +185,7 @@ static void fe_follow(void){
         "UI_StartCareer", "UI_Main", "MC_", "UI_Options", "UI_PC_LAN", "PC_OL", 0 };
     static uint32_t flow;
     static char told[64];
-    if (MR32(G_FLOW) != flow){ flow = MR32(G_FLOW); g_fe_ours = 0; told[0] = 0; }
+    if (MR32(G_FLOW) != flow){ flow = MR32(G_FLOW); g_fe_ours = 0; told[0] = 0; g_fe_screen[0] = 0; }
     if (flow != 3u) return;
     /* the newest screen of either list (the game starts a screen with the garage's backdrop and its help line in
      * the same frame: autotest_screen_batch has them all, the screen first) */
@@ -192,6 +193,7 @@ static void fe_follow(void){
     for (int i = 0; (b = autotest_screen_batch(i)); i++) if (screen_in(b, other_screens) || screen_in(b, our_screens)) s = b;
     if (!s) return;
     g_fe_ours = screen_in(s, our_screens) && !screen_in(s, other_screens);
+    snprintf(g_fe_screen, sizeof g_fe_screen, "%s", s);
     if (g_mine[0] && strcmp(told, s)){
         snprintf(told, sizeof told, "%s", s);
         fprintf(stderr, "[plates] f=%ld %s: %s\n", autotest_frame(), s, g_fe_ours ? "our car, our plate" : "not our car, the game's plate");
@@ -338,6 +340,10 @@ uint32_t plates_begin(uint32_t ri){
     return before;
 }
 void plates_end(uint32_t before){ g_drawing = before; }
+/* stance.c: the front end's car is ours (fe_follow) */
+int plates_fe_ours(void){ return g_fe_ours; }
+/* ... and the screen that says so ("" none yet) */
+const char *plates_fe_screen(void){ return g_fe_screen; }
 /* 0x5C5930 (overrides.c): a model of the car being drawn into the render lists (item: its model); keep says what to
  * put back after (keep[0] the place, 0: nothing) */
 void plates_model(uint32_t item, uint32_t keep[2]){

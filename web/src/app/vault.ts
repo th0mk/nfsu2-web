@@ -372,12 +372,25 @@ export function failureOf(e: unknown): { msg: string; why: { t: string; v?: Vars
 /** the unanswered sends a link remembers */
 const SENT_MAX = 8;
 
+/** the files beside a profile that hold what it does not (runtime/garage.c slots 6-10, runtime/modpacks.c mod parts
+ *  and stances, runtime/mpcredit.c multiplayer wins): a save may change only one of them */
+const BESIDE = ['GARAGE.DAT', 'MODPARTS.DAT', 'MPWINS.DAT'];
+/** a profile's sum for a conflict: its file's and those beside it, so a change only there shows too */
+function profileSum(files: SaveFile[], f: SaveFile): number {
+  const dir = f.path.slice(0, f.path.lastIndexOf('/') + 1).toLowerCase();
+  const parts = [crc32(f.data)];
+  for (const name of BESIDE) {
+    const b = files.find(x => x.path.toLowerCase() === dir + name.toLowerCase());
+    parts.push(b ? crc32(b.data) : 0);
+  }
+  return crc32(new Uint8Array(new Uint32Array(parts).buffer));
+}
 /** a side of a conflict from its files (saved: the server's time of them; none: the newest profile's file's) */
 export function sideOf(files: SaveFile[], saved?: number): Side {
   const profiles = profileFiles(files), times = profiles.filter(f => f.mtime).map(f => f.mtime!);
   return { saved: saved ?? (times.length ? Math.max(...times) : null),
     profiles: profiles.map(f => ({ name: f.path.split('/')[1], money: profileMoney(f.data), ...profileWhole(f.data) ? {} : { whole: false } })),
-    sums: Object.fromEntries(profiles.map(f => [f.path.split('/')[1].toLowerCase(), crc32(f.data)])) };
+    sums: Object.fromEntries(profiles.map(f => [f.path.split('/')[1].toLowerCase(), profileSum(files, f)])) };
 }
 
 export class VaultSync {

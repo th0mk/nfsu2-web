@@ -1,0 +1,34 @@
+# Stance between players, instance B (and C, NFSU2_OTHERS_MOD_PARTS=original: A's car as the game draws it), with
+# stance_pair_a.txt: as soon as A's car is there, B shoots it in photo mode from behind and from the front (its own
+# car hidden: both start on one spot).
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 2 6000
++0    roam mp waitcars 2 3000
++300  photo on
++30   photo show 62
++0    photo target 1
++30   photo reset
++30   photo fov 40
++120  dump pair_rear
++30   photo drag 1 0
++120  dump pair_front
++0    photo off
++600  roam mp status
++10   quit

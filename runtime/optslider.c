@@ -1,5 +1,5 @@
 /* optslider.c -- sliders of our own on the game's option screens (Horn
- * Volume, hornmenu.c; Exposure and White Level, tonemenu.c).
+ * Volume, hornmenu.c; Exposure and White Level, tonemenu.c; Stance's page, stance.c).
  *
  * The game's sliders are a class each over one widget (0x98 bytes, made by
  * 0x51E840 from the screen's layout).  Three methods are their own, the rest
@@ -46,7 +46,7 @@ void dispatch_patch(uint32_t a, void (*f)(CPU *));
 #define W_VALUE       0x84u
 #define W_STEP        0x8cu
 
-#define SLIDERS 4
+#define SLIDERS 8
 static OptSlider *g_sl[SLIDERS];
 static int g_nsl;
 static uint32_t g_scr;                           /* guest memory: scratch for strings */
@@ -173,7 +173,7 @@ static uint32_t part(CPU *c, uint32_t pk, uint32_t base, uint32_t n, uint32_t *h
 static int parts_ready(CPU *c, uint32_t scr, uint32_t n, const char *name){
     static const uint32_t OFS[NAMES] = { 0xc4u, 0xd0u, 0xd4u, 0xd8u, 0xdcu, 0xe0u, 0xe4u, 0xe8u, 0xecu, 0xf0u };
     uint32_t pn = MR32(scr + S_PACKAGE), pk = pn ? gcall(c, FN_FE_PACKAGE, 0, 1, &pn) : 0;
-    if (!pk || n < 2u) return 0;
+    if (!pk || n < 1u) return 0;
     char line[200]; int o_n = 0;
     if (pk != g_cp.pk || pn != g_cp.pkname) g_cp.n = 0;                 /* another screen's copies: gone with it */
     g_cp.pk = pk; g_cp.pkname = pn;
@@ -182,7 +182,7 @@ static int parts_ready(CPU *c, uint32_t scr, uint32_t n, const char *name){
         char nm[48], was[48];
         uint32_t h, h0, b = MR32(scr + OFS[i]);
         if (part(c, pk, b, n, &h, nm, sizeof nm)) continue;
-        uint32_t o = part(c, pk, b, n - 1u, &h0, was, sizeof was), cl = o && g_cp.n < COPIES ? fe_copy(c, pk, o, h) : 0;
+        uint32_t o = n > 1u ? part(c, pk, b, n - 1u, &h0, was, sizeof was) : 0, cl = o && g_cp.n < COPIES ? fe_copy(c, pk, o, h) : 0;
         if (!o) continue;
         if (!cl){ fprintf(stderr, "[menu] no copy of %s for %s: no %s slider\n", was, nm, name); return 0; }
         g_cp.o[g_cp.n] = o; g_cp.cl[g_cp.n] = cl; g_cp.ho[g_cp.n] = h0; g_cp.hc[g_cp.n++] = h;

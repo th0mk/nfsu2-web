@@ -81,6 +81,7 @@
 #define RC_EXT_PERF      1
 #define RC_EXT_HORN      2          /* car-look record extension 2: the player's horn, 1 byte */
 #define RC_EXT_RATING    3          /* car-look record extension 3: the car's class (int8) and rating (u16), 3 bytes */
+#define RC_EXT_STANCE    4          /* car-look record extension 4: the car's stance (stance.c), 8 bytes */
 /* a car's crash damage (damage.c) on the wire (RC_MSG_DENTS): the dents its owner's game made, oldest first, so that a
  * friend's game makes the same ones on its copy of the car.  A dent: where (3 x int16, mm, car space), the push
  * (3 x int8, x 127), the depth (u8, of RC_DMG_DEPTH m) and the impact's strength (u8, impulse units) */
@@ -534,6 +535,10 @@ typedef struct {
      * rating, rounded): a remote car is built without its physics pass, so the others' games cannot rate it.  The
      * race lobby's card shows each car against ours (roam_game.c mp_rating) */
     uint8_t  has_rating; int8_t rating_cls; uint16_t rating;
+    /* extension 4 (8 bytes): the car's stance as its player set it in the garage (stance.h's units: the cambers,
+     * front and rear, tenths of a degree, u8 each; the offsets, mm, int16 each; the tires' width, per cent, u8; a
+     * byte 0); a record without it: the car as the game draws it */
+    uint8_t  has_stance; uint8_t stance_fc, stance_rc, stance_tw; int16_t stance_fo, stance_ro;
 } rc_carcfg;
 int rc_carcfg_encode(const rc_carcfg *c, uint8_t *out, int cap);   /* bytes, or -1 */
 int rc_carcfg_decode(const uint8_t *p, int len, rc_carcfg *c);     /* RC_OK / RC_E_* */

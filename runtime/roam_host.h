@@ -55,6 +55,10 @@
  *                           there are no plates
  *   rh_plate_car(k, car, text)  slot k's car (0: none) and its player's license plate, to show (plates_friend)
  *   rh_plates_forget()      the world is gone, every slot's car with it (plates_forget)
+ *   rh_stance_mine(v)       1 with the player's car's stance (stance.c's stance_wire_mine: v[5] camber front, rear,
+ *                           offset front, rear, tires' width), 0 none of its own (or no stance here)
+ *   rh_stance_car(k, car, has, v)   slot k's car (0: none) and its stance (has 0: none), to draw (stance_wire_car)
+ *   rh_stance_forget()      the world is gone, every slot's car with it (stance_forget)
  *   ROAM_HOST_SCRIPT        defined when the input-script commands exist
  *   RH_FE_NODES             the most objects FEng draws of one package (its
  *                           level sorter's nodes)
@@ -136,6 +140,12 @@ void plates_forget(void);
 #define rh_plate_mine()  plates_mine()
 #define rh_plate_car(k, car, text) plates_friend((k), (car), (text))
 #define rh_plates_forget() plates_forget()
+int  stance_wire_mine(int16_t v[5]);     /* stance.c */
+void stance_wire_car(int k, uint32_t car, int has, const int16_t v[5]);
+void stance_forget(void);
+#define rh_stance_mine(v) stance_wire_mine(v)
+#define rh_stance_car(k, car, has, v) stance_wire_car((k), (car), (has), (v))
+#define rh_stance_forget() stance_forget()
 typedef FILE rh_file;
 #ifdef __wasm__
 /* The pose log (a test aid) in the browser: every stdio flush is a

@@ -88,6 +88,9 @@ const TABLE = [
   // the game's Full Scene Anti-Aliasing at 4 samples (runtime/com.c MULTISAMPLING): on and off in Customize Display
   // Settings, each a Reset
   ['fsaa', 'options_fsaa.txt', 'com: back buffer multisampling off (type 0, quality 0)', '', 400],
+  // Stance (runtime/stance.c): Customize's Body Shop, Stance after Rims, its page of sliders, each moved, Back with the
+  // car's stance kept
+  ['stance', 'stance_menu.txt', 'a stance of its own', 'NFSU2_STANCE=1', 400],
   // Power Units (runtime/powerunits.c): a row of Options > Gameplay after Speedometer Units
   ['powerunits', 'options_units.txt', '[units] power in bhp', '', 400],
   // Show Player Names (runtime/shownames.c): the game's own row in Options > Gameplay, before Save

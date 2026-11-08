@@ -462,6 +462,8 @@ typedef struct {
     uint32_t h_orig;                          /* a car of our own: its first ride (an opponent's copy) */
     int      have_orig, activated;
     uint32_t cfg_gen;  int pending_cfg;       /* the record the car shows / one waiting */
+    int      stance; int16_t stance_v[5];     /* the car's stance, as its record has it (RC_EXT_STANCE; 0: none) ... */
+    int      stance_new; int16_t stance_vnew[5];   /* ... the record being loaded's, the car's once it is on */
     uint32_t look;                            /* hash of the record the car shows (0: none) */
     /* the crash damage of the friend's car (its DENTS, rc_peer dents_*: damage_peers makes it on the car), as of the
      * peer's dents_gen dmg_gen (of the peer at index dmg_idx: co-op moves a slot to player 2's session's peer) */
@@ -780,6 +782,11 @@ static int car_cfg(uint32_t car, int mine, uint8_t *out, int cap, char *tname){
     cfg_rating(car, &c);                             /* the car as the game rates it (the others' games cannot: RC_EXT_RATING) */
     int horn = mine ? rh_horn_mine() : -1;           /* the horn the others hear from this car */
     if (horn >= 0){ c.has_horn = 1; c.horn = (uint8_t)horn; }
+    int16_t st[5];                                   /* the stance the others see this car with (stance.c) */
+    if (mine && rh_stance_mine(st)){
+        c.has_stance = 1; c.stance_fc = (uint8_t)st[0]; c.stance_rc = (uint8_t)st[1];
+        c.stance_fo = st[2]; c.stance_ro = st[3]; c.stance_tw = (uint8_t)st[4];
+    }
     for (uint32_t sl = 0; sl < RC_PART_SLOTS; sl++){
         uint32_t part = MR32(ride + 0x590u + 4u * sl);
         if (!part || !ok(part, 0xe)) continue;
@@ -1510,6 +1517,7 @@ static void world_gone(void){
     }
     g_created_n = 0; g_em = EM_GAME; g_em_pin = 0; g_em_racing_noted = 0; g_em_release_at = 0;
     rh_plates_forget();
+    rh_stance_forget();
 }
 static void flush_unloads(CPU *c){
     for (int i = 0; i < g_npending; i++) gcall1(c, FN_LOADER_UNLOAD, G_CARLOADER, g_handles_pending[i]);
@@ -2053,6 +2061,9 @@ static int begin_load(CPU *c, int k, const uint8_t *cfg, int len, uint32_t gen){
     roam_texlist_engine = 0;
     uint32_t a2[2] = { 0, 0 }; rh_call(c, FN_LOADER_SERVICE, G_CARLOADER, 0, 2, a2);
     s->load_t0 = roam_plat_now_us(); s->load_f0 = rh_frame(); s->pending_cfg = 1; s->cfg_gen = gen;
+    s->stance_new = cc.has_stance;
+    s->stance_vnew[0] = cc.stance_fc; s->stance_vnew[1] = cc.stance_rc; s->stance_vnew[2] = cc.stance_fo; s->stance_vnew[3] = cc.stance_ro;
+    s->stance_vnew[4] = cc.stance_tw;
     s->look = rc_fnv1a_bytes(cfg, (uint32_t)len);
     snprintf(s->carname, sizeof s->carname, "%s", cc.type_name);
     s->loads++;
@@ -2092,6 +2103,7 @@ static int finish_load(CPU *c, int k){
     if (s->h_cur) gcall1(c, FN_LOADER_UNLOAD, G_CARLOADER, s->h_cur);
     s->h_cur = s->h_new; s->h_new = 0;
     s->pending_cfg = 0; s->hidden = 1;
+    s->stance = s->stance_new; memcpy(s->stance_v, s->stance_vnew, sizeof s->stance_v);
     /* the renderer draws a car at +0x50 (with the matrix copy at +0xD0),
      * the body position minus the centre-of-mass offset; the game sets it
      * in 0x5F5010 (when a car lands on loaded track, or is placed), so a
@@ -4620,6 +4632,14 @@ static void lights_peers(void){
     for (int k = 0; k < NSLOT; k++){
         uint32_t car = g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
         rh_lights_car(k, ok(car, 0x9e0) ? car : 0, st[k]);
+    }
+}
+
+/* friends' stances (stance.c): each shown car's, as its record has it */
+static void stance_peers(void){
+    for (int k = 0; k < NSLOT; k++){
+        uint32_t car = g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
+        rh_stance_car(k, ok(car, 0x9e0) ? car : 0, g_sl[k].stance, g_sl[k].stance_v);
     }
 }
 
@@ -9792,6 +9812,7 @@ void roam_game_frame(CPU *c){
     lights_peers();
     damage_peers(c);
     plates_peers();
+    stance_peers();
     if (g_poselog && have_ls){
         uint32_t me = player_car();
         rh_fprintf(g_poselog, "L,%lld,%.0f,%08x,%.4f,%.4f,%.4f,%.3f,0,0,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", (long long)host, g_sync, g_s.conf.self_id,

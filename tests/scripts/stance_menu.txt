@@ -1,0 +1,48 @@
+# Stance (runtime/stance.c) in Customize's Body Shop: the entry after Rims, its page of sliders, each moved, Back to
+# the Body Shop with the car's stance kept, Back again.  NFSU2_STANCE=1.  Frames: list, page, moved, back, cat.
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN
++0    waitfng UI_Main.fng 3000
++500  tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT        # Customize (Split Screen after Quick Race)
++120  tap RETURN
++0    waitfng UI_QRCarSelect.fng 600
++300  tap RETURN                                   # the car
++0    waitfng UI_ChooseCustomizeCategory.fng 600
++400  tap RETURN                                   # Change Body Parts: the Body Shop, on Front Bumpers
++400  loop 11
++60   tap RIGHT
++0    endloop
++300  dump list                                    # Stance, after Rims
++0    tap RETURN
++0    waitfng UI_Options.fng 600
++400  fnglist
++0    dump page
++0    loop 6
++20   tap RIGHT                                    # Front Camber +3
++0    endloop
++30   tap DOWN
++0    loop 8
++20   tap RIGHT                                    # Rear Camber 4
++0    endloop
++30   tap DOWN
++0    loop 6
++20   tap RIGHT                                    # Front Offset +30 mm
++0    endloop
++30   tap DOWN
++0    loop 6
++20   tap RIGHT                                    # Rear Offset +30 mm
++0    endloop
++30   tap DOWN
++0    loop 4
++20   tap RIGHT                                    # Tire Width 120 %
++0    endloop
++300  dump moved
++0    tap ESCAPE
++0    waitfng UI_GenericParts_Browser.fng 600
++400  dump back
++0    tap ESCAPE
++400  dump cat
++60   quit

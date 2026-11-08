@@ -84,8 +84,9 @@ BirdSentinel (Zack)'s port of mihaits'
 [NFSU2-SplitScreen](https://github.com/mihaits/NFSU2-SplitScreen). Other changes follow what these mods found out
 about the game: ThirteenAG's, Aero_'s and xan1242's [Widescreen Fixes Pack](https://nfsmods.xyz/mod/3327), dstudnicki's
 [NFSU2 High FPS Audio Fix](https://github.com/dstudnicki/NFSU2HighFPSAudioFix), the ExOpts Team's
-[NFSU2 Extra Options](https://nfsmods.xyz/mod/290), MaxHwoy's [Show Hidden Races Mod](https://nfsmods.xyz/mod/1583)
-and thelink2012's [Visual Reputation Remover](https://nfsmods.xyz/mod/2773). The start page's Mods tab lists them all.
+[NFSU2 Extra Options](https://nfsmods.xyz/mod/290), MaxHwoy's [Show Hidden Races Mod](https://nfsmods.xyz/mod/1583),
+thelink2012's [Visual Reputation Remover](https://nfsmods.xyz/mod/2773) and Archie (AR4I)'s
+[Stance Mod](https://nfsmods.xyz/mod/1687). The start page's Mods tab lists them all.
 Built with the help of Claude Code.
 
 ## License

@@ -366,7 +366,19 @@ static void t_roundtrip(void){
       r2[n2 - 5] = 77;                                       /* as an older core reads it: skipped */
       CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_rating && d2.has_horn, "rating extension skipped as unknown");
       r2[n2 - 5] = RC_EXT_RATING; r2[n2 - 1] = 0x40;         /* a rating past 5000: none */
-      CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_rating, "a rating past 5000 is none"); }
+      CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_rating, "a rating past 5000 is none");
+      /* and the car's stance (stance.c; a core before it skips it): any value the wire carries, the receiver clamps */
+      cp.rating = 316; cp.has_stance = 1; cp.stance_fc = 120; cp.stance_rc = 255; cp.stance_fo = -40; cp.stance_ro = 30000;
+      cp.stance_tw = 115; n2 = rc_carcfg_encode(&cp, r2, sizeof r2);
+      CHECK(n2 == 27 + 9 * RC_PART_SLOTS + 2 + RC_PERF_BYTES + 3 + 5 + 10 && r2[n - 1] == 4 && r2[n2 - 10] == RC_EXT_STANCE && r2[n2 - 9] == 8 && r2[n2 - 1] == 0,
+            "car record with the stance extension: %d bytes", n2);
+      CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && d2.has_stance && d2.stance_fc == 120 && d2.stance_rc == 255 && d2.stance_fo == -40 &&
+            d2.stance_ro == 30000 && d2.stance_tw == 115 && d2.has_rating && d2.has_horn && d2.has_perf, "stance extension round trip");
+      r2[n2 - 10] = 77;                                      /* as an older core reads it: skipped */
+      CHECK(rc_carcfg_decode(r2, n2, &d2) == RC_OK && !d2.has_stance && d2.has_rating, "stance extension skipped as unknown");
+      r2[n2 - 10] = RC_EXT_STANCE; r2[n2 - 9] = 7;           /* another length: skipped, its bytes then trail */
+      CHECK(rc_carcfg_decode(r2, n2, &d2) != RC_OK || !d2.has_stance, "a stance extension of another length is none");
+      CHECK(rc_carcfg_decode(r2, n2 - 3, &d2) != RC_OK, "a stance extension cut short is refused"); }
     CHECK(rc_carcfg_decode(rec, n, &c2) == RC_OK && c2.type_hash == cc.type_hash && !strcmp(c2.type_name, "350Z") && c2.n_parts == RC_PART_SLOTS &&
           !memcmp(c2.part, cc.part, sizeof cc.part), "car record round trip");
     /* record: version 1, type hash 4, name 16, ride bytes 4, count 1 = 26, then 9 per part */

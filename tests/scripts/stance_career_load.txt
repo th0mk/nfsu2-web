@@ -1,0 +1,17 @@
+# Stance (runtime/stance.c) after a load: stance_career.txt's save (its profile with MODPARTS.DAT beside it) in the
+# world, the car from behind and from the front in photo mode.  The log's "[mods] <profile>: ... 1 car with a stance
+# of its own" says MODPARTS.DAT gave it back.  NFSU2_STANCE=1 (=0: the same car as the game draws it).
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --data <game folder> --seed <that save tree>
+#        --a St:stance_career_load.txt:NFSU2_ROAM=0,NFSU2_STANCE=1
+0     bot on
++0    waitroam 6000
++0    bot off
++300  photo on
++30   photo target 0
++30   photo reset
++30   photo fov 40
++120  dump ld_rear
++30   photo drag 1 0
++120  dump ld_front
++0    photo off
++10   quit

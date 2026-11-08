@@ -60,6 +60,7 @@
 #include "guest.h"
 #include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
+#include "stance.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -405,6 +406,7 @@ void sub_00532cf0(CPU *c){ stages(c, sub_00532cf0_orig); }
 void garage_split_keep(CPU *c){
     if (!g_blk) return;
     xsave(c, G_FECARS, g_split.cars); g_split.on = 1;
+    stance_split_keep();                         /* (player 1's cars' stances too: a load in the mode is undone) */
     fprintf(stderr, "[garage] split screen: slots 6-10 kept aside, %u cars of yours, %u of %u slots open\n",
             owned_n(G_FECARS), open_n(G_FECARS), SLOTS);
 }
@@ -413,6 +415,7 @@ void sub_00515d70(CPU *c){
     sub_00515d70_orig(c);
     if (!g_blk || !g_split.on) return;
     xload(c, G_FECARS, g_split.cars); g_split.on = 0;
+    stance_split_back();
     fprintf(stderr, "[garage] split screen's end: slots 6-10 as they were, %u cars of yours, %u of %u slots open\n",
             owned_n(G_FECARS), open_n(G_FECARS), SLOTS);
 }

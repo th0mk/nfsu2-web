@@ -1,6 +1,6 @@
 /* optslider.h -- sliders of our own on the game's option screens
  * (optslider.c): Horn Volume (hornmenu.c), Exposure and White Level
- * (tonemenu.c) */
+ * (tonemenu.c), Stance's page (stance.c) */
 #ifndef OPTSLIDER_H
 #define OPTSLIDER_H
 #include "cpu.h"

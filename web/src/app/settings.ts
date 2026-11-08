@@ -197,25 +197,23 @@ export const KEYS: readonly KeyDef[] = [
   // (runtime/catchup.c).  Not in bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_CATCHUP
   // all the same
   { key: 'catchup', env: 'NFSU2_CATCHUP', kind: 'enum', vals: 'original|noboost|off', scope: 'web' },
-  // The rims are out for now (mods.ts): these two keys come back with their lines in TEMPLATE, after catchup's:
+  // The rims are out for now (mods.ts): this key comes back with its lines in TEMPLATE, after catchup's:
   //   # New rim brands in the rim shop: Blitz.  Everyone's game has their rims,
   //   # so a friend's car with them looks the same either way, and rims already
   //   # on your car stay.  off = the shops offer only the original game's.
   //   # [NFSU2_MOD_RIMS]
   //   #mod_rims = off
-  //
-  //   # Other players' cars: shown = with the mods' parts they have (rims of a
-  //   # mod's on above), as they see them; original = with parts of the original
-  //   # game in their place (a look-alike rim of the same size, else the stock
-  //   # part).  Your own car keeps its own either way.  [NFSU2_OTHERS_MOD_PARTS]
-  //   #others_mod_parts = shown
   // the new rim brands in the rim shop (runtime/modpacks.c; everyone's game has them, so a friend's car shows them either
   // way).  Not in bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_MOD_RIMS all the same
   // { key: 'mod_rims', env: 'NFSU2_MOD_RIMS', kind: 'bool', scope: 'web' },
-  // other players' cars with the mods' parts or with the game's in their place (runtime/modpacks.c: the parts'
-  // look-alikes, else the stock ones; free roam's cars and the race's).  Not in bundle.m's table: there a lower-case
-  // key, so it reaches the runtime as NFSU2_OTHERS_MOD_PARTS all the same
-  // { key: 'others_mod_parts', env: 'NFSU2_OTHERS_MOD_PARTS', kind: 'enum', vals: 'shown|original', scope: 'web' },
+  // each car's stance, set in the garage's Body Shop (runtime/stance.c: the Stance entry, the car drawn with it, sent to
+  // friends in free roam; kept in MODPARTS.DAT by runtime/modpacks.c).  Not in bundle.m's table: there a lower-case key,
+  // so it reaches the runtime as NFSU2_STANCE all the same
+  { key: 'stance', env: 'NFSU2_STANCE', kind: 'bool', scope: 'web' },
+  // other players' cars with the mods' looks or as the original game draws them (runtime/stance.c: their stance;
+  // runtime/modpacks.c: a mod's parts, their look-alikes, else the stock ones, in free roam's cars and the race's).  Not
+  // in bundle.m's table: there a lower-case key, so it reaches the runtime as NFSU2_OTHERS_MOD_PARTS all the same
+  { key: 'others_mod_parts', env: 'NFSU2_OTHERS_MOD_PARTS', kind: 'enum', vals: 'shown|original', scope: 'web' },
   // each local player's gearbox whine over the game's sound, as ropi's Underground 2 Transmission Whine (runtime/whine.c;
   // its sounds from the game folder's MODPACKS/WHINE, read only when on: tools/whinepack.py).  Not in bundle.m's
   // table: there a lower-case key, so it reaches the runtime as NFSU2_GEARBOX_WHINE all the same
@@ -373,6 +371,19 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # off, you see every car undamaged.  off (the default) = the original game.
 # [NFSU2_DAMAGE]
 #crash_damage = off
+
+# Each car's stance, as Archie's Stance Mod has it, set in the garage's
+# Body Shop (Stance, after Rims): the camber front and rear, how far the
+# wheels stand out and how wide the tires are.  Only what is seen: the car
+# drives as before.  Other players see your car's stance in free roam.
+# off = the original game (the values stay for when it is on again).
+# [NFSU2_STANCE]
+#stance = off
+
+# Other players' cars: shown = with the looks they chose with the mods
+# (their stance), as they see them; original = as the original game draws
+# them.  Your own car keeps its own either way.  [NFSU2_OTHERS_MOD_PARTS]
+#others_mod_parts = shown
 
 # The career's rubberbanding (Mods: Rubberbanding).  In a career race the
 # game slows opponents who are ahead of you and gives ones behind you more

@@ -296,7 +296,7 @@ World row's list says how many are in each world.
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, music in drag and drift races, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
-| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover, Crash Damage, Rubberbanding (original, no boost or off), Transmission Whine, HQ Vinyls & Doorlines; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
+| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover, Mods on other cars (shown or original), Stance, Crash Damage, Rubberbanding (original, no boost or off), Transmission Whine, HQ Vinyls & Doorlines; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -343,6 +343,15 @@ World row's list says how many are in each world.
   and 8 stars in stages 1 to 4, 10 from stage 5), so every cover shoot of the stage is offered the next time free roam
   loads, and pays by that rating. The shops show no Visual Rating box. Turned off again, the next free-roam load
   offers the shoots by your car's own rating; the ones shot and paid stay.
+- **Stance** (Mods): off by default. On, as Archie (AR4I)'s [Stance Mod](https://nfsmods.xyz/mod/1687) has it but for
+  each car of yours: the garage's Body Shop gets a Stance entry after Rims, a page of sliders with the car behind it:
+  Front Camber and Rear Camber (0 to 15 degrees, the wheels' tops in; the front starts at the camber the game gives
+  your suspension parts), Front Offset and Rear Offset (-40 to +80 mm, the wheels further out or in) and Tire Width
+  (80% to 130%). Looks only: the car drives as in the original game. In free roam other players see your car's stance.
+  It is kept beside the profile (MODPARTS.DAT): the profile still loads in the PC game, where the car looks as the game
+  draws it. Off, your cars look as in the original game and the Stance entry is gone; the values stay for later.
+- **Mods on other cars** (Mods, the first row of Seen by others): Shown by default. Original draws other players' cars
+  as the original game does, without the stance they set.
 - **Crash Damage** (Mods): off by default. Chrystian Farias's Crashing Foreign Cars: the racers' cars, yours and the
   AI's, dent where they are hit, scratch, break their lights and lose loose parts, which lie on the road for a while.
   Looks only: the cars drive as in the original game. In free roam, players who have it on see each other's damage;
