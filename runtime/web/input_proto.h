@@ -93,8 +93,12 @@ enum {
     IEV_LOBBY = 16,       /* free roam's race lobby (roam_web.c roam_plat_lobby_input): dik = what (roam_plat.h ROAM_LB_*);
                              ROAM_LB_JOIN (an invite's Join): a = the lobby's host's id, b = the lobby's id, its race's
                              hash in vk, flags, ch[0], ch[1] (little-endian) */
+    IEV_TRAVEL = 17,      /* the page menu's Tracks (travel.c travel_ask): dik = where, 0 the city, 1.. a race track's spot;
+                             TRAVEL_FRIEND: the page menu's Friends, Join (travel_ask_friend): a = the friend's name's
+                             hash (rc_room_hash), b = the spot it is at (0 the city) */
 };
 #define INAME_SEAT2 1u            /* IEV_NAME's flags: player 2's (co-op) */
+#define TRAVEL_FRIEND 100u        /* IEV_TRAVEL's where: to a friend */
 enum {                    /* event flags */
     IKF_REPEAT = 1,       /* autorepeat */
     IKF_ALT = 2,          /* Alt / Option held */

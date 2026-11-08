@@ -1,0 +1,80 @@
+# Tracks (runtime/travel.c, the page menu's Tracks, F9): career free roam on each race track's map and back.  A stage-2
+# career drives into free roam (the career bot); the menu's Tracks takes the car to the Airport Speedway (the page's
+# way: IEV_TRAVEL), then the script's "travel N" (the same ask) to every other spot in turn.  Each: the track's own
+# number loads, "travel where" says where the car stands (on the ground: velocity 0), the career's kept spot is still
+# the city's place the car left (expect), the shot shows it.  On the Speedway M leaves the World Map shut (fnglist: no
+# UI_InGame_WorldMap.fng).  Then the menu's Back to the city: the place the car left.
+#   roam-pair --page app --solo --seed <a stage-2 career save> --a Ann:travel_tracks.txt --env NFSU2_ROAM=1
+#             --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++60   mark CX f:[[0xd00000]+4]+0x60
++0    mark CY f:[[0xd00000]+4]+0x64
++0    travel where
++60   log KEY F9
++60   log PRESS [data-act="tracks"]
++120  log SHOT tracks_city
++60   log PRESS [data-at="1"]
++0    waitexpr i:0x89e7a0 == 4700 1800
++0    waitroam 6000
++120  travel where
++0    expect f:0x863490 == @CX         # the kept spot: the city's place
++0    expect f:0x863494 == @CY
++0    log SHOT airport_speedway
++0    tap M
++120  fnglist
++0    log SHOT no_world_map
++60   travel 2
++300  waitroam 6000                 # (the same map: no track number to wait for)
++120  travel where
++0    expect f:0x863490 == @CX
++0    log SHOT industrial_speedway
++60   travel 3
++0    waitexpr i:0x89e7a0 == 4300 1800
++0    waitroam 6000
++120  travel where
++0    expect f:0x863490 == @CX
++0    log SHOT stadium_drift
++60   travel 4
++300  waitroam 6000                 # (the same map: no track number to wait for)
++120  travel where
++0    expect f:0x863490 == @CX
++0    log SHOT vacantlot_drift
++60   travel 5
++0    waitexpr i:0x89e7a0 == 4200 1800
++0    waitroam 6000
++120  travel where
++0    expect f:0x863490 == @CX
++0    log SHOT city_drag
++60   travel 6
++300  waitroam 6000                 # (the same map: no track number to wait for)
++120  travel where
++0    expect f:0x863490 == @CX
++0    log SHOT industrial_drag
++60   travel 7
++300  waitroam 6000                 # (the same map: no track number to wait for)
++120  travel where
++0    expect f:0x863490 == @CX
++0    log SHOT airport_drag
++60   travel 8
++0    waitexpr i:0x89e7a0 == 4600 1800
++0    waitroam 6000
++120  travel where
++0    expect f:0x863490 == @CX
++0    log SHOT city_streetx
++60   travel 9
++300  waitroam 6000                 # (the same map: no track number to wait for)
++120  travel where
++0    expect f:0x863490 == @CX
++0    log SHOT industrial_streetx
++60   log KEY F9
++60   log PRESS [data-act="tracks"]
++120  log SHOT tracks_away
++60   log PRESS [data-at="0"]
++0    waitexpr i:0x89e7a0 == 4000 1800
++0    waitroam 6000
++120  travel where
++0    log SHOT city_back
++60   log TRAVEL DONE
++10   quit

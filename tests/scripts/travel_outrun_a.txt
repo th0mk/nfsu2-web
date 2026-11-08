@@ -1,0 +1,31 @@
+# An outrun between two players on a race track's map (runtime/travel.c; roam_game.c's outruns): Ann and Bob go to the
+# Airport Circuit, Ann challenges Bob there and drives off on the game's autopilot (the map's roads), Bob takes it and
+# stands: Ann wins 300 m on ("outrun with Bob: over, WON").  After it the career's kept spot is still the city's (an
+# outrun's end keeps the car's place there, 0x513950) and the trip back to the city goes.
+#   roam-pair --seed <a stage-2 career save> --a Ann:travel_outrun_a.txt --b Bob:travel_outrun_b.txt
+#             --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++60   mark CX f:[[0xd00000]+4]+0x60
++0    travel 1
++0    waitexpr i:0x89e7a0 == 4700 1800
++0    waitroam 6000
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp waitoutrun prompt 1800
++30   tap RETURN
++0    roam mp waitoutrun race 900
++0    roam mp outrun
++60   autopilot on
++0    roam mp waitoutrun idle 3600
++0    roam mp outrun
++0    autopilot off
++300  travel where
++0    expect f:0x863490 == @CX         # the kept spot: still the city's place
++60   travel city
++0    waitexpr i:0x89e7a0 == 4000 1800
++0    waitroam 6000
++60   travel where
++60   log TRAVEL OUTRUN A DONE
++10   quit

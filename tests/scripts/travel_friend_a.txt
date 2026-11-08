@@ -1,0 +1,47 @@
+# Join a friend (runtime/travel.c friend_step; the page menu's Friends, Join, as "travel friend NAME SPOT"), from a
+# stage 2 career (Coal Harbor locked: the wall across the bridge south of the City Core, walls_reset.txt), with Bob
+# (travel_friend_b.txt, the same career):
+#  1. Bob on an open road 1.4 km off (220.7 -1013.8): Ann's free roam loads behind him ("to a friend: there"), on the
+#     road, within 60 m of him;
+#  2. Bob behind the wall, on the bridge (218.8 -1086.9): "to a friend: a part of the city this career has not
+#     opened", Ann stays where she is;
+#  3. Bob at the Stadium's drift (spot 3), driven 2 km off its start (at the Parkade's): Ann goes to that map (one
+#     load), sees him there and loads behind him (a second), "there".
+#   roam-pair --seed <a stage 2 career save> --a Ann:travel_friend_a.txt --b Bob:travel_friend_b.txt
+#             --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam mp waitpeers 1 6000
++900  travel friend Bob 0                # 1. Bob on the open road
++0    waitexpr f:[[0xd00000]+4]+0x60 >= 160 1800
++0    waitroam 6000
++120  travel where
++0    expect f:[[0xd00000]+4]+0x60 >= 160
++0    expect f:[[0xd00000]+4]+0x60 <= 280
++0    expect f:[[0xd00000]+4]+0x64 >= -1075
++0    expect f:[[0xd00000]+4]+0x64 <= -950
++0    log FRIEND OPEN DONE
++900  mark ax f:[[0xd00000]+4]+0x60      # 2. Bob behind the wall
++0    mark ay f:[[0xd00000]+4]+0x64
++0    travel friend Bob 0
++600  travel where
++0    expect f:[[0xd00000]+4]+0x60 >= @ax-5
++0    expect f:[[0xd00000]+4]+0x60 <= @ax+5
++0    expect f:[[0xd00000]+4]+0x64 >= @ay-5
++0    expect f:[[0xd00000]+4]+0x64 <= @ay+5
++0    log FRIEND LOCKED DONE
++1500 travel friend Bob 3                # 3. Bob at the Stadium's drift, at the Parkade's
++0    waitexpr i:0x89e7a0 == 4300 1800
++0    waitexpr f:[[0xd00000]+4]+0x60 >= 800 2400
++0    waitroam 6000
++120  travel where
++0    expect i:0x89e7a0 == 4300
++0    expect f:[[0xd00000]+4]+0x60 >= 800
++0    expect f:[[0xd00000]+4]+0x60 <= 960
++0    log FRIEND TRACK DONE
++60   travel city
++0    waitexpr i:0x89e7a0 == 4000 1800
++0    waitroam 6000
++60   log TRAVEL FRIEND A DONE
++10   quit

@@ -18,8 +18,6 @@
 #include "game.h"
 #include <stdio.h>
 
-#define C_SPOT          0x8750u       /* float[3]: the kept place */
-#define C_SPOT_HEADING  0x8760u       /* u16 */
 #define PLACE_MAX       100000.f      /* farther out than this (m): no place on the map */
 static const float START[3] = { 1695.25f, -883.64f, 24.11f };   /* the new career's start (roam_game.c SPAWN_*) */
 #define START_HEADING   0xf840u

@@ -84,10 +84,6 @@ void autotest_tap(unsigned dik, long frames);
 
 /* ---- guest globals (v1.2 NA, verified in our exe) ------------------------ */
 #define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* PlayersByNumber[0] (Player*) */
-#define G_HOTPOS        0x00890140u   /* hot-position vec3 used by the jump */
-#define G_HOTPOS_ANGLE  0x008900d0u   /* u16 */
-#define G_HOTPOS_JUMP   0x008900cdu   /* u8: jump to the hot position */
-#define G_HOTPOS_VALID  0x008900ceu   /* u8: a hot position is stored */
 #define FN_AUTOPILOT_ON  0x005fae20u  /* Player::AutoPilotOn(this) */
 #define FN_AUTOPILOT_OFF 0x005faf10u  /* Player::AutoPilotOff(this) */
 #define FN_SETINPUTMODE  0x00605c70u  /* Player::SetInputMode(this, mode) */
@@ -1066,7 +1062,7 @@ static void queue(const char *line){
 int career_is_cmd(const char *cmd){
     static const char *const k[] = { "call", "memdump", "waitx", "teleport", "autopilot", "racewin",
                                      "careerlist", "careergo", "shopgo", "peekx", "fnglist", "bot", "waitfe", "tapfe", "waitroam", "showgo", "cargo", "watchw",
-                                     "outrun", "outrunwin", "visual", "uniques", "mpcredit", "walls", 0 };
+                                     "outrun", "outrunwin", "visual", "uniques", "mpcredit", "walls", "travel", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -1211,6 +1207,7 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
         fprintf(stderr, "[career] f=%ld fe packages:", f); fe_each(fe_print, a1[0] ? (void *)1 : 0); fputc('\n', stderr); return 1; }
     if (!strcasecmp(cmd, "careergo")){ career_go(a1); return 1; }
     if (!strcasecmp(cmd, "walls")){ int walls_cmd(const char *); return walls_cmd(rest); }
+    if (!strcasecmp(cmd, "travel")){ int travel_cmd(const char *); return travel_cmd(rest); }
     if (!strcasecmp(cmd, "mpcredit")){ int mpcredit_test(const char *, float); mpcredit_test(a1, a2[0] ? (float)atof(a2) : 100.f); return 1; }
     if (!strcasecmp(cmd, "shopgo")){
         uint32_t sh = shop_by_name(a1);

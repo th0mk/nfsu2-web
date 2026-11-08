@@ -83,6 +83,8 @@ uint64_t    roam_win_ns(void);
 #define rh_drift_tuning(out) ((void)(out), 0)
 #define ROAM_HOST_DRIFT  0               /* ...so no drift battles */
 #define rh_drift_want()  0
+/* no trips to the race tracks' maps here (travel.c): always the city */
+#define rh_travel_room() 0u
 #define rh_drift_begin() ((void)0)
 #define rh_drift_go(c)   ((void)(c))
 #define rh_drift_score(b, p) (*(b) = 0, *(p) = 0)

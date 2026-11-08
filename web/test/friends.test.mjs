@@ -360,7 +360,7 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
     w.joins = []; w.copies = [];
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async s => { w.copies.push(s); } } });
     document.body.append(box);
-    w.prompt.drawPlaced(box, r => w.joins.push(r));
+    w.prompt.drawPlaced(box, f => w.joins.push(f.room));   // (a game without trips: Join for one in another world, its world)
     const rows = [...box.querySelectorAll('.fl li')].map(li => [li.querySelector('.fl-name').firstChild.textContent, li.querySelector('.fl-st').textContent,
       [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]);
     for (const b of box.querySelectorAll('button')) b.click();
@@ -374,6 +374,16 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
       ['Fox', 'your world', '']],
     lines: ['In the Online lobby: Eve.'], joins: ['Blue Room', ''], copies: ['cy.races'], toasts: ['Copied cy.races'],
   });
+  // a game that goes to friends (runtime/travel.c): a Join on each one in free roam, in the player's world too
+  const goes = await p.evaluate(() => {
+    const w = /** @type {any} */ (window), box = document.createElement('div'), joins = [];
+    document.body.append(box);
+    w.prompt.drawPlaced(box, f => joins.push(f.name), true);
+    for (const b of box.querySelectorAll('button[aria-label="Join"]')) b.click();
+    box.remove();
+    return joins;
+  });
+  assert.deepEqual(goes, ['Bo_', 'Cy_', 'Dee', 'Fox']);
   await server(p, { op: 'where', friends: [{ name: 'Bo_', where: 'online' }, { name: 'Cy_', where: '' }, { name: 'Dee', where: '' }] });
   await p.evaluate(() => new Promise(r => setTimeout(r, 4400)));
   assert.deepEqual(await pop(), {

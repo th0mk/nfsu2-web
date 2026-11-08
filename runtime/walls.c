@@ -53,10 +53,6 @@ int mprace_car_ok(void);              /* mprace.c: the career has a car of its o
 void roam_game_jumped(void);          /* roam_game.c: friends' cars are ghosts until they are clear of ours */
 
 #define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* Player*: +4 its car */
-#define G_HOTPOS        0x00890140u   /* the hot-position jump: where, */
-#define G_HOTPOS_ANGLE  0x008900d0u   /* ...the heading (u16), */
-#define G_HOTPOS_JUMP   0x008900cdu   /* ...1: jump there (the player's next update), */
-#define G_HOTPOS_VALID  0x008900ceu   /* ...1: the place is set */
 #define G_TRACK         0x0088f298u
 #define TK_NBAR         0x498u
 #define TK_BARS         0x49cu
@@ -335,11 +331,29 @@ static int check(long f, uint32_t car, int why){
     return 1;
 }
 
+/* travel.c (a trip to a friend in the city): whether `at` is on this career's side of its walls, and if so where its
+ * car may go near `near`: the nearest place on its roads at least WALL_GAP from a barrier line (out, heading *h along
+ * the road, toward (tx, ty)), 1; 0 when `at` is past its walls (a part of the city its career has not opened), or
+ * the roads are not as expected (then nowhere is known to be open) */
+int walls_open_near(const float at[3], const float near[3], float tx, float ty, float out[3], uint16_t *h){
+    ensure(autotest_frame());
+    if (!W.ok) return 0;
+    Where w; where(at[0], at[1], at[2], &w);
+    if (w.state == W_PAST) return 0;
+    career_place(near[0], near[1], near[2], &w);
+    if (!w.found) return 0;
+    float hx = w.hx, hy = w.hy;
+    if ((tx - w.qx) * hx + (ty - w.qy) * hy < 0.f){ hx = -hx; hy = -hy; }
+    out[0] = w.qx; out[1] = w.qy; out[2] = w.qz;
+    *h = heading_of(hx, hy);
+    return 1;
+}
+
 /* the main-loop hook (roam.c), every frame */
 void walls_frame(void){
     long f = autotest_frame();
     uint32_t car = 0;
-    if (MR32(G_GAMEMODE) == 1u && MR32(G_RACETYPE) == 0u && MR32(G_FLOW) == 6u) car = player_car();
+    if (MR32(G_GAMEMODE) == 1u && MR32(G_RACETYPE) == 0u && MR32(G_FLOW) == 6u && MR32(G_RACEPARAMS) == 4000u) car = player_car();   /* the city (a race track's map, travel.c, has no career walls) */
     if (!car){ S.in = 0; return; }
     if (!S.in){
         memset(&S, 0, sizeof S); S.in = mprace_car_ok() ? 1 : 2; S.since = f; S.jumped_at = -100000; S.stamp = MR32(car + CAR_RESET_T);

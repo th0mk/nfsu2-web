@@ -888,8 +888,11 @@ Good to know:
   name over the car shows at any distance, in a pale lime white (a friend in one of your crews has the crew's colour),
   and so do their arrows on the minimap and the world map. When a friend comes into free roam, the notices on the left
   say so (with **I Message** under it when they are in your world). The page menu has **Friends** in every game in
-  free roam with other players: the requests to answer (✓ and ✕), who is in free roam, with **Join** for one in
-  another world and Discord's mark to copy one's Discord username, the others in a line, and **Add a player**;
+  free roam with other players: the requests to answer (✓ and ✕), who is in free roam (and on which race track, if
+  one: Tracks below), with **Join** to go to them (their world, their track, then a short loading screen and your
+  car stands on the road behind theirs; in the city only where your career has opened the city: a friend behind your
+  career's walls is out of reach, and the line says so) and Discord's mark to copy one's Discord username, the
+  others in a line, and **Add a player**;
   with no friends yet, it says how to add one. A friend is a
   friend in the game's Online mode too (EA Messenger), up to 250. In free roam the server takes a request only between
   two players whose cars are within 30 m of each other; by name, from the start page or the page menu, five at once and then one every
@@ -912,15 +915,26 @@ Good to know:
   (the default, and the busiest); **World 1** to **World 4** are for anyone who wants a quieter free roam, and
   **World 4** has Ghost mode off for everyone in it; **Own name…** makes a world of a name you type, shared by
   whoever types the same (capitals and spaces don't count). Pick one in the page menu (F9, **World**: every world
-  with how many are in free roam there, yours checked; a tap switches at once, back to the game, and your settings
+  with how many are in free roam there, on its race tracks too, yours checked; a tap switches at once, back to the game, and your settings
   keep it), or on the start page (Online, **World**, the counts in its list). Arriving, the log on the left says the
-  world and how many are there. Friends and crew-mates meet only within one world (the menu's Friends has Join for
-  one in another), and so do race lobbies. An invite link (`#room=`) joins a world too. Worlds came with commit
+  world and how many are there. Friends and crew-mates meet only within one world (the menu's Friends has Join, which
+  takes you to them), and so do race lobbies. An invite link (`#room=`) joins a world too. Worlds came with commit
   41737add: before it is live the page has only a **Room** name box under Online (the same thing: empty is the main
   world). A world is a filter between players, not privacy: every browser on the server still sees your name ("Your
   name", or the profile name), whether you are in the menus or driving, and the world, and someone with their own
   tools could join it. Play on a server only with
   people you would show your name and car to.
+- **Tracks:** the career's race tracks are places of their own beside the city, and free roam can go there: the
+  page menu (F9, **Tracks**) lists them by the career's names: the URL's Airport Circuit and Bayview Speedway, the
+  Stadium's and the Parkade's drift, the Bayview Bridge, Central Station and South Runway drags, and Street X's
+  Industrial Park and Parkade, each with how many players are there. Pick one: after a short loading screen your car stands on a race's start line there, with the players of your
+  world who went to the same one (each is a place of its own: you meet nobody from the city there, and the city's
+  players don't see you). **Back to the city**, at the top of the same list, takes you back to where you left. A track
+  has no traffic, events, shops or World Map; Respawn and outruns with other players work as in the city. A trip goes only while you drive in your
+  career's free roam: not in a new career's prologue (your own car first), not during an outrun, a race or a race
+  lobby, a timed career task or with two players on one screen, and not while you stand on an event's or a shop's
+  marker; the list says why when it can't. A save made on a track (the pause menu's Save) keeps the city place you
+  left, so your career loads in the city, in the original PC game too, and so does quitting there.
 - **Blocking:** Online, More online settings, **Blocked players**: names as they show over cars, separated
   by commas, up to 32 (capitals don't count). You and they never see each other in free roam, wherever you are: no
   car, no name, no horn, no quick chat or outrun, no message about them, nobody on the world map. Neither of you sees

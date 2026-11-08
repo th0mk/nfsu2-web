@@ -38,6 +38,10 @@
 #include <strings.h>
 
 long autotest_frame(void);
+void travel_setup(void);          /* travel.c: a trip's track in free roam's setup */
+void travel_presetup(void);       /* travel.c: before it, a trip's start or the city's place for a load the game starts */
+int travel_full(void);            /* travel.c: a trip to the race track's map loaded now: load it in full, 1 once */
+uint32_t travel_room(void);       /* travel.c: on a race track's map (its room's key), 0 the city */
 
 #define G_HUMANS      0x0089e7c0u
 #define G_RECORDS     0x00890160u   /* racer records (AddRacer copies into the next) */
@@ -72,13 +76,7 @@ static uint32_t coop_pl, coop_car, coop_world;   /* player 2's Player and car, a
  * race status's event 10 (PostEvent 0x601020 on [0x8900D8]: SwitchTrack, the free-roam setup 0x540780 again), with
  * the flow step 0x581820 told the track changes (the current track info [0x883DAC] another one's while it reads
  * it) so the track loads in full and the pools are made again. */
-#define G_RACESTATUS  0x008900d8u
-#define FN_POSTEVENT  0x00601020u   /* thiscall (event, arg) */
-#define G_TRACKINFO   0x00883dacu   /* the current track's info */
 #define G_TRACKINFOS  0x00883da0u   /* the track infos (stride 0x128): entry 0 L1RA */
-#define G_START_KEEP  0x00863484u   /* byte: the next world puts player 1 at the place below */
-#define G_START_POS   0x00863490u   /* float[3] */
-#define G_START_HEAD  0x008634a0u   /* u16 */
 static int coop_pools_big;          /* the last track load made the pools for two (splitscreen.c tells) */
 static int coop_reload;             /* 1 asked (the event went), 2 the flow step saw it */
 void coop_note_pools(int big){ coop_pools_big = big; }
@@ -404,17 +402,20 @@ void sub_0050c8e0(CPU *c){
 
 void sub_00581820_orig(CPU *c);
 void sub_00581820(CPU *c){
-    if (coop_reload != 1){ sub_00581820_orig(c); return; }
-    coop_reload = 2;
+    int trip = travel_full();                       /* travel.c: a trip to another spot of the race track's map loaded */
+    if (coop_reload != 1 && !trip){ sub_00581820_orig(c); return; }
+    if (coop_reload == 1) coop_reload = 2;
     uint32_t keep = MR32(G_TRACKINFO), other = MR32(G_TRACKINFOS);
     if (other && other != keep) MR32(G_TRACKINFO) = other;   /* "another track": the full load (it writes this itself) */
-    fprintf(stderr, "[coop] f=%ld free roam loads again, with room for two\n", autotest_frame());
+    if (trip) fprintf(stderr, "[coop] f=%ld free roam loads again (a trip on the race track's map)\n", autotest_frame());
+    else fprintf(stderr, "[coop] f=%ld free roam loads again, with room for two\n", autotest_frame());
     sub_00581820_orig(c);
 }
-/* the first join in a world whose pools are one player's: the reload, from player 1's place (no menu up, one racer) */
+/* the first join in a world whose pools are one player's: the reload, from player 1's place (no menu up, one racer).
+ * Not on a race track's map (travel.c): the reload is the city's; player 2 comes in once the car is back there */
 static int coop_reload_now(CPU *c){
     uint32_t car1 = p1_car(), rs = MR32(G_RACESTATUS), race = MR32(G_RACE);
-    if (!car1 || !rs || MR32(rs) != 4u || !race || MR32(race + 0x24u) != 1u) return 0;
+    if (!car1 || !rs || MR32(rs) != 4u || !race || MR32(race + 0x24u) != 1u || travel_room()) return 0;
     uint32_t fe = MR32(G_FENG), mg = fe ? MR32(fe + 8u) : 0, p1 = MR32(SPLIT_PLAYERS_INDEX);
     if (!mg || !p1 || !fe_named(coop_fe_top(mg), MR32(p1 + 0x9a4u))) return 0;
     for (unsigned i = 0; i < 3; i++) MRF32(G_START_POS + 4u * i) = MRF32(car1 + 0x60u + 4u * i);
@@ -1137,7 +1138,9 @@ void sub_00540780(CPU *c){
     if (MR32(G_GAMEMODE) == 1u && MR32(G_HUMANS) == 2u){ MR32(G_HUMANS) = 1u; fprintf(stderr, "[coop] f=%ld free roam: one local human again\n", autotest_frame()); }
     if (coop_rt_port_kept){ MR32(G_FE_PORT1) = coop_rt_port; coop_rt_port_kept = 0; }
     coop_rt = 0;
+    travel_presetup();                                      /* (the game's own reload on a race track's map: the city) */
     sub_00540780_orig(c);
+    travel_setup();                                         /* a trip to a race track's map: its track */
 }
 /* player 2's racer in the career race, after player 1's (0x5322E0 makes player 1's from the career, then the AI):
  * human 1, its garage car (or a copy of player 1's ride), port 1; CreatePlayers then makes its Player */

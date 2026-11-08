@@ -1,0 +1,21 @@
+# An outrun on a race track's map: Bob's side (travel_outrun_a.txt): takes Ann's challenge and stands
+0     bot on
++0    waitroam 6000
++0    bot off
++60   travel 1
++0    waitexpr i:0x89e7a0 == 4700 1800
++0    waitroam 6000
++0    roam mp waitpeers 1 6000
++0    roam mp waitoutrun got 4000
++30   tap RETURN
++0    roam mp waitoutrun race 900
++0    roam mp outrun
++0    roam mp waitoutrun idle 3600
++0    roam mp outrun
++300  travel where
++60   travel city
++0    waitexpr i:0x89e7a0 == 4000 1800
++0    waitroam 6000
++60   travel where
++60   log TRAVEL OUTRUN B DONE
++10   quit

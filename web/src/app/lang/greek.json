@@ -1210,7 +1210,6 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "Ακουμπήστε τους μπροστινούς προφυλακτήρες στην ελεύθερη οδήγηση για 3 δευτ. για να προσθέσεις έναν παίκτη.",
   "Your friend {name} is in free roam": "Ο φίλος σου {name} βρίσκεται σε ελεύθερη οδήγηση",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Ο φίλος σου {name} βρίσκεται σε ελεύθερη οδήγηση ({world}): πάτησε «Συμμετοχή» από {menu}",
-  "Join a friend's world: free roam shows its players from now on.": "Μπες στον κόσμο ενός φίλου: η ελεύθερη οδήγηση θα εμφανίζει από εδώ και πέρα τους παίκτες του.",
   "None of your friends is in free roam now.": "Κανένας φίλος σου δεν βρίσκεται αυτή τη στιγμή σε ελεύθερη οδήγηση.",
   "In the Online lobby: {names}.": "Στη διαδικτυακή αίθουσα: {names}.",
   "Offline: {names}.": "Εκτός σύνδεσης: {names}.",
@@ -1546,5 +1545,26 @@
   "{n} fixes": {
     "one": "{n} διόρθωση",
     "other": "{n} διορθώσεις"
-  }
+  },
+  "Tracks": "Πίστες",
+  "Back to the city": "Επιστροφή στην πόλη",
+  "Only while you drive in free roam.": "Μόνο όταν οδηγείς στην ελεύθερη οδήγηση.",
+  "Buy a car of your own first.": "Αγόρασε πρώτα δικό σου αυτοκίνητο.",
+  "Not during an outrun, a race or a race lobby.": "Όχι σε κόντρα, αγώνα ή αίθουσα αγώνα.",
+  "Not during a timed career task.": "Όχι σε χρονομετρημένη αποστολή καριέρας.",
+  "Drive off the marker first.": "Βγες πρώτα από το σημάδι.",
+  "On the way…": "Καθ' οδόν…",
+  "Not with two players on one screen.": "Όχι με δύο παίκτες σε μία οθόνη.",
+  "URL: Airport Circuit": "URL: Αεροδρόμιο",
+  "URL: Bayview Speedway": "URL: Bayview Speedway",
+  "Drift: Stadium": "Ντριφτ: Στάδιο",
+  "Drift: Parkade": "Ντριφτ: Πάρκινγκ",
+  "Drag: Bayview Bridge": "Ντραγκ: Bayview Bridge",
+  "Drag: Central Station": "Ντραγκ: Κεντρικός σταθμός",
+  "Drag: South Runway": "Ντραγκ: Νότιος διάδρομος",
+  "Street X: Industrial Park": "Street X: Βιομηχανική περιοχή",
+  "Street X: Parkade": "Street X: Πάρκινγκ",
+  "Join takes you to your friend: their world, their track and their car.": "Η «Συμμετοχή» σε πηγαίνει στον φίλο σου: στον κόσμο του, στην πίστα του και στο αυτοκίνητό του.",
+  "{name} is in a part of the city your career hasn't opened yet.": "Ο παίκτης {name} είναι σε μέρος της πόλης που δεν έχει ξεκλειδωθεί ακόμα στην καριέρα σου.",
+  "{name} could not be found in free roam.": "Ο παίκτης {name} δεν βρέθηκε στην ελεύθερη οδήγηση."
 }

@@ -52,6 +52,7 @@ int sndlead_hook(CPU *c, uint32_t ip);
 int drift_hook(CPU *c, uint32_t ip);
 int quickrace_hook(CPU *c, uint32_t ip);
 int trafficcars_hook(CPU *c, uint32_t ip);
+int travel_hook(CPU *c, uint32_t ip);
 int damage_hook(CPU *c, uint32_t ip);
 
 /* ---- every frame --------------------------------------------------------- */
@@ -65,6 +66,7 @@ void visualrep_frame(void);
 void whine_frame(void);
 void carspot_frame(void);
 void walls_frame(void);
+void travel_frame(CPU *c);
 void mprace_frame(CPU *c);
 void mpcredit_frame(CPU *c);
 int  roam_asipeer_frame(CPU *c);           /* 1: the Windows plugin under Unicorn took roam_game_frame's place */

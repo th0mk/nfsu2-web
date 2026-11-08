@@ -1,0 +1,12 @@
+# A save made on a race track's map, read back (travel_disk_a.txt): the profile's place is the city's the car left
+0     bot on
++0    waitroam 6000
++0    bot off
++60   travel where
++0    expect i:0x89e7a0 == 4000
++0    expect f:[[0xd00000]+4]+0x60 >= ${CX_LO}
++0    expect f:[[0xd00000]+4]+0x60 <= ${CX_HI}
++0    expect f:[[0xd00000]+4]+0x64 >= ${CY_LO}
++0    expect f:[[0xd00000]+4]+0x64 <= ${CY_HI}
++60   log TRAVEL DISK B DONE
++10   quit

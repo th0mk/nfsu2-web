@@ -123,6 +123,8 @@ void plates_forget(void);
 #define rh_drift_tuning(out) drift_kept_tuning(out)
 #define ROAM_HOST_DRIFT  1               /* drift mode (drift.c): drift battles */
 #define rh_drift_want()  drift_wanted()
+uint32_t travel_room(void);              /* travel.c: on a race track's map, its spot's room key (0 the city) */
+#define rh_travel_room() travel_room()
 #define rh_drift_begin() drift_battle_begin()
 #define rh_drift_go(c)   drift_battle_go(c)
 #define rh_drift_score(b, p) drift_battle_score((b), (p))

@@ -1,0 +1,20 @@
+# A trip that never starts (runtime/travel.c; NFSU2_TRAVEL_TEST_NOEVENT=1 makes a trip ask for no load): it is given up
+# after a while in the world, and nothing of it is kept: the career's kept spot and the track are as they were.
+#   roam-pair --solo --seed <a stage-2 career save> --a Ann:travel_noevent.txt:NFSU2_TRAVEL_TEST_NOEVENT=1
+0     bot on
++0    waitroam 6000
++0    bot off
++60   mark kx f:0x863490
++0    mark ky f:0x863494
++0    mark kz f:0x863498
++0    travel 3
++900  travel where
++0    expect i:0x89e7a0 == 4000
++0    expect f:0x863490 == @kx
++0    expect f:0x863494 == @ky
++0    expect f:0x863498 == @kz
++0    travel 5
++900  travel where
++0    expect f:0x863490 == @kx
++60   log TRAVEL NOEVENT DONE
++10   quit

@@ -302,10 +302,14 @@ static int em_racing(uint32_t race);
  * free roam's own track: Performance Tuning / Dyno is one racer and no
  * career race too, but on tracks of its own (the Dyno Shop 4706, a circuit
  * test run on URL track 4705), whose places are not the city's -- friends
- * saw those cars stand and race in the air over them (players, 2026-10-25) */
+ * saw those cars stand and race in the air over them (players, 2026-10-25).
+ * A race track's map in free roam (the page's Tracks, travel.c) is free roam
+ * too, its own track xx00: its players meet in a room of their own
+ * (room_at) */
+static int roam_track(void){ uint32_t t = rd32(G_TRACK); return t % 1000u == 0 || (t % 100u == 0 && rh_travel_room()); }
 static int roaming(void){
     uint32_t race = rd32(G_RACE);
-    return rd32(G_FLOW) == 6u && rd32(G_TRACK) % 1000u == 0 && ok(race, 0xc44) && MR32(race) == 4u &&
+    return rd32(G_FLOW) == 6u && roam_track() && ok(race, 0xc44) && MR32(race) == 4u &&
            (MR32(race + 0x24u) == 1u || du_racing(race) || em_racing(race)) &&
            !rd32(G_CAREER_RACE) && !(rd32(G_GAMEMODE) & 0x200u) && world() && player_car();
 }
@@ -4985,7 +4989,7 @@ static int du_drift_offer(int k){ return du_drifts(k) && rh_drift_want(); }
 /* free roam's world, paused or not (the pause menu, the map: still there) */
 static int db_here(void){
     uint32_t race = rd32(G_RACE);
-    return rd32(G_FLOW) == 6u && rd32(G_TRACK) % 1000u == 0 && ok(race, 0xc44) && MR32(race + 0x24u) == 1u && !MR32(G_RACETYPE) &&
+    return rd32(G_FLOW) == 6u && roam_track() && ok(race, 0xc44) && MR32(race + 0x24u) == 1u && !MR32(G_RACETYPE) &&
            !rd32(G_CAREER_RACE) && world() && player_car();
 }
 /* 12345 as "12,345" */
@@ -8047,6 +8051,9 @@ static int g_parked;
  * each frame with the lock held; roam_web.c shows no notices then) */
 static int g_racing;
 int roam_game_racing(void){ return g_racing; }     /* with the lock held */
+/* the room as the Room setting or the page has it (rc_room_hash, 0 none: the main world); the session's room is this,
+ * or on a race track's map this with the spot's key mixed in (room_at) */
+static uint32_t g_room_base;
 #ifndef ROAM_HOST_WIN
 /* In a room (the Room setting) with nobody else in free roam there: the page says so once the player has been
  * ROOM_ALONE_US in free roam without a friend while the server's hub answers (it links the players of a room at any
@@ -8056,7 +8063,8 @@ int roam_game_racing(void){ return g_racing; }     /* with the lock held */
 #define ROOM_AGAIN_US 300000000
 static int64_t g_alone_since, g_alone_told;
 static void room_alone(int64_t host, uint8_t st){
-    if (!g_s.conf.room || !g_s.conf.hub_ip || g_s.hub_was != 2 || (st != RC_ST_ROAM && st != RC_ST_PAUSED) || rc_established(&g_s)){
+    if (!g_room_base || rh_travel_room() || !g_s.conf.hub_ip || g_s.hub_was != 2 || (st != RC_ST_ROAM && st != RC_ST_PAUSED) ||
+        rc_established(&g_s)){
         g_alone_since = 0; return; }
     if (!g_alone_since) g_alone_since = host;
     if (st != RC_ST_ROAM || host - g_alone_since < ROOM_ALONE_US || (g_alone_told && host - g_alone_told < ROOM_AGAIN_US)) return;
@@ -8546,7 +8554,7 @@ static void init_once(CPU *c){
     if (rm && name_blocked(rm)){ rlog("[roam] the room setting reads as a slur: no room\n"); rm = 0; }
     snprintf(O.room, sizeof O.room, "%s", rm ? rm : "");
     rc_config cf; memset(&cf, 0, sizeof cf);
-    cf.self_id = roam_plat_random(); cf.port = (uint16_t)port; cf.room = rc_room_hash(O.room);
+    cf.self_id = roam_plat_random(); cf.port = (uint16_t)port; cf.room = g_room_base = rc_room_hash(O.room);
     crews_parse(opt("NFSU2_ROAM_CREW"), &cf);
     snprintf(cf.name, sizeof cf.name, "%s", O.name[0] ? O.name : "Player");
     /* our flag (the page's list; one this module does not have: none) */
@@ -9042,6 +9050,13 @@ static void crews_follow(void){
  * outrun, a race lobby or a race: the change waits until the player is back to driving alone in free roam, where
  * leaving everyone breaks nothing.  A name that reads as a slur is no room, as at the start. */
 static uint32_t g_room_gen;
+/* the session's room for the room base: on a race track's map (the page's Tracks, travel.c) its players meet in a room
+ * of their own, base with the spot's key mixed in; the page counts them by the same hash (web/src/app/tracks.ts
+ * trackRoom) */
+static uint32_t room_at(uint32_t base){
+    uint32_t k = rh_travel_room(), r = base ^ k * 0x9E3779B1u;
+    return !k ? base : r ? r : 1u;
+}
 static void room_follow(void){
     char name[64];
     uint32_t gen = roam_plat_room(name);
@@ -9055,6 +9070,7 @@ static void room_follow(void){
     g_room_gen = gen;
     if (name_blocked(name)){ rlog("[roam] f=%ld the room from the page reads as a slur: no room\n", rh_frame()); name[0] = 0; }
     uint32_t h = rc_room_hash(name);
+    g_room_base = h; h = room_at(h);
     roam_plat_lock();
     uint32_t was = g_s.conf.room;
     int left = rc_set_room(&g_s, h);
@@ -9063,6 +9079,44 @@ static void room_follow(void){
     roam_plat_unlock();
     snprintf(O.room, sizeof O.room, "%s", name);
     rlog("[roam] f=%ld room changed (the page): %08x -> %08x, %d friend(s) left with the old one\n", rh_frame(), was, h, left);
+}
+/* The car went to a race track's map or came back to the city (travel.c): the session leaves the room it was in and
+ * the hub links it in the other at its next HELLO, as for a change of room */
+static void track_follow(void){
+    uint32_t want = room_at(g_room_base);
+    if (want == g_s.conf.room) return;
+    roam_plat_lock();
+    int left = rc_set_room(&g_s, want);
+    if (g_c2.on) rc_set_room(&g_c2.s, want);
+    g_alone_since = 0; g_alone_told = 0;
+    roam_plat_unlock();
+    rlog("[roam] f=%ld %s: room %08x, %d friend(s) left with the other\n", rh_frame(),
+         rh_travel_room() ? "on a race track's map" : "back in the city", want, left);
+}
+/* travel.c (a trip to a friend): where the player of name hash `name` (rc_room_hash of its name) drives in our room
+ * now, its car as drawn: the place and heading, 1; 0 when no such player is linked with a place, or it is not in free
+ * roam.  The game thread's (the views of this frame's step) */
+int roam_game_friend_at(uint32_t name, float p[3], uint16_t *h){
+    for (int i = 0; i < g_npv; i++){
+        const PeerView *v = &g_pv[i];
+        if (!v->have_pose || !v->roams || rc_room_hash(v->name) != name) continue;
+        float f[3], l[3], u[3]; rc_q2m(v->pose.q, f, l, u);
+        p[0] = v->pose.p[0]; p[1] = v->pose.p[1]; p[2] = v->pose.p[2];
+        *h = (uint16_t)(int32_t)(rc_atan2f(f[1], f[0]) * (32768.f / 3.14159265f));
+        return 1;
+    }
+    return 0;
+}
+/* travel.c: no outrun, race lobby or race's trip of ours under way (a trip to another map leaves the players here) */
+int roam_game_alone(void){
+    if (g_racing) return 0;
+#if DUELS
+    if (g_du.st != DU_IDLE) return 0;
+#endif
+#if MPRACES
+    if (g_mp.st != MP_IDLE) return 0;
+#endif
+    return 1;
 }
 /* The player picked another name while the game runs (roam_plat_name: the operator took the old one away, and the
  * page asked for another): the HELLOs carry it from the next tick on (the hub and the friends take a new name), as
@@ -9424,6 +9478,7 @@ void roam_game_frame(CPU *c){
     solid_follow();
     crews_follow();
     room_follow();
+    track_follow();
     name_follow();
 #endif
     g_step++;

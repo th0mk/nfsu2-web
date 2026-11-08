@@ -1271,7 +1271,6 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "I udforsknings-mode: hold forkofangerne mod hinanden i 3 sek. for at tilføje en spiller.",
   "Your friend {name} is in free roam": "Din ven {name} er i udforsknings-mode",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Din ven {name} er i udforsknings-mode, {world}: Deltag via {menu}",
-  "Join a friend's world: free roam shows its players from now on.": "Gå ind i en vens verden: udforsknings-mode viser derefter verdenens spillere.",
   "None of your friends is in free roam now.": "Ingen af dine venner er i udforsknings-mode nu.",
   "In the Online lobby: {names}.": "I Online-lobbyen: {names}.",
   "Offline: {names}.": "Offline: {names}.",
@@ -1606,5 +1605,26 @@
   "{n} fixes": {
     "one": "{n} rettelse",
     "other": "{n} rettelser"
-  }
+  },
+  "Tracks": "Baner",
+  "Back to the city": "Tilbage til byen",
+  "Only while you drive in free roam.": "Kun mens du kører i udforsknings-mode.",
+  "Buy a car of your own first.": "Køb din egen bil først.",
+  "Not during an outrun, a race or a race lobby.": "Ikke under et Outrun-løb, et løb eller i en løbslobby.",
+  "Not during a timed career task.": "Ikke under en karriereopgave på tid.",
+  "Drive off the marker first.": "Kør væk fra markeringen først.",
+  "On the way…": "På vej…",
+  "Not with two players on one screen.": "Ikke med to spillere på én skærm.",
+  "URL: Airport Circuit": "URL: Lufthavnsbanen",
+  "URL: Bayview Speedway": "URL: Bayview Speedway",
+  "Drift: Stadium": "Drift: Stadion",
+  "Drift: Parkade": "Drift: Parkeringshuset",
+  "Drag: Bayview Bridge": "Drag: Bayview Bridge",
+  "Drag: Central Station": "Drag: Hovedbanegården",
+  "Drag: South Runway": "Drag: Landingsbane syd",
+  "Street X: Industrial Park": "Street X: Industriområdet",
+  "Street X: Parkade": "Street X: Parkeringshuset",
+  "Join takes you to your friend: their world, their track and their car.": "Deltag bringer dig hen til din ven: til vennens verden, bane og bil.",
+  "{name} is in a part of the city your career hasn't opened yet.": "{name} er i en del af byen, som din karriere ikke har åbnet endnu.",
+  "{name} could not be found in free roam.": "{name} blev ikke fundet i udforsknings-mode."
 }

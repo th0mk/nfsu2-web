@@ -32,6 +32,7 @@ import { keyName, siteKey } from './sitekeys';
 import { pageDialog } from './padnav';
 import { onlineName } from './claim';
 import { roomHash } from './players';
+import { atName, friendSpot } from './tracks';
 import { worldName, worldNamed } from './worlds';
 import { iconButton, TRASH } from './settings-ui';
 import { named } from './cards';
@@ -46,8 +47,10 @@ function sameName(a: string, b: string): boolean {
 }
 
 /** a friend as the start page shows it: where it plays ('roam' free roam, 'online' the Online lobby, '' neither),
- *  its room's name in free roam ('' the room of everyone; none: its page did not say), and its line for its friends */
-export interface Friend { name: string; where: 'roam' | 'online' | ''; room?: string; contact?: string }
+ *  its room's name in free roam ('' the room of everyone; none: its page did not say), its room's hash there (its
+ *  world's, or a race track's spot's: tracks.ts friendSpot; none from a server of before), and its line for its
+ *  friends */
+export interface Friend { name: string; where: 'roam' | 'online' | ''; room?: string; at?: number; contact?: string }
 /** the lists: the player's claimed name (null: none, so no friends), its friends, the requests that wait for its
  *  answer and its own that wait, the friends' messages that waited for it (gone from the server now); `done` what the
  *  last change did (friends.rs) */
@@ -71,7 +74,8 @@ export function discordName(typed: string): string | null {
 function friendsOf(v: unknown): Friend[] {
   return Array.isArray(v) ? v.filter((f: any) => typeof f?.name === 'string').map((f: any) => ({
     name: f.name, where: f.where === 'roam' || f.where === 'online' ? f.where : '',
-    ...(typeof f.room === 'string' ? { room: f.room } : {}), ...(typeof f.contact === 'string' ? { contact: f.contact } : {}),
+    ...(typeof f.room === 'string' ? { room: f.room } : {}), ...(Number.isInteger(f.at) && f.at >= 0 ? { at: f.at } : {}),
+    ...(typeof f.contact === 'string' ? { contact: f.contact } : {}),
   })) : [];
 }
 
@@ -127,9 +131,11 @@ export function whereText(f: Friend, mine?: string): string {
 }
 
 /** where a friend in free roam plays, in the page menu's Friends (all of them in free roam there): your world (`mine`,
- *  the game's room), its world (worlds.ts), or free roam (its page did not say) */
+ *  the game's room), its world (worlds.ts), or free roam (its page did not say); and the race track it is at, if one */
 function roomText(f: Friend, mine: string): string {
-  return inRoom(f, mine) ? t('your world') : f.room !== undefined ? worldName(f.room) : t('free roam');
+  const w = inRoom(f, mine) ? t('your world') : f.room !== undefined ? worldName(f.room) : t('free roam');
+  const spot = atName(friendSpot(f.room, f.at));
+  return spot ? `${w} · ${spot}` : w;
 }
 
 /** the signs of the friends' icons (24-unit boxes, as settings-ui.ts's) */
@@ -809,11 +815,11 @@ export class FriendPrompt {
   }
 
   /** The page menu's Friends, in box: the requests to answer (Accept, Decline), the friends in free roam, a Join
-   *  for each one in another room (join: the room's name, '' the room of everyone), a Discord icon for one that gave
-   *  its Discord username; the others in a line; with no friends yet, how to add one; then the field to ask a player
-   *  by name.  Without a claimed name, only how to get one.  Returns whether a friend has a Join (the menu's line on
-   *  Join shows then). */
-  drawPlaced(box: HTMLElement, join: (room: string) => void): boolean {
+   *  for each one (join: the game goes to it, its world, its race track and its car; `goes` false, a game without
+   *  that: for each one in another room only, its world), a Discord icon for one that gave its Discord username; the
+   *  others in a line; with no friends yet, how to add one; then the field to ask a player by name.  Without a claimed
+   *  name, only how to get one.  Returns whether a friend has a Join (the menu's line on Join shows then). */
+  drawPlaced(box: HTMLElement, join: (f: Friend) => void, goes = false): boolean {
     const p = (text: string) => Object.assign(document.createElement('p'), { className: 'hint', textContent: text });
     if (this.me === null) { box.replaceChildren(p(t('Claim your name on the start page to add friends'))); return false; }
     if (this.me === undefined) { box.replaceChildren(p(t('Checking.'))); return false; }
@@ -830,13 +836,13 @@ export class FriendPrompt {
       const hosted = this.deps.hosted(), now = performance.now();
       for (const f of all.filter(f => f.where === 'roam')) {
         const at = this.invited.get(f.name.toLowerCase()), sent = at !== undefined && now - at < INVITED_MS;
-        const there = f.room !== undefined && !inRoom(f, room);
+        const there = goes ? f.room !== undefined || f.at !== undefined : f.room !== undefined && !inRoom(f, room);
         joins ||= there;
         lines.push({
           name: f.name, state: sent ? `${roomText(f, room)} · ${t('invited')}` : roomText(f, room), ok: true,
           acts: [
             ...(f.contact ? [discordIcon(f.contact)] : []),
-            ...(there ? [icon('fl-join', t('Join'), JOIN, () => join(f.room!))] : []),
+            ...(there ? [icon('fl-join', t('Join'), JOIN, () => join(f))] : []),
             // (a friend in our room, while we host a lobby with room in it: the invite joins it from where it is)
             ...(hosted && inRoom(f, room) && !sent ? [icon('fl-invite', t('Invite {name} to your race', { name: f.name }), FLAG, () => this.inviteFriend(f.name))] : []),
             ...this.crewInvites.acts(f.name),

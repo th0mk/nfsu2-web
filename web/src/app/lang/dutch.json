@@ -1271,7 +1271,6 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "Houd in Verkennen 3 s de voorbumpers tegen elkaar om een speler toe te voegen.",
   "Your friend {name} is in free roam": "Je vriend {name} is in Verkennen",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Je vriend {name} is in Verkennen, {world}: Meedoen via {menu}",
-  "Join a friend's world: free roam shows its players from now on.": "Ga naar de wereld van een vriend: Verkennen toont voortaan de spelers in die wereld.",
   "None of your friends is in free roam now.": "Geen van je vrienden is nu in Verkennen.",
   "In the Online lobby: {names}.": "In de Online-lobby: {names}.",
   "Offline: {names}.": "Offline: {names}.",
@@ -1606,5 +1605,26 @@
   "{n} fixes": {
     "one": "{n} bugfix",
     "other": "{n} bugfixes"
-  }
+  },
+  "Tracks": "Racebanen",
+  "Back to the city": "Terug naar de stad",
+  "Only while you drive in free roam.": "Alleen tijdens het rijden in Verkennen.",
+  "Buy a car of your own first.": "Koop eerst een eigen wagen.",
+  "Not during an outrun, a race or a race lobby.": "Niet tijdens een outrun, een race of in een racelobby.",
+  "Not during a timed career task.": "Niet tijdens een carrièreopdracht met tijdslimiet.",
+  "Drive off the marker first.": "Rijd eerst van de markering af.",
+  "On the way…": "Onderweg…",
+  "Not with two players on one screen.": "Niet met twee spelers op één scherm.",
+  "URL: Airport Circuit": "URL: Vliegveldcircuit",
+  "URL: Bayview Speedway": "URL: Bayview Speedway",
+  "Drift: Stadium": "Drift: Stadion",
+  "Drift: Parkade": "Drift: Parkeergarage",
+  "Drag: Bayview Bridge": "Drag: Bayviewbrug",
+  "Drag: Central Station": "Drag: Centraal Station",
+  "Drag: South Runway": "Drag: Zuidbaan",
+  "Street X: Industrial Park": "Street X: Industrieterrein",
+  "Street X: Parkade": "Street X: Parkeergarage",
+  "Join takes you to your friend: their world, their track and their car.": "Met Meedoen ga je naar je vriend: naar zijn wereld, zijn racebaan en vlak achter zijn wagen.",
+  "{name} is in a part of the city your career hasn't opened yet.": "{name} is in een deel van de stad dat nog niet is vrijgespeeld in je carrière.",
+  "{name} could not be found in free roam.": "{name} was niet te vinden in Verkennen."
 }

@@ -1,0 +1,27 @@
+# A save made on a race track's map, read back from the profile file (with travel_disk_b.txt): the car drives off its
+# loaded place in the city, goes to the Stadium's drift, saves there with the pause menu's Save, and the game quits.
+# travel_disk_b.txt starts from the files this leaves (run-suite --save-out) and finds the car at the city's place it
+# left from: the profile kept it, not the Stadium's.
+#   run-suite --script travel_disk_a.txt --save-out <dir> (NFSU2_SAVE_SEED=<a stage-2 career save>), then
+#   run-suite --script travel_disk_b.txt (NFSU2_SAVE_SEED=<dir>/travel_disk_a) --env CX=<x> --env CY=<y>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    autopilot on
++240  autopilot off
++300  travel where                     # the city's place it leaves from
++0    travel 3
++0    waitexpr i:0x89e7a0 == 4300 1800
++0    waitroam 6000
++120  poke 0x844ad9 1 byte              # Save: Autosave
++0    poke 0x844ad8 1 byte
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  tap RIGHT                        # Save
++60   tap RETURN
++0    waitfng MC_Main.fng 600
++150  tap RETURN                        # "Save complete.": Continue
++0    waitexpr i:0x836514 == 0 600
++60   travel where
++60   log TRAVEL DISK A DONE
++10   quit

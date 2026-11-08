@@ -74,6 +74,7 @@ long autotest_frame(void);
 int career_fe_active(const char *name);
 int mprace_car_ok(void);              /* mprace.c: the career has a car of its own (not a new one's prologue) */
 int roam_game_in_lobby(void);         /* roam_game.c: in a free-roam race lobby (its trip can start any moment) */
+int travel_city(float p[3], uint16_t *h);   /* travel.c: on a race track's map, the city's place the car left */
 
 #define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player*: +4 its car */
 #define G_MC_JOB       0x00836514u   /* the save screen's job: 0 none */
@@ -83,9 +84,6 @@ int roam_game_in_lobby(void);         /* roam_game.c: in a free-roam race lobby 
 #define FN_LIB_FLAGS   0x006fbfccu   /* thiscall (the +0x5C) (on, bits; ret 8): the library's flags on or off */
 #define LIB_ASKED      0x100u        /* ... set: the overwrite question answered Yes (not asked again) */
 #define G_AUTOSAVE     0x00844ad9u   /* byte: Save at Autosave */
-#define C_KEEP         0x8744u       /* byte: the world's next load puts the car at the place below */
-#define C_PLACE        0x8750u       /* float[3] */
-#define C_HEADING      0x8760u       /* u16 */
 #define CAR_PLACE      0x60u
 #define CAR_VELOCITY   0x70u
 #define CAR_HEADING    0x40cu
@@ -157,10 +155,17 @@ int savegame_accept(CPU *c){
         if (why) fprintf(stderr, "[save] f=%ld Save: not now (%s)\n", autotest_frame(), why);
         else {
             uint32_t car = player_car(), k = G_CAREER;
-            S.keep_was = MR8(k + C_KEEP);
-            for (uint32_t i = 0; i < 3u; i++) MRF32(k + C_PLACE + 4u * i) = MRF32(car + CAR_PLACE + 4u * i);
-            MR16(k + C_HEADING) = MR16(car + CAR_HEADING);
-            MR8(k + C_KEEP) = 1;
+            float city[3]; uint16_t city_h;
+            S.keep_was = MR8(k + C_SPOT_SET);
+            if (travel_city(city, &city_h)){              /* on a race track's map: the city's place it left (a save
+                                                           * loads in the city, in the stock game too) */
+                for (uint32_t i = 0; i < 3u; i++) MRF32(k + C_SPOT + 4u * i) = city[i];
+                MR16(k + C_SPOT_HEADING) = city_h;
+            } else {
+                for (uint32_t i = 0; i < 3u; i++) MRF32(k + C_SPOT + 4u * i) = MRF32(car + CAR_PLACE + 4u * i);
+                MR16(k + C_SPOT_HEADING) = MR16(car + CAR_HEADING);
+            }
+            MR8(k + C_SPOT_SET) = 1;
             uint32_t mgr = guest_rd32(G_MC_MANAGER), lib = guest_ok(mgr, MGR_LIB + 3u) ? guest_rd32(mgr + MGR_LIB) : 0;
             if (MR8(G_AUTOSAVE) && lib){                     /* no "overwrite?", whose No turns Autosave off */
                 MR8(mgr + MGR_YES) = 1;
@@ -170,7 +175,7 @@ int savegame_accept(CPU *c){
             uint32_t arg[7] = { pkg, pkg, MC_JOB_SAVE, 0, 0, 0, 0 };
             S.pending = 1; S.at = autotest_frame(); S.writes_at = g_writes;
             fprintf(stderr, "[save] f=%ld Save: the career at %.1f %.1f %.1f (heading %04x), the save screen\n", S.at,
-                    (double)MRF32(k + C_PLACE), (double)MRF32(k + C_PLACE + 4u), (double)MRF32(k + C_PLACE + 8u), MR16(k + C_HEADING));
+                    (double)MRF32(k + C_SPOT), (double)MRF32(k + C_SPOT + 4u), (double)MRF32(k + C_SPOT + 8u), MR16(k + C_SPOT_HEADING));
             gcall_main(c, FN_MC_JOB, 0, 7, arg);
         }
     }
@@ -191,7 +196,7 @@ void savegame_frame(void){
     long f = autotest_frame();
     int up = MR32(G_MC_JOB) || career_fe_active(MC_PACKAGE);   /* MC_Main comes up through the front end's queue */
     if ((up || f - S.at < 10) && f - S.at < WAIT_FRAMES) return;
-    MR8(G_CAREER + C_KEEP) = (uint8_t)S.keep_was;
+    MR8(G_CAREER + C_SPOT_SET) = (uint8_t)S.keep_was;
     S.pending = 0;
     int w = g_writes - S.writes_at;
     fprintf(stderr, "[save] f=%ld Save: %s after %ld frames (%s)\n", f, up ? "the save screen still up" : "over", f - S.at,

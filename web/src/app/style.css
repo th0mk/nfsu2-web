@@ -1341,6 +1341,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .menu-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-row > span:first-child { flex: none; max-width: 100%; }
 .menu-row:hover, .menu-row:focus-visible, .dlg.menu[data-pad] .menu-row:focus { outline: none; box-shadow: none; background: var(--lime-fill); color: var(--lime); }
+.menu-row:disabled { opacity: 0.5; background: none; color: var(--text); cursor: not-allowed; }
 .menu-val { color: var(--muted); }
 .menu-row.selected .menu-val { color: var(--lime); }
 .menu-row.go { font-weight: 700; color: var(--lime); }

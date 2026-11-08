@@ -42,7 +42,7 @@ import { SynthDriver } from './synth';
 import { AltGrCtrl } from './altgr';
 import {
   IEV_FOCUS, IEV_KEY_DOWN, IEV_KEY_TAP, IEV_KEY_UP, IEV_LOG, IEV_MOUSE_DOWN, IEV_MOUSE_MOVE, IEV_MOUSE_UP, IEV_QUIT, IEV_SMS,
-  IEV_PHOTO, IEV_NAME, INAME_SEAT2, IEV_LOBBY, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
+  IEV_PHOTO, IEV_NAME, INAME_SEAT2, IEV_LOBBY, IEV_TRAVEL, TRAVEL_FRIEND, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
   IM_EV_DROP, IM_EV_R, IM_EV_W, IM_EVENTS, IM_GAME_INACTIVE, IM_HDR_WORDS, IM_KEYS_HELD, IM_MAGIC, IM_MOUSE_X,
   IM_MOUSE_Y, IM_NAMES_GEN, IM_OFF_EV, IM_OFF_NAMES, IM_OFF_SYN, IM_QUIT_REQ, IM_SYN_R, IM_SYN_W, IM_TEXT,
   IM_TEXT_KIND, IM_TEXT_LEN, IM_TEXT_MAX, IM_TEXT_SEQ, IM_MENU_SCALE, IM_VERSION, IM_VIEW_ROLL, INPUT_EV_N, INPUT_MAGIC, INPUT_NAME_LEN,
@@ -100,6 +100,13 @@ export interface InputHandle {
   /** free roam's race lobby (runtime/roam_game.c mp_act): what (proto.ts LB_*), and for an invite's Join the lobby's
    *  host's id, the lobby's id and its race's hash.  false: it cannot reach the game */
   lobby(what: number, host?: number, lobby?: number, race?: number): boolean;
+  /** the page menu's Tracks: a trip to where (runtime/travel.c: 0 the city, 1.. a race track's spot; the game says
+   *  in its status's "travel" whether it goes).  false: it cannot reach the game */
+  travel(where: number): boolean;
+  /** the page menu's Friends, Join: a trip to the friend whose name has this hash (players.ts roomHash), at that spot
+   *  (tracks.ts friendSpot, 0 the city; the game says how it went in its status's "travel_said").  false: it cannot
+   *  reach the game */
+  travelFriend(name: number, spot: number): boolean;
   enterFullscreen(): Promise<boolean>;
   exitFullscreen(): Promise<void>;
   toggleFullscreen(): Promise<void>;
@@ -474,6 +481,16 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     lobby(what, host = 0, lobby = 0, race = 0) {
       if (!h || !api.canQuit()) return false;
       push(IEV_LOBBY, what, race & 0xff, (race >>> 8) & 0xff, [(race >>> 16) & 0xff, (race >>> 24) & 0xff], host, lobby);
+      return true;
+    },
+    travel(where) {
+      if (!h || !api.canQuit()) return false;
+      push(IEV_TRAVEL, where, 0, 0, [], 0, 0);
+      return true;
+    },
+    travelFriend(name, spot) {
+      if (!h || !api.canQuit()) return false;
+      push(IEV_TRAVEL, TRAVEL_FRIEND, 0, 0, [], name | 0, spot);
       return true;
     },
     async enterFullscreen() {

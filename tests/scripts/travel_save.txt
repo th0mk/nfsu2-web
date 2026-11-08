@@ -1,0 +1,54 @@
+# Saving on a race track's map (runtime/travel.c, savegame.c): the pause menu's Save there keeps the city's place the
+# car left in the career (+0x8750; a save made there loads in the city, in the stock game too); then the pause menu's
+# Quit (it keeps the car's place, 0x513B30: the menus leave the city's), Resume Career and the crib's Return to Explore
+# Mode (the game's own way back, which saves again with Autosave on): free roam in the city at that place.
+#   roam-pair --solo --seed <a stage-2 career save> --a Sav:travel_save.txt --env NFSU2_ROAM=1
+#             --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++60   mark px f:[[0xd00000]+4]+0x60    # the city's place
++0    mark py f:[[0xd00000]+4]+0x64
++0    travel 3                          # the Stadium (drift)
++0    waitexpr i:0x89e7a0 == 4300 1800
++0    waitroam 6000
++120  poke 0x844ad9 1 byte              # Save: Autosave
++0    poke 0x844ad8 1 byte
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  tap RIGHT                        # Save
++60   tap RETURN
++0    waitfng MC_Main.fng 600
++150  tap RETURN                        # "Save complete.": Continue
++0    waitexpr i:0x836514 == 0 600      # the save over
++0    log LOG saved_on_track
++60   expect f:0x863490 == @px          # the career keeps the city's place
++0    expect f:0x863494 == @py
++0    waitfe UI_pause.fng 600
++120  tap RIGHT                       # Save
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++60   tap RETURN                      # Quit
++0    waitfe UI_InGameDialog.fng 600
++60   tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe UI_Main.fng 3000
++60   expect f:0x863490 == @px          # the career keeps the city's place
++300  tap LEFT
++60   tap RETURN                      # Career
++0    waitfe UI_StartCareer.fng 1200
++240  tap RETURN                      # Resume Career
++0    waitfe UI_CareerCrib.fng 3000
++300  bot on                          # the crib's Return to Explore Mode, Yes, the save's prompts
++0    waitroam 6000
++0    bot off
++60   travel where
++0    expect i:0x89e7a0 == 4000         # the city
++0    expect f:[[0xd00000]+4]+0x60 >= @px-3
++0    expect f:[[0xd00000]+4]+0x60 <= @px+3
++0    expect f:[[0xd00000]+4]+0x64 >= @py-3
++0    expect f:[[0xd00000]+4]+0x64 <= @py+3
++60   log TRAVEL SAVE DONE
++10   quit

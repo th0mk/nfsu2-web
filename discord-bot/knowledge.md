@@ -342,6 +342,15 @@ Checked against the guide or the code, and confirmed by players in threads:
 - Free roam split into worlds (commit 41737add; before it is live the page has a Room name box, empty = main world):
   Main world (everyone, default), World 1 to 4 (quieter; World 4 holds Ghost mode Off for all), or Own name. Picked in
   F9, World (counts shown, switches at once) or start page, Online, World. "Too busy / crowded" -> World 1 to 4.
+- Tracks (new, not live until the next update): F9, Tracks takes the car in career free roam to the race tracks' own
+  places: URL Airport Circuit and Bayview Speedway, drift Stadium and Parkade, drags Bayview Bridge, Central Station and
+  South Runway, Street X Industrial Park and Parkade (each with its player count), and Back to the city to where you
+  left. Other players of your world who went to the same one are there; no traffic, events, shops or World Map
+  there; outruns with players and Respawn work. Greyed out with a reason: prologue (own car first), outrun, race or
+  lobby, timed career task, on a marker, two players on one screen. A save there keeps the city place. World counts
+  include the players on that world's tracks. F9, Friends, Join (same update) takes you to the friend: their world,
+  their track, then behind their car after a short load; a friend behind your career's walls (a part of the city your
+  stage hasn't opened) can't be reached and the line says so.
 - Races only with friends, career races too: everyone picks the same uncommon Own name world (Room on an older page)
   before Play; lobbies stay within the world. It is not private. Alone in free roam often means another world picked
   (or a Room left set on an older page): pick Main world.

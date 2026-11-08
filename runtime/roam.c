@@ -70,10 +70,6 @@ void autotest_tap(unsigned dik, long frames);
 
 /* ---- guest globals (v1.2 NA) ---------------------------------------------- */
 #define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* PlayersByNumber[0] (Player*), +4 = car */
-#define G_HOTPOS        0x00890140u
-#define G_HOTPOS_ANGLE  0x008900d0u
-#define G_HOTPOS_JUMP   0x008900cdu
-#define G_HOTPOS_VALID  0x008900ceu
 
 uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 /* ---- expressions ---------------------------------------------------------- */
@@ -131,8 +127,10 @@ static int roaming(void){
  * the gear buttons in a drag): on free roam's own track (4000; the race parameters' track, [0x89E7A0]), as
  * roam_game.c's roaming() has it.  The crib's Performance Tuning test runs are one racer and no career race
  * too, but a race on a track of their own (a circuit 4705, 0x4FEF80; a drag 4709 with the drag byte set,
- * 0x4FEFF0): read as free roam, a drag test run on a phone had no gear buttons (a player's report). */
-int roam_exploring(void){ return roaming() && rd32(G_RACEPARAMS) % 1000u == 0; }
+ * 0x4FEFF0): read as free roam, a drag test run on a phone had no gear buttons (a player's report).  A race
+ * track's map in free roam (the page's Tracks, travel.c) is free roam. */
+uint32_t travel_room(void);   /* travel.c: on a race track's map (its own free roam), 0 the city */
+int roam_exploring(void){ return roaming() && (rd32(G_RACEPARAMS) % 1000u == 0 || travel_room()); }
 /* One line per car of the world list (World +0 head; the list node is the
  * car's first two dwords). */
 static void log_cars(const char *why){

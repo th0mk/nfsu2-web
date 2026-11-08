@@ -1,0 +1,21 @@
+# Tracks with two players: Bob's side (travel_pair_a.txt)
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam mp waitpeers 1 6000        # Ann, in the city
++600  roam mp status                  # Ann gone to the Speedway: no friend
++0    travel 1
++0    waitexpr i:0x89e7a0 == 4700 1800
++0    waitroam 6000
++60   travel where
++0    roam mp waitpeers 1 6000        # Ann
++300  roam mp status
++0    log SHOT speedway_both
++120  travel city
++0    waitexpr i:0x89e7a0 == 4000 1800
++0    waitroam 6000
++60   travel where
++300  roam mp status
++0    log SHOT city_back
++600  log TRAVEL PAIR B DONE
++10   quit

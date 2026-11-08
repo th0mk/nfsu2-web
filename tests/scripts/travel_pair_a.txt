@@ -1,0 +1,21 @@
+# Tracks with two players (runtime/travel.c, roam_game.c room_at): Ann and Bob meet in the city, Ann goes to the
+# Airport Speedway (Bob's game drops her: another room), Bob comes too (they meet there, at the same start line: each
+# game ghosts the other's car until they are clear), then Bob goes back to the city (Ann's game drops him).
+#   roam-pair --page app --seed <a stage-2 career save> --a Ann:travel_pair_a.txt --b Bob:travel_pair_b.txt
+#             --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam mp waitpeers 1 6000        # Bob, in the city
++120  log SHOT city
++300  travel 1
++0    waitexpr i:0x89e7a0 == 4700 1800
++0    waitroam 6000
++60   travel where
++0    roam mp waitpeers 1 6000        # Bob, at the Speedway
++300  roam mp status
++0    log SHOT speedway_both
++600  roam mp status                  # Bob gone back to the city: no friend
++0    log SHOT speedway_alone
++60   log TRAVEL PAIR A DONE
++10   quit

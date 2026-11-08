@@ -1271,7 +1271,6 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "Berühre in der freien Fahrt 3 s lang die Frontstoßstange eines Spielers mit deiner, um ihn hinzuzufügen.",
   "Your friend {name} is in free roam": "Dein Freund {name} ist in der freien Fahrt",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Dein Freund {name} ist in der freien Fahrt, {world}: Beitreten über {menu}",
-  "Join a friend's world: free roam shows its players from now on.": "Tritt der Welt eines Freundes bei: Die freie Fahrt zeigt ab dann die Spieler dieser Welt.",
   "None of your friends is in free roam now.": "Gerade ist keiner deiner Freunde in der freien Fahrt.",
   "In the Online lobby: {names}.": "In der Online-Lobby: {names}.",
   "Offline: {names}.": "Offline: {names}.",
@@ -1606,5 +1605,26 @@
   "{n} fixes": {
     "one": "{n} Fehlerbehebung",
     "other": "{n} Fehlerbehebungen"
-  }
+  },
+  "Tracks": "Strecken",
+  "Back to the city": "Zurück in die Stadt",
+  "Only while you drive in free roam.": "Nur während du in der freien Fahrt unterwegs bist.",
+  "Buy a car of your own first.": "Kauf dir zuerst einen eigenen Wagen.",
+  "Not during an outrun, a race or a race lobby.": "Nicht in einem Outrun, einem Rennen oder einer Rennlobby.",
+  "Not during a timed career task.": "Nicht während einer Karriereaufgabe auf Zeit.",
+  "Drive off the marker first.": "Fahr zuerst von der Markierung weg.",
+  "On the way…": "Unterwegs…",
+  "Not with two players on one screen.": "Nicht mit zwei Spielern an einem Bildschirm.",
+  "URL: Airport Circuit": "URL: Flughafen-Rundkurs",
+  "URL: Bayview Speedway": "URL: Bayview Speedway",
+  "Drift: Stadium": "Drift: Stadion",
+  "Drift: Parkade": "Drift: Parkhaus",
+  "Drag: Bayview Bridge": "Drag: Bayview-Brücke",
+  "Drag: Central Station": "Drag: Hauptbahnhof",
+  "Drag: South Runway": "Drag: Startbahn Süd",
+  "Street X: Industrial Park": "Street X: Industriegebiet",
+  "Street X: Parkade": "Street X: Parkhaus",
+  "Join takes you to your friend: their world, their track and their car.": "„Beitreten“ bringt dich zu deinem Freund: in seine Welt, auf seine Strecke und hinter seinen Wagen.",
+  "{name} is in a part of the city your career hasn't opened yet.": "{name} ist in einem Teil der Stadt, der in deiner Karriere noch nicht freigeschaltet ist.",
+  "{name} could not be found in free roam.": "{name} wurde in der freien Fahrt nicht gefunden."
 }

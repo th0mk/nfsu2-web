@@ -11,6 +11,8 @@
  *  crews: of roam, those in each crew asked for, in the order asked (/players?crews=, the same) */
 export interface PlayerCounts {
   players: number; online: number | null; roam?: number | null; full?: boolean; roamBusy?: boolean; room?: number; rooms?: number[]; crews?: number[];
+  /** a world's race tracks' spots, each its own room (the page menu's Tracks; missing from an older server) */
+  spots?: number[];
   /** pages waiting in line for a place (missing from an older server) */
   queue?: number;
 }
@@ -177,6 +179,20 @@ export async function askWorlds(rooms: readonly number[], ms: number): Promise<M
     const r = await fetch(`/players?rooms=${rooms.join(',')}`, { cache: 'no-store', signal: AbortSignal.timeout(ms) });
     return r.ok ? worldCounts(await r.json() as PlayerCounts, rooms) : null;
   } catch { return null; }
+}
+
+/** How many are at each of these race tracks' spots now (their rooms: tracks.ts trackRooms), by room, asked once as
+ *  askWorlds asks: the page menu's Tracks.  A server of before this has no `spots` (and counted a world without its
+ *  tracks): its `rooms`, then, 8 at a time.  null: no answer within ms. */
+export async function askSpots(rooms: readonly number[], ms: number): Promise<Map<number, number> | null> {
+  try {
+    const r = await fetch(`/players?spots=${rooms.join(',')}`, { cache: 'no-store', signal: AbortSignal.timeout(ms) });
+    if (!r.ok) return null;
+    const c = await r.json() as PlayerCounts;
+    if (Array.isArray(c.spots)) return byHash(c.spots, rooms);
+  } catch { return null; }
+  const parts = await Promise.all([askWorlds(rooms.slice(0, 8), ms), askWorlds(rooms.slice(8), ms)]);
+  return parts[0] ? new Map([...parts[0], ...(parts[1] ?? [])]) : null;
 }
 
 /** How many are in free roam in each of these crews now (crewCounts), asked once, whatever the page does, and
