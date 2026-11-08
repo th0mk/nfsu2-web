@@ -39,7 +39,8 @@
  *    it goes back to what it was once the save is over.
  *  - The save: 0x4A3100 (cdecl: the package that asks, the package to tell,
  *    the job, 4 more) with the job 0x151, as the crib's Return to Explore
- *    Mode (0x4AF383) and the test run's pause menu (0x5648DB) call it:
+ *    Mode (0x4AF383) and the dyno menu's Quit Tuning (its "save your
+ *    profile now?" Yes, 0x5648DB, runtime/dyno.c) call it:
  *    MC_Main.fng over that package; its end (0x4A31D0) tells the package
  *    0x251BF83E and takes MC_Main off, and the job's word ([0x836514]) is 0
  *    again (0x4A3272; not after a job with 0x2000, so here MC_Main up is

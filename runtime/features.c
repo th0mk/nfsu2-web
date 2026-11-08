@@ -30,6 +30,7 @@ static const struct { const char *name; void (*install)(void); unsigned builds; 
     { "menusize",    menusize_install,    FT_WEB },   /* the help bar's buttons at the page's menu button size */
     { "olfilter",    olfilter_install,    FT_ALL },   /* the Online lobby's Filter, once set, narrows its list */
     { "tunegraph",   tunegraph_install,   FT_WEB },   /* the tuning graphs' dots follow a press and a drag (touch) */
+    { "dyno",        dyno_install,        FT_ALL },   /* the dyno's Save Profile and Quit Tuning keep its setups in the car */
     { "regional",    regional_install,    FT_ALL },   /* the European game's Corsa and 106 for sale, and AI racers' cars */
     { "garage",      garage_install,      FT_ALL },   /* the career garage's slots 6-10 and Trade Car */
     { "vinylpacks",  vinylpacks_install,  FT_ALL },   /* the Japanese release's Art Factory 28-34 (VINYLPACKS) */

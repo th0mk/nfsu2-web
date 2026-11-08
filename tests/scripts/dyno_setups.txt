@@ -1,0 +1,139 @@
+# Performance Tuning / Dyno keeps its setups (runtime/dyno.c) with the game's Save option Off: from a career save in
+# stage 2 or later (s4_outrun) the Performance Shop's Extreme ECU package (the ECU graph is locked without one), the
+# Save option Off, the crib, Performance Tuning / Dyno (Circuit), ECU: three steps up on its graph; back on the dyno's
+# menu (Back twice, not stored), Save Profile and its save, Mode Select and Circuit again, Quit Tuning, the crib, and
+# the dyno again.
+#   node web/tools/roam-pair.mjs --solo --page play --seed <s4_outrun> --a Al:dyno_setups.txt
+#        [--fetch "NFS Underground 2/CLAUDE/CLAUDE"]
+# Good: "[dyno] ... Save Profile: the setups into the car" and no "... Quit Tuning with the Save option Off: ..."
+# (nothing left to put in), and the expects pass: the car's Circuit setup (record +0x360, the ECU's bytes at +0x18) and
+# the visit's copy of it (0x83A544) are the tuned one after Save Profile, Mode Select loads it, and so does the next
+# visit (and in the profile --fetch copies out, the record's own bytes; a car in slots 6-10 in GARAGE.DAT).  Without
+# dyno.c the profile had the setups of before and the next visit their defaults (100 each, 0x64646464).  The dumps
+# need /test/play.html.
+0     bot on
++0    waitroam 6000
++0    bot off
++300  shopgo CC_PERF_SHOP
++600  tapuntil RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitfng GarageMain.fng 3000
++600  tap RIGHT
++60   tap RETURN                      # ECU
++300  tap RIGHT
++90   tap RIGHT
++90   tap RIGHT                       # Extreme Package
++120  tap RETURN
++120  tap LEFT
++30   tap RETURN                      # buy and install: Yes
++300  tap RETURN                      # brands: Continue
++200  tap ESCAPE
++200  tap ESCAPE
++200  tap LEFT
++30   tap RETURN                      # back to Explore Mode: Yes
++0    waitfe MC_Main.fng 600
++150  tap RETURN                      # save the profile: No
++0    waitroam 6000
++0    poke 0x00844ad8 0 byte           # the game's Save option: Off
++600  shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitfe UI_CareerCrib.fng 3000   # enter the crib
++120  tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RETURN                      # Performance Tuning / Dyno
++60   tap LEFT
++30   tap RETURN
++0    waitfe UI_PerformanceTuning_Setting.fng 3000
++120  tap RETURN                      # Circuit
++60   tap LEFT
++30   tap RETURN
++0    waitfe UI_PerformanceDyno_Chart.fng 3000
++600  tap RETURN
++0    waitfe UI_PerformanceDyno_Results.fng 3000
++200  tap RETURN
++0    waitfe UI_PerformanceDyno_MAIN.fng 3000
++60   tap RETURN                      # Tune Settings
++0    waitfe UI_PerformanceTuning_Master.fng 3000
++120  tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT                       # ECU
++60   tap RETURN
++0    waitfe UI_PerformanceTuning_Graph.fng 3000
++120  tap UP
++40   tap UP
++40   tap UP
++60   dump graph
++0    mark tuned x:[0x83a540]+0x2c       # the setup being tuned: its ECU bytes 0x18 .. 0x1B
++0    expect x:[0x83a540]+0x2c != 1684300900
++0    tap ESCAPE
++150  tap ESCAPE                      # the dyno's menu
++150  tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++60   tap RETURN                      # Save Profile
++150  tap LEFT
++30   tap RETURN                      # Yes
++150  tap LEFT
++30   tap RETURN                      # are you sure: Yes
++150  tap LEFT
++30   tap RETURN                      # overwrite: Yes
++150  tap RETURN                      # Save complete: Continue
++150  expect x:[0x839c40]+0x378 == @tuned   # Save Profile: the tune in the car
++0    expect x:0x83a544+0x18 == @tuned      # ... and in the visit's copy of Circuit
++0    tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++60   dump modeselect
++0    tap RETURN                      # Mode Select (nothing left to store: no question)
++0    waitfe UI_PerformanceTuning_Setting.fng 600
++120  tap RETURN                      # Circuit
++60   tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe UI_PerformanceDyno_MAIN.fng 1200
++120  expect x:[0x83a540]+0x2c == @tuned    # Circuit loaded again from the visit's copy: the tune
++0    tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++60   tap RETURN                      # Quit Tuning
++150  tap LEFT
++30   tap RETURN                      # Quit to Garage: Yes
++0    waitfe UI_CareerCrib.fng 3000
++300  dump crib2
++0    tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RETURN                      # Performance Tuning / Dyno
++60   tap LEFT
++30   tap RETURN
++0    waitfe UI_PerformanceTuning_Setting.fng 3000
++120  tap RETURN                      # Circuit
++60   tap LEFT
++30   tap RETURN
++0    waitfe UI_PerformanceDyno_Chart.fng 3000
++600  tap RETURN
++0    waitfe UI_PerformanceDyno_Results.fng 3000
++200  tap RETURN
++0    waitfe UI_PerformanceDyno_MAIN.fng 3000
++60   dump dyno2
++0    expect x:[0x839c40]+0x378 == @tuned   # the car's Circuit setup
++0    expect x:[0x83a540]+0x2c == @tuned    # ... loaded to be tuned
++0    log DYNO done
++10   quit

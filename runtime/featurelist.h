@@ -22,6 +22,7 @@ void lobbyclick_install(void);
 void menusize_install(void);
 void olfilter_install(void);
 void tunegraph_install(void);
+void dyno_install(void);
 void regional_install(void);
 void garage_install(void);
 void vinylpacks_install(void);
