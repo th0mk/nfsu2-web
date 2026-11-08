@@ -919,7 +919,9 @@ static int read_mp(const char *name, uint64_t fp, MList *l){
     uint32_t *cnt = count_of(name);
     if (d > 0 && cd != 0xffffffffu && cd > *cnt) *cnt = cd;
     if (w > 0 && cn != 0xffffffffu && cn > *cnt) *cnt = cn;
-    int dat_too = d > 0 && fd == fp && (cd == 0xffffffffu || cd >= cn);   /* (a later save of the same cars, or a page of before's) */
+    /* DAT wins only as a later save of the same cars: a page of before's DAT never does, since such a page writes through
+     * MODPARTS.NEW and renames it, so a NEW of ours beside its DAT came after it */
+    int dat_too = d > 0 && fd == fp && cd != 0xffffffffu && cd >= cn;
     if (mine && !dat_too){
         *l = nw;
         fprintf(stderr, "[mods] %s: its %s (write %u, of the profile as it is: its rename cut) taken, renamed %s now\n", name, MP_NEW, cn, MP_FILE);

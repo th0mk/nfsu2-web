@@ -392,7 +392,9 @@ int main(void){
     MR32(CAR + R_KEY(0x40u)) = 0;
     profile_load("ANN", 0xd002);
     int lone_left = g_wait[0].n == 0 && MR32(CAR + R_KEY(0x40u)) == 0 && there("ANN", "MODPARTS.NEW");
-    /* a MODPARTS.DAT a page of before wrote last (head word 0, our head carried inside) beside a MODPARTS.NEW of ours */
+    /* a MODPARTS.DAT of a page of before (head word 0, our head carried inside) beside a MODPARTS.NEW of ours: the NEW
+     * came after it (such a page writes through MODPARTS.NEW and renames it, so ours could not have lived through its save):
+     * ours is taken (a cut rename after an older page's save, AF28 swapped for AF29: the same cars) */
     clean("ANN");
     { uint64_t fpc = car_fp(CAR);
       uint32_t hd[4] = { 0x504d324eu, 1u, 2u, 0 }, en[16] = { 0x4448504du, name_hash("ANN"), 3, 0xd003, 0, 0, 0, 3,  SLOT1, PEUGOT, 0x40u, AF12 ^ 1u, 0, (uint32_t)fpc, (uint32_t)(fpc >> 32), 0 };
@@ -401,10 +403,10 @@ int main(void){
       write_raw("ANN", "MODPARTS.NEW", hn, eo, 2); }
     g_vp_have = 0;
     profile_load("ANN", 0xd003);
-    int old_wins = g_wait[0].n == 1 && g_wait[0].e[0].w[3] == (AF12 ^ 1u);
+    int new_wins = g_wait[0].n == 1 && g_wait[0].e[0].w[3] == AF29;
     g_vp_have = 1;
-    CHECK(both_there && got29 && renamed && lone_left && old_wins, "counter the cut rename: ART_F_29 on the car %d, MODPARTS.NEW renamed at the "
-          "load %d; a lone MODPARTS.NEW of another profile not taken %d; a page of before's MODPARTS.DAT over ours %d", got29, renamed, lone_left, old_wins);
+    CHECK(both_there && got29 && renamed && lone_left && new_wins, "counter the cut rename: ART_F_29 on the car %d, MODPARTS.NEW renamed at the "
+          "load %d; a lone MODPARTS.NEW of another profile not taken %d; ours over a page of before's MODPARTS.DAT %d", got29, renamed, lone_left, new_wins);
     clean("ANN"); MR32(CAR + R_KEY(0x40u)) = 0;
 
     /* kind0-unknown: a part this game lacks (ART_F_28, no VINYLPACKS) waiting on a car of a car type it lacks */
