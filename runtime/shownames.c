@@ -19,11 +19,11 @@
  * as powerunits.c says: the row goes in only where the screen's package has
  * them for the list's last entry too, which ours makes one more. */
 #include "cpu.h"
+#include "guest.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <string.h>
 
-void dispatch_indirect(CPU *c, uint32_t addr);
 int  win32_reg_get_dword(const char *nm, uint32_t *out);
 void win32_reg_put_dword(const char *nm, uint32_t v);
 
@@ -45,24 +45,6 @@ void win32_reg_put_dword(const char *nm, uint32_t v);
 static int g_loaded;
 static int g_on = -1;                            /* 1: on, 0: off, -1: the game's (no registry value) */
 static uint32_t g_scr;                           /* guest memory: scratch for a part's name */
-
-/* a guest function with ecx and stack arguments, the CPU as it was after */
-static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(fn);                                  /* the callee's ret pops it */
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
-static void gstr(uint32_t a, const char *s, uint32_t cap){
-    uint32_t i = 0;
-    for (; s[i] && i + 1 < cap; i++) MR8(a + i) = (uint8_t)s[i];
-    MR8(a + i) = 0;
-}
 
 static void load(void){
     if (g_loaded) return;
@@ -93,7 +75,7 @@ static uint32_t part(CPU *c, uint32_t pk, uint32_t base, uint32_t n, char *nm, s
     int k = 0;
     for (; k < 32 && MR8(base + (uint32_t)k); k++) nm[k] = (char)MR8(base + (uint32_t)k);
     snprintf(nm + k, cap - (size_t)k, "%u", n);
-    gstr(g_scr, nm, 48);
+    guest_write_str(g_scr, nm, 48);
     uint32_t h = gcall(c, FN_FE_HASH, 0, 1, &g_scr);
     return gcall(c, FN_PKG_FIND, pk, 1, &h);
 }

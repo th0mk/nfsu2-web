@@ -5,6 +5,7 @@
  * GPS_DISTANCE (roam_game_clone_hud_text), the HUD package's own: freed with it, and looked up by its name every
  * frame, so no pointer outlives a HUD (shops, races, pause).  "[gps]" log line when one is made. */
 #include "cpu.h"
+#include "guest.h"
 #include "splitscreen_mem.h"
 #include "gpsdistance_format.h"
 #include <math.h>
@@ -13,19 +14,11 @@
 #include <stdlib.h>
 #include <strings.h>
 
-void dispatch_indirect(CPU *, uint32_t);
 uint32_t roam_game_clone_hud_text(CPU *, uint32_t, uint32_t, const char *);
 
+/* a guest function with ecx and stack arguments, returning to itself, 512 bytes below the hook's stack (guest.h) */
 static uint32_t call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *args){
-    CPU saved = *c;
-    c->esp = (c->esp - 512u) & ~15u;
-    for (int i = n - 1; i >= 0; --i) PUSH32(args[i]);
-    c->ecx = self;
-    PUSH32(fn);
-    dispatch_indirect(c, fn);
-    uint32_t result = c->eax;
-    *c = saved;
-    return result;
+    return guest_call_ex(c, fn, self, c->edx, n, args, fn, 512u);
 }
 static uint32_t one(CPU *c, uint32_t fn, uint32_t self, uint32_t arg){ return call(c, fn, self, 1, &arg); }
 

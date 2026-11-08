@@ -30,6 +30,7 @@
  * Test knobs (with NFSU2_INPUT_SCRIPT only): NFSU2_TEST_TRAFFIC_CAR=<type name> makes the player's car that type
  * (stock parts) at the world's load; NFSU2_TEST_TRAFFIC_GAME=1 leaves the three checks as the game has them. */
 #include "cpu.h"
+#include "guest.h"
 #include "widescreen.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +49,6 @@
 #define FN_RIDE_INIT    0x00610270u   /* thiscall (type, 1, 0, 0) */
 #define FN_RIDE_STOCK   0x00637040u   /* thiscall (0) */
 #define FN_RIDE_SKINS   0x0061c280u   /* thiscall (n) */
-#define CALL_RET        0x00581475u
 
 #define CT_SPOTS        0x720u        /* the count; +4 split screen's; the spots at +0x10 and +0x70 */
 #define SPOT_SIZE       0x10u
@@ -60,17 +60,6 @@ static const struct { const char *type; float s; } BIG[] = {
 static int test_on(const char *name){
     const char *s = getenv("NFSU2_INPUT_SCRIPT"), *v = getenv(name);
     return s && *s && v && *v && strcmp(v, "0");
-}
-static uint32_t guest_call(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(CALL_RET);
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
 }
 static void type_name(uint32_t type, char *out, int len){
     uint32_t t = MR32(G_CARTYPES) + type * CT_SIZE;
@@ -118,9 +107,9 @@ static void test_ride(CPU *c, uint32_t e){
         if (strcasecmp(nm, want)) continue;
         uint32_t ride = e + RC_RIDE, a4[4] = { t, 1u, 0u, 0u }, z = 0, slot = (uint32_t)MR8(e + 1u) + 1u;
         if (MR32(ride) == t) return;
-        guest_call(c, FN_RIDE_INIT, ride, 4, a4);
-        guest_call(c, FN_RIDE_STOCK, ride, 1, &z);
-        guest_call(c, FN_RIDE_SKINS, ride, 1, &slot);
+        gcall_main(c, FN_RIDE_INIT, ride, 4, a4);
+        gcall_main(c, FN_RIDE_STOCK, ride, 1, &z);
+        gcall_main(c, FN_RIDE_SKINS, ride, 1, &slot);
         fprintf(stderr, "[traffic] (test) the player's car made a %s (type %u)\n", nm, t);
         return;
     }

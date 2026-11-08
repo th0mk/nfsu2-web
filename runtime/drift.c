@@ -149,15 +149,16 @@
  *
  * Drift battles between players (roam_game.c du_*, db_*) are drift mode with a clock: drift_battle_* below. */
 #include "cpu.h"
+#include "guest.h"
 #include "coop.h"
 #include "kbd.h"
 #include "widescreen.h"           /* HOOK_SITE */
+#include "setting.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
-void dispatch_indirect(CPU *c, uint32_t addr);
 long autotest_frame(void);
 
 /* status_web.c in the browser; the Mac has no page */
@@ -165,7 +166,6 @@ __attribute__((weak)) int host_status_slot(const char *name){ (void)name; return
 __attribute__((weak)) void host_status_set_n(const int *slot, const double *value, int n){ (void)slot; (void)value; (void)n; }
 
 #define DIK_X          0x2du         /* in none of the game's key maps (its F2 is the map) */
-#define HOOK_RET       0x00581475u   /* the main-loop hook's return address, as guest calls see it */
 #define G_FLOW         0x008654a4u   /* 6: in the world */
 #define G_GAMEMODE     0x00850078u   /* 1 career, 8 Online, 0x200 LAN */
 #define G_RACE         0x00890118u   /* the race coordinator: +0 state (4 racing, 6 paused), +0x24 racers, +0xBD0 the racers */
@@ -215,26 +215,6 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define SETUP_SZ       0x29u
 #define SETUP_DRIFT    2u            /* 0 circuit and sprint, 1 drag, 2 drift, 3 and 4 the others */
 
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
-static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
-static void cstr(uint32_t a, char *o, int n){
-    int i = 0;
-    for (; a && i + 1 < n && ok(a + (uint32_t)i, 0) && MR8(a + (uint32_t)i); i++) o[i] = (char)MR8(a + (uint32_t)i);
-    o[i] = 0;
-}
-/* a guest function with ecx and stack arguments, the CPU as it was after */
-static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(HOOK_RET);
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
-
 static struct {
     int want, on, cam, note;          /* chosen, the switch set now, our camera, the last X outside free roam */
     uint32_t saved;                   /* the view before the drift camera */
@@ -268,41 +248,41 @@ static int x_presses(void){
     }
     return n;
 }
-static uint32_t race(void){ uint32_t r = rd32(G_RACE); return ok(r, 0xbd4) ? r : 0; }
-static uint32_t racer(void){ uint32_t r = race(), p = r ? rd32(r + 0xbd0u) : 0; return ok(p, RC_DRIFTCAR + 4u) ? p : 0; }
+static uint32_t race(void){ uint32_t r = guest_rd32(G_RACE); return guest_ok(r, 0xbd4) ? r : 0; }
+static uint32_t racer(void){ uint32_t r = race(), p = r ? guest_rd32(r + 0xbd0u) : 0; return guest_ok(p, RC_DRIFTCAR + 4u) ? p : 0; }
 /* free roam's world: its own race, paused or not; not in co-op (the switch is the world's, for both cars) */
 int coop_in(void);
 static int roam_world(void){
-    uint32_t r = race(), pl = rd32(G_PLAYER1);
-    return !coop_in() && rd32(G_FLOW) == 6u && r && MR32(r + 0x24u) == 1u && (MR32(r) == 4u || MR32(r) == 6u) && !rd32(G_CAREER_RACE) &&
-           rd32(G_RACEKIND) == 0u && !(rd32(G_GAMEMODE) & 0x208u) && !MR8(G_DRIFTRACE) && pl && rd32(pl + 4u);
+    uint32_t r = race(), pl = guest_rd32(G_PLAYER1);
+    return !coop_in() && guest_rd32(G_FLOW) == 6u && r && MR32(r + 0x24u) == 1u && (MR32(r) == 4u || MR32(r) == 6u) && !guest_rd32(G_CAREER_RACE) &&
+           guest_rd32(G_RACEKIND) == 0u && !(guest_rd32(G_GAMEMODE) & 0x208u) && !MR8(G_DRIFTRACE) && pl && guest_rd32(pl + 4u);
 }
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(void){
-    uint32_t pl = rd32(G_PLAYER1), hud = pl ? rd32(pl + PL_HUD) : 0, fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0,
+    uint32_t pl = guest_rd32(G_PLAYER1), hud = pl ? guest_rd32(pl + PL_HUD) : 0, fe = guest_rd32(G_FENG), mg = fe ? guest_rd32(fe + 8u) : 0,
              top = mg ? coop_fe_top(mg) : 0;
     char a[40], b[40];
-    cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
+    guest_read_str(top ? guest_rd32(top + 0xcu) : 0, a, sizeof a); guest_read_str(hud ? guest_rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b);
 }
 static uint32_t view_addr(void){
-    uint32_t pl = rd32(G_PLAYER1), n = pl ? rd32(pl + 0x10u) : 9u;
+    uint32_t pl = guest_rd32(G_PLAYER1), n = pl ? guest_rd32(pl + 0x10u) : 9u;
     return n < 2u ? G_PSET + 0x28u * n + 0x10u : 0;
 }
 
 /* the drift event's styles that the racer's DriftScore lacks (looked for every frame: a new free roam's
  * DriftScore may be where the last one was) */
 static void add_styles(CPU *c, uint32_t rc){
-    uint32_t ds = rd32(rc + RC_DRIFTSCORE), tab = rd32(G_STYLES), pool = rd32(G_STYLEPOOL);
-    if (!ok(ds, 4u * N_STYLES) || !ok(tab, 0x30u * N_STYLES) || !pool) return;
+    uint32_t ds = guest_rd32(rc + RC_DRIFTSCORE), tab = guest_rd32(G_STYLES), pool = guest_rd32(G_STYLEPOOL);
+    if (!guest_ok(ds, 4u * N_STYLES) || !guest_ok(tab, 0x30u * N_STYLES) || !pool) return;
     int added = 0;
     for (uint32_t i = 0; i < N_STYLES; i++){
         if (!(MR8(tab + 0x30u * i + 7u) & MODE_DRIFT) || MR32(ds + 4u * i)) continue;
-        uint32_t s = gcall(c, FN_POOL_ALLOC, 0, 1, &pool);
-        if (!ok(s, 0x3c)){ fprintf(stderr, "[drift] f=%ld no style from the pool (entry %u)\n", autotest_frame(), i); return; }
+        uint32_t s = gcall_main(c, FN_POOL_ALLOC, 0, 1, &pool);
+        if (!guest_ok(s, 0x3c)){ fprintf(stderr, "[drift] f=%ld no style from the pool (entry %u)\n", autotest_frame(), i); return; }
         MR32(s + 0x34u) = 0; MR32(s + 0x38u) = 0; MR8(s + 0x10u) = 0; MR8(s + 0x18u) = 1;
         MR32(s + 0xcu) = i; MR32(s + 8u) = tab + 0x30u * i;
-        gcall(c, FN_STYLE_INIT, s, 0, 0);
+        gcall_main(c, FN_STYLE_INIT, s, 0, 0);
         MR32(ds + 4u * i) = s;
         MR8(s + 0x10u) = 1;
         added++;
@@ -312,15 +292,15 @@ static void add_styles(CPU *c, uint32_t rc){
 }
 /* free roam has no route: the DriftCar's best route distance follows the car's down */
 static void no_route(uint32_t rc){
-    uint32_t dc = rd32(rc + RC_DRIFTCAR), car = dc && ok(dc, DC_BEST + 4u) ? rd32(dc + DC_CAR) : 0, rt = car ? rd32(car + 0x1cu) : 0;
-    if (!ok(rt, 0x18)) return;
+    uint32_t dc = guest_rd32(rc + RC_DRIFTCAR), car = dc && guest_ok(dc, DC_BEST + 4u) ? guest_rd32(dc + DC_CAR) : 0, rt = car ? guest_rd32(car + 0x1cu) : 0;
+    if (!guest_ok(rt, 0x18)) return;
     float d = MRF32(rt + 0x14u);
     if (MRF32(dc + DC_BEST) > d) MRF32(dc + DC_BEST) = d;
 }
 /* the points of drifts banked since the last frame */
 static void count(uint32_t rc){
-    uint32_t ds = rd32(rc + RC_DRIFTSCORE), st = ok(ds, 3) ? rd32(ds) : 0;
-    if (!ok(st, ST_TOTAL + 4u)) return;
+    uint32_t ds = guest_rd32(rc + RC_DRIFTSCORE), st = guest_ok(ds, 3) ? guest_rd32(ds) : 0;
+    if (!guest_ok(st, ST_TOTAL + 4u)) return;
     float tot = MRF32(st + ST_TOTAL);
     if (st != D.style){ D.style = st; D.last = tot; return; }
     if (tot >= D.last + 1.f){
@@ -334,36 +314,36 @@ static void count(uint32_t rc){
 
 /* free roam's style popup, which stays up while the switch is on (see the top) */
 static void hide_popup(CPU *c){
-    uint32_t pl = rd32(G_PLAYER1), hud = pl ? rd32(pl + PL_HUD) : 0, el = hud ? rd32(hud + HUD_STYLES) : 0;
-    if (!ok(el, 0x3c)) return;
+    uint32_t pl = guest_rd32(G_PLAYER1), hud = pl ? guest_rd32(pl + PL_HUD) : 0, el = hud ? guest_rd32(hud + HUD_STYLES) : 0;
+    if (!guest_ok(el, 0x3c)) return;
     for (uint32_t o = 0x34u; o <= 0x38u; o += 4u){
-        uint32_t obj = rd32(el + o);
-        if (ok(obj, 0x20) && !(MR32(obj + 0x1cu) & 1u)) gcall(c, FN_FE_HIDE, 0, 1, &obj);
+        uint32_t obj = guest_rd32(el + o);
+        if (guest_ok(obj, 0x20) && !(MR32(obj + 0x1cu) & 1u)) gcall_main(c, FN_FE_HIDE, 0, 1, &obj);
     }
 }
 
 static void camera_on(CPU *c){
-    uint32_t va = view_addr(), pl = rd32(G_PLAYER1);
+    uint32_t va = view_addr(), pl = guest_rd32(G_PLAYER1);
     if (!va || !pl) return;
     uint32_t v = MR32(va);
     if (v != VIEW_DRIFT){
         D.saved = v;
         MR32(va) = VIEW_DRIFT - 1u;
         uint32_t one = 1;
-        gcall(c, FN_CAMERA_KEY, pl, 1, &one);
+        gcall_main(c, FN_CAMERA_KEY, pl, 1, &one);
     } else D.saved = VIEW_DRIFT;                   /* the player's own pick (cameras.c: every drive has the view) */
     D.cam = MR32(va) == VIEW_DRIFT;
     if (!D.cam){ MR32(va) = v; fprintf(stderr, "[drift] f=%ld no drift camera (view %u)\n", autotest_frame(), v); }
 }
 /* live: the world's camera too (the camera key's way), else only the view the next one is made for */
 static void camera_off(CPU *c, int live){
-    uint32_t va = view_addr(), pl = rd32(G_PLAYER1), back = D.saved <= VIEW_LAST ? D.saved : 3u;
+    uint32_t va = view_addr(), pl = guest_rd32(G_PLAYER1), back = D.saved <= VIEW_LAST ? D.saved : 3u;
     D.cam = 0;
     if (!va || MR32(va) != VIEW_DRIFT || MR8(G_DRIFTRACE) || back == VIEW_DRIFT) return;
     if (live && pl){
         MR32(va) = back - 1u;                      /* the camera key's step wraps a -1 to 0 */
         uint32_t one = 1;
-        gcall(c, FN_CAMERA_KEY, pl, 1, &one);
+        gcall_main(c, FN_CAMERA_KEY, pl, 1, &one);
     } else MR32(va) = back;
 }
 
@@ -372,12 +352,12 @@ uint32_t garage_find(uint32_t db, uint32_t h);   /* garage.c: a front-end car re
 /* The car made again (0x5F6C20) with its nitrous as it was: the shot's length (a drift event's is 0) and what is left
  * of it (see the top) */
 static void car_tuned(CPU *c, uint32_t car){
-    uint32_t ph = rd32(car + CAR_PHYS), nos[4], one = 1;
-    int keep = ok(ph, PH_NOS_LEN + 3u) && ok(car + CAR_NOS_STATE, 15u);
+    uint32_t ph = guest_rd32(car + CAR_PHYS), nos[4], one = 1;
+    int keep = guest_ok(ph, PH_NOS_LEN + 3u) && guest_ok(car + CAR_NOS_STATE, 15u);
     float len = keep ? MRF32(ph + PH_NOS_LEN) : 0.f;
     for (uint32_t i = 0; keep && i < 4u; i++) nos[i] = MR32(car + CAR_NOS_STATE + 4u * i);
-    gcall(c, FN_CAR_TUNED, car, 1, &one);
-    if (!keep || rd32(car + CAR_PHYS) != ph) return;
+    gcall_main(c, FN_CAR_TUNED, car, 1, &one);
+    if (!keep || guest_rd32(car + CAR_PHYS) != ph) return;
     MRF32(ph + PH_NOS_LEN) = len;
     for (uint32_t i = 0; i < 4u; i++) MR32(car + CAR_NOS_STATE + 4u * i) = nos[i];
 }
@@ -385,10 +365,10 @@ static void car_tuned(CPU *c, uint32_t car){
 /* The car's physics made again with the switch on: a drift event's handling (parameter set 3) and the car's Drift
  * setup from the dyno in its ride (see the top) */
 static void physics_in(CPU *c){
-    uint32_t car = rd32(rd32(G_PLAYER1) + 4u), ride = car ? rd32(car + CAR_RIDE) : 0,
-             rec = MR32(G_GAMEMODE) == 1u ? garage_find(G_FECARS, rd32(G_CAREER_CAR)) : 0;
-    if (!ok(ride, RIDE_TUNING + SETUP_SZ)) return;
-    uint32_t setup = ok(rec, REC_SETUPS + 5u * SETUP_SZ) ? rec + REC_SETUPS + SETUP_DRIFT * SETUP_SZ : 0;
+    uint32_t car = guest_rd32(guest_rd32(G_PLAYER1) + 4u), ride = car ? guest_rd32(car + CAR_RIDE) : 0,
+             rec = MR32(G_GAMEMODE) == 1u ? garage_find(G_FECARS, guest_rd32(G_CAREER_CAR)) : 0;
+    if (!guest_ok(ride, RIDE_TUNING + SETUP_SZ)) return;
+    uint32_t setup = guest_ok(rec, REC_SETUPS + 5u * SETUP_SZ) ? rec + REC_SETUPS + SETUP_DRIFT * SETUP_SZ : 0;
     int differ = 0;
     for (uint32_t i = 0; setup && i < SETUP_SZ; i++) differ += MR8(setup + i) != MR8(ride + RIDE_TUNING + i);
     if (differ){
@@ -402,22 +382,22 @@ static void physics_in(CPU *c){
 }
 /* ... and as they were, while the car is still the one (out of the world: the next car is made new) */
 static void physics_out(CPU *c){
-    uint32_t car = D.tuned, ride = car ? rd32(car + CAR_RIDE) : 0;
-    int same = car && rd32(rd32(G_PLAYER1) + 4u) == car && ok(ride, RIDE_TUNING + SETUP_SZ);
+    uint32_t car = D.tuned, ride = car ? guest_rd32(car + CAR_RIDE) : 0;
+    int same = car && guest_rd32(guest_rd32(G_PLAYER1) + 4u) == car && guest_ok(ride, RIDE_TUNING + SETUP_SZ);
     /* The drift assist (0x5AC260, every physics step while the switch is on) sets the rear wheels' grip factor, and
      * nothing puts it back: only a new car's wheels (a respawn, a reset) have 1 again.  Left as it was, the car slid
      * more after drift mode than in it (0.86 standing still; 25 degrees of slip in a test turn against 11) */
     if (same){
-        uint32_t po = rd32(car + CAR_PHYSOBJ);
-        for (uint32_t o = 0x40u; ok(po, 0x48) && o <= 0x44u; o += 4u){
-            uint32_t w = rd32(po + o);
-            if (ok(w, WH_GRIP + 3u)) MRF32(w + WH_GRIP) = 1.f;
+        uint32_t po = guest_rd32(car + CAR_PHYSOBJ);
+        for (uint32_t o = 0x40u; guest_ok(po, 0x48) && o <= 0x44u; o += 4u){
+            uint32_t w = guest_rd32(po + o);
+            if (guest_ok(w, WH_GRIP + 3u)) MRF32(w + WH_GRIP) = 1.f;
         }
     }
     if (same && D.swapped) for (uint32_t i = 0; i < SETUP_SZ; i++) MR8(ride + RIDE_TUNING + i) = D.kept[i];
     D.tuned = 0; D.swapped = 0;
     if (!car) return;
-    if (!same || rd32(G_FLOW) != 6u){ fprintf(stderr, "[drift] f=%ld the car is gone: no physics to give back\n", autotest_frame()); return; }
+    if (!same || guest_rd32(G_FLOW) != 6u){ fprintf(stderr, "[drift] f=%ld the car is gone: no physics to give back\n", autotest_frame()); return; }
     car_tuned(c, car);
     fprintf(stderr, "[drift] f=%ld the car's own physics back\n", autotest_frame());
 }
@@ -433,11 +413,11 @@ int drift_kept_tuning(uint8_t *out){
 static void publish(void){
     static const char *const k[8] = { "drift", "drift_key", "drift_x", "drift_gain", "drift_total", "drift_best", "drift_st", "drift_pend" };
     if (!D.slots){ D.slots = 1; for (int i = 0; i < 8; i++){ D.slot[i] = host_status_slot(k[i]); D.val[i] = -1; } }
-    uint32_t dc = 0, st = 0, rc = D.on ? racer() : 0, ds = rc ? rd32(rc + RC_DRIFTSCORE) : 0;
-    if (rc) dc = rd32(rc + RC_DRIFTCAR);
-    if (ok(ds, 3)) st = rd32(ds);
-    if (!ok(st, ST_TOTAL + 4u)) st = 0;
-    int lvl = dc && ok(dc, DC_GAIN + 4u) ? (int)MR32(dc + DC_LEVEL) : 1;
+    uint32_t dc = 0, st = 0, rc = D.on ? racer() : 0, ds = rc ? guest_rd32(rc + RC_DRIFTSCORE) : 0;
+    if (rc) dc = guest_rd32(rc + RC_DRIFTCAR);
+    if (guest_ok(ds, 3)) st = guest_rd32(ds);
+    if (!guest_ok(st, ST_TOTAL + 4u)) st = 0;
+    int lvl = dc && guest_ok(dc, DC_GAIN + 4u) ? (int)MR32(dc + DC_LEVEL) : 1;
     if (lvl < 1 || lvl > 5) lvl = 1;
     float pend = st ? MRF32(st + ST_PEND) : 0.f;
     double v[8] = { (double)(D.want | (D.on ? 2 : 0) | (D.note ? 4 : 0)), (double)D.keys, (double)lvl,
@@ -452,7 +432,7 @@ static void publish(void){
 
 /* X is a letter here: the front end (and the loading screens), or the game's text entry is up */
 static int x_is_typing(void){
-    return rd32(G_FLOW) != 6u || (mem_is_committed(G_TXT_REC + 3u) && MR8(G_TXT_ON) && MR32(G_TXT_REC));
+    return guest_rd32(G_FLOW) != 6u || (mem_is_committed(G_TXT_REC + 3u) && MR8(G_TXT_ON) && MR32(G_TXT_REC));
 }
 
 /* ---- drift battles ------------------------------------------------------------------------------------- */
@@ -478,8 +458,8 @@ int drift_wanted(void){ return D.want; }
 /* the controller's switch (showoff.c: D-pad down held a second while driving), as X */
 void drift_pad(void){ D.pad++; }
 static void nos_off(void){
-    uint32_t pl = rd32(G_PLAYER1), car = pl ? rd32(pl + 4u) : 0, ph = car ? rd32(car + CAR_PHYS) : 0;
-    if (!ok(ph, PH_NOS_LEN + 3u) || !ok(car + CAR_NOS_STATE, 15u)) return;
+    uint32_t pl = guest_rd32(G_PLAYER1), car = pl ? guest_rd32(pl + 4u) : 0, ph = car ? guest_rd32(car + CAR_PHYS) : 0;
+    if (!guest_ok(ph, PH_NOS_LEN + 3u) || !guest_ok(car + CAR_NOS_STATE, 15u)) return;
     if (car != B.car){
         if (B.car) fprintf(stderr, "[drift] f=%ld drift battle: another car (0x%08x), its nitrous off too\n", autotest_frame(), car);
         B.car = car; B.ph = ph; B.len = MRF32(ph + PH_NOS_LEN);
@@ -492,9 +472,9 @@ static void nos_off(void){
     for (uint32_t i = 0; i < 4u; i++) if (MR32(car + CAR_NOS_STATE + 4u * i)) MR32(car + CAR_NOS_STATE + 4u * i) = 0;
 }
 static void nos_back(void){
-    uint32_t pl = rd32(G_PLAYER1), car = pl ? rd32(pl + 4u) : 0, ph = car ? rd32(car + CAR_PHYS) : 0;
+    uint32_t pl = guest_rd32(G_PLAYER1), car = pl ? guest_rd32(pl + 4u) : 0, ph = car ? guest_rd32(car + CAR_PHYS) : 0;
     if (!B.car) return;
-    if (car == B.car && rd32(G_FLOW) == 6u && ok(ph, PH_NOS_LEN + 3u) && ok(car + CAR_NOS_STATE, 15u)){
+    if (car == B.car && guest_rd32(G_FLOW) == 6u && guest_ok(ph, PH_NOS_LEN + 3u) && guest_ok(car + CAR_NOS_STATE, 15u)){
         MRF32(ph + PH_NOS_LEN) = B.len;
         for (uint32_t i = 0; i < 4u; i++) MR32(car + CAR_NOS_STATE + 4u * i) = B.nos[i];
         fprintf(stderr, "[drift] f=%ld drift battle over: the nitrous back as it was\n", autotest_frame());
@@ -511,9 +491,9 @@ void drift_battle_begin(void){
 /* the off: the points from now, from X1 */
 void drift_battle_go(CPU *c){
     if (!B.on || B.go) return;
-    uint32_t rc = racer(), dc = rc ? rd32(rc + RC_DRIFTCAR) : 0, ds = dc && ok(dc, DC_BEST + 4u) ? rd32(dc) : 0;
-    int lvl = dc && ok(dc, DC_GAIN + 4u) ? (int)MR32(dc + DC_LEVEL) : 0;
-    if (ok(ds, 3) && ok(rd32(ds), ST_TOTAL + 4u)) gcall(c, FN_DC_RESET, dc, 0, 0);
+    uint32_t rc = racer(), dc = rc ? guest_rd32(rc + RC_DRIFTCAR) : 0, ds = dc && guest_ok(dc, DC_BEST + 4u) ? guest_rd32(dc) : 0;
+    int lvl = dc && guest_ok(dc, DC_GAIN + 4u) ? (int)MR32(dc + DC_LEVEL) : 0;
+    if (guest_ok(ds, 3) && guest_ok(guest_rd32(ds), ST_TOTAL + 4u)) gcall_main(c, FN_DC_RESET, dc, 0, 0);
     B.go = 1; B.base = D.total;
     fprintf(stderr, "[drift] f=%ld drift battle: the points count from now (the multiplier was X%d%s)\n", autotest_frame(), lvl,
             ds ? "" : ", no drift yet");
@@ -523,8 +503,8 @@ void drift_battle_score(double *banked, double *pend){
     *banked = *pend = 0;
     if (!B.on || !B.go) return;
     *banked = D.total - B.base;
-    uint32_t rc = racer(), ds = rc ? rd32(rc + RC_DRIFTSCORE) : 0, st = ok(ds, 3) ? rd32(ds) : 0;
-    if (!ok(st, ST_TOTAL + 4u)) return;
+    uint32_t rc = racer(), ds = rc ? guest_rd32(rc + RC_DRIFTSCORE) : 0, st = guest_ok(ds, 3) ? guest_rd32(ds) : 0;
+    if (!guest_ok(st, ST_TOTAL + 4u)) return;
     uint32_t s = MR32(st + ST_STATE);
     float p = MRF32(st + ST_PEND);
     if ((s == 0u || s == 1u) && p > 0.f && p < 1e9f) *pend = (double)(int)p;
@@ -566,8 +546,8 @@ void drift_frame(CPU *c){
         if (rc){ add_styles(c, rc); no_route(rc); count(rc); }
         hide_popup(c);
         if (!D.cam) camera_on(c);
-    } else if (D.cam && (!D.want || !world)) camera_off(c, rd32(G_FLOW) == 6u && hud_on_top());
-    if (B.on && rd32(G_FLOW) == 6u) nos_off();
+    } else if (D.cam && (!D.want || !world)) camera_off(c, guest_rd32(G_FLOW) == 6u && hud_on_top());
+    if (B.on && guest_rd32(G_FLOW) == 6u) nos_off();
     publish();
 }
 
@@ -576,8 +556,7 @@ void drift_frame(CPU *c){
 static int race_music(void){
     static int on = -1;
     if (on < 0){
-        const char *e = getenv("NFSU2_RACE_MUSIC");
-        on = e && *e && *e != '0' && strcasecmp(e, "off") && strcasecmp(e, "no") && strcasecmp(e, "false");
+        on = setting_bool("NFSU2_RACE_MUSIC", 0);
         if (on) fprintf(stderr, "[drift] music in drag and drift races: on (NFSU2_RACE_MUSIC)\n");
     }
     return on;
@@ -625,6 +604,6 @@ void sub_004c85d0(CPU *c){                       /* the style points' drift bran
 }
 void sub_004ac120_orig(CPU *c);
 void sub_004ac120(CPU *c){                       /* FEngHud::ShowNiftyDriftyMessage (this: the HUD) */
-    if ((!D.on || MR8(G_DRIFTRACE)) && rd32(c->ecx + HUD_DRIFT)){ sub_004ac120_orig(c); return; }
+    if ((!D.on || MR8(G_DRIFTRACE)) && guest_rd32(c->ecx + HUD_DRIFT)){ sub_004ac120_orig(c); return; }
     POP32(c->eip); c->esp += 4u;
 }

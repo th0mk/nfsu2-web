@@ -97,6 +97,7 @@
  * RaceWon there could move the career to the next stage under the running
  * world. */
 #include "cpu.h"
+#include "guest.h"
 #include "mpcredit.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -105,7 +106,6 @@
 
 long autotest_frame(void);
 int career_fe_active(const char *name);
-void dispatch_indirect(CPU *c, uint32_t addr);
 
 #define G_CAREER        0x0085ad40u
 #define G_GAMEMODE      0x00850078u   /* 1 career */
@@ -162,38 +162,29 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 #define MSG_NEXT        0x4d504302u
 #define HOOK_MAINLOOP   0x00581475u
 
-static int okm(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
-static uint32_t rd(uint32_t a){ return okm(a, 3) ? MR32(a) : 0; }
+/* a guest function with ecx and stack arguments from the main-loop hook, 512 bytes below its stack (guest.h) */
 static uint32_t call(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 512u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(HOOK_MAINLOOP);
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
+    return guest_call_ex(c, fn, ecx, c->edx, n, arg, HOOK_MAINLOOP, 512u);
 }
 static uint32_t fbits(float f){ uint32_t u; memcpy(&u, &f, 4); return u; }
 static const char *race_name(uint32_t r){
-    uint32_t s = rd(G_STRPOOL) + MR16(r);
-    return okm(s, 63) ? (const char *)(g_mem + s) : "?";
+    uint32_t s = guest_rd32(G_STRPOOL) + MR16(r);
+    return guest_ok(s, 63) ? (const char *)(g_mem + s) : "?";
 }
 static int race_in_table(uint32_t r){
-    uint32_t t = rd(G_RACES), n = rd(G_NRACES);
-    return t && n <= 1024 && r >= t && r < t + n * RACE_SZ && (r - t) % RACE_SZ == 0 && okm(r, RACE_SZ);
+    uint32_t t = guest_rd32(G_RACES), n = guest_rd32(G_NRACES);
+    return t && n <= 1024 && r >= t && r < t + n * RACE_SZ && (r - t) % RACE_SZ == 0 && guest_ok(r, RACE_SZ);
 }
 static int event_won(uint32_t h){
-    uint32_t n = rd(G_CAREER + C_NEVENTS);
+    uint32_t n = guest_rd32(G_CAREER + C_NEVENTS);
     for (uint32_t i = 0; i < n && i < 384; i++) if (MR32(G_CAREER + C_EVENTS + 8u * i) == h) return MR8(G_CAREER + C_EVENTS + 8u * i + 6u) == 1;
     return 0;
 }
-static int race_open(uint32_t r){ for (uint32_t i = 0; i < 64; i++) if (rd(G_CAREER + C_OPEN + 4u * i) == r) return 1; return 0; }
+static int race_open(uint32_t r){ for (uint32_t i = 0; i < 64; i++) if (guest_rd32(G_CAREER + C_OPEN + 4u * i) == r) return 1; return 0; }
 static uint32_t stage_rec(uint32_t s){ return s < 8 ? G_CAREER + C_STAGEREC + s * SR_SIZE : 0; }
 /* the stage's wins as 0x5004D0 counts them: its normal races' list (35) */
-static int stage_wins(uint32_t sr){ int n = 0; for (uint32_t i = 0; i < 35; i++) n += rd(sr + 4u * i) != 0; return n; }
-static float stage_rep(uint32_t sr){ int runs = (int)rd(sr + SR_RUNS); return runs > 0 ? MRF32(sr + SR_POINTS) / (float)runs : 0.f; }
+static int stage_wins(uint32_t sr){ int n = 0; for (uint32_t i = 0; i < 35; i++) n += guest_rd32(sr + 4u * i) != 0; return n; }
+static float stage_rep(uint32_t sr){ int runs = (int)guest_rd32(sr + SR_RUNS); return runs > 0 ? MRF32(sr + SR_POINTS) / (float)runs : 0.f; }
 
 static MpCredit g_last;
 int mpcredit_last(MpCredit *o){ *o = g_last; return g_last.race != 0; }
@@ -203,15 +194,15 @@ int mpcredit_last(MpCredit *o){ *o = g_last; return g_last.race != 0; }
  * is, as 0x500670 counts them; the sponsor screen lists the stage info's first that many, 0x5006D0), in order */
 #define OFFERS_MAX 5
 static int sponsor_offers(CPU *c, uint32_t *o){
-    uint32_t st = rd(G_CAREER + C_STAGE), sr = stage_rec(st), info = sr ? rd(sr + SR_INFO) : 0;
-    if (rd(G_GAMEMODE) != 1u || st <= 1 || st >= 8 || !okm(info, 0x30)) return 0;
+    uint32_t st = guest_rd32(G_CAREER + C_STAGE), sr = stage_rec(st), info = sr ? guest_rd32(sr + SR_INFO) : 0;
+    if (guest_rd32(G_GAMEMODE) != 1u || st <= 1 || st >= 8 || !guest_ok(info, 0x30)) return 0;
     if (!(call(c, FN_WANTS_SP, sr, 0, 0) & 0xffu)) return 0;
     float rep = stage_rep(sr - SR_SIZE); int wins = stage_wins(sr), n = (int8_t)MR8(info + 1u), k = 0;
     for (int i = 0; i < n && i < OFFERS_MAX; i++){
-        uint32_t sp = rd(info + 8u + 4u * (uint32_t)i);
-        if (okm(sp, 0x10) && wins >= (int16_t)MR16(info + 0x1cu + 2u * (uint32_t)i) && (float)(int16_t)MR16(sp + SP_REP) <= rep) k++;
+        uint32_t sp = guest_rd32(info + 8u + 4u * (uint32_t)i);
+        if (guest_ok(sp, 0x10) && wins >= (int16_t)MR16(info + 0x1cu + 2u * (uint32_t)i) && (float)(int16_t)MR16(sp + SP_REP) <= rep) k++;
     }
-    for (int i = 0; i < k; i++) o[i] = rd(info + 8u + 4u * (uint32_t)i);
+    for (int i = 0; i < k; i++) o[i] = guest_rd32(info + 8u + 4u * (uint32_t)i);
     return k;
 }
 
@@ -238,8 +229,8 @@ static int movies_on(void){
 /* the race's movie, as 0x513A50 picks it (the race won; stage_now: the stage after the win) */
 static void race_scene(uint32_t r, uint32_t race_stage, uint32_t stage_now){
     char nm[16] = "";
-    uint32_t s = rd(G_STRPOOL) + MR16(r + 4u);
-    if (okm(s, 15) && MR8(s)){ for (int i = 0; i < 15 && MR8(s + (uint32_t)i); i++) nm[i] = (char)MR8(s + (uint32_t)i); }
+    uint32_t s = guest_rd32(G_STRPOOL) + MR16(r + 4u);
+    if (guest_ok(s, 15) && MR8(s)){ for (int i = 0; i < 15 && MR8(s + (uint32_t)i); i++) nm[i] = (char)MR8(s + (uint32_t)i); }
     else if (race_stage != stage_now && stage_now == 2u) snprintf(nm, sizeof nm, "Scene07");
     else if (MR32(r + 8u) == RACE_LAST) snprintf(nm, sizeof nm, "Scene15");
     if (!nm[0] || g_ui.nscene >= 4) return;
@@ -250,7 +241,7 @@ static void race_scene(uint32_t r, uint32_t race_stage, uint32_t stage_now){
 static void sponsor_name(CPU *c, uint32_t sp, char *lat, int nl, char *utf, int nu){
     uint32_t h = call(c, FN_SP_NAMEHASH, sp, 0, 0), t = call(c, FN_TEXT, 0, 1, &h);
     int a = 0, b = 0;
-    for (uint32_t i = 0; okm(t + i, 1) && MR8(t + i) && i < 40; i++){
+    for (uint32_t i = 0; guest_ok(t + i, 1) && MR8(t + i) && i < 40; i++){
         uint8_t ch = MR8(t + i);
         if (ch < 0x20 || ch == '%') ch = ' ';
         if (a + 1 < nl) lat[a++] = (char)ch;
@@ -262,10 +253,10 @@ static void sponsor_name(CPU *c, uint32_t sp, char *lat, int nl, char *utf, int 
 static void gs(uint32_t a, const char *s, uint32_t cap){ uint32_t i = 0; for (; s[i] && i + 1 < cap; i++) MR8(a + i) = (uint8_t)s[i]; MR8(a + i) = 0; }
 /* the crib screen's package name (the FE's own string), else ours */
 static uint32_t crib_name(void){
-    uint32_t n = rd(G_FEMGR_LIST);
-    for (int k = 0; n && n != G_FEMGR_LIST && k < 256; k++, n = rd(n)){
-        uint32_t sc = rd(n - 4u + 0x14u), nm = sc ? rd(sc + 4u) : 0;
-        if (okm(nm, 18) && !strcasecmp((const char *)(g_mem + nm), "UI_CareerCrib.fng")) return nm;
+    uint32_t n = guest_rd32(G_FEMGR_LIST);
+    for (int k = 0; n && n != G_FEMGR_LIST && k < 256; k++, n = guest_rd32(n)){
+        uint32_t sc = guest_rd32(n - 4u + 0x14u), nm = sc ? guest_rd32(sc + 4u) : 0;
+        if (guest_ok(nm, 18) && !strcasecmp((const char *)(g_mem + nm), "UI_CareerCrib.fng")) return nm;
     }
     gs(g_ui.str + 0x200u, "UI_CareerCrib.fng", 0x20);
     return g_ui.str + 0x200u;
@@ -339,7 +330,7 @@ static int ui_ready(CPU *c){
 }
 /* the question about offer g_ui.i over the crib (the game's generic dialog, roam_game.c mp_ask's way: the text as a
  * "%s" argument, with no % in it) */
-static int dialog_up(void){ return career_fe_active("GenericDialog_MED.fng") || career_fe_active("GenericDialog_SMALL.fng") || rd(G_DLG); }
+static int dialog_up(void){ return career_fe_active("GenericDialog_MED.fng") || career_fe_active("GenericDialog_SMALL.fng") || guest_rd32(G_DLG); }
 static int ui_ask(CPU *c){
     if (!ui_ready(c) || dialog_up()) return 0;
     uint32_t sp = g_ui.offer[g_ui.i];
@@ -363,7 +354,7 @@ static int ui_ask(CPU *c){
  * 0x827E88 first: without it the movies stopped after about 2.5 s; the package added over the others, 0x555E80, as
  * 0x4C57C0 adds PC_Loading) */
 static int ui_movie(CPU *c){
-    if (!ui_ready(c) || !rd(G_FE)) return 0;
+    if (!ui_ready(c) || !guest_rd32(G_FE)) return 0;
     for (uint32_t k = 0; k < 4; k++) MR8(G_MOVIES + 0x40u * k) = 0;
     for (int k = 0; k < g_ui.nscene; k++) gs(G_MOVIES + 0x40u * (uint32_t)k, g_ui.scene[k], 0x40);
     MR32(G_MOVIE_AT) = 0; MR32(G_MOVIE_MODE) = 5; MR32(G_MOVIES_DONE) = 0;
@@ -383,15 +374,15 @@ static void ui_frame(CPU *c){
         break;
     case UI_ASKED:
         if (g_ui.answer == MSG_SIGN){
-            uint32_t sp = g_ui.offer[g_ui.i], b0 = rd(G_CAREER + C_BANK), st = rd(G_CAREER + C_STAGE);
+            uint32_t sp = g_ui.offer[g_ui.i], b0 = guest_rd32(G_CAREER + C_BANK), st = guest_rd32(G_CAREER + C_STAGE);
             call(c, FN_SIGN, G_CAREER, 1, &sp);
-            if (rd(stage_rec(st) + SR_SPONSOR) == sp){
+            if (guest_rd32(stage_rec(st) + SR_SPONSOR) == sp){
                 char nm[48];
-                g_last.sponsor = sp; g_last.bonus = (int)(rd(G_CAREER + C_BANK) - b0);
+                g_last.sponsor = sp; g_last.bonus = (int)(guest_rd32(G_CAREER + C_BANK) - b0);
                 sponsor_name(c, sp, nm, sizeof nm, g_last.sponsor_name, sizeof g_last.sponsor_name);
             }
             fprintf(stderr, "[mpcredit] f=%ld signed with %s (offer %d of %d): bonus $%d, bank $%u -> $%u%s\n", f, g_last.sponsor_name,
-                    g_ui.i + 1, g_ui.n, g_last.bonus, b0, rd(G_CAREER + C_BANK), g_last.sponsor == sp ? "" : " (the game did not sign it)");
+                    g_ui.i + 1, g_ui.n, g_last.bonus, b0, guest_rd32(G_CAREER + C_BANK), g_last.sponsor == sp ? "" : " (the game did not sign it)");
             g_ui.st = g_ui.nscene ? UI_WAIT : UI_NONE;
         } else if (g_ui.answer == MSG_NEXT){
             g_ui.i = (g_ui.i + 1) % g_ui.n; g_ui.st = UI_OFFER;
@@ -410,9 +401,9 @@ static void ui_frame(CPU *c){
          * came: the world.  (0x5404A0 called alone, with the crib's message not held, loaded the world twice: half
          * loaded, or a crash in the sound's streams; the world's loading under a playing movie cut it after 2 s) */
         if (movie) g_ui.seen = 1;
-        if ((!movie && (g_ui.seen || rd(G_MOVIES_DONE) == 1u || f - g_ui.at > 300)) || f - g_ui.at > 60 * 600){
+        if ((!movie && (g_ui.seen || guest_rd32(G_MOVIES_DONE) == 1u || f - g_ui.at > 300)) || f - g_ui.at > 60 * 600){
             fprintf(stderr, "[mpcredit] f=%ld the race's movie %s: the world, as the crib goes there\n", f,
-                    g_ui.seen || rd(G_MOVIES_DONE) == 1u ? "is over" : "did not play");
+                    g_ui.seen || guest_rd32(G_MOVIES_DONE) == 1u ? "is over" : "did not play");
             g_ui.st = UI_NONE; g_ui.leaving = 0; g_ui.nscene = 0;
             int n = g_ui.nheld; g_ui.nheld = 0;
             for (int i = 0; i < n; i++) call(c, FN_CRIB_MSG, g_ui.held_this, 4, g_ui.held[i]);
@@ -422,25 +413,25 @@ static void ui_frame(CPU *c){
 }
 
 static int win_now(CPU *c, uint32_t r, float margin){
-    uint32_t h = MR32(r + 8u), kind = MR8(r + 0x34u), rs = MR8(r + 0x37u), st0 = rd(G_CAREER + C_STAGE);
+    uint32_t h = MR32(r + 8u), kind = MR8(r + 0x34u), rs = MR8(r + 0x37u), st0 = guest_rd32(G_CAREER + C_STAGE);
     uint32_t sr = stage_rec(rs), cur = stage_rec(st0);
     if (!sr || !cur){ fprintf(stderr, "[mpcredit] f=%ld %s: stage %u, no stage record: left\n", autotest_frame(), race_name(r), rs); return 0; }
     int open = race_open(r), wins0 = stage_wins(cur);
-    uint32_t bank0 = rd(G_CAREER + C_BANK), runs0 = rd(sr + SR_RUNS);
+    uint32_t bank0 = guest_rd32(G_CAREER + C_BANK), runs0 = guest_rd32(sr + SR_RUNS);
     float pts0 = MRF32(sr + SR_POINTS);
     /* 1: the event entry, and the race started, as StartRace */
     uint32_t e = call(c, FN_ENTRY, G_CAREER, 1, &h);
-    if (!okm(e, 8) || MR32(e) != h){ fprintf(stderr, "[mpcredit] f=%ld %s: no event entry (0x%08x): left\n", autotest_frame(), race_name(r), e); return 0; }
+    if (!guest_ok(e, 8) || MR32(e) != h){ fprintf(stderr, "[mpcredit] f=%ld %s: no event entry (0x%08x): left\n", autotest_frame(), race_name(r), e); return 0; }
     MR32(G_CAREER + C_STARTED) += 1u;
     /* 2: the prize and the margin, as RaceWon's paying part (0x532E50, 0x513FE0 -> 0x513430) */
-    uint32_t sp = kind == 1u ? rd(cur + SR_SPONSOR) : 0, prize = sp && okm(sp, 4) ? MR16(sp + SP_PRIZE) : MR32(r + 0x30u);
+    uint32_t sp = kind == 1u ? guest_rd32(cur + SR_SPONSOR) : 0, prize = sp && guest_ok(sp, 4) ? MR16(sp + SP_PRIZE) : MR32(r + 0x30u);
     if (prize > 1000000u) prize = 0;
     MR32(G_CAREER + C_BANK) = bank0 + prize;
     if (margin < 0.f){
         /* (no margin: the race type's first step, the least points a win gets) */
         uint32_t ty = call(c, FN_RACE_TYPE, 0, 1, &r);
         margin = 0.f;
-        for (uint32_t k = 0; k < 7; k++) if (rd(G_POINTS + 0x1cu * k) == ty){ margin = MRF32(G_POINTS + 0x1cu * k + 4u); break; }
+        for (uint32_t k = 0; k < 7; k++) if (guest_rd32(G_POINTS + 0x1cu * k) == ty){ margin = MRF32(G_POINTS + 0x1cu * k + 4u); break; }
     }
     uint32_t a[2] = { fbits(margin), r };
     call(c, FN_MARGIN_REC, sr, 2, a);
@@ -451,7 +442,7 @@ static int win_now(CPU *c, uint32_t r, float margin){
     MR8(G_CAREER + C_RESULTS + 2u) = pay;
     /* 4: the open races again */
     call(c, FN_OPEN_LIST, G_CAREER, 0, 0);
-    uint32_t st1 = rd(G_CAREER + C_STAGE);
+    uint32_t st1 = guest_rd32(G_CAREER + C_STAGE);
     memset(&g_last, 0, sizeof g_last);
     g_last.race = r; g_last.prize = (int)prize; g_last.stage_from = (int)st0; g_last.stage_to = (int)st1;
     g_last.points = (int)(MRF32(sr + SR_POINTS) - pts0 + 0.5f);
@@ -471,8 +462,8 @@ static int win_now(CPU *c, uint32_t r, float margin){
     }
     fprintf(stderr, "[mpcredit] f=%ld %s (kind %u, stage %u, %s): won %d, still open %d; bank $%u -> $%u (prize $%u%s); stage %u record: "
             "%.0f points of %u races -> %.0f of %u (margin %.2f); wins of stage %u %d -> %d; stage %u -> %u; %d sponsor offers%s%s\n",
-            autotest_frame(), race_name(r), kind, rs, open ? "open" : "not open", event_won(h), race_open(r), bank0, rd(G_CAREER + C_BANK),
-            prize, sp ? ", the sponsor's" : "", rs, (double)pts0, runs0, (double)MRF32(sr + SR_POINTS), rd(sr + SR_RUNS), (double)margin,
+            autotest_frame(), race_name(r), kind, rs, open ? "open" : "not open", event_won(h), race_open(r), bank0, guest_rd32(G_CAREER + C_BANK),
+            prize, sp ? ", the sponsor's" : "", rs, (double)pts0, runs0, (double)MRF32(sr + SR_POINTS), guest_rd32(sr + SR_RUNS), (double)margin,
             st0, wins0, stage_wins(cur), st0, st1, g_last.offers, g_last.movie[0] ? "; the movie " : "", g_last.movie);
     return event_won(h);
 }
@@ -510,8 +501,8 @@ static void live_profile(char out[33]){
     out[i] = 0;
 }
 static uint32_t race_by_hash(uint32_t h){
-    uint32_t t = rd(G_RACES), n = rd(G_NRACES);
-    for (uint32_t i = 0; t && i < n && i < 1024; i++) if (rd(t + i * RACE_SZ + 8u) == h) return t + i * RACE_SZ;
+    uint32_t t = guest_rd32(G_RACES), n = guest_rd32(G_NRACES);
+    for (uint32_t i = 0; t && i < n && i < 1024; i++) if (guest_rd32(t + i * RACE_SZ + 8u) == h) return t + i * RACE_SZ;
     return 0;
 }
 /* the file's host path; to write: where it goes (the resolve says 0 for a file not there yet: its folder's path, the
@@ -616,7 +607,7 @@ void mpcredit_profile_deleted(const char *path){
 int mpcredit_win(CPU *c, uint32_t race, float margin, int in_roam){
     if (!race_in_table(race)){ fprintf(stderr, "[mpcredit] f=%ld race 0x%08x is not in the race table: left\n", autotest_frame(), race); return 0; }
     if (event_won(MR32(race + 8u))){ fprintf(stderr, "[mpcredit] f=%ld %s is won already: left\n", autotest_frame(), race_name(race)); return 0; }
-    if (rd(G_GAMEMODE) != 1u){ fprintf(stderr, "[mpcredit] f=%ld %s: not in the career (mode 0x%x): left\n", autotest_frame(), race_name(race), rd(G_GAMEMODE)); return 0; }
+    if (guest_rd32(G_GAMEMODE) != 1u){ fprintf(stderr, "[mpcredit] f=%ld %s: not in the career (mode 0x%x): left\n", autotest_frame(), race_name(race), guest_rd32(G_GAMEMODE)); return 0; }
     if (in_roam){
         if (!pend_add(race, margin)) return 0;
         fprintf(stderr, "[mpcredit] f=%ld %s: in free roam, the win waits for the next crib\n", autotest_frame(), race_name(race));
@@ -635,13 +626,13 @@ int mpcredit_pending(void){ return g_pend.n; }
  * autosave off takes none).  A question or a movie whose crib went away (the player left it some other way) is
  * dropped */
 void mpcredit_frame(CPU *c){
-    if (rd(G_GAMEMODE) == 1u){
+    if (guest_rd32(G_GAMEMODE) == 1u){
         char pn[33]; live_profile(pn);
         unsigned loads = garage_profile_loads();
         if (pn[0] && (strcasecmp(pn, g_pend.profile) || loads != g_pend.loads)) pend_load(pn, loads);
     }
     if (g_ui.st != UI_NONE){
-        int gone = rd(G_GAMEMODE) != 1u || ((g_ui.st == UI_OFFER || g_ui.st == UI_ASKED || (g_ui.st == UI_WAIT && !g_ui.leaving))
+        int gone = guest_rd32(G_GAMEMODE) != 1u || ((g_ui.st == UI_OFFER || g_ui.st == UI_ASKED || (g_ui.st == UI_WAIT && !g_ui.leaving))
                                             && !career_fe_active("UI_CareerCrib.fng"));
         if (gone){
             fprintf(stderr, "[mpcredit] f=%ld the crib is gone: its %s left\n", autotest_frame(), g_ui.st == UI_WAIT ? "movie" : "sponsor question");
@@ -652,15 +643,15 @@ void mpcredit_frame(CPU *c){
         ui_ready(c);                               /* (the crib's handler patched: its way to the world is ours) */
     }
     if (!g_pend.n) return;
-    if (rd(G_GAMEMODE) != 1u || !career_fe_active("UI_CareerCrib.fng") || career_fe_active("MC_Main.fng")){ g_pend.since = 0; return; }
+    if (guest_rd32(G_GAMEMODE) != 1u || !career_fe_active("UI_CareerCrib.fng") || career_fe_active("MC_Main.fng")){ g_pend.since = 0; return; }
     long f = autotest_frame();
     if (!g_pend.since) g_pend.since = f;
-    if (!rd(G_SNAPSHOT) && f - g_pend.since < 180) return;
+    if (!guest_rd32(G_SNAPSHOT) && f - g_pend.since < 180) return;
     uint32_t r = g_pend.race[0]; float m = g_pend.margin[0];
     for (int i = 1; i < g_pend.n; i++){ g_pend.race[i - 1] = g_pend.race[i]; g_pend.margin[i - 1] = g_pend.margin[i]; }
     g_pend.n--;
     if (!race_in_table(r) || event_won(MR32(r + 8u))){ fprintf(stderr, "[mpcredit] f=%ld a waiting win: won already or gone, left\n", f); pend_write(); return; }
-    fprintf(stderr, "[mpcredit] f=%ld the waiting win of %s, in the crib%s\n", f, race_name(r), rd(G_SNAPSHOT) ? "" : " (no snapshot: the autosave is off)");
+    fprintf(stderr, "[mpcredit] f=%ld the waiting win of %s, in the crib%s\n", f, race_name(r), guest_rd32(G_SNAPSHOT) ? "" : " (no snapshot: the autosave is off)");
     if (win_now(c, r, m)) pend_given(r, m); else pend_write();
 }
 
@@ -668,9 +659,9 @@ void mpcredit_frame(CPU *c){
  * "mpcredit unwin:NAME": the race not won in the career any more (its event entry's won flag, as a load of an older
  * save of the profile has it), for what a profile written then does with a win given but not saved */
 int mpcredit_test(const char *names, float margin){
-    uint32_t t = rd(G_RACES), n = rd(G_NRACES); int got = 0;
+    uint32_t t = guest_rd32(G_RACES), n = guest_rd32(G_NRACES); int got = 0;
     if (!strncasecmp(names, "unwin:", 6)){
-        uint32_t r = 0, ne = rd(G_CAREER + C_NEVENTS);
+        uint32_t r = 0, ne = guest_rd32(G_CAREER + C_NEVENTS);
         for (uint32_t i = 0; t && i < n && i < 1024 && !r; i++) if (!strcasecmp(race_name(t + i * RACE_SZ), names + 6)) r = t + i * RACE_SZ;
         for (uint32_t i = 0; r && i < ne && i < 384; i++)
             if (MR32(G_CAREER + C_EVENTS + 8u * i) == MR32(r + 8u)){ MR8(G_CAREER + C_EVENTS + 8u * i + 6u) = 0; got = 1; }

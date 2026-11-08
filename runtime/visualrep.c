@@ -30,6 +30,7 @@
  * own rating.  NFSU2_CAREER_BOT_VISUAL (career.c's test bot, the same float)
  * wins over the stage's value. */
 #include "cpu.h"
+#include "setting.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -43,9 +44,7 @@ static float g_said = -1.f;           /* the last value logged */
 
 static void visualrep_init(void){
     if (g_on >= 0) return;
-    /* the page writes 1 or 0; the Mac app passes the line's own on/off */
-    const char *e = getenv("NFSU2_VISUAL_REP_REMOVER");
-    g_on = e && *e && *e != '0' && strcasecmp(e, "off") && strcasecmp(e, "no") && strcasecmp(e, "false");
+    g_on = setting_bool("NFSU2_VISUAL_REP_REMOVER", 0);
     if (!g_on) return;
     const char *b = getenv("NFSU2_CAREER_BOT_VISUAL");
     g_rate = !(b && atof(b) > 0);

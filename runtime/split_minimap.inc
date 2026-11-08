@@ -44,13 +44,13 @@ static void mm_collect(CPU *c){
         uint32_t p = MR32(SPLIT_PLAYERS_INDEX + k*4), hud = p ? MR32(p + 0x9a4) : 0;
         uint32_t name = hud ? MR32(hud + 0x10) : 0;
         if (!name) continue;
-        uint32_t e = split_call(c, 0x51bb70u, 0x8637b0u, 1, &name);
+        uint32_t e = gcall(c, 0x51bb70u, 0x8637b0u, 1, &name);
         pkg[k] = e ? MR32(e + 0x18) : 0;
     }
     for (unsigned j = 0; j < 2; ++j){
         uint32_t name = 0xd09400u;
         snprintf((char *)g_mem + name, 160, "PlayerCarIndicator_%u", j+1);
-        hashes[j] = split_call(c, 0x505450u, 0, 1, &name);
+        hashes[j] = gcall(c, 0x505450u, 0, 1, &name);
     }
     mm_first_extra = split_coop_hud() ? 1 : 2;
     for (int k = 0; k < split_render_limit(); ++k){
@@ -65,16 +65,16 @@ static int mm_extend(CPU *c, uint32_t mgr){
     if (mm_extended == mgr) return 1;
     for (int k = mm_first_extra; k < split_render_limit(); ++k) if (!mm_marker[k]) return 0;
     for (int k = mm_first_extra; k < split_render_limit(); ++k){
-        uint32_t pool = MR32(0x8364b4u), desc = split_call(c, 0x43f8f0u, 0, 1, &pool);
+        uint32_t pool = MR32(0x8364b4u), desc = gcall(c, 0x43f8f0u, 0, 1, &pool);
         if (!desc) return 0;
-        uint32_t node = split_call(c, 0x440ec0u, 0, 0, 0);
+        uint32_t node = gcall(c, 0x440ec0u, 0, 0, 0);
         if (!node) return 0;
         MR32(desc) = mm_marker[k]; MR32(desc+4) = 4;
         uint32_t tail = MR32(0x836564u);
         MR32(node+8) = desc; MR32(tail) = node; MR32(0x836564u) = node;
         MR32(node+4) = tail; MR32(node) = 0x836560u;
         uint32_t a[] = {4, (uint32_t)k};
-        if (!split_call(c, 0x4ec790u, mgr, 2, a)) return 0;
+        if (!gcall(c, 0x4ec790u, mgr, 2, a)) return 0;
     }
     mm_extended = mgr; return 1;
 }
@@ -117,8 +117,8 @@ static void mm_drop_extras(CPU *c, uint32_t mgr){
         uint32_t next = MR32(e), desc = MR32(e+0x1c);
         if (desc && MR32(desc+4) == 4 && MR32(e+8) >= (uint32_t)mm_first_extra){
             uint32_t prev = MR32(e+4); MR32(prev) = next; MR32(next+4) = prev;
-            uint32_t a[] = {MR32(0x8364b4u), desc}; split_call(c, 0x43f920u, 0, 2, a);
-            a[0] = MR32(0x8364b8u); a[1] = e; split_call(c, 0x43f920u, 0, 2, a);
+            uint32_t a[] = {MR32(0x8364b4u), desc}; gcall(c, 0x43f920u, 0, 2, a);
+            a[0] = MR32(0x8364b8u); a[1] = e; gcall(c, 0x43f920u, 0, 2, a);
         }
         e = next;
     }

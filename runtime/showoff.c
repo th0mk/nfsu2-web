@@ -53,6 +53,7 @@
  *
  * Tests: tests/scripts/showoff_*.txt; "[showoff]" log lines. */
 #include "cpu.h"
+#include "guest.h"
 #include "coop.h"
 #include "kbd.h"
 #include "gamepad.h"
@@ -64,12 +65,10 @@
 #include <strings.h>
 #include <time.h>
 
-void dispatch_indirect(CPU *c, uint32_t addr);
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
 long autotest_frame(void);
 
 #define DIK_O          0x18u         /* in none of the game's key maps */
-#define HOOK_RET       0x00581475u   /* the main-loop hook's return address, as guest calls see it */
 #define G_FLOW         0x008654a4u   /* 6: in the world */
 #define G_GAMEMODE     0x00850078u   /* 1 career, 8 Online, 0x200 LAN */
 #define G_RACE         0x00890118u   /* the race coordinator: +0 state (4 racing, 6 paused), +0x24 racers */
@@ -112,26 +111,7 @@ long autotest_frame(void);
 #define SO_CARS        (1 + SO_FRIENDS)
 #define SO_TYPES       48
 
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
-static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
-static void cstr(uint32_t a, char *o, int n){
-    int i = 0;
-    for (; a && i + 1 < n && ok(a + (uint32_t)i, 0) && MR8(a + (uint32_t)i); i++) o[i] = (char)MR8(a + (uint32_t)i);
-    o[i] = 0;
-}
 static double now_s(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec + ts.tv_nsec * 1e-9; }
-/* a guest function with ecx and stack arguments, the CPU as it was after (from the main-loop hook only) */
-static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(HOOK_RET);
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
 
 /* a car: the player's (0) or a friend's (1 + roam_game.c's slot) */
 typedef struct {
@@ -162,8 +142,8 @@ static const char *const k_part[4] = { "hood", "trunk", "left door", "right door
 
 /* the bank of a car type (0x433A30's walk; 0: its animations are not in) */
 static uint32_t bank_of(uint32_t type){
-    uint32_t e = rd32(G_BANKS), b = e ? e - 4u : 0;
-    for (int n = 0; b && b != G_BANKS - 4u && n < 256 && ok(b, 0x28); n++){
+    uint32_t e = guest_rd32(G_BANKS), b = e ? e - 4u : 0;
+    for (int n = 0; b && b != G_BANKS - 4u && n < 256 && guest_ok(b, 0x28); n++){
         if (MR32(b + 0x24u) == type) return b;
         e = MR32(b + 4u); b = e ? e - 4u : 0;
     }
@@ -172,25 +152,25 @@ static uint32_t bank_of(uint32_t type){
 
 /* free roam's world: its own race, paused or not, not an outrun, a career race or an online one */
 static int roam_world(void){
-    uint32_t r = rd32(G_RACE), pl = rd32(G_PLAYER1);
-    return rd32(G_FLOW) == 6u && ok(r, 0x28) && MR32(r + 0x24u) == 1u && (MR32(r) == 4u || MR32(r) == 6u) &&
-           !rd32(G_CAREER_RACE) && rd32(G_RACEKIND) == 0u && !(rd32(G_GAMEMODE) & 0x208u) && pl && rd32(pl + 4u);
+    uint32_t r = guest_rd32(G_RACE), pl = guest_rd32(G_PLAYER1);
+    return guest_rd32(G_FLOW) == 6u && guest_ok(r, 0x28) && MR32(r + 0x24u) == 1u && (MR32(r) == 4u || MR32(r) == 6u) &&
+           !guest_rd32(G_CAREER_RACE) && guest_rd32(G_RACEKIND) == 0u && !(guest_rd32(G_GAMEMODE) & 0x208u) && pl && guest_rd32(pl + 4u);
 }
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(void){
-    uint32_t pl = rd32(G_PLAYER1), hud = pl ? rd32(pl + 0x9a4u) : 0, fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0,
+    uint32_t pl = guest_rd32(G_PLAYER1), hud = pl ? guest_rd32(pl + 0x9a4u) : 0, fe = guest_rd32(G_FENG), mg = fe ? guest_rd32(fe + 8u) : 0,
              top = mg ? coop_fe_top(mg) : 0;
     char a[40], b[40];
-    cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
+    guest_read_str(top ? guest_rd32(top + 0xcu) : 0, a, sizeof a); guest_read_str(hud ? guest_rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b);
 }
-static int typing(void){ return rd32(G_FLOW) != 6u || (mem_is_committed(G_TXT_REC + 3u) && MR8(G_TXT_ON) && MR32(G_TXT_REC)); }
+static int typing(void){ return guest_rd32(G_FLOW) != 6u || (mem_is_committed(G_TXT_REC + 3u) && MR8(G_TXT_ON) && MR32(G_TXT_REC)); }
 /* a cover shoot is on (its screens on top: UI_ShowCase_Preview.fng, UI_Showcase_DPAD.fng): it opens and closes the
  * player's car's parts itself, on the game's list */
 static int shoot_on(void){
-    uint32_t fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? coop_fe_top(mg) : 0;
+    uint32_t fe = guest_rd32(G_FENG), mg = fe ? guest_rd32(fe + 8u) : 0, top = mg ? coop_fe_top(mg) : 0;
     char a[40];
-    cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a);
+    guest_read_str(top ? guest_rd32(top + 0xcu) : 0, a, sizeof a);
     return !strncasecmp(a, "UI_Showcase", 11);
 }
 
@@ -234,14 +214,14 @@ uint32_t showoff_pad(uint32_t b, uint32_t D){
 static int mem_ok(CPU *c){
     if (S.mem) return 1;
     uint32_t sz = SO_CARS * 4u * NODE_SZ + SO_TYPES * 64u;
-    S.mem = gcall(c, FN_MALLOC, 0, 1, &sz);
+    S.mem = gcall_main(c, FN_MALLOC, 0, 1, &sz);
     if (!S.mem){ fprintf(stderr, "[showoff] guest malloc failed\n"); return 0; }
     for (uint32_t i = 0; i < sz; i += 4) MR32(S.mem + i) = 0;
     return 1;
 }
 /* a car type's animations in (1), or on the way (0, loading them; -1: they can't be had) */
 static int bank_ready(CPU *c, uint32_t ti){
-    uint32_t type = ok(ti, 0xd4) ? MR32(ti + 0xd0u) : 0;
+    uint32_t type = guest_ok(ti, 0xd4) ? MR32(ti + 0xd0u) : 0;
     if (!type) return -1;
     if (bank_of(type)) return 1;
     if (!roam_world()) return 0;                                       /* loads only out in free roam (sub_00438140) */
@@ -255,7 +235,7 @@ static int bank_ready(CPU *c, uint32_t ti){
     long f = autotest_frame();
     if (k->st == 1 && f - k->since < 600) return 0;                    /* on the way (10 s at most) */
     char nm[24], path[64];
-    cstr(ti, nm, sizeof nm);
+    guest_read_str(ti, nm, sizeof nm);
     /* not in after 10 s, or its bank gone with the file still in: load it again.  The old file is left loaded, never
      * unloaded: the game's file unload (0x580E90 -> 0x439D70) takes the first bank of the file's car type off the list,
      * and with none there it calls through 0 (exit 134, 2026-11-02: ... car_apply); one that comes in late is a
@@ -269,7 +249,7 @@ static int bank_ready(CPU *c, uint32_t ti){
     for (int i = 0; i < 64; i++) MR8(k->name + (uint32_t)i) = (uint8_t)path[i < (int)sizeof path ? i : 63];
     MR8(k->name + 63u) = 0;
     uint32_t a[6] = { k->name, 0, 0, 1, FN_NOP, 0 };
-    k->file = gcall(c, FN_LOAD, 0, 6, a);
+    k->file = gcall_main(c, FN_LOAD, 0, 6, a);
     k->st = 1; k->since = f; k->tries++;
     fprintf(stderr, "[showoff] f=%ld %s: loading the car's part animations (%s)\n", f, nm, k->file ? "under way" : "FAILED");
     return 0;
@@ -279,37 +259,37 @@ static int bank_ready(CPU *c, uint32_t ti){
  * the door style part's attribute (scissor doors on a wide body: the wide body's), the trunk's the one; *mark: the
  * hood is the car's "style 22" hood */
 static uint32_t so_kind(CPU *c, uint32_t ri, int part, uint32_t *mark){
-    uint32_t ride = rd32(ri + RI_RIDE), ti = rd32(ri + RI_TYPE), type = ok(ti, 0xd4) ? MR32(ti + 0xd0u) : 0, kind = 0;
+    uint32_t ride = guest_rd32(ri + RI_RIDE), ti = guest_rd32(ri + RI_TYPE), type = guest_ok(ti, 0xd4) ? MR32(ti + 0xd0u) : 0, kind = 0;
     *mark = 0;
-    if (!ok(ride, 0x8f0)) return 0;
+    if (!guest_ok(ride, 0x8f0)) return 0;
     if (part == 0){
-        uint32_t h = rd32(ride + RIDE_HOOD);
-        if (!ok(h, 0xe) || (MR8(h + 5u) & 0x1fu) != 5u) return 0;
-        uint32_t s = S_ATTR_HOOD, ah = gcall(c, FN_HASH, 0, 1, &s), aa[2] = { ah, 0 }, at = gcall(c, FN_ATTR, h, 2, aa);
-        kind = ok(at, 8) && MR32(at + 4u) ? 4u : 2u;
+        uint32_t h = guest_rd32(ride + RIDE_HOOD);
+        if (!guest_ok(h, 0xe) || (MR8(h + 5u) & 0x1fu) != 5u) return 0;
+        uint32_t s = S_ATTR_HOOD, ah = gcall_main(c, FN_HASH, 0, 1, &s), aa[2] = { ah, 0 }, at = gcall_main(c, FN_ATTR, h, 2, aa);
+        kind = guest_ok(at, 8) && MR32(at + 4u) ? 4u : 2u;
         uint32_t key = (uint32_t)MR16(h + 2u) << 16 | MR16(h), s1[2] = { S_STYLE22, type }, s2[2] = { S_STYLE22CF, type };
-        *mark = key == gcall(c, FN_HASH2, 0, 2, s1) || key == gcall(c, FN_HASH2, 0, 2, s2);
+        *mark = key == gcall_main(c, FN_HASH2, 0, 2, s1) || key == gcall_main(c, FN_HASH2, 0, 2, s2);
         return kind;
     }
     if (part == 1) return 0;
-    uint32_t d = rd32(ride + RIDE_DOORS);
-    if (!ok(d, 0xe)) return 0;
-    uint32_t s = S_ATTR_DOOR, ah = gcall(c, FN_HASH, 0, 1, &s), aa[2] = { ah, 0 }, at = gcall(c, FN_ATTR, d, 2, aa);
-    if (!ok(at, 8)) return 0;
+    uint32_t d = guest_rd32(ride + RIDE_DOORS);
+    if (!guest_ok(d, 0xe)) return 0;
+    uint32_t s = S_ATTR_DOOR, ah = gcall_main(c, FN_HASH, 0, 1, &s), aa[2] = { ah, 0 }, at = gcall_main(c, FN_ATTR, d, 2, aa);
+    if (!guest_ok(at, 8)) return 0;
     kind = MR32(at + 4u);
     if (kind == 1u){
-        uint32_t w = rd32(ride + RIDE_WIDE);
-        if (ok(w, 6)){ uint8_t b = MR8(w + 5u); if ((b >> 5) && (b & 0x1fu)) kind = (b & 0x1fu) + 2u; }
+        uint32_t w = guest_rd32(ride + RIDE_WIDE);
+        if (guest_ok(w, 6)){ uint8_t b = MR8(w + 5u); if ((b >> 5) && (b & 0x1fu)) kind = (b & 0x1fu) + 2u; }
     }
     return kind;
 }
 /* the player's car sounds as the shoot's does: the hood 3 / 2, the trunk 5 / 4, the doors (as one) 1 / 0 */
 static void so_sound(CPU *c, int part, int open){
     if (part == 3) return;
-    uint32_t snd = rd32(G_SOUND), w = snd ? rd32(snd + 0x78u) : 0;
-    if (!w || rd32(snd + 0x90u) == 1u) return;
+    uint32_t snd = guest_rd32(G_SOUND), w = snd ? guest_rd32(snd + 0x78u) : 0;
+    if (!w || guest_rd32(snd + 0x90u) == 1u) return;
     uint32_t which = part == 0 ? (open ? 3u : 2u) : part == 1 ? (open ? 5u : 4u) : (open ? 1u : 0u);
-    gcall(c, FN_SOUND, w, 1, &which);
+    gcall_main(c, FN_SOUND, w, 1, &which);
 }
 
 static int live_of(const Car *k){
@@ -336,8 +316,8 @@ static void car_reset(Car *k){
  * bank closes at once.  Test: tests/scripts/showoff_stale.txt (NFSU2_TEST_SHOWOFF_STALE=1, script runs only: the
  * player's car's trunk node first made for a type with no animations, as a slot's earlier car leaves it). */
 static void car_apply(CPU *c, Car *k, int sound, const char *who){
-    if (k->want == k->has || !ok(k->ri, 0x2d48)) return;
-    uint32_t ti = rd32(k->ri + RI_TYPE);
+    if (k->want == k->has || !guest_ok(k->ri, 0x2d48)) return;
+    uint32_t ti = guest_rd32(k->ri + RI_TYPE);
     int r = bank_ready(c, ti);
     if (r <= 0){
         if (r < 0 && k->has){ for (int p = 0; p < 4; p++) if (k->node[p]) MR32(k->node[p] + 0x10u) = 1u; k->has = 0; }
@@ -350,7 +330,7 @@ static void car_apply(CPU *c, Car *k, int sound, const char *who){
     if (stale < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_SHOWOFF_STALE"); stale = s && *s && e && *e == '1'; }
     if (stale == 1 && idx == 0 && !k->node[1]){
         uint32_t n = k->node[1] = S.mem + NODE_SZ, a[5] = { k->type ^ 0x5a5a5a5au, 0x3f800000u, 1u, 0u, 0u };
-        gcall(c, FN_NODE_INIT, n, 5, a);
+        gcall_main(c, FN_NODE_INIT, n, 5, a);
         MR32(n + 0x10u) = 1u; stale = 2;
         fprintf(stderr, "[showoff] f=%ld test: my car's trunk node is one of another car type, closed\n", autotest_frame());
     }
@@ -362,13 +342,13 @@ static void car_apply(CPU *c, Car *k, int sound, const char *who){
         if (w && (!n || MR32(n + 0x20u) != k->type)){
             n = k->node[p] = S.mem + ((uint32_t)idx * 4u + (uint32_t)p) * NODE_SZ;
             uint32_t a[5] = { k->type, 0x3f800000u, (uint32_t)p, kind, mark };
-            gcall(c, FN_NODE_INIT, n, 5, a);                          /* opening, from now */
+            gcall_main(c, FN_NODE_INIT, n, 5, a);                          /* opening, from now */
         } else if (!w && !bank_of(MR32(n + 0x20u))){
             MR32(n + 0x10u) = 1u;                                     /* closed at once: no animation to close by */
         } else {
             if (w){ MR32(n + 8u) = 0x3f800000u; MR32(n + 0x14u) = kind; MR8(n + 0x24u) = (uint8_t)mark; }
             uint32_t a[2] = { n, w ? 2u : 3u };
-            gcall(c, FN_NODE_GO, 0, 2, a);
+            gcall_main(c, FN_NODE_GO, 0, 2, a);
         }
         if (sound) so_sound(c, p, w);
         k->has ^= bit;
@@ -377,8 +357,8 @@ static void car_apply(CPU *c, Car *k, int sound, const char *who){
 }
 /* a car of ours to show: its car (0: none), what should be open */
 static void car_set(Car *k, uint32_t car, uint8_t want){
-    uint32_t ri = ok(car, 0x9e0) ? rd32(car + CAR_RI) : 0, ti = ok(ri, 0x2d48) ? rd32(ri + RI_TYPE) : 0;
-    uint32_t type = ok(ti, 0xd4) ? MR32(ti + 0xd0u) : 0;
+    uint32_t ri = guest_ok(car, 0x9e0) ? guest_rd32(car + CAR_RI) : 0, ti = guest_ok(ri, 0x2d48) ? guest_rd32(ri + RI_TYPE) : 0;
+    uint32_t type = guest_ok(ti, 0xd4) ? MR32(ti + 0xd0u) : 0;
     if (!type){ if (k->car) car_reset(k); return; }
     if (k->car != car || k->ri != ri || k->type != type){ car_reset(k); k->car = car; k->ri = ri; k->type = type; }
     k->want = want & RC_OPEN_ALL;
@@ -397,9 +377,9 @@ uint8_t showoff_mine(void){ return S.car[0].car ? S.car[0].want : 0; }
 
 /* each frame, from the main-loop hook */
 void showoff_frame(CPU *c){
-    int world = roam_world(), top = world && hud_on_top() && !rd32(G_FREEZE);
-    uint32_t pl = rd32(G_PLAYER1), car = pl ? rd32(pl + 4u) : 0;
-    float v = ok(car, 0x9e0) ? fabsf(MRF32(car + CAR_SPEED)) : 0.f;
+    int world = roam_world(), top = world && hud_on_top() && !guest_rd32(G_FREEZE);
+    uint32_t pl = guest_rd32(G_PLAYER1), car = pl ? guest_rd32(pl + 4u) : 0;
+    float v = guest_ok(car, 0x9e0) ? fabsf(MRF32(car + CAR_SPEED)) : 0.f;
     if (!(v == v)) v = 0.f;
     int stands = top && v < OPEN_MPS;
     S.gate = top; S.moving = !stands;
@@ -477,8 +457,8 @@ static uint32_t trunk_rec(const Car *k){
     static int game_way = -1;                                          /* test aid, script runs only: the game's drawing */
     if (game_way < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_TRUNK_GAMEWAY"); game_way = s && *s && e && *e == '1'; }
     if (game_way) return 0;
-    uint32_t n = k->node[1], car = k->car, rec = ok(car, 0x9e0) ? rd32(car + CAR_REC) : 0, cam = rd32(G_VIEW1 + 0x40u);
-    if (!n || MR32(n + 0x10u) == 1u || !ok(rec, 8) || rd32(k->ri) != car || !ok(cam, 0x4c)) return 0;
+    uint32_t n = k->node[1], car = k->car, rec = guest_ok(car, 0x9e0) ? guest_rd32(car + CAR_REC) : 0, cam = guest_rd32(G_VIEW1 + 0x40u);
+    if (!n || MR32(n + 0x10u) == 1u || !guest_ok(rec, 8) || guest_rd32(k->ri) != car || !guest_ok(cam, 0x4c)) return 0;
     float dx = MRF32(car + CAR_POS) - MRF32(cam + 0x40u), dy = MRF32(car + CAR_POS + 4u) - MRF32(cam + 0x44u),
           dz = MRF32(car + CAR_POS + 8u) - MRF32(cam + 0x48u), d2 = dx * dx + dy * dy + dz * dz;
     return d2 == d2 && d2 < TRUNK_NEAR_M * TRUNK_NEAR_M ? rec : 0;
@@ -542,7 +522,7 @@ static void drop_ours(CPU *c){
         Bank *k = &S.bank[i];
         if (!k->file || !bank_of(k->type)) continue;                   /* (still loading: not on the list yet) */
         uint32_t a = k->file;
-        gcall(c, FN_UNLOAD, 0, 1, &a);
+        gcall_main(c, FN_UNLOAD, 0, 1, &a);
         k->file = 0; k->st = 0; k->tries = 0; n++;
     }
     if (!n) return;
@@ -564,14 +544,14 @@ void sub_00438140(CPU *c){
     if (game_way){ sub_00438140_orig(c); return; }
     uint32_t type = MR32(c->esp + 4u);
     if (!lost) drop_ours(c);
-    uint32_t e = rd32(G_BANKS), b = e ? e - 4u : 0;
-    for (int n = 0; b && b != G_BANKS - 4u && n < 4096 && ok(b, 0x28); n++){
+    uint32_t e = guest_rd32(G_BANKS), b = e ? e - 4u : 0;
+    for (int n = 0; b && b != G_BANKS - 4u && n < 4096 && guest_ok(b, 0x28); n++){
         uint32_t ne = MR32(b + 4u), next = ne ? ne - 4u : 0;           /* read before the bank is deleted */
         if (!type || MR32(b + 0x24u) == type){
             uint32_t pv = MR32(b + 8u), nx = MR32(b + 4u), one = 1;
             MR32(pv) = nx; MR32(nx + 4u) = pv;
-            gcall(c, FN_BANK_FREE, b, 0, 0);
-            gcall(c, MR32(MR32(b)), b, 1, &one);
+            gcall_main(c, FN_BANK_FREE, b, 0, 0);
+            gcall_main(c, MR32(MR32(b)), b, 1, &one);
             fprintf(stderr, "[showoff] f=%ld a bank was still on the list: deleted\n", autotest_frame());
         }
         b = next;

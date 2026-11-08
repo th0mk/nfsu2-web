@@ -22,18 +22,19 @@
  * half as well, and the game's own keys but player 2's (dinput_kbd.c hides those from the game's keyboard).
  */
 #include "cpu.h"
+#include "guest.h"
 #include "splitscreen_mem.h"
 #include "gamepad.h"
 #include "kbd.h"
 #include "coop.h"
 #include "widescreen.h"           /* HOOK_SITE */
+#include "setting.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <strings.h>
 
-void dispatch_indirect(CPU *c, uint32_t addr);
 long autotest_frame(void);
 
 #define G_FLOW        0x008654a4u   /* GameFlowManager state: 6 in the world */
@@ -92,16 +93,9 @@ static long coop_settled;           /* frames free roam has been as roaming want
  * ends (then we free it: the World's teardown frees only the Players in its order) */
 static uint32_t coop_parked, coop_parked_pl, coop_parked_world, coop_parked_rec;
 
+/* a guest function with ecx, edx and stack arguments, returning to itself (guest.h) */
 static uint32_t call(CPU *c, uint32_t fn, uint32_t ecx, uint32_t edx, unsigned n, const uint32_t *args){
-    CPU saved = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (unsigned i = n; i; --i) PUSH32(args[i - 1]);
-    c->ecx = ecx; c->edx = edx;
-    PUSH32(fn);
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = saved;
-    return r;
+    return guest_call_ex(c, fn, ecx, edx, (int)n, args, fn, 256u);
 }
 static uint32_t p1_car(void){
     uint32_t p = MR32(SPLIT_PLAYERS_INDEX);
@@ -688,8 +682,7 @@ uint32_t gamepad_local_join_stamp(unsigned seat);
 void coop_item(CPU *c, uint32_t menu){
     if (MR32(G_GAMEMODE) != 1u || MR32(G_RACEPARAMS + 0x10u) != 0u) return;
     /* NFSU2_COOP (settings.ini coop): off on phones and tablets (the page's device defaults: one touch screen) */
-    const char *e = getenv("NFSU2_COOP");
-    if (e && (e[0] == '0' || !strcasecmp(e, "off") || !strcasecmp(e, "no") || !strcasecmp(e, "false"))) return;
+    if (!setting_bool("NFSU2_COOP", 1)) return;
     coop_texts(c);
     uint32_t n = ITEM_BYTES, it = call(c, FN_NEW, 0, 0, 1, &n);
     if (!it) return;

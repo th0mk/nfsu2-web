@@ -2,6 +2,7 @@
  * Source: Copyright (c) 2026 mihaits, MIT (licenses/NFSU2-SplitScreen.txt).
  * Guest calls run through the lifted dispatcher, never native x86 pointers. */
 #include "cpu.h"
+#include "guest.h"
 void garage_split_keep(CPU *c);            /* garage.c: slots 6-10 aside for the mode */
 #include <string.h>
 #include <stdlib.h>
@@ -65,18 +66,6 @@ static SplitCell split_cell(int seat){
     void com_backbuffer_size(unsigned *, unsigned *);
     com_backbuffer_size(&width, &height);
     return split_layout_cell(split_render_limit(), seat, width, height, 0);
-}
-
-static uint32_t split_call(CPU *c, uint32_t fn, uint32_t self, unsigned n, const uint32_t *args){
-    CPU saved = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (unsigned i = n; i; --i) PUSH32(args[i - 1]);
-    c->ecx = self;
-    PUSH32(fn);
-    dispatch_indirect(c, fn);
-    uint32_t result = c->eax;
-    *c = saved;
-    return result;
 }
 
 static int split_menu_players, split_entering, split_seat, split_carsel_active;
@@ -231,7 +220,7 @@ static void split_pause_refresh(CPU *c){
     for (unsigned i = 0; i < 4; ++i){
         uint32_t name = 0x00d09400u;
         strcpy((char *)g_mem + name, names[i]);
-        active |= !!(split_call(c, 0x52cf60u, 0, 1, &name) & 255);
+        active |= !!(gcall(c, 0x52cf60u, 0, 1, &name) & 255);
     }
     if (active) split_pause_seen = 1;
     else if (split_pause_seen || !(split_racing() || coop_in() || coop_racing_together())){
@@ -408,13 +397,13 @@ void sub_006373e0(CPU *c){
         MR32(c->esp + 4) = index;
         MR32(c->esp + 16) = SPLIT_NAMES + index * 16;
         uint32_t skin = index + 1;
-        split_call(c, 0x61c280u, MR32(c->esp + 12), 1, &skin);
+        gcall(c, 0x61c280u, MR32(c->esp + 12), 1, &skin);
     }
     sub_006373e0_orig(c);
 }
 
 static uint32_t split_alloc(CPU *c, uint32_t size){
-    return split_call(c, 0x575620u, 0, 1, &size);
+    return gcall(c, 0x575620u, 0, 1, &size);
 }
 
 /* Native frontend flow. The extra option uses Quick Race's real vtable;
@@ -438,7 +427,7 @@ static void split_menu_sound(CPU *c, unsigned event){
     int sound=(int8_t)MR8(0x837fe0u+event*0x1bu+style);
     if(manager && sound>=0){
         uint32_t a=(uint32_t)sound;
-        split_call(c,0x458520u,manager,1,&a);
+        gcall(c,0x458520u,manager,1,&a);
         if(getenv("NFSU2_SPLIT_MENU_LOG")) fprintf(stderr,"[split sound] event=%u sound=%d\n",event,sound);
     }
 }
@@ -453,7 +442,7 @@ static void split_count_bar(CPU *c){
         /* Use the active list for both the count selector and restored main
          * menu; their cached native scrollbar indices can be stale. */
         uint32_t a[] = {1, count, selected};
-        split_call(c, 0x538080u, menu+0x84, 3, a);
+        gcall(c, 0x538080u, menu+0x84, 3, a);
         /* Main-menu animations leave the track and thumb fully transparent;
          * showing the objects alone does not restore their FE opacity. */
         for (unsigned j=0; j<2; ++j){
@@ -480,15 +469,15 @@ static uint32_t split_lang_text(CPU *c, uint32_t hash){
 static void split_menu_title(CPU *c, const char *text){
     split_text(SPLIT_FE_TEXT+160, text);
     uint32_t a[] = {MR32(split_main_menu+4), 0x42adb44cu, SPLIT_FE_TEXT+160};
-    split_call(c, 0x537b80u, 0, 3, a);
+    gcall(c, 0x537b80u, 0, 3, a);
 }
 static void split_menu_fade_in(CPU *c){
     /* Play the native menu entrance once after the carousel is prepared. */
     split_text(SPLIT_FE_TEXT+320, "INIT");
     uint32_t a[] = {MR32(split_main_menu+4), 0x47ff4e7cu, SPLIT_FE_TEXT+320, 1};
-    split_call(c, 0x537c00u, 0, 4, a);
+    gcall(c, 0x537c00u, 0, 4, a);
     if (getenv("NFSU2_SPLIT_MENU_LOG")){
-        uint32_t group=split_call(c,0x5379c0u,0,2,a), anim=group?MR32(group+0x54):0;
+        uint32_t group=gcall(c,0x5379c0u,0,2,a), anim=group?MR32(group+0x54):0;
         fprintf(stderr,"[split fade] INIT active=%x\n",anim?MR32(anim+0x30):0);
     }
 }
@@ -513,7 +502,7 @@ static void split_spacing_keep(uint32_t o, float dy, float dh){
 static void split_spacing_setup(CPU *c){
     split_spacing_count=0;
     uint32_t a[]={MR32(split_main_menu+4),0x8d7e0c53u};
-    uint32_t root=split_call(c,0x5379c0u,0,2,a);
+    uint32_t root=gcall(c,0x5379c0u,0,2,a);
     for(uint32_t o=root?MR32(root+0x64):0,n=0;o && n<64;o=MR32(o+4),n++){
         uint32_t hash=MR32(o+0x10);
         if(hash==0x42adb44cu || hash==0x7609b60au) continue;
@@ -527,7 +516,7 @@ static void split_spacing_setup(CPU *c){
     }
     const uint32_t hashes[]={0x444969fdu,0x444969feu,0xb04669e3u,0x3fbb7a4eu,0x688a1551u};
     for(unsigned i=0;i<sizeof hashes/sizeof hashes[0];i++){
-        a[1]=hashes[i]; split_spacing_keep(split_call(c,0x5379c0u,0,2,a),-16.f,0.f);
+        a[1]=hashes[i]; split_spacing_keep(gcall(c,0x5379c0u,0,2,a),-16.f,0.f);
     }
 }
 static void split_spacing_apply(int restore){
@@ -545,11 +534,11 @@ static void split_count_scheme(CPU *c, int save){
         split_main_help_buttons=MR32(split_main_menu+0x20);
         MR32(split_main_menu+0x20)=0x404u;
         uint32_t hb=MR32(0x8384d8u), buttons[]={0x404u,MR32(split_main_menu+4)};
-        if(hb) split_call(c,0x54e6e0u,hb,2,buttons);
+        if(hb) gcall(c,0x54e6e0u,hb,2,buttons);
         uint32_t a[]={MR32(split_main_menu+4),0x42adb44cu};
-        split_title_obj=split_call(c,0x537a10u,0,2,a);
+        split_title_obj=gcall(c,0x537a10u,0,2,a);
         a[1]=0x7609b60au;
-        split_logo_obj=split_call(c,0x5379c0u,0,2,a);
+        split_logo_obj=gcall(c,0x5379c0u,0,2,a);
         if(split_title_obj){
             uint32_t d=MR32(split_title_obj+0x2c);
             split_title_align=MR32(split_title_obj+0x6c);
@@ -566,14 +555,14 @@ static void split_count_scheme(CPU *c, int save){
         MRF32(d+0x38)=MRF32(d+0x3c)=0.8f;
         MR32(split_title_obj+0x1c)|=0x400000u;
     }
-    if(split_logo_obj) split_call(c,0x50ca00u,0,1,&split_logo_obj);
+    if(split_logo_obj) gcall(c,0x50ca00u,0,1,&split_logo_obj);
     split_spacing_apply(0);
 }
 static void split_count_restore_scheme(CPU *c){
     split_spacing_apply(1);
     MR32(split_main_menu+0x20)=split_main_help_buttons;
     uint32_t hb=MR32(0x8384d8u), buttons[]={split_main_help_buttons,MR32(split_main_menu+4)};
-    if(hb) split_call(c,0x54e6e0u,hb,2,buttons);
+    if(hb) gcall(c,0x54e6e0u,hb,2,buttons);
     if(split_title_obj){
         uint32_t d=MR32(split_title_obj+0x2c);
         MR32(split_title_obj+0x6c)=split_title_align;
@@ -581,13 +570,13 @@ static void split_count_restore_scheme(CPU *c){
         MRF32(d+0x38)=split_title_geometry[2]; MRF32(d+0x3c)=split_title_geometry[3];
         MR32(split_title_obj+0x1c)|=0x400000u;
     }
-    if(split_logo_obj && !split_logo_hidden) split_call(c,0x50ca50u,0,1,&split_logo_obj);
+    if(split_logo_obj && !split_logo_hidden) gcall(c,0x50ca50u,0,1,&split_logo_obj);
     split_title_obj=split_logo_obj=0;
 }
 static void split_count_close(CPU *c){
     split_count_restore_scheme(c);
     uint32_t menu = split_main_menu;
-    split_call(c, 0x51fd10u, menu+0x4c, 0, 0);
+    gcall(c, 0x51fd10u, menu+0x4c, 0, 0);
     memcpy(g_mem+menu+0x4c, split_main_carousel, sizeof split_main_carousel);
     /* The temporary carousel shares the FNG's image objects. Restore their
      * original texture hashes before the native carousel positions them. */
@@ -596,15 +585,15 @@ static void split_count_close(CPU *c){
         uint32_t option=node-4, image=MR32(option+0x10);
         if(image){
             MR32(image+0x24)=MR32(option+0xc); MR32(image+0x1c)|=0x400000u;
-            split_call(c,0x50ca50u,0,1,&image);
+            gcall(c,0x50ca50u,0,1,&image);
         }
     }
     split_count_dialog=0; split_menu_open_pending=0;
-    split_call(c,0x538ca0u,menu,0,0);
-    split_call(c,0x50da50u,menu,0,0);
+    gcall(c,0x538ca0u,menu,0,0);
+    gcall(c,0x50da50u,menu,0,0);
     /* the game's own heading back, in the player's language */
     uint32_t text = split_title_hash ? split_lang_text(c, split_title_hash) : 0;
-    if (text){ uint32_t a[] = {MR32(menu+4), 0x42adb44cu, text}; split_call(c, 0x537b80u, 0, 3, a); }
+    if (text){ uint32_t a[] = {MR32(menu+4), 0x42adb44cu, text}; gcall(c, 0x537b80u, 0, 3, a); }
     else split_menu_title(c,"Main Menu");
     fprintf(stderr,"[split] main menu heading %08x back: %.40s\n", split_title_hash, text ? (char *)g_mem + text : "(English)");
     split_menu_fade_in(c);
@@ -613,12 +602,12 @@ static void split_count_close(CPU *c){
 static void split_count_open(CPU *c, unsigned players){
     uint32_t menu=split_main_menu;
     if(!split_bar_own){
-        uint32_t a[]={MR32(menu+4),0x42adb44cu}, title=split_call(c,0x537a10u,0,2,a);
+        uint32_t a[]={MR32(menu+4),0x42adb44cu}, title=gcall(c,0x537a10u,0,2,a);
         split_title_hash = title && mem_is_committed(title+0x63) ? MR32(title+0x60) : 0;
     }
     split_bar_own=1;
     memcpy(split_main_carousel,g_mem+menu+0x4c,sizeof split_main_carousel);
-    split_call(c,0x51fd10u,menu+0x4c,0,0);
+    gcall(c,0x51fd10u,menu+0x4c,0,0);
     /* Borrow the first three native icon objects and their spacing. Keeping
      * the existing widget preserves its panel, highlight and animations. */
     uint32_t source=MR32(menu+0x50), head=menu+0x50;
@@ -642,9 +631,9 @@ static void split_count_open(CPU *c, unsigned players){
     MR32(menu+0x58)=split_count_options[0]; MR32(menu+0x74)=3;
     MRF32(menu+0x4c+0xd8)-=16.f; /* native carousel icon baseline */
     uint32_t selected=players>=2 && players<=4 ? players-1 : 1;
-    split_call(c,0x538a30u,menu+0x4c,1,&selected);
-    split_call(c,0x538ca0u,menu,0,0);
-    split_call(c,0x50da50u,menu,0,0);
+    gcall(c,0x538a30u,menu+0x4c,1,&selected);
+    gcall(c,0x538ca0u,menu,0,0);
+    gcall(c,0x50da50u,menu,0,0);
     split_count_dialog=1;
     PadState pad; gamepad_read(&pad); split_menu_buttons=pad.buttons;
     uint8_t keys[256]; kbd_state(keys, sizeof keys); split_menu_escape=!!keys[1];
@@ -653,7 +642,7 @@ static void split_count_open(CPU *c, unsigned players){
     /* Hide unused shared icons before the first animated frame. */
     uint32_t node; memcpy(&node,split_main_carousel+4,4);
     for(unsigned k=0;node && node!=menu+0x50 && k<32;k++,node=MR32(node)){
-        if(k>=3){ uint32_t image=MR32(node-4+0x10); if(image) split_call(c,0x50ca00u,0,1,&image); }
+        if(k>=3){ uint32_t image=MR32(node-4+0x10); if(image) gcall(c,0x50ca00u,0,1,&image); }
     }
     split_menu_fade_in(c);
     split_count_bar(c);
@@ -690,7 +679,7 @@ static void split_main_react(CPU *c){
                     split_count_close(c);
                     split_return_count=1;
                     split_entering=1;
-                    split_call(c,0x4fc050u,split_option,5,split_option_args);
+                    gcall(c,0x4fc050u,split_option,5,split_option_args);
                     split_entering=0;
                     fprintf(stderr,"[split] menu selected %d players\n",split_menu_players);
                     break;
@@ -875,10 +864,10 @@ static void split_add_menu(CPU *c, uint32_t menu){
     uint32_t p = split_alloc(c, 0x48);
     if (!p) return;
     uint32_t a[] = {0x883e25d6u, 0x6a2b93ebu, 0};
-    split_call(c, 0x51f670u, p, 3, a);
+    gcall(c, 0x51f670u, p, 3, a);
     MR32(p) = 0x790c30u;
     split_option = p;
-    split_call(c, MR32(MR32(menu) + 0x18), menu, 1, &p);
+    gcall(c, MR32(MR32(menu) + 0x18), menu, 1, &p);
     split_carsel_active = 0;
 }
 void sub_004fc050(CPU *c){ sub_004fc050_orig(c); }
@@ -902,17 +891,17 @@ static void split_restore_seat(int seat){
 static void split_label(CPU *c, const char *pkg, uint32_t hash, const char *text){
     split_text(SPLIT_FE_TEXT+256, pkg);
     uint32_t a[] = {SPLIT_FE_TEXT+256, hash};
-    uint32_t obj = split_call(c, 0x537a10u, 0, 2, a);
+    uint32_t obj = gcall(c, 0x537a10u, 0, 2, a);
     if (obj){
         split_text(SPLIT_FE_TEXT+320, text);
         uint32_t b[] = {obj, SPLIT_FE_TEXT+320};
-        split_call(c, 0x537be0u, 0, 2, b);
+        gcall(c, 0x537be0u, 0, 2, b);
     }
 }
 static int split_popup(CPU *c){
     split_text(SPLIT_FE_TEXT+256, "2P_PressStart.fng");
     uint32_t a = SPLIT_FE_TEXT+256;
-    return split_call(c, 0x52cf60u, 0, 1, &a) & 255;
+    return gcall(c, 0x52cf60u, 0, 1, &a) & 255;
 }
 static void split_seat_title(CPU *c){
     char title[64];
@@ -923,7 +912,7 @@ static void split_seat_title(CPU *c){
     split_label(c, "2P_PressStart.fng", 0x2ebb974du, title);
     split_text(SPLIT_FE_TEXT+256, "Player_Name");
     uint32_t p = SPLIT_FE_TEXT+256;
-    uint32_t hash = split_call(c, 0x505450u, 0, 1, &p);
+    uint32_t hash = gcall(c, 0x505450u, 0, 1, &p);
     split_label_text(SL_PLAYER_UP, (unsigned)split_seat + 1, title, sizeof title);
     split_label(c, "UI_QRCarSelect.fng", hash, title);
     split_label(c, "GarageMain.fng", hash, title);
@@ -949,7 +938,7 @@ void sub_0053fc20_orig(CPU *c);
 static void split_start_selected(CPU *c){
     split_carsel_active = 0;
     split_restore_seat(0); split_restore_seat(1);
-    split_call(c, 0x53fc20u, 0, 0, 0);
+    gcall(c, 0x53fc20u, 0, 0, 0);
 }
 void sub_004fa2a0(CPU *c){
 #ifdef __wasm__
@@ -1005,7 +994,7 @@ static void split_minimap_names(CPU *c){
     for (unsigned i = 0; i < 140; ++i){
         if (i < 4) snprintf((char *)g_mem + name, 160, "%s", fixed[i]);
         else snprintf((char *)g_mem + name, 160, (char *)g_mem + MR32(0x7f6828u + ((i - 4) / 8) * 8), (i - 4) % 8);
-        split_minimap_hashes[i] = split_call(c, 0x505450u, 0, 1, &name);
+        split_minimap_hashes[i] = gcall(c, 0x505450u, 0, 1, &name);
     }
 }
 static unsigned split_hud_data_count, split_hud_copy;
@@ -1039,7 +1028,7 @@ static void split_map_huds(CPU *c){
         uint32_t player = MR32(SPLIT_PLAYERS_INDEX + k * 4);
         uint32_t hud = player ? MR32(player + 0x9a4) : 0, name = hud ? MR32(hud + 0x10) : 0;
         if (!name) continue;
-        uint32_t e = split_call(c, 0x51bb70u, 0x8637b0u, 1, &name), pkg = e ? MR32(e + 0x18) : 0;
+        uint32_t e = gcall(c, 0x51bb70u, 0x8637b0u, 1, &name), pkg = e ? MR32(e + 0x18) : 0;
         if (pkg) split_map_hud_objects(MR32(pkg + 0x4c), k, 0, 0);
     }
 }
@@ -1057,7 +1046,7 @@ static void split_world_for(CPU *c, unsigned seat){
         if (owner == view) return;
         MR32(entry + 0x40) = view;
         uint32_t args[] = {view, entry};
-        split_call(c, 0x5c26e0u, 0, 2, args);
+        gcall(c, 0x5c26e0u, 0, 2, args);
         memcpy(g_mem + entry + 0x60, g_mem + camera + 0x40, 12);
         memcpy(g_mem + entry + 0x70, g_mem + camera + 0x50, 12);
         MR32(entry + 0x80) = MR32(view + 0xc);
@@ -1071,7 +1060,7 @@ static void split_world_for(CPU *c, unsigned seat){
         MR32(entry + 0x84) = section;
         MR32(entry + 0x48) = MR32(entry + 0x4c) = MR32(split_world + 0x6c8);
         MR32(entry + 0x50) = MR32(split_world + 0x6cc);
-        split_call(c, 0x5e99c0u, split_world, 1, &entry);
+        gcall(c, 0x5e99c0u, split_world, 1, &entry);
         MR32(split_world + 0x6c8) = MR32(entry + 0x4c);
         return;
     }
@@ -1154,25 +1143,25 @@ static void split_init_view(CPU *c, unsigned seat){
         uint32_t cull = split_alloc(c, 0x3b0), render = split_alloc(c, 0x51c0);
         if (!cull || !render) return;
         memset(g_mem + cull, 0, 0x3b0); memset(g_mem + render, 0, 0x51c0);
-        split_call(c, 0x5e0260u, cull, 0, 0); MR32(cull) = view;
+        gcall(c, 0x5e0260u, cull, 0, 0); MR32(cull) = view;
         uint32_t args[] = {view, 0};
-        split_call(c, 0x61e150u, render, 2, args);
+        gcall(c, 0x61e150u, render, 2, args);
         MRF32(render + 0x509c) = 1.f;
         args[0] = 5; args[1] = 0x3f800000u;
-        split_call(c, 0x613050u, render, 2, args);
+        gcall(c, 0x613050u, render, 2, args);
         MR32(view + 0x60) = cull; MR32(view + 0x64) = render;
     }
     if (!cameras[seat]){
         cameras[seat] = split_alloc(c, 0x320);
         if (!cameras[seat]) return;
         memset(g_mem + cameras[seat], 0, 0x320);
-        split_call(c, 0x44f5a0u, cameras[seat], 0, 0);
+        gcall(c, 0x44f5a0u, cameras[seat], 0, 0);
     }
     MR32(view + 0x40) = cameras[seat];
 }
 
 static uint32_t split_find_car(CPU *c, unsigned index){
-    uint32_t end = split_call(c, 0x502fd0u, 0, 0, 0), list = MR32(0x890080u);
+    uint32_t end = gcall(c, 0x502fd0u, 0, 0, 0), list = MR32(0x890080u);
     if (!list) return 0;
     uint32_t node = MR32(list);
     for (unsigned guard = 0; node && node != end && guard < 1024; ++guard, node = MR32(node))
@@ -1194,7 +1183,7 @@ void sub_005f4250(CPU *c){
     if (n){ MR32(0x85ad28u) = 0; split_carsel_active = 0; }
     if (MR32(0x89e7c0u) != 2) return;
     for (unsigned index = 2; index < (unsigned)n; ++index){
-        uint32_t racer = split_call(c, 0x5ed920u, 0x89e7a0u, 1, &index);
+        uint32_t racer = gcall(c, 0x5ed920u, 0x89e7a0u, 1, &index);
         uint32_t car = split_find_car(c, index);
         if (!racer || MR32(racer + 4) != 1 || !car) continue;
         uint32_t player = split_alloc(c, 0x9c0);
@@ -1202,7 +1191,7 @@ void sub_005f4250(CPU *c){
         uint32_t twin = MR32(SPLIT_PLAYERS_INDEX + (index & 1) * 4);
         uint32_t args[] = {index, index & 1};
         split_hud_owner = index;
-        split_call(c, 0x5f1670u, player, 2, args);
+        gcall(c, 0x5f1670u, player, 2, args);
         split_hud_owner = -1;
         MR32(SPLIT_PLAYERS_INDEX + (index & 1) * 4) = twin;
         MR32(SPLIT_PLAYERS_INDEX + index * 4) = player;
@@ -1210,7 +1199,7 @@ void sub_005f4250(CPU *c){
         memcpy(g_mem + player + 0x30, g_mem + SPLIT_NAMES + index * 16, 16);
         split_init_view(c, index);
         MR32(player + 0x18) = split_view_id(index); MR32(player + 0x1c) = 0;
-        split_call(c, 0x5f3e10u, player, 1, &car);
+        gcall(c, 0x5f3e10u, player, 1, &car);
         fprintf(stderr, "[split] P%u player=%08x car=%08x view=%d\n", index + 1, player, car, split_view_id(index));
     }
 }
@@ -1223,8 +1212,8 @@ void sub_005ed960(CPU *c){
 }
 
 static int split_clone_hud(CPU *c, uint32_t src, uint32_t dst){
-    if (split_call(c, 0x51bb70u, 0x8637b0u, 1, &dst)) return 1;
-    uint32_t entry = split_call(c, 0x51bb70u, 0x8637b0u, 1, &src);
+    if (gcall(c, 0x51bb70u, 0x8637b0u, 1, &dst)) return 1;
+    uint32_t entry = gcall(c, 0x51bb70u, 0x8637b0u, 1, &src);
     if (!entry) return 0;
     uint32_t hdr = MR32(entry + 0x10);
     if (!hdr || (MR32(hdr) != 0x30210 && MR32(hdr) != 0x30203)) return 0;
@@ -1235,7 +1224,7 @@ static int split_clone_hud(CPU *c, uint32_t src, uint32_t dst){
     if (!copy) return 0;
     if (compressed){
         uint32_t args[] = {hdr + 12, copy + 8};
-        split_call(c, 0x574670u, 0, 2, args);
+        gcall(c, 0x574670u, 0, 2, args);
     } else memcpy(g_mem + copy + 8, g_mem + hdr + 8, size);
     MR32(copy) = 0x30203; MR32(copy + 4) = size;
     const char *name = (const char *)g_mem + src, *dot = strrchr(name, '.');
@@ -1249,7 +1238,7 @@ static int split_clone_hud(CPU *c, uint32_t src, uint32_t dst){
     if (!patched) return 0;
     uint32_t ne = split_alloc(c, 0x54);
     if (!ne) return 0;
-    split_call(c, 0x51b8e0u, ne, 1, &copy);
+    gcall(c, 0x51b8e0u, ne, 1, &copy);
     uint32_t head = 0x8637b4u, node = ne + 4, first = MR32(head);
     MR32(node) = first; MR32(node + 4) = head; MR32(first + 4) = node; MR32(head) = node;
     return 1;
@@ -1348,7 +1337,7 @@ void sub_005e5300(CPU *c){
                 MR32(pos) = 0xffffffffu;
                 memcpy(g_mem + pos + 4, g_mem + camera + 0x40, 8);
                 memcpy(g_mem + pos + 12, g_mem + camera + 0x1e0, 8);
-                split_zones[k] = (int16_t)split_call(c, 0x5e4f20u, 0x88eb00u, 1, &pos);
+                split_zones[k] = (int16_t)gcall(c, 0x5e4f20u, 0x88eb00u, 1, &pos);
             }
         }
         if (split_zones[k] != split_used_zones[k]) c->eax = (c->eax & ~255u) | 1;
@@ -1360,7 +1349,7 @@ static unsigned split_zone_sections(CPU *c, int16_t zone){
         int count = (int16_t)MR16(node + 0x18);
         for (int i = 0; i < count; ++i) if ((int16_t)MR16(node + 0x1a + i * 2) == zone){
             uint32_t args[] = {node, SPLIT_STREAM_LIST, 0x180};
-            unsigned n = split_call(c, 0x5dff50u, 0x883e70u, 3, args);
+            unsigned n = gcall(c, 0x5dff50u, 0x883e70u, 3, args);
             return n <= 0x180 ? n : 0;
         }
     }
@@ -1385,7 +1374,7 @@ void sub_005e5110(CPU *c){
         unsigned n = split_zone_sections(c, split_zones[k]);
         if (n){
             uint32_t args[] = {SPLIT_STREAM_LIST, n, k & 1};
-            split_call(c, 0x5dacb0u, streamer, 3, args);
+            gcall(c, 0x5dacb0u, streamer, 3, args);
         }
     }
 }
@@ -1403,7 +1392,7 @@ void sub_005df580(CPU *c){
             if (k >= 2 && (k >= (unsigned)split_render_limit() || split_zones[k - 2] <= 0)) continue;
             if (!(MR8(section + 0xb) & (1u << (k & 1)))) continue;
             uint32_t args[] = {section, k < 2 ? streamer + 0xb0 + k * 0x5c : SPLIT_STREAM_POS + (k - 2) * 0x5c};
-            int distance = (int)split_call(c, 0x5df3a0u, streamer, 2, args);
+            int distance = (int)gcall(c, 0x5df3a0u, streamer, 2, args);
             if (distance < best) best = distance;
         }
         MR32(section + 0x40) = best * 100000 + MR32(section + 0x20);
@@ -1464,7 +1453,7 @@ void sub_00579550(CPU *c){
         MR32(SPLIT_PORT_TABLES + port * 0x1c8u + 0x1b4u) = port;
         if (port < 4){
             const uint32_t args[] = {port, 1, 0x00571a20u, 0};
-            split_call(c, 0x00579410u, 0, 4, args);
+            gcall(c, 0x00579410u, 0, 4, args);
         }
     }
 #endif
@@ -1499,7 +1488,7 @@ static void split_poll(CPU *c){
         memcpy(saved_copy, g_mem + copy, sizeof saved_copy);
         memcpy(g_mem + 0x86ffc0u, state, sizeof state);
         memcpy(g_mem + copy, state, sizeof state);
-        split_call(c, 0x5c1840u, SPLIT_INPUT_RECORD, 0, 0);
+        gcall(c, 0x5c1840u, SPLIT_INPUT_RECORD, 0, 0);
         memcpy(g_mem + 0x86ffc0u, saved_live, sizeof saved_live);
         memcpy(g_mem + copy, saved_copy, sizeof saved_copy);
         MR32(cur) = MR32(SPLIT_INPUT_RECORD + 8);
@@ -1678,7 +1667,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
         uint32_t view = MR32(c->esi + 0x1ec);
         if (split_racing() && view) for (uint32_t seat = 0; seat < (unsigned)split_render_limit(); ++seat)
             if (MR32(view + 4) == (uint32_t)split_view_id(seat)){
-                c->eax = split_call(c, 0x5ed980u, 0x89e7a0u, 1, &seat); break;
+                c->eax = gcall(c, 0x5ed980u, 0x89e7a0u, 1, &seat); break;
             }
         return 1;
     }
@@ -1712,7 +1701,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
     if (ip == 0x5cae12u){
         /* Outside split screen the game's own call here is the only one. */
         if (!split_racing()) return 1;
-        split_call(c, 0x5cf420u, 0, 0, 0);
+        gcall(c, 0x5cf420u, 0, 0, 0);
         int initialized = 0;
         if (split_racing()) for (int k = 1; k < split_render_limit(); ++k) if (!env_valid[k]){
             env_turn = k; reflection_env(c); initialized = 1;
@@ -1725,7 +1714,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
     if (ip == 0x6312b0u && split_racing() && MR32(c->edi+4) == 4){
         unsigned seat = (unsigned)reflection_seat;
         c->esi = MR32(SPLIT_PLAYERS_INDEX + seat*4);
-        c->eax = split_call(c, 0x5ed980u, 0x89e7a0u, 1, &seat);
+        c->eax = gcall(c, 0x5ed980u, 0x89e7a0u, 1, &seat);
         return 1;
     }
     /* The native streak pass hard-codes view 1 and shares a persistent
@@ -1867,7 +1856,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
             if (MR8(view + 8) && target && MR32(target + 8) && count < 4){
                 uint32_t args[] = {view, split_world + count * 0x90, MR32(0x8707a4u) ? 0x1000u : 0x6000u};
                 MR32(split_world + 0x6c0) = count + 1;
-                split_call(c, 0x4888a0u, 0, 3, args);
+                gcall(c, 0x4888a0u, 0, 3, args);
             }
         }
         return 1;
@@ -1912,7 +1901,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
         if (msg == 0xc98356bau) split_seat_title(c);
         if (msg == 0x911ab364u && split_seat >= 2 && !(split_seat & 1) && split_popup(c)){
             uint32_t pkg = SPLIT_FE_TEXT+256;
-            split_call(c, 0x5379a0u, 0, 1, &pkg);
+            gcall(c, 0x5379a0u, 0, 1, &pkg);
             split_restore_seat(0);
             split_switch_seat(c, c->ecx, split_seat-1);
             MR32(c->esp+4) = 0;
@@ -1965,7 +1954,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
                 uint32_t saved = MR32(0x89e808u);
                 MR32(0x89e808u) = seat < 2 ? MR32(0x89e808u + 4u*seat) : (uint32_t)seat;
                 uint32_t a[] = {v9, 0};
-                split_call(c, 0x5c2ae0u, 0, 2, a);
+                gcall(c, 0x5c2ae0u, 0, 2, a);
                 MR32(0x89e808u) = saved;
                 reflection_update(c, v9);
                 reflection_recull(c, v9);

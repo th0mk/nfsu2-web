@@ -40,6 +40,7 @@
  * yet); free-roam multiplayer on or off.  Log lines start "[walls]".  Script
  * command (tests): walls [at X Y Z | bars | sweep | fling VX VY VZ]. */
 #include "cpu.h"
+#include "guest.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,23 +109,21 @@ static struct {
     unsigned jumps;
 } S;
 
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
-static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
-static uint32_t player_car(void){ uint32_t p = rd32(G_PLAYER1), car = p ? rd32(p + 4u) : 0; return ok(car, CAR_RESET_T + 4u) ? car : 0; }
+static uint32_t player_car(void){ uint32_t p = guest_rd32(G_PLAYER1), car = p ? guest_rd32(p + 4u) : 0; return guest_ok(car, CAR_RESET_T + 4u) ? car : 0; }
 static uint32_t road(uint32_t i){
-    uint32_t r = rd32(G_ROADS + 4u * i);
-    if (!ok(r, RD_NODE0) || (int16_t)MR16(r + RD_ID) != (int)i) return 0;   /* the table's other slots name roads again */
+    uint32_t r = guest_rd32(G_ROADS + 4u * i);
+    if (!guest_ok(r, RD_NODE0) || (int16_t)MR16(r + RD_ID) != (int)i) return 0;   /* the table's other slots name roads again */
     int n = (int16_t)MR16(r + RD_NODES);
-    return n > 0 && n < 4096 && ok(r + RD_NODE0, (uint32_t)n * NODE_SZ) ? r : 0;
+    return n > 0 && n < 4096 && guest_ok(r + RD_NODE0, (uint32_t)n * NODE_SZ) ? r : 0;
 }
 static uint32_t mix(uint32_t h, uint32_t v){ return (h ^ v) * 16777619u; }
 
 /* the roads and the enabled barriers as they are now, in a word */
 static uint32_t signature(void){
-    uint32_t h = 2166136261u, nb = rd32(G_TRACK + TK_NBAR), bars = rd32(G_TRACK + TK_BARS);
-    for (uint32_t i = 0; i < NROADS; i++) h = mix(h, rd32(G_ROADS + 4u * i));
-    h = mix(h, rd32(G_JOINTS)); h = mix(h, rd32(G_NJOINTS)); h = mix(h, nb);
-    for (uint32_t i = 0; i < nb && i < 8192u && ok(bars + i * BAR_SZ, BAR_SZ); i++) if (MR8(bars + i * BAR_SZ + BAR_ON)) h = mix(h, i + 1u);
+    uint32_t h = 2166136261u, nb = guest_rd32(G_TRACK + TK_NBAR), bars = guest_rd32(G_TRACK + TK_BARS);
+    for (uint32_t i = 0; i < NROADS; i++) h = mix(h, guest_rd32(G_ROADS + 4u * i));
+    h = mix(h, guest_rd32(G_JOINTS)); h = mix(h, guest_rd32(G_NJOINTS)); h = mix(h, nb);
+    for (uint32_t i = 0; i < nb && i < 8192u && guest_ok(bars + i * BAR_SZ, BAR_SZ); i++) if (MR8(bars + i * BAR_SZ + BAR_ON)) h = mix(h, i + 1u);
     return h;
 }
 
@@ -170,8 +169,8 @@ static void drop(void){
 static void build(long f){
     drop();
     W.built = 1; W.sig = signature();
-    uint32_t nb = rd32(G_TRACK + TK_NBAR), bars = rd32(G_TRACK + TK_BARS);
-    for (uint32_t i = 0; i < nb && i < 8192u && ok(bars + i * BAR_SZ, BAR_SZ); i++){
+    uint32_t nb = guest_rd32(G_TRACK + TK_NBAR), bars = guest_rd32(G_TRACK + TK_BARS);
+    for (uint32_t i = 0; i < nb && i < 8192u && guest_ok(bars + i * BAR_SZ, BAR_SZ); i++){
         uint32_t b = bars + i * BAR_SZ;
         if (!MR8(b + BAR_ON)) continue;
         if (W.nbar == MAX_BARS){ fprintf(stderr, "[walls] f=%ld more than %d barrier lines on: left as the game has it\n", f, MAX_BARS); return; }
@@ -182,8 +181,8 @@ static void build(long f){
     static int base[NROADS];
     int n = 0;
     for (uint32_t i = 0; i < NROADS; i++){ uint32_t r = road(i); base[i] = r ? n : -1; if (r) n += (int16_t)MR16(r + RD_NODES); }
-    uint32_t nj = rd32(G_NJOINTS), jt = rd32(G_JOINTS);
-    if (nj > 65536u || !ok(jt, nj * JOINT_SZ)) nj = 0;
+    uint32_t nj = guest_rd32(G_NJOINTS), jt = guest_rd32(G_JOINTS);
+    if (nj > 65536u || !guest_ok(jt, nj * JOINT_SZ)) nj = 0;
     if (n < 100){ fprintf(stderr, "[walls] f=%ld no roads (%d nodes): left as the game has it\n", f, n); return; }
     int maxseg = n + (int)nj;
     W.x = malloc(sizeof(float) * (size_t)n); W.y = malloc(sizeof(float) * (size_t)n); W.z = malloc(sizeof(float) * (size_t)n);
@@ -394,8 +393,8 @@ int walls_cmd(const char *args){
         return 1;
     }
     if (!strcasecmp(sub, "fling")){
-        uint32_t mb = car ? rd32(car + CAR_RB) : 0, rb = ok(mb, 0x6c) && MR32(mb + 0x5cu) ? rd32(mb + 0x68u) : 0;
-        if (!ok(rb, 0x168)){ fprintf(stderr, "[walls] f=%ld fling: no rigid body\n", f); return 1; }
+        uint32_t mb = car ? guest_rd32(car + CAR_RB) : 0, rb = guest_ok(mb, 0x6c) && MR32(mb + 0x5cu) ? guest_rd32(mb + 0x68u) : 0;
+        if (!guest_ok(rb, 0x168)){ fprintf(stderr, "[walls] f=%ld fling: no rigid body\n", f); return 1; }
         float m = MRF32(rb + 0x164u), v[3] = { a, b, c };
         for (uint32_t i = 0; i < 3u; i++){ MRF32(rb + 0x70u + 4u * i) = v[i] * m; MRF32(rb + 0xa0u + 4u * i) = v[i]; MRF32(car + 0x70u + 4u * i) = v[i]; }
         fprintf(stderr, "[walls] f=%ld fling: velocity %.1f %.1f %.1f (mass %.3f)\n", f, (double)a, (double)b, (double)c, (double)m);

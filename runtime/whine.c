@@ -66,6 +66,7 @@
 #include "whine.h"
 #include "cpu.h"
 #include "splitscreen_mem.h"
+#include "setting.h"
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -158,9 +159,7 @@ static int g_on = -1;                 /* the setting (game thread) */
 
 static void whine_init(void){
     if (g_on >= 0) return;
-    /* the page writes 1 or 0; the Mac app passes the line's own on/off */
-    const char *e = getenv("NFSU2_GEARBOX_WHINE");
-    g_on = e && *e && *e != '0' && strcasecmp(e, "off") && strcasecmp(e, "no") && strcasecmp(e, "false");
+    g_on = setting_bool("NFSU2_GEARBOX_WHINE", 0);
     if (!g_on) return;
     int have = 1;
     for (int w = 0; w < W_N; w++) have = have && fileio_mod_pack(k_file[w], g_path[w], sizeof g_path[w]);

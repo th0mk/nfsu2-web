@@ -57,13 +57,13 @@
  * The page moves the file with its profile (renameProfile moves the folder),
  * backs it up and syncs it with the save folder. */
 #include "cpu.h"
+#include "guest.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
 
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
-void dispatch_indirect(CPU *c, uint32_t addr);
 uint32_t gheap_alloc(int heap, uint32_t n, int zero);
 int fileio_resolve_save(const char *win, char *out, size_t outsz);
 
@@ -160,17 +160,6 @@ static uint32_t g_blk;            /* guest memory: our records (XN a player), a 
 #define SCRATCH_LEFT    (SCRATCH + XN * SAVE_REC)
 #define BLK_SZ          (SCRATCH_LEFT + 16u - g_blk)
 
-static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(fn);                                  /* the callee's ret pops it */
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
 static int pkg_is(uint32_t s, const char *name){
     char b[64]; uint32_t i = 0;
     if (!s || !mem_is_committed(s)) return 0;

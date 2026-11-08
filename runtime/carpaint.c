@@ -26,6 +26,7 @@
  * Test aid ("roam mp paint", roam_game.c): carpaint_watch counts each such part's draw (overrides.c sub_005c5930)
  * whose solid holds another car's paint: an unpainted part's not its default, a painted tip's not its paint. */
 #include "cpu.h"
+#include "guest.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,19 +52,16 @@ static const uint32_t g_hash[NH] = {
     0x22719fa9u, 0xfd102a92u, 0x12049251u,   /* MAGSILVER, MAGCHROME, MAGGUNMETAL */
 };
 
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
-static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
-
 /* the material each name's solids loaded with (0x48F6A0), kept while the list's ends and DEFAULT are the same */
 static uint32_t g_def[NH], g_def_key[3];
 static void defaults(void){
-    uint32_t head = rd32(G_LM_LIST), tail = rd32(G_LM_LIST + 4u), dflt = rd32(G_LM_DEFAULT);
+    uint32_t head = guest_rd32(G_LM_LIST), tail = guest_rd32(G_LM_LIST + 4u), dflt = guest_rd32(G_LM_DEFAULT);
     if (g_def_key[0] == head && g_def_key[1] == tail && g_def_key[2] == dflt && head) return;
     g_def_key[0] = head; g_def_key[1] = tail; g_def_key[2] = dflt;
     for (int i = 0; i < NH; i++) g_def[i] = 0;
     const uint32_t end = G_LM_LIST - 4u;
     uint32_t m = head ? head - 4u : 0u;
-    for (int n = 0; m && m != end && ok(m, LM_HASH + 4u) && n < 65536; n++){
+    for (int n = 0; m && m != end && guest_ok(m, LM_HASH + 4u) && n < 65536; n++){
         uint32_t h = MR32(m + LM_HASH);
         for (int i = 0; i < NH; i++) if (h == g_hash[i] && !g_def[i]) g_def[i] = m;
         uint32_t nx = MR32(m + 4u);
@@ -75,11 +73,11 @@ static void defaults(void){
 /* each model of ride slot sl: its solid's entries of names [h0, h1) get material mat (as 0x48D860 writes them) */
 static void put(uint32_t ri, uint32_t sl, int h0, int h1, const uint32_t *mat){
     for (uint32_t j = 0; j < 8u; j++){
-        uint32_t mdl = MR32(ri + CRI_MODELS + 0x20u * sl + 4u * j), so = mdl ? rd32(mdl + MODEL_SOLID) : 0u;
-        if (!ok(so, SOLID_LM + 4u)) continue;
+        uint32_t mdl = MR32(ri + CRI_MODELS + 0x20u * sl + 4u * j), so = mdl ? guest_rd32(mdl + MODEL_SOLID) : 0u;
+        if (!guest_ok(so, SOLID_LM + 4u)) continue;
         int n = (int8_t)MR8(so + SOLID_NLM);
         uint32_t t = MR32(so + SOLID_LM);
-        if (n <= 0 || !ok(t, 8u * (uint32_t)n)) continue;
+        if (n <= 0 || !guest_ok(t, 8u * (uint32_t)n)) continue;
         for (int e = 0; e < n; e++){
             uint32_t h = MR32(t + 8u * (uint32_t)e);
             for (int i = h0; i < h1; i++) if (h == g_hash[i] && mat[i]) MR32(t + 8u * (uint32_t)e + 4u) = mat[i];
@@ -93,7 +91,7 @@ void carpaint_draw(uint32_t ri){
     if (g_gameway < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_PAINT_GAMEWAY");
                         g_gameway = s && *s && e && *e == '1'; }
     g_carpaint_ri = ri;
-    if (g_gameway || !ok(ri, CRI_MODELS + 0x20u * 0x3fu)) return;
+    if (g_gameway || !guest_ok(ri, CRI_MODELS + 0x20u * 0x3fu)) return;
     defaults();
     uint32_t tip = MR32(ri + CRI_TIP_PAINT), brk = MR32(ri + CRI_BRK_PAINT), rim = MR32(ri + CRI_RIM_PAINT), own[NH];
     for (int i = 0; i < NH; i++) own[i] = g_def[i];
@@ -113,7 +111,7 @@ extern int g_carpaint_watch;          /* overrides.c */
 static struct { uint64_t n, bad, mine, mine_bad, kn[3], kbad[3]; uint32_t last_h, last_has, last_want; } W;
 void carpaint_model(uint32_t mdl){
     uint32_t ri = g_carpaint_ri;
-    if (!ri || !mdl || !ok(ri, CRI_MODELS + 0x20u * 0x3fu)) return;
+    if (!ri || !mdl || !guest_ok(ri, CRI_MODELS + 0x20u * 0x3fu)) return;
     static const uint8_t slots[5] = { 0x10u, 0x1bu, 0x1cu, 0x1du, 0x1eu };
     int s = -1;
     for (int k = 0; k < 5 && s < 0; k++)
@@ -122,13 +120,13 @@ void carpaint_model(uint32_t mdl){
     uint32_t paint = s == 0 ? MR32(ri + CRI_TIP_PAINT) : s <= 2 ? MR32(ri + CRI_BRK_PAINT) : MR32(ri + CRI_RIM_PAINT);
     if (paint && s != 0) return;      /* painted calipers and rims: not checked (see the top) */
     int h0 = s == 0 ? H_TIP : s <= 2 ? H_CALIPER : H_MAGSILVER, h1 = s == 0 ? H_TIP + 1 : s <= 2 ? H_CALIPER2 + 1 : NH;
-    uint32_t so = rd32(mdl + MODEL_SOLID);
-    if (!ok(so, SOLID_LM + 4u)) return;
+    uint32_t so = guest_rd32(mdl + MODEL_SOLID);
+    if (!guest_ok(so, SOLID_LM + 4u)) return;
     int n = (int8_t)MR8(so + SOLID_NLM);
     uint32_t t = MR32(so + SOLID_LM);
-    if (n <= 0 || !ok(t, 8u * (uint32_t)n)) return;
+    if (n <= 0 || !guest_ok(t, 8u * (uint32_t)n)) return;
     defaults();
-    uint32_t car = rd32(ri + CRI_CAR), pl = rd32(G_PLAYER1), me = pl ? rd32(pl + 4u) : 0u;
+    uint32_t car = guest_rd32(ri + CRI_CAR), pl = guest_rd32(G_PLAYER1), me = pl ? guest_rd32(pl + 4u) : 0u;
     int mine = car && car == me, bad = 0, any = 0;
     for (int e = 0; e < n; e++){
         uint32_t h = MR32(t + 8u * (uint32_t)e), has = MR32(t + 8u * (uint32_t)e + 4u);
@@ -157,12 +155,12 @@ uint64_t carpaint_report(char *out, int cap, const char *arg){
     defaults();
     size_t at = strlen(out);
     snprintf(out + at, (size_t)cap - at, "; loaded with:");       /* each name's material (DEFAULT's hash 2c420d64: none of its own) */
-    for (int i = 0; i < NH; i++){ at = strlen(out); snprintf(out + at, (size_t)cap - at, " %08x", ok(g_def[i], LM_HASH + 4u) ? MR32(g_def[i] + LM_HASH) : 0u); }
+    for (int i = 0; i < NH; i++){ at = strlen(out); snprintf(out + at, (size_t)cap - at, " %08x", guest_ok(g_def[i], LM_HASH + 4u) ? MR32(g_def[i] + LM_HASH) : 0u); }
     if (W.bad){
         at = strlen(out);
         snprintf(out + at, (size_t)cap - at, "; the last: name %08x has %08x (hash %08x), its own %08x (hash %08x)", W.last_h,
-                 W.last_has, ok(W.last_has, LM_HASH + 4u) ? MR32(W.last_has + LM_HASH) : 0u, W.last_want,
-                 ok(W.last_want, LM_HASH + 4u) ? MR32(W.last_want + LM_HASH) : 0u);
+                 W.last_has, guest_ok(W.last_has, LM_HASH + 4u) ? MR32(W.last_has + LM_HASH) : 0u, W.last_want,
+                 guest_ok(W.last_want, LM_HASH + 4u) ? MR32(W.last_want + LM_HASH) : 0u);
     }
     return W.bad;
 }

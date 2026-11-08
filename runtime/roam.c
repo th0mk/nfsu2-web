@@ -52,6 +52,7 @@
  * purges and every driver/physics change of the ghost car.
  */
 #include "cpu.h"
+#include "guest.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,7 +61,6 @@
 #include <math.h>
 #include <time.h>
 
-void dispatch_indirect(CPU *c, uint32_t addr);
 long autotest_frame(void);
 const char *autotest_top_fng(void);
 void mprot_arm(uint32_t);
@@ -108,15 +108,7 @@ static uint32_t eval(const char *s){ xp = s; return x_expr(); }
 /* Call guest function fn (any convention: esp and every register are restored
  * afterwards).  Only from the main-loop hook. */
 static uint32_t guest_call(CPU *c, uint32_t fn, uint32_t ecx, uint32_t edx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 512u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx; c->edx = edx;
-    PUSH32(HOOK_MAINLOOP);
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
+    return guest_call_ex(c, fn, ecx, edx, n, arg, HOOK_MAINLOOP, 512u);
 }
 
 #define QMAX 32
@@ -127,17 +119,16 @@ static void queue(const char *line){
 }
 
 /* ---- world inspection ------------------------------------------------------- */
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
 static const char *cstr(uint32_t a){
     static char b[4][48]; static int k; char *o = b[k++ & 3];
-    if (!ok(a, 32)){ snprintf(o, 48, "?"); return o; }
+    if (!guest_ok(a, 32)){ snprintf(o, 48, "?"); return o; }
     int i = 0; for (; i < 40 && MR8(a + i) >= 0x20 && MR8(a + i) < 0x7f; i++) o[i] = (char)MR8(a + i);
     o[i] = 0; return o;
 }
 static uint32_t player_car(void){ uint32_t p = rd32(G_PLAYER1); return p ? rd32(p + 4u) : 0; }
 static int roaming(void){
     uint32_t race = rd32(G_RACE);
-    return rd32(G_FLOW) == 6u && ok(race, 0xc00) && MR32(race) == 4u && MR32(race + 0x24u) == 1u &&
+    return rd32(G_FLOW) == 6u && guest_ok(race, 0xc00) && MR32(race) == 4u && MR32(race + 0x24u) == 1u &&
            !rd32(G_CAREER_RACE);
 }
 /* free roam now (runtime/web/status_web.c "drive": the touch controls' free-roam buttons, else a race's with
@@ -151,18 +142,18 @@ int roam_exploring(void){ return roaming() && rd32(G_TRACK) % 1000u == 0; }
  * car's first two dwords). */
 static void log_cars(const char *why){
     uint32_t w = rd32(G_WORLD);
-    if (!ok(w, 0x20)){ fprintf(stderr, "[roam] f=%ld cars (%s): no world\n", autotest_frame(), why); return; }
+    if (!guest_ok(w, 0x20)){ fprintf(stderr, "[roam] f=%ld cars (%s): no world\n", autotest_frame(), why); return; }
     uint32_t me = player_car();
     fprintf(stderr, "[roam] f=%ld cars (%s): world 0x%08x count %u, player car 0x%08x\n",
             autotest_frame(), why, w, MR32(w + 0x10u), me);
     uint32_t e = MR32(w);
-    for (int k = 0; e && e != w && k < 64 && ok(e, 0x9e0); k++, e = MR32(e)){
+    for (int k = 0; e && e != w && k < 64 && guest_ok(e, 0x9e0); k++, e = MR32(e)){
         uint32_t ti = MR32(e + 0xcu), rec = MR32(e + 0x14u), brain = MR32(e + 0x2cu), phys = MR32(e + 0x34u);
         fprintf(stderr, "[roam]   car 0x%08x%s #%d racer %d type %s drv %u (brain vt 0x%08x) phys %u (vt 0x%08x)"
                 " rec 0x%08x kind %u pos %.1f %.1f %.1f hdg 0x%04x vel %.1f %.1f %.1f +5c0 %u +918 0x%08x\n",
                 e, e == me ? " (player)" : "", (int16_t)MR16(e + 8u), (int16_t)MR16(e + 0xau),
-                ok(ti, 16) ? cstr(ti) : "?", MR32(e + 0x24u), ok(brain, 4) ? MR32(brain) : 0, MR32(e + 0x28u),
-                ok(phys, 4) ? MR32(phys) : 0, rec, ok(rec, 8) ? MR32(rec + 4u) : 0,
+                guest_ok(ti, 16) ? cstr(ti) : "?", MR32(e + 0x24u), guest_ok(brain, 4) ? MR32(brain) : 0, MR32(e + 0x28u),
+                guest_ok(phys, 4) ? MR32(phys) : 0, rec, guest_ok(rec, 8) ? MR32(rec + 4u) : 0,
                 (double)MRF32(e + 0x60u), (double)MRF32(e + 0x64u), (double)MRF32(e + 0x68u), MR16(e + 0x40cu),
                 (double)MRF32(e + 0x70u), (double)MRF32(e + 0x74u), (double)MRF32(e + 0x78u),
                 MR8(e + 0x5c0u), MR32(e + 0x918u));
@@ -179,7 +170,7 @@ void sub_00606480(CPU *c){
     sub_00606480_orig(c);
     if (probe())
         fprintf(stderr, "[roam] f=%ld CreateCar from 0x%08x ecx 0x%08x rec 0x%08x (kind %u) drv %u a2 0x%08x -> car 0x%08x\n",
-                autotest_frame(), ret, ecx, edx, ok(edx, 8) ? MR32(edx + 4u) : 0, a1, a2, c->eax);
+                autotest_frame(), ret, ecx, edx, guest_ok(edx, 8) ? MR32(edx + 4u) : 0, a1, a2, c->eax);
 }
 void sub_00604260_orig(CPU *c);   /* Car::Car(rec, pos*, u16 heading, float) */
 void sub_00604260(CPU *c){
@@ -187,10 +178,10 @@ void sub_00604260(CPU *c){
              hd = MR32(c->esp + 12u), f4 = MR32(c->esp + 16u);
     sub_00604260_orig(c);
     if (probe()){
-        float x = ok(pos, 12) ? MRF32(pos) : 0, y = ok(pos, 12) ? MRF32(pos + 4u) : 0, z = ok(pos, 12) ? MRF32(pos + 8u) : 0, fv;
+        float x = guest_ok(pos, 12) ? MRF32(pos) : 0, y = guest_ok(pos, 12) ? MRF32(pos + 4u) : 0, z = guest_ok(pos, 12) ? MRF32(pos + 8u) : 0, fv;
         memcpy(&fv, &f4, 4);
         fprintf(stderr, "[roam] f=%ld Car::Car 0x%08x from 0x%08x rec 0x%08x (kind %u, cartype %u) pos %.1f %.1f %.1f hdg 0x%04x a4 %g\n",
-                autotest_frame(), self, ret, rec, ok(rec, 0x20) ? MR32(rec + 4u) : 0, ok(rec, 0x20) ? MR32(rec + 0x10u) : 0,
+                autotest_frame(), self, ret, rec, guest_ok(rec, 0x20) ? MR32(rec + 4u) : 0, guest_ok(rec, 0x20) ? MR32(rec + 0x10u) : 0,
                 (double)x, (double)y, (double)z, hd & 0xffffu, (double)fv);
     }
 }
@@ -239,7 +230,7 @@ static void trace_tick(void){
     if (getenv("NFSU2_ROAM_TRACECTL")){   /* the controls block (car +0x30 -> 0x220 bytes) as raw dwords */
         static FILE *cf; if (!cf) cf = fopen(getenv("NFSU2_ROAM_TRACECTL"), "w");
         uint32_t ctl = MR32(car + 0x30u);
-        if (cf && ok(ctl, 0x220)){ fprintf(cf, "%ld,%.4f", autotest_frame(), (double)MRF32(car + 0x118u));
+        if (cf && guest_ok(ctl, 0x220)){ fprintf(cf, "%ld,%.4f", autotest_frame(), (double)MRF32(car + 0x118u));
             for (uint32_t o = 0; o < 0x220u; o += 4) fprintf(cf, ",%08x", MR32(ctl + o));
             for (uint32_t o = 0x400; o < 0x600u; o += 4) fprintf(cf, ",%08x", MR32(car + o));
             fputc('\n', cf); }
@@ -323,7 +314,7 @@ static void rewind_player(void){
 #define FN_BODY_DISABLE    0x005930f0u   /* DynamicCollisionBody (car +0x3C): ++[+0x17] */
 static uint32_t opponent_car(int k){
     uint32_t w = rd32(G_WORLD);
-    if (!ok(w, 0x80)) return 0;
+    if (!guest_ok(w, 0x80)) return 0;
     int first = (int)MR32(w + 0x14u), end = (int)MR32(w + 0x18u);
     if (first < 0 || end > 22 || first + k >= end) return 0;
     return rd32(w + 0x1cu + 4u * (uint32_t)(first + k));
@@ -335,7 +326,7 @@ static uint32_t opponent_car(int k){
  * brains as AI racer brains and crashes on our inert car (0x42A860 ->
  * 0x41C100 in run roam-18), so it is switched off while a ghost exists. */
 #define RC_ENCOUNTER_MGR 0xc40u
-static uint32_t encounter_mgr(void){ uint32_t r = rd32(G_RACE); return ok(r, 0xc44) ? r + RC_ENCOUNTER_MGR : 0; }
+static uint32_t encounter_mgr(void){ uint32_t r = rd32(G_RACE); return guest_ok(r, 0xc44) ? r + RC_ENCOUNTER_MGR : 0; }
 static void ghost_on(CPU *c, int k, int direct, int nocol, int replay){
     uint32_t car = opponent_car(k), me = player_car(), a, em = encounter_mgr();
     if (!car || !me){ fprintf(stderr, "[roam] f=%ld ghost: no opponent car %d / no player\n", autotest_frame(), k); return; }
@@ -343,7 +334,7 @@ static void ghost_on(CPU *c, int k, int direct, int nocol, int replay){
     guest_call(c, FN_CAR_ACTIVATE, car, 0, 0, 0);
     a = 0; guest_call(c, FN_CAR_SETDRIVER, car, 0, 1, &a);
     a = 0; guest_call(c, FN_CAR_SETPHYSICS, car, 0, 1, &a);
-    if (nocol && ok(MR32(car + 0x3cu), 0x20)) guest_call(c, FN_BODY_DISABLE, MR32(car + 0x3cu), 0, 0, 0);
+    if (nocol && guest_ok(MR32(car + 0x3cu), 0x20)) guest_call(c, FN_BODY_DISABLE, MR32(car + 0x3cu), 0, 0, 0);
     /* circle centre 17 m ahead of the player (in view of the chase camera),
      * radius 7 m, 0.6 rad/s */
     float ah = 17.f, lf = 0.f, rr = 7.f;   /* NFSU2_ROAM_CIRCLE="ahead,left,radius" (m) */
@@ -479,7 +470,7 @@ static void spawn_tick(CPU *c){
     uint32_t done = e ? guest_call(c, FN_LOADER_LOADED, G_CARLOADER, 0, 1, &e) : 0;
     if (!done){ if (autotest_frame() - SP.since > 1200){ fprintf(stderr, "[roam] spawn: not loaded\n"); SP.pending = 0; } return; }
     guest_call(c, FN_LOADER_WAIT, G_CARLOADER, 0, 1, &SP.handle);
-    if (!me || !ok(w, 0x80)){ SP.pending = 0; return; }
+    if (!me || !guest_ok(w, 0x80)){ SP.pending = 0; return; }
     uint32_t grid = (c->esp - 256u) & ~15u;
     for (uint32_t i = 0; i < 0x20u; i += 4) MR32(grid + i) = 0;
     MRF32(grid) = MRF32(me + 0x60u) + 8.f * MRF32(me + 0xa0u); MRF32(grid + 4) = MRF32(me + 0x64u) + 8.f * MRF32(me + 0xa4u);
@@ -494,7 +485,7 @@ static void spawn_tick(CPU *c){
 static void log_types(void){
     uint32_t t = rd32(G_CARTYPES);
     fprintf(stderr, "[roam] f=%ld car types:", autotest_frame());
-    for (uint32_t i = 0; t && i < 64 && ok(t + i * 0x890u, 0x100); i++){
+    for (uint32_t i = 0; t && i < 64 && guest_ok(t + i * 0x890u, 0x100); i++){
         const char *n = cstr(t + i * 0x890u);
         if (!n[0] || n[0] == '?') break;
         fprintf(stderr, " %u=%s", i, n);
@@ -503,7 +494,7 @@ static void log_types(void){
 }
 static void ghost_off(CPU *c){
     if (!G.on) return;
-    if (G.nocol && ok(MR32(G.car + 0x3cu), 0x20)) MR8(MR32(G.car + 0x3cu) + 0x17u) = 0;
+    if (G.nocol && guest_ok(MR32(G.car + 0x3cu), 0x20)) MR8(MR32(G.car + 0x3cu) + 0x17u) = 0;
     guest_call(c, FN_CAR_DEACTIVATE, G.car, 0, 0, 0);
     { uint32_t em = encounter_mgr(); if (em && MR32(em) == 6) MR32(em) = 0; }   /* re-initialises itself */
     fprintf(stderr, "[roam] f=%ld ghost off: car 0x%08x parked (physics mode reset %ld times), encounters back on\n",
@@ -514,7 +505,7 @@ static void ghost_off(CPU *c){
 static uint32_t fbits(float f){ uint32_t u; memcpy(&u, &f, 4); return u; }
 static void ghost_tick(CPU *c){
     if (!G.on) return;
-    if (!roaming() || !ok(G.car, 0x9e0)){ fprintf(stderr, "[roam] f=%ld ghost: left free roam, off\n", autotest_frame()); G.on = 0; return; }
+    if (!roaming() || !guest_ok(G.car, 0x9e0)){ fprintf(stderr, "[roam] f=%ld ghost: left free roam, off\n", autotest_frame()); G.on = 0; return; }
     { uint32_t em = encounter_mgr(); if (em && MR32(em) != 6){
         fprintf(stderr, "[roam] f=%ld ghost: encounter manager state %u again -> 6\n", autotest_frame(), MR32(em)); MR32(em) = 6; } }
     float t = (float)(int32_t)(MR32(G_WORLDTIMER) - G.t0) / 4000.f, a = G.w * t;
@@ -546,7 +537,7 @@ static void ghost_tick(CPU *c){
         /* wheel spin: speed / tyre radius per wheel (RidePhysicsInfo +0x20 +0x30k), as SetPosition does
          * (whether the renderer uses these or +0x4E8/+0x4F8 is UNVERIFIED) */
         uint32_t ph = MR32(car + 0x20u);
-        if (ok(ph, 0xc0)) for (uint32_t k = 0; k < 4; k++){ float r = MRF32(ph + 0x20u + 0x30u * k); if (r > 0.05f) MRF32(car + 0x330u + 4u * k) = P.spd / r; }
+        if (guest_ok(ph, 0xc0)) for (uint32_t k = 0; k < 4; k++){ float r = MRF32(ph + 0x20u + 0x30u * k); if (r > 0.05f) MRF32(car + 0x330u + 4u * k) = P.spd / r; }
         guest_call(c, FN_CAR_SECTION, car, 0, 0, 0);
         /* smoothness: per-frame displacement against the interpolated speed
          * (m; a pop shows as a large difference), and an optional per-frame
@@ -706,7 +697,7 @@ static void shop_go(const char *nm){
 static void race_go(void){
     for (int i = 0; i < 64; i++){
         uint32_t r = rd32(0x85ad40u + 0x71c8u + 4u * (uint32_t)i);
-        uint32_t m = ok(r, 0x40) ? marker_by_hash(MR32(r + 0x28u)) : 0;
+        uint32_t m = guest_ok(r, 0x40) ? marker_by_hash(MR32(r + 0x28u)) : 0;
         if (!m) continue;
         double a = atan2((double)MRF32(m + 0x10u), (double)MRF32(m + 0xcu));
         MRF32(G_HOTPOS) = MRF32(m + 4u); MRF32(G_HOTPOS + 4) = MRF32(m + 8u); MRF32(G_HOTPOS + 8) = MRF32(m + 0x14u) + 0.5f;
@@ -723,7 +714,7 @@ static void world_watch(void){
     if (!g_active && !probe()){ g_world_seen = w; return; }
     if (w != g_world_seen){
         fprintf(stderr, "[roam] f=%ld world 0x%08x -> 0x%08x (flow %u, cars %u)\n", autotest_frame(), g_world_seen, w,
-                rd32(G_FLOW), ok(w, 0x20) ? MR32(w + 0x10u) : 0);
+                rd32(G_FLOW), guest_ok(w, 0x20) ? MR32(w + 0x10u) : 0);
         g_world_seen = w; }
 }
 
@@ -873,18 +864,18 @@ int roam_hook(CPU *c, uint32_t ip){
  * names the screen below. */
 static uint32_t fe_mgr(void){
     uint32_t fe = rd32(0x8384c4u);
-    if (!fe || !ok(fe, 11)) return 0;
+    if (!fe || !guest_ok(fe, 11)) return 0;
     uint32_t mg = MR32(fe + 8u);
-    return ok(mg, 0xf7) ? mg : 0;
+    return guest_ok(mg, 0xf7) ? mg : 0;
 }
 static int fe_active(const char *want){
     uint32_t mg = fe_mgr();
     if (!mg) return 0;
     for (uint32_t head = 0xe4u; head <= 0xf4u; head += 0x10u){
         uint32_t p = MR32(mg + head);
-        for (int k = 0; p && k < 64 && ok(p, 0x10); k++, p = MR32(p + 4u)){
+        for (int k = 0; p && k < 64 && guest_ok(p, 0x10); k++, p = MR32(p + 4u)){
             uint32_t n = MR32(p + 0xcu);
-            if (!ok(n, 47)) continue;
+            if (!guest_ok(n, 47)) continue;
             const char *q = (const char *)(g_mem + n); int i = 0;
             while (i < 47 && q[i] >= 0x20 && q[i] < 0x7f) i++;
             if (i > 4 && !q[i] && (want[0] == '*' ? strstr(q, want + 1) != 0 : !strcasecmp(q, want))) return 1;
@@ -974,7 +965,7 @@ int roam_cmd(CPU *c, const char *line, long *wait_start){
         uint32_t a = eval(a1), n = a2[0] ? eval(a2) : 1;
         for (uint32_t i = 0; i < n && i < 64; i++){
             uint32_t q = a + 4u * i;
-            if (!ok(q, 3)){ fprintf(stderr, "[roam] f=%ld peek [0x%08x] = <unmapped>\n", f, q); continue; }
+            if (!guest_ok(q, 3)){ fprintf(stderr, "[roam] f=%ld peek [0x%08x] = <unmapped>\n", f, q); continue; }
             uint32_t v = MR32(q); float fv; memcpy(&fv, &v, 4);
             fprintf(stderr, "[roam] f=%ld peek [0x%08x] = 0x%08x (%d, %g)\n", f, q, v, (int)v, (double)fv);
         }

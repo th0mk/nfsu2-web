@@ -43,6 +43,7 @@
  * original: none of this.  Story, tutorial and region movies (IG_PlayMovie)
  * are never touched. */
 #include "cpu.h"
+#include "guest.h"
 #include "kbd.h"
 #include "gamepad.h"
 #include <stdio.h>
@@ -236,7 +237,6 @@ void sub_00566020(CPU *c){
  * "title_a" its alpha 0..1, 0 off the title; "title_x"/"title_y" its middle
  * in HUD units; "title_s" its size). */
 const char *autotest_top_fng(void);
-void dispatch_indirect(CPU *c, uint32_t addr);
 uint32_t fe_copy(CPU *c, uint32_t pk, uint32_t o, uint32_t hash);
 
 #define TITLE_FNG     "UG_LS_Splash.fng"
@@ -253,19 +253,6 @@ uint32_t fe_copy(CPU *c, uint32_t pk, uint32_t o, uint32_t hash);
 
 static struct { uint32_t scr, hash; int off, told; } g_tl;
 
-/* a guest function with ecx and stack arguments, the CPU as it was after */
-static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(fn);                                  /* the callee's ret pops it */
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
 static uint32_t gstr(uint32_t a, const char *s){
     uint32_t i = 0;
     for (; s[i] && i < 63u; i++) MR8(a + i) = (uint8_t)s[i];
@@ -311,8 +298,8 @@ static uint32_t title_copyright(CPU *c, uint32_t *pk){
     }
     uint32_t a = gstr(g_tl.scr, TITLE_FNG), h = H_COPYRIGHT;
     *pk = gcall(c, FN_FE_PACKAGE, 0, 1, &a);
-    uint32_t o = ok(*pk, 0x54) ? gcall(c, FN_PKG_FIND, *pk, 1, &h) : 0;
-    return ok(o, 0x70) && MR32(o + 0x18u) == 2u && ok(MR32(o + 0x2cu), 0x40) ? o : 0;   /* 2: a string */
+    uint32_t o = guest_ok(*pk, 0x54) ? gcall(c, FN_PKG_FIND, *pk, 1, &h) : 0;
+    return guest_ok(o, 0x70) && MR32(o + 0x18u) == 2u && guest_ok(MR32(o + 0x2cu), 0x40) ? o : 0;   /* 2: a string */
 }
 
 #ifdef __wasm__
@@ -341,7 +328,7 @@ void intro_frame(CPU *c){
     if (!o) return;
     uint32_t line = gcall(c, FN_PKG_FIND, pk, 1, &g_tl.hash);
     if (!line){
-        if (!(line = fe_copy(c, pk, o, g_tl.hash)) || !ok(MR32(line + 0x2cu), 0x40)){
+        if (!(line = fe_copy(c, pk, o, g_tl.hash)) || !guest_ok(MR32(line + 0x2cu), 0x40)){
             fprintf(stderr, "[intro] the title's copyright could not be copied: no line under it\n");
             g_tl.off = 1;
             return;
@@ -351,7 +338,7 @@ void intro_frame(CPU *c){
         MR32(line + 0x1cu) |= 2u;                /* a text of its own, as FEPrintf leaves it (0x537B30) */
         uint32_t d0 = MR32(o + 0x2cu);
         char tx[64]; uint32_t w = MR32(o + 0x64u), k = 0;
-        for (; ok(w, 2u * k + 1u) && k + 1 < sizeof tx && MR16(w + 2u * k); k++) tx[k] = (char)MR16(w + 2u * k);
+        for (; guest_ok(w, 2u * k + 1u) && k + 1 < sizeof tx && MR16(w + 2u * k); k++) tx[k] = (char)MR16(w + 2u * k);
         tx[k] = 0;
         fprintf(stderr, "[intro] title: \"%s\" under \"%s\" (y %.1f, size %.2f)\n", TITLE_LINE, tx,
                 (double)(MRF32(d0 + 0x20u) + LINE_DY), (double)(MRF32(d0 + 0x38u) * LINE_SIZE));
@@ -362,9 +349,9 @@ void intro_frame(CPU *c){
     static const uint32_t AT[4] = { 0x1cu, 0x20u, 0x38u, 0x3cu };
     for (int i = 0; i < 4; i++)
         if (MRF32(d1 + AT[i]) != want[i]){ MRF32(d1 + AT[i]) = want[i]; MR32(line + 0x1cu) |= 0x400000u; }
-    uint32_t p = gcall(c, FN_PKG_FIND, pk, 1, &hp), dp = ok(p, 0x70) ? MR32(p + 0x2cu) : 0;
+    uint32_t p = gcall(c, FN_PKG_FIND, pk, 1, &hp), dp = guest_ok(p, 0x70) ? MR32(p + 0x2cu) : 0;
     int32_t col[4];
-    for (uint32_t i = 0; i < 4; i++) col[i] = (int32_t)MR32((i < 3 && ok(dp, 16) ? dp : d0) + 4u * i);
+    for (uint32_t i = 0; i < 4; i++) col[i] = (int32_t)MR32((i < 3 && guest_ok(dp, 16) ? dp : d0) + 4u * i);
     for (uint32_t i = 0; i < 4; i++)
         if ((int32_t)MR32(d1 + 4u * i) != col[i]){ MR32(d1 + 4u * i) = (uint32_t)col[i]; MR32(line + 0x1cu) |= 0x400000u; }
 }

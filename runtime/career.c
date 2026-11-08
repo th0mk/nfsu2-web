@@ -67,6 +67,7 @@
  * and "*" between two operands (multiply), e.g. "*(*0x890118+0xbd0)".
  */
 #include "cpu.h"
+#include "guest.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -168,20 +169,6 @@ static uint32_t x_expr(void){
 static uint32_t eval(const char *s){ xp = s; return x_expr(); }
 
 /* ---- guest calls ---------------------------------------------------------- */
-/* Call guest function fn with ecx and stack arguments.  Must run on the guest
- * thread at a point where the game can take a call (the main-loop hook).
- * The whole CPU state is restored, so it works for any calling convention. */
-static uint32_t guest_call(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(MAINLOOP_RET);           /* the callee's ret pops it into eip */
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
 
 #define QMAX 16
 typedef struct { char line[160]; } Job;
@@ -243,7 +230,7 @@ static void race_win(CPU *c){
           drift_lead((r - (race + 0x30u)) / 0x1f0u);
           fprintf(stderr, "[career] f=%ld racewin: drift, the other entries on the board put below 0\n", autotest_frame()); } }
     uint32_t a[4] = { i, 0, 0, RACING_CAR_NORMAL_COMPLETION };
-    guest_call(c, FN_FINISHRACER, race, 4, a);
+    gcall_main(c, FN_FINISHRACER, race, 4, a);
     fprintf(stderr, "[career] f=%ld racewin: player (racer %u of %u, was %u.) finished, position %u\n",
             autotest_frame(), i, MR32(race + 0x24u), MR8(r + 0xau), MR8(r + 0xcu));
 }
@@ -982,7 +969,7 @@ static void uniques_list(CPU *c, int won){
         }
     }
     uint32_t car = MR32(0x008389acu), ct = 0;      /* set in the front end (garage, shops), 0 in free roam */
-    if (car && mem_is_committed(car) && mem_is_committed(MR32(car) + 7u)) ct = guest_call(c, MR32(MR32(car) + 4u), car, 0, 0);
+    if (car && mem_is_committed(car) && mem_is_committed(MR32(car) + 7u)) ct = gcall_main(c, MR32(MR32(car) + 4u), car, 0, 0);
     fprintf(stderr, "[career] f=%ld uniques: Caleb beaten %d, shown car 0x%08x, car type %u, game mode %u, garage flag %u\n",
             autotest_frame(), uniques_caleb_beaten(), car, ct, MR32(0x00850078u), MR32(0x0083898cu));
     if (!car || ct > 64u) return;
@@ -994,14 +981,14 @@ static void uniques_list(CPU *c, int won){
         uint32_t prev = 0, price = 0;
         for (int k = 0; k < 4096; k++){
             uint32_t a[4] = { ct, slot, 0, 0xffffffffu }, b[5] = { prev, ct, slot, 0, 0xffffffffu };
-            uint32_t p = prev ? guest_call(c, 0x0061ba50u, 0x008a2b68u, 5, b) : guest_call(c, 0x0061ba30u, 0x008a2b68u, 4, a);
+            uint32_t p = prev ? gcall_main(c, 0x0061ba50u, 0x008a2b68u, 5, b) : gcall_main(c, 0x0061ba30u, 0x008a2b68u, 4, a);
             if (!p || p == prev || !mem_is_committed(p + 13u)) break;
             prev = p; all++; lv[MR8(p + 5u) >> 5]++;
             if ((MR8(p + 5u) >> 5) != 4u) continue;
-            if (!uniq++){ uint32_t pa[2] = { slot, p }; price = guest_call(c, 0x00514280u, G_CAREER, 2, pa); }  /* a buy's price (0x5289F0) */
+            if (!uniq++){ uint32_t pa[2] = { slot, p }; price = gcall_main(c, 0x00514280u, G_CAREER, 2, pa); }  /* a buy's price (0x5289F0) */
             uint32_t s6[4] = { 6u, slot, p, MR32(0x008389b0u) }, s2[4] = { 2u, slot, p, MR32(0x008389b0u) };
-            if (guest_call(c, 0x0052a010u, 0, 4, s6) & 0xffu) shop++;
-            if (guest_call(c, 0x0052a010u, 0, 4, s2) & 0xffu) gar++;
+            if (gcall_main(c, 0x0052a010u, 0, 4, s6) & 0xffu) shop++;
+            if (gcall_main(c, 0x0052a010u, 0, 4, s2) & 0xffu) gar++;
         }
         if (uniq) fprintf(stderr, "[career] uniques: slot %u %s: %u parts (levels 0-7: %u %u %u %u %u %u %u %u), %u unique (the first $%u), %u in the shops, %u in the garage\n",
                           slot, name, all, lv[0], lv[1], lv[2], lv[3], lv[4], lv[5], lv[6], lv[7], uniq, price, shop, gar);
@@ -1028,16 +1015,16 @@ static void run_job(CPU *c, const char *line){
             if (!strncasecmp(tok[i], "ecx=", 4)) ecx = eval(tok[i] + 4);
             else arg[na++] = eval(tok[i]);
         }
-        uint32_t r = guest_call(c, fn, ecx, na, arg);
+        uint32_t r = gcall_main(c, fn, ecx, na, arg);
         fprintf(stderr, "[career] f=%ld call 0x%08x(ecx=0x%08x, %d args) -> eax=0x%08x (%d)\n",
                 autotest_frame(), fn, ecx, na, r, (int)r);
     } else if (!strcasecmp(cmd, "autopilot")){
         if (!player1_ok()){ fprintf(stderr, "[career] autopilot: no player\n"); return; }
         uint32_t p = MR32(G_PLAYER1);
-        if (!strncasecmp(rest, "on", 2)) guest_call(c, FN_AUTOPILOT_ON, p, 0, 0);
+        if (!strncasecmp(rest, "on", 2)) gcall_main(c, FN_AUTOPILOT_ON, p, 0, 0);
         else {
-            guest_call(c, FN_AUTOPILOT_OFF, p, 0, 0);
-            uint32_t mode = 2; guest_call(c, FN_SETINPUTMODE, p, 1, &mode);
+            gcall_main(c, FN_AUTOPILOT_OFF, p, 0, 0);
+            uint32_t mode = 2; gcall_main(c, FN_SETINPUTMODE, p, 1, &mode);
         }
         fprintf(stderr, "[career] f=%ld autopilot %s\n", autotest_frame(), rest);
     } else if (!strcasecmp(cmd, "visual")){      /* the car's visual rating (with the tweak, its own) */

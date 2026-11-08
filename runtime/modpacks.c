@@ -37,6 +37,8 @@
  *    name text of a mod's brand, RIMS_BRAND_<name>, from the pack (the mod's
  *    English text) into the game's language table (language.c). */
 #include "cpu.h"
+#include "guest.h"
+#include "setting.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -94,13 +96,8 @@ static uint32_t bhash(const char *s){
     for (; *s; s++) h = h * 33u + (uint8_t)*s;
     return h;
 }
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
 static uint32_t rd32(const uint8_t *b){ return (uint32_t)b[0] | (uint32_t)b[1] << 8 | (uint32_t)b[2] << 16 | (uint32_t)b[3] << 24; }
 static const char *pstr(uint32_t o){ return o < g.nstr ? (const char *)g.str + o : 0; }
-static int switched_on(const char *env){
-    const char *e = getenv(env);   /* the page writes 1 or 0; the Mac app passes the line's own on/off */
-    return e && *e && *e != '0' && strcasecmp(e, "off") && strcasecmp(e, "no") && strcasecmp(e, "false");
-}
 
 /* MODPACKS/PARTS.BIN, read and checked once; 0: none (or not as tools/modpacks.py writes it, logged) */
 static int load(void){
@@ -130,8 +127,8 @@ static int load(void){
     for (uint32_t i = 0; i < nm; i++){
         memcpy(g.env[i], m + PK_MOD * i, 31); g.env[i][31] = 0;
         /* the rims are out for now (web/src/app/mods.ts): no shop offers them, whatever MODPACKS or
-         * settings.ini says; back: g.on[i] = switched_on(g.env[i]) */
-        g.on[i] = 0; (void)switched_on;
+         * settings.ini says; back: g.on[i] = setting_bool(g.env[i], 0) */
+        g.on[i] = 0;
     }
     for (uint32_t i = 0; i < np; i++){
         const uint8_t *q = pp + PK_PART * i;
@@ -180,7 +177,7 @@ static int load(void){
 
 /* the car part database's chunk with the packs' parts at its end, in guest memory for good; 0: as it is (logged why) */
 uint32_t modpacks_grow(uint32_t chunk){
-    if (!ok(chunk, 16u) || MR32(chunk) != CHUNK_PARTS || !ok(chunk, MR32(chunk + 4u) + 8u) || !load()) return 0;
+    if (!guest_ok_bytes(chunk, 16u) || MR32(chunk) != CHUNK_PARTS || !guest_ok_bytes(chunk, MR32(chunk + 4u) + 8u) || !load()) return 0;
     uint32_t size = MR32(chunk + 4u), at = chunk + 8u, end = chunk + 8u + size, sub[16][2];
     int n = 0;
     while (at + 8u <= end && n < 16){
@@ -430,7 +427,6 @@ int garage_records(uint32_t db, uint32_t *out, int max);
 int garage_car_in_use(uint32_t db, uint32_t r);
 int fileio_resolve_save(const char *win, char *out, size_t outsz);
 int fileio_resolve_save_w(const char *win, char *out, size_t outsz);    /* (a file to write there) */
-void dispatch_indirect(CPU *c, uint32_t addr);
 int vinylpacks_key(uint32_t key);                       /* vinylpacks.c: one of Art Factory 28-34's */
 int vinylpacks_have(void);                              /* ... the car part database has them */
 
@@ -485,17 +481,6 @@ static char g_foreign[8][33]; static int g_nforeign;    /* profiles whose MODPAR
 static uint32_t g_ride;                                  /* a ride of ours, for the stock parts */
 static struct { uint32_t type, key[N_SLOTS]; } g_stock[16]; static int g_nstock;
 
-static uint32_t mcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(fn);                                          /* the callee's ret pops it */
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
 static int mod_key(uint32_t key){
     if (!key || !g_grown) return 0;
     for (int i = 0; i < g.nparts; i++) if (g.p[i].key == key) return 1;
@@ -508,7 +493,7 @@ static int have_key(uint32_t key){ return mod_key(key) || (vinylpacks_key(key) &
 /* a car type's info (0x610130's search, without the call): its CarTypeInfo, 0 none; -1 not known yet (no car types) */
 int64_t modparts_cartype(uint32_t hash){
     uint32_t t = MR32(G_CARTYPES);
-    if (!ok(t, CARTYPES_N * CARTYPE_SZ)) return -1;
+    if (!guest_ok_bytes(t, CARTYPES_N * CARTYPE_SZ)) return -1;
     for (uint32_t i = 0; hash && i < CARTYPES_N; i++) if (MR32(t + i * CARTYPE_SZ + 0xd0u) == hash) return t + i * CARTYPE_SZ;
     return 0;
 }
@@ -521,15 +506,15 @@ static uint32_t lookalike(uint32_t key){
 static uint32_t stock_key(CPU *c, uint32_t type, uint32_t slot){
     for (int i = 0; i < g_nstock; i++) if (g_stock[i].type == type) return g_stock[i].key[slot];
     if (!g_ride && !(g_ride = gheap_alloc(1, 0x1000u, 1))) return 0;
-    uint32_t info = mcall(c, FN_TYPE_INFO, 0, 1, &type);
+    uint32_t info = gcall(c, FN_TYPE_INFO, 0, 1, &type);
     int i = g_nstock < 16 ? g_nstock++ : 15;
     g_stock[i].type = type;
     memset(g_stock[i].key, 0, sizeof g_stock[i].key);
     if (!info || !mem_is_committed(info + 0x840u)){ fprintf(stderr, "[mods] car type %08x: no info for its stock parts\n", type); return 0; }
     for (uint32_t o = 0; o < 0x1000u; o += 4u) MR32(g_ride + o) = 0;
     uint32_t a[4] = { MR32(info + 0x840u), 1u, 0, 0 }, z = 0;
-    mcall(c, FN_RIDE_INIT, g_ride, 4, a);
-    mcall(c, FN_RIDE_STOCK, g_ride, 1, &z);
+    gcall(c, FN_RIDE_INIT, g_ride, 4, a);
+    gcall(c, FN_RIDE_STOCK, g_ride, 1, &z);
     for (uint32_t s = 0; s < N_SLOTS; s++){
         uint32_t part = MR32(g_ride + RIDE_PARTS + 4u * s);
         g_stock[i].key[s] = part && mem_is_committed(part + 3u) ? MR32(part) : 0;
@@ -1018,26 +1003,26 @@ static uint32_t stock_part(CPU *c, uint32_t ride, uint32_t slot){
     if (!g_ride && !(g_ride = gheap_alloc(1, 0x1000u, 1))) return 0;
     for (uint32_t o = 0; o < 0x1000u; o += 4u) MR32(g_ride + o) = 0;
     uint32_t a[4] = { MR32(ride), 0, MR8(ride + 5u), MR8(ride + 6u) }, z = 0;
-    mcall(c, FN_RIDE_INIT, g_ride, 4, a);
-    mcall(c, FN_RIDE_STOCK, g_ride, 1, &z);
+    gcall(c, FN_RIDE_INIT, g_ride, 4, a);
+    gcall(c, FN_RIDE_STOCK, g_ride, 1, &z);
     return MR32(g_ride + RIDE_PARTS + 4u * slot);
 }
 void sub_005f04d0_orig(CPU *c);
 void sub_005f04d0(CPU *c){
     uint32_t ride = MR32(c->esp + 4u);
     sub_005f04d0_orig(c);
-    if (!modpacks_others_original() || !g_grown || !ok(ride, 0x8f0u)) return;
+    if (!modpacks_others_original() || !g_grown || !guest_ok_bytes(ride, 0x8f0u)) return;
     int n = 0, la_n = 0;
     for (uint32_t s = 0; s < N_SLOTS; s++){
         uint32_t part = MR32(ride + RIDE_PARTS + 4u * s);
-        if (!part || !ok(part, 4u) || !mod_key(MR32(part))) continue;
+        if (!part || !guest_ok_bytes(part, 4u) || !mod_key(MR32(part))) continue;
         uint32_t la = lookalike(MR32(part)), np = 0;
-        if (la){ uint32_t a[5] = { MR32(ride), s, la, 0, 0xffffffffu }; np = mcall(c, FN_GETCARPART, G_CARPARTDB, 5, a); }
+        if (la){ uint32_t a[5] = { MR32(ride), s, la, 0, 0xffffffffu }; np = gcall(c, FN_GETCARPART, G_CARPARTDB, 5, a); }
         if (np) la_n++; else np = stock_part(c, ride, s);
         MR32(ride + RIDE_PARTS + 4u * s) = np; n++;
     }
     if (!n) return;
-    mcall(c, FN_PARTS_ON, ride, 0, 0);
+    gcall(c, FN_PARTS_ON, ride, 0, 0);
     static int said;
     if (said++ < 8) fprintf(stderr, "[mods] a race's car (ride 0x%08x): %d mod part%s shown as the game's (%d look-alike%s, the rest stock)\n",
                             ride, n, n == 1 ? "" : "s", la_n, la_n == 1 ? "" : "s");

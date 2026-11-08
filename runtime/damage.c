@@ -36,6 +36,7 @@
  *   Off unless NFSU2_DAMAGE=1 (the start page's Crash damage, off by default); NFSU2_DAMAGE_LOG=1 logs every
  *   impact. */
 #include "cpu.h"
+#include "guest.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include "guest_span.h"           /* g_gwin_hi: the guest heap's window */
 #include <stdio.h>
@@ -186,7 +187,7 @@ float dmg_thiscall_f(uint32_t fn, uint32_t self, int n, const uint32_t *a){
 }
 uint32_t dmg_alloc(uint32_t n){ return gheap_alloc(1, n, 1); }
 void dmg_free(uint32_t p){ gheap_free(1, p); }
-int dmg_committed(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
+int dmg_committed(uint32_t a, uint32_t n){ return guest_ok_bytes(a, n); }
 uint32_t dmg_va_free(void){ return gheap_va_free(); }
 /* the guest heap has its window above the runtime (guest_span.h: a computer's browser; not phones, tablets, Safari) */
 int dmg_big_memory(void){ return g_gwin_hi != 0; }

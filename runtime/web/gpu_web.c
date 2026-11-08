@@ -32,9 +32,7 @@
 #include <math.h>
 #include <time.h>
 #include <stdatomic.h>
-
-#define ENVC(nm_) ({ static const char *_ev_; static int _ei_; \
-                     if (!_ei_){ _ei_ = 1; _ev_ = getenv(nm_); } _ev_; })
+#include "setting.h"      /* ENVC */
 
 void guest_wait_begin(void);     /* win32_ext.c: release the guest lock around a host wait */
 void guest_wait_end(void);

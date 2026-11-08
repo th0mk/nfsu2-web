@@ -35,6 +35,7 @@
  * The game's own look stays as it was while the lights are on.  NFSU2_LIGHTS_LOG=1 logs each press.  Tests: the
  * script command "lights ..." (lightkey_script), tests/web/scripts/lightkey_*.txt, tests/scripts/roam_lights_*.txt. */
 #include "cpu.h"
+#include "guest.h"
 #include "kbd.h"
 #include "gamepad.h"
 #include <math.h>
@@ -100,27 +101,20 @@ static struct {
  * aimed hi_pitch degrees higher (headlights.c) */
 static float g_hi_flare = 3.0f, g_hi_gain = 5.0f, g_hi_pitch = 5.0f;
 
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
-static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
-static void cstr(uint32_t a, char *o, int n){
-    int i = 0;
-    for (; a && i + 1 < n && ok(a + (uint32_t)i, 0) && MR8(a + (uint32_t)i); i++) o[i] = (char)MR8(a + (uint32_t)i);
-    o[i] = 0;
-}
 static double now_s(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec + ts.tv_nsec * 1e-9; }
 static int lg(void){ static int on = -1; if (on < 0){ const char *e = getenv("NFSU2_LIGHTS_LOG"); on = e && *e == '1'; } return on; }
 
-static uint32_t my_car(void){ uint32_t pl = rd32(G_PLAYER1); return pl ? rd32(pl + PL_CAR) : 0u; }
+static uint32_t my_car(void){ uint32_t pl = guest_rd32(G_PLAYER1); return pl ? guest_rd32(pl + PL_CAR) : 0u; }
 /* the player drives: the world runs (not paused), the drive camera, the HUD on top, no typing, not photo mode */
 static int driving(void){
-    uint32_t pl = rd32(G_PLAYER1), r = rd32(G_RACE);
-    if (rd32(G_FLOW) != 6u || !ok(pl, PL_MOVER + 4u) || !ok(r, 3) || MR32(r) != 4u || rd32(G_FREEZE)) return 0;
-    uint32_t car = rd32(pl + PL_CAR), mv = rd32(pl + PL_MOVER);
-    if (!ok(car, 0x9e0) || !ok(mv, MV_TYPE + 4u) || MR32(mv + MV_TYPE) != MOVER_DRIVE) return 0;
+    uint32_t pl = guest_rd32(G_PLAYER1), r = guest_rd32(G_RACE);
+    if (guest_rd32(G_FLOW) != 6u || !guest_ok(pl, PL_MOVER + 4u) || !guest_ok(r, 3) || MR32(r) != 4u || guest_rd32(G_FREEZE)) return 0;
+    uint32_t car = guest_rd32(pl + PL_CAR), mv = guest_rd32(pl + PL_MOVER);
+    if (!guest_ok(car, 0x9e0) || !guest_ok(mv, MV_TYPE + 4u) || MR32(mv + MV_TYPE) != MOVER_DRIVE) return 0;
     if (mem_is_committed(G_TXT_REC + 3u) && MR8(G_TXT_ON) && MR32(G_TXT_REC)) return 0;
-    uint32_t hud = rd32(pl + PL_HUD), fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? rd32(mg + 0xe4u) : 0;
+    uint32_t hud = guest_rd32(pl + PL_HUD), fe = guest_rd32(G_FENG), mg = fe ? guest_rd32(fe + 8u) : 0, top = mg ? guest_rd32(mg + 0xe4u) : 0;
     char a[40], b[40];
-    cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
+    guest_read_str(top ? guest_rd32(top + 0xcu) : 0, a, sizeof a); guest_read_str(hud ? guest_rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b);
 }
 
@@ -144,7 +138,7 @@ void lightkey_car(int k, uint32_t car, int st){
         /* the slot's car before is gone or another slot's now: never written again from here.  A car new to the slot
          * with its lights off may be one we turned off in another slot: on again below unless its player has them off */
         K.fcar[k] = car; K.fst[k] = LK_NORMAL;
-        K.fdark[k] = ok(car, 0x9e0) && !MR8(car + CAR_HL_ON);
+        K.fdark[k] = guest_ok(car, 0x9e0) && !MR8(car + CAR_HL_ON);
     }
     if (!car) return;
     st = st == LK_OFF || st == LK_HIGH ? st : LK_NORMAL;
@@ -233,7 +227,7 @@ void lightkey_frame(CPU *c){
     int st = lightkey_mine();
     if (st != K.last && lg()) fprintf(stderr, "[lights] f=%ld my lights %s\n", autotest_frame(), st_name(st));
     K.last = st;
-    if (ok(car, 0x9e0)){
+    if (guest_ok(car, 0x9e0)){
         if (st == LK_OFF){ MR8(car + CAR_HL_ON) = 0; K.dark = 1; }
         else if (K.dark){ MR8(car + CAR_HL_ON) = 1; K.dark = 0; }    /* (the game's next step sets its own) */
     }
@@ -243,7 +237,7 @@ void lightkey_frame(CPU *c){
     K.fresh = 0;
     for (int k = 0; k < LK_SLOTS; k++){
         uint32_t fc = K.fcar[k];
-        if (!fc || !ok(fc, 0x9e0)) continue;
+        if (!fc || !guest_ok(fc, 0x9e0)) continue;
         if (K.fst[k] == LK_OFF){ MR8(fc + CAR_HL_ON) = 0; K.fdark[k] = 1; }
         else if (K.fdark[k]){ MR8(fc + CAR_HL_ON) = 1; K.fdark[k] = 0; }
     }
@@ -253,17 +247,17 @@ void lightkey_frame(CPU *c){
  * photo.c's override of 0x615630, around the game's: the car whose flares it draws now (its render info; 0: done) */
 void lightkey_flares(uint32_t ri){
     K.flare_ri = ri; K.flare_k = 1.f;
-    if (!ri || !ok(ri, 3)) return;
+    if (!ri || !guest_ok(ri, 3)) return;
     K.fl_cars++;
     if (lightkey_state(MR32(ri)) == LK_HIGH){ K.flare_k = g_hi_flare; K.fl_cars_hi++; }
 }
 void sub_00490920_orig(CPU *c);
 void sub_00490920(CPU *c){                       /* a light's flare (cdecl: view, light, matrix, strength, ...) */
     if (K.flare_ri && K.flare_k != 1.f){
-        uint32_t light = MR32(c->esp + 8u), h = ok(light, 0xb) ? MR32(light + 8u) : 0u;
+        uint32_t light = MR32(c->esp + 8u), h = guest_ok(light, 0xb) ? MR32(light + 8u) : 0u;
         if (h == HASH_HL_A || h == HASH_HL_B){ MRF32(c->esp + 0x10u) *= K.flare_k; K.fl_scaled++; }
     }
-    if (K.flare_ri){ uint32_t light = MR32(c->esp + 8u), h = ok(light, 0xb) ? MR32(light + 8u) : 0u; K.fl_hl += h == HASH_HL_A || h == HASH_HL_B; }
+    if (K.flare_ri){ uint32_t light = MR32(c->esp + 8u), h = guest_ok(light, 0xb) ? MR32(light + 8u) : 0u; K.fl_hl += h == HASH_HL_A || h == HASH_HL_B; }
     sub_00490920_orig(c);
 }
 
@@ -280,11 +274,11 @@ void lightkey_self_lit(int on){ g_self_lit = on; }
 uint32_t split_render_player(void);   /* splitscreen.c: the Player* whose view split screen draws now, 0 none */
 int lightkey_road_vector(uint32_t handle, uint32_t vec){
     int st = lightkey_mine();
-    if (st == LK_NORMAL || rd32(G_FLOW) != 6u) return 0;
+    if (st == LK_NORMAL || guest_rd32(G_FLOW) != 6u) return 0;
     uint32_t rp = split_render_player();
-    if (rp && rp != rd32(G_PLAYER1)) return 0;                          /* (another split-screen player's own light) */
-    uint32_t sh = rd32(G_SHADER), p = sh ? rd32(sh + 0x1cu) : 0;
-    if (!p || !ok(p + SH_HLCOLOR, 3) || MR32(p + SH_HLCOLOR) != handle || !ok(vec, 15)) return 0;
+    if (rp && rp != guest_rd32(G_PLAYER1)) return 0;                          /* (another split-screen player's own light) */
+    uint32_t sh = guest_rd32(G_SHADER), p = sh ? guest_rd32(sh + 0x1cu) : 0;
+    if (!p || !guest_ok(p + SH_HLCOLOR, 3) || MR32(p + SH_HLCOLOR) != handle || !guest_ok(vec, 15)) return 0;
     float k = st == LK_OFF ? 0.f : g_self_lit ? 0.f : g_hi_gain;
     for (uint32_t i = 0; i < 3; i++) MRF32(vec + 4u * i) *= k;
     K.rd_set++;
@@ -306,16 +300,16 @@ int lightkey_script(const char *s){
     if (!strcasecmp(w, "report")){
         fprintf(stderr, "[lights] f=%ld mine %s (off %d, flash %d), taps %lu, holds %lu, car 0x%08x +0x93d %u; high beam: flares x%.2f, road x%.2f, %.1f deg up\n",
                 autotest_frame(), st_name(lightkey_mine()), K.off, K.flash, K.taps, K.holds, K.car,
-                ok(K.car, 0x9e0) ? MR8(K.car + CAR_HL_ON) : 0u, (double)g_hi_flare, (double)g_hi_gain, (double)g_hi_pitch);
+                guest_ok(K.car, 0x9e0) ? MR8(K.car + CAR_HL_ON) : 0u, (double)g_hi_flare, (double)g_hi_gain, (double)g_hi_pitch);
         fprintf(stderr, "[lights]   flares: %lu cars' drawn (%lu on high beam), %lu headlight flares, %lu of them brighter; our road light set %lu times\n",
                 K.fl_cars, K.fl_cars_hi, K.fl_hl, K.fl_scaled, K.rd_set);
         for (int k = -1; k < LK_SLOTS; k++){            /* (and the fields 0x615630 draws the headlight flares by) */
             uint32_t c = k < 0 ? K.car : K.fcar[k];
-            if (!c || !ok(c, 0x9e0)) continue;
-            uint32_t ri = rd32(c + 0x554u), lt = rd32(c + 0x8e4u);
+            if (!c || !guest_ok(c, 0x9e0)) continue;
+            uint32_t ri = guest_rd32(c + 0x554u), lt = guest_rd32(c + 0x8e4u);
             fprintf(stderr, "[lights]   %s %d car 0x%08x: %s, +0x93d %u, its render info's car 0x%08x, light type %d\n",
                     k < 0 ? "mine" : "slot", k, c, st_name(k < 0 ? lightkey_mine() : K.fst[k]), MR8(c + CAR_HL_ON),
-                    ri && ok(ri, 3) ? MR32(ri) : 0u, lt && ok(lt, 4) ? (int)(int8_t)MR8(lt + 4u) : -1);
+                    ri && guest_ok(ri, 3) ? MR32(ri) : 0u, lt && guest_ok(lt, 4) ? (int)(int8_t)MR8(lt + 4u) : -1);
         }
         return 1;
     }

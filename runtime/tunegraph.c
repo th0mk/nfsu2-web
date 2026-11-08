@@ -23,10 +23,10 @@
  * so turning back moves it after 8 units.  Original: the pointer only picks
  * the column. */
 #include "cpu.h"
+#include "guest.h"
 #include <stdio.h>
 
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
-void dispatch_indirect(CPU *c, uint32_t addr);
 void sub_005654d0(CPU *c);
 
 #define FN_TUNE_MSG  0x005654d0u   /* thiscall (msg, obj, a3, a4), ret 0x10 */
@@ -49,18 +49,6 @@ void sub_005654d0(CPU *c);
 static uint32_t g_drag;            /* the screen whose graph the button holds, 0: none */
 static int g_inner;                /* the game's own handling of the mouse runs */
 static int g_ref, g_steps;         /* the pointer's y the next step counts from; steps so far */
-
-static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(fn);                                  /* the callee's ret pops it */
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
 
 static int pointer_y(void){ return (int32_t)MR32(MOUSE + 8u); }
 

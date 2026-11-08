@@ -94,6 +94,7 @@
  *   photo_target the kind of car the camera is on (KIND_*: 0 the player's, 1 a friend's, 2 a crew-mate's, 3 another
  *               player's, 4 traffic, 5 a racer's) */
 #include "cpu.h"
+#include "guest.h"
 #include "coop.h"
 #include "kbd.h"
 #include <math.h>
@@ -104,7 +105,6 @@
 #include <strings.h>
 #include <time.h>
 
-void dispatch_indirect(CPU *c, uint32_t addr);
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
 long autotest_frame(void);
 const char *language_name(void);
@@ -126,7 +126,6 @@ __attribute__((weak)) void gw_photo(uint32_t state, uint32_t n, uint32_t target,
 __attribute__((weak)) uint32_t gw_photo_got(uint32_t gen){ (void)gen; return 0; }
 __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 
-#define HOOK_RET       0x00581475u   /* the main-loop hook's return address, as guest calls see it */
 #define G_FLOW         0x008654a4u   /* 6: in the world */
 #define G_RACE         0x00890118u   /* the race status: +0 4 racing, 6 paused */
 #define G_RACEKIND     0x0089e7b0u   /* 0 free roam */
@@ -334,65 +333,45 @@ static struct {
 /* the car renders of this frame in photo mode, and those only it gave the full model; the frame before's */
 static int cars_drawn, cars_full, cars_drawn1, cars_full1;
 
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
-static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
 static void rd3(uint32_t a, float *v){ for (int i = 0; i < 3; i++) v[i] = MRF32(a + 4u * (uint32_t)i); }
 static void wr3(uint32_t a, const float *v){ for (int i = 0; i < 3; i++) MRF32(a + 4u * (uint32_t)i) = v[i]; }
-static void cstr(uint32_t a, char *o, int n){
-    int i = 0;
-    for (; a && i + 1 < n && ok(a + (uint32_t)i, 0) && MR8(a + (uint32_t)i); i++) o[i] = (char)MR8(a + (uint32_t)i);
-    o[i] = 0;
-}
 static float clampf(float v, float lo, float hi){ return v < lo ? lo : v > hi ? hi : v; }
 static float s16(int packed, int hi){ return (float)(int16_t)(hi ? (uint32_t)packed >> 16 : (uint32_t)packed & 0xffffu) / 32767.f; }
 static double now_s(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec + ts.tv_nsec * 1e-9; }
 
-/* a guest function with ecx and stack arguments, the CPU as it was after */
-static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(HOOK_RET);
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
-
 /* the sound at the volumes at v (the options' own, or the quiet copy) */
 static void volumes(CPU *c, uint32_t v){
-    uint32_t snd = rd32(G_SOUND);
-    if (snd && v) gcall(c, FN_VOLUMES, snd, 1, &v);
+    uint32_t snd = guest_rd32(G_SOUND);
+    if (snd && v) gcall_main(c, FN_VOLUMES, snd, 1, &v);
 }
 static void hush(CPU *c){
-    if (!P.quiet){ uint32_t n = VOL_BYTES; P.quiet = gcall(c, FN_NEW, 0, 1, &n); }
-    if (!ok(P.quiet, VOL_BYTES - 1u)){ P.quiet = 0; return; }
+    if (!P.quiet){ uint32_t n = VOL_BYTES; P.quiet = gcall_main(c, FN_NEW, 0, 1, &n); }
+    if (!guest_ok(P.quiet, VOL_BYTES - 1u)){ P.quiet = 0; return; }
     memcpy(g_mem + P.quiet, g_mem + G_VOLUMES, VOL_BYTES);
     for (uint32_t o = 0x10u; o <= 0x18u; o += 4u) MRF32(P.quiet + o) = 0.f;
     volumes(c, P.quiet);
 }
 
-static uint32_t player(void){ uint32_t p = rd32(G_PLAYER1); return ok(p, PL_HUD + 4u) ? p : 0; }
-static uint32_t car_of(uint32_t pl){ uint32_t c = pl ? rd32(pl + PL_CAR) : 0; return ok(c, 0x70) ? c : 0; }
-static uint32_t mover_type(uint32_t pl){ uint32_t m = pl ? rd32(pl + PL_MOVER) : 0; return ok(m, MV_KEYS + 20u) ? MR32(m + MV_TYPE) : 0; }
-static uint32_t view1_camera(void){ uint32_t cam = rd32(G_VIEW1 + 0x40u); return ok(cam, CAM_FOV + 2u) ? cam : 0; }
+static uint32_t player(void){ uint32_t p = guest_rd32(G_PLAYER1); return guest_ok(p, PL_HUD + 4u) ? p : 0; }
+static uint32_t car_of(uint32_t pl){ uint32_t c = pl ? guest_rd32(pl + PL_CAR) : 0; return guest_ok(c, 0x70) ? c : 0; }
+static uint32_t mover_type(uint32_t pl){ uint32_t m = pl ? guest_rd32(pl + PL_MOVER) : 0; return guest_ok(m, MV_KEYS + 20u) ? MR32(m + MV_TYPE) : 0; }
+static uint32_t view1_camera(void){ uint32_t cam = guest_rd32(G_VIEW1 + 0x40u); return guest_ok(cam, CAM_FOV + 2u) ? cam : 0; }
 static int network_race(void){
     return MR8(G_NET_ONLINE) || (int32_t)MR32(G_NET_CLIENT) > 0 || (int32_t)MR32(G_NET_HOST) > 0;
 }
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(uint32_t pl){
-    uint32_t hud = rd32(pl + PL_HUD), fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0, top = mg ? coop_fe_top(mg) : 0;
+    uint32_t hud = guest_rd32(pl + PL_HUD), fe = guest_rd32(G_FENG), mg = fe ? guest_rd32(fe + 8u) : 0, top = mg ? coop_fe_top(mg) : 0;
     char a[40], b[40];
-    cstr(top ? rd32(top + 0xcu) : 0, a, sizeof a); cstr(hud ? rd32(hud + 0x10u) : 0, b, sizeof b);
+    guest_read_str(top ? guest_rd32(top + 0xcu) : 0, a, sizeof a); guest_read_str(hud ? guest_rd32(hud + 0x10u) : 0, b, sizeof b);
     return a[0] && !strcasecmp(a, b);
 }
 /* why photo mode cannot be on now (0: it can); on: it is, with our camera */
 static const char *not_now(int on){
-    uint32_t pl = player(), r = rd32(G_RACE);
+    uint32_t pl = player(), r = guest_rd32(G_RACE);
     if (MR32(G_FLOW) != 6u || !pl || !car_of(pl)) return "not in the world";
     if (network_race()) return "a race over the network";
-    if (!ok(r, 3) || MR32(r) != 4u) return "not driving";
+    if (!guest_ok(r, 3) || MR32(r) != 4u) return "not driving";
     if (!hud_on_top(pl)) return "a screen over the HUD";
     if (mover_type(pl) != (on ? MOVER_DEBUG : MOVER_DRIVE)) return on ? "the game changed the camera" : "not the drive camera";
     return 0;
@@ -426,7 +405,7 @@ static void clear_input(void){
 
 /* ---- the cars: what kind each is, the car the camera is on, the other cars' headlights ------------------------- */
 static int car_live(uint32_t car){              /* a car of the world's in play: active, not parked, not blinking out */
-    return ok(car, CAR_BLINKOUT) && MR8(car + CAR_ACTIVE) && !MR8(car + CAR_BLINKOUT) && fabsf(MRF32(car + 0x68u) - PARK_Z) >= 0.001f;
+    return guest_ok(car, CAR_BLINKOUT) && MR8(car + CAR_ACTIVE) && !MR8(car + CAR_BLINKOUT) && fabsf(MRF32(car + 0x68u) - PARK_Z) >= 0.001f;
 }
 static int car_kind(uint32_t car, uint32_t mine){
     if (car == mine) return KIND_MINE;
@@ -442,11 +421,11 @@ static int kind_shown(int kind){
 }
 /* the world's cars, each in play (at most 256: the list is the game's) */
 static int world_cars(uint32_t *out, int max){
-    uint32_t w = rd32(G_WORLD);
+    uint32_t w = guest_rd32(G_WORLD);
     int n = 0, guard = 0;
     if (!w) return 0;
-    for (uint32_t car = rd32(w); car && car != w && guard < 256 && n < max; car = rd32(car), guard++){
-        if (!ok(car, CAR_BLINKOUT)) break;
+    for (uint32_t car = guest_rd32(w); car && car != w && guard < 256 && n < max; car = guest_rd32(car), guard++){
+        if (!guest_ok(car, CAR_BLINKOUT)) break;
         if (car_live(car)) out[n++] = car;
     }
     return n;
@@ -504,7 +483,7 @@ static int target_there(uint32_t mine){
 static void lights_restore(void){
     for (int i = 0; i < P.ndark; i++){
         uint32_t car = P.dark[i];
-        if (car_live(car) && ok(car, CAR_HL_ON) && lightkey_state(car) != 1) MR8(car + CAR_HL_ON) = 1;
+        if (car_live(car) && guest_ok(car, CAR_HL_ON) && lightkey_state(car) != 1) MR8(car + CAR_HL_ON) = 1;
     }
     P.ndark = 0;
 }
@@ -513,7 +492,7 @@ static void lights_off(uint32_t mine){
     int n = world_cars(cars, 256);
     for (int i = 0; i < n; i++){
         uint32_t car = cars[i];
-        if (car == mine || !ok(car, CAR_HL_ON) || !MR8(car + CAR_HL_ON)) continue;
+        if (car == mine || !guest_ok(car, CAR_HL_ON) || !MR8(car + CAR_HL_ON)) continue;
         MR8(car + CAR_HL_ON) = 0;
         int k = 0;
         while (k < P.ndark && P.dark[k] != car) k++;
@@ -598,7 +577,7 @@ static void enter(CPU *c){
     P.freeze_was = MR32(G_FREEZE);
     MR32(G_FREEZE) = P.drive_on ? P.freeze_was : 1u;
     uint32_t arg[2] = { MOVER_DEBUG, 0u };
-    gcall(c, FN_SET_MOVER, pl, 2, arg);
+    gcall_main(c, FN_SET_MOVER, pl, 2, arg);
     if (mover_type(pl) != MOVER_DEBUG){
         MR32(G_FREEZE) = P.freeze_was;
         fprintf(stderr, "[photo] f=%ld no free camera (mover type %u): not opened\n", autotest_frame(), mover_type(pl));
@@ -619,8 +598,8 @@ static void enter(CPU *c){
     if (!P.speed_blur) MR32(G_MOTION_BLUR) = 0;
     roam_game_hold(!P.drive_on);
     horn_mute(!P.horns);
-    uint32_t rn = rd32(G_RAIN);                     /* the rain as it is: back so after a photo's own weather */
-    P.rain_saved = ok(rn, 0x50a3u);
+    uint32_t rn = guest_rd32(G_RAIN);                     /* the rain as it is: back so after a photo's own weather */
+    P.rain_saved = guest_ok(rn, 0x50a3u);
     if (P.rain_saved){ P.rain_was[0] = MRF32(rn + 0x1f0u); P.rain_was[1] = MRF32(rn + 0x5098u); P.rain_was[2] = MRF32(rn + 0x509cu); }
     P.target = 0; P.target_kind = KIND_MINE; P.path_play = 0;
     P.focus_auto = 1; P.acc = 0; P.acc_n = 0;
@@ -630,15 +609,15 @@ static void enter(CPU *c){
 }
 static void leave(CPU *c, const char *why){
     uint32_t pl = player();
-    if (MR32(G_FLOW) == 6u && pl && mover_type(pl) == MOVER_DEBUG){ uint32_t z = 0; gcall(c, FN_OWN_CAMERA, pl, 1, &z); }
+    if (MR32(G_FLOW) == 6u && pl && mover_type(pl) == MOVER_DEBUG){ uint32_t z = 0; gcall_main(c, FN_OWN_CAMERA, pl, 1, &z); }
     MR32(G_FREEZE) = P.freeze_was;
     volumes(c, G_VOLUMES);
     MR32(G_LEAST_LOD_A) = P.least[0]; MR32(G_LEAST_LOD_B) = P.least[1];
     MR32(G_MOTION_BLUR) = P.mb_was; MR32(G_HEADLIGHTS) = P.hl_was;
     roam_game_hold(0);
     lights_restore(); horn_mute(0);
-    uint32_t rn = rd32(G_RAIN);
-    if (P.weather >= 0 && P.rain_saved && ok(rn, 0x50a3u)){
+    uint32_t rn = guest_rd32(G_RAIN);
+    if (P.weather >= 0 && P.rain_saved && guest_ok(rn, 0x50a3u)){
         MRF32(rn + 0x1f0u) = P.rain_was[0]; MRF32(rn + 0x5098u) = P.rain_was[1]; MRF32(rn + 0x509cu) = P.rain_was[2]; }
     P.target = 0; P.path_play = 0;
     memset(P.jit, 0, sizeof P.jit);
@@ -1101,7 +1080,7 @@ static void picture(void){
 
 /* the camera mover's: the eye and the point, nothing of its own */
 static void place(uint32_t pl){
-    uint32_t m = rd32(pl + PL_MOVER);
+    uint32_t m = guest_rd32(pl + PL_MOVER);
     memset(g_mem + m + MV_KEYS, 0, 20);
     MR32(G_FOLLOW) = 0xffffffffu;
     MR32(G_NUDGE) = 0; MR32(G_NUDGE + 4u) = 0; MR32(G_NUDGE + 8u) = 0;
@@ -1259,13 +1238,13 @@ static int holds(uint32_t o, const uint32_t *keep, int nk, int depth){
     for (int i = 0; i < nk; i++) if (o == keep[i]) return 1;
     if (depth >= 8 || MR32(o + OB_TYPE) != 5u) return 0;
     int n = 0;
-    for (uint32_t it = rd32(o + OB_CHILD); it && ok(it, OB_CHILD + 4u) && n < 4096; it = rd32(it + OB_NEXT), n++)
+    for (uint32_t it = guest_rd32(o + OB_CHILD); it && guest_ok(it, OB_CHILD + 4u) && n < 4096; it = guest_rd32(it + OB_NEXT), n++)
         if (holds(it, keep, nk, depth + 1)) return 1;
     return 0;
 }
 static void hide_but(uint32_t first, const uint32_t *keep, int nk, int depth){
     int n = 0;
-    for (uint32_t o = rd32(first); o && ok(o, OB_CHILD + 4u) && n < 4096; o = rd32(o + OB_NEXT), n++){
+    for (uint32_t o = guest_rd32(first); o && guest_ok(o, OB_CHILD + 4u) && n < 4096; o = guest_rd32(o + OB_NEXT), n++){
         int group = MR32(o + OB_TYPE) == 5u && depth < 8;
         if (holds(o, keep, nk, depth)){
             if (group) hide_but(o + OB_CHILD, keep, nk, depth + 1);
@@ -1286,18 +1265,18 @@ void sub_005378c0(CPU *c){
         return;
     }
     if (S.mode == (int)GW_CAP_TILES){ POP32(c->eip); return; }       /* tiles: the names would be where the whole view has them */
-    uint32_t keep[NAMES_MAX], fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0;
-    int nk = P.names && (P.show & SHOW_PEOPLE) == SHOW_PEOPLE && ok(mg, 0xf7) ? roam_game_names(c, keep, NAMES_MAX) : 0;   /* (players' cars hidden: no names) */
+    uint32_t keep[NAMES_MAX], fe = guest_rd32(G_FENG), mg = fe ? guest_rd32(fe + 8u) : 0;
+    int nk = P.names && (P.show & SHOW_PEOPLE) == SHOW_PEOPLE && guest_ok(mg, 0xf7) ? roam_game_names(c, keep, NAMES_MAX) : 0;   /* (players' cars hidden: no names) */
     if (!nk){ POP32(c->eip); return; }
     nhid = 0;
     char seen[160] = ""; int np = 0;
     for (uint32_t head = 0xe4u; head <= 0xf4u; head += 0x10u)
-        for (uint32_t r = rd32(mg + head); r && ok(r, 0x10) && np < 64; r = rd32(r + 4u), np++){
-            uint32_t name = rd32(r + 0xcu), pk = name ? gcall(c, FN_FE_PACKAGE, 0, 1, &name) : 0;
-            if (!ok(pk, PK_FIRST + 4u)) continue;
+        for (uint32_t r = guest_rd32(mg + head); r && guest_ok(r, 0x10) && np < 64; r = guest_rd32(r + 4u), np++){
+            uint32_t name = guest_rd32(r + 0xcu), pk = name ? gcall_main(c, FN_FE_PACKAGE, 0, 1, &name) : 0;
+            if (!guest_ok(pk, PK_FIRST + 4u)) continue;
             hide_but(pk + PK_FIRST, keep, nk, 0);
             if (P.drawn) continue;
-            char b[40]; cstr(name, b, sizeof b);
+            char b[40]; guest_read_str(name, b, sizeof b);
             snprintf(seen + strlen(seen), sizeof seen - strlen(seen), "%s%s", seen[0] ? ", " : "", b);
         }
     if (!P.drawn){ P.drawn = 1; fprintf(stderr, "[photo] f=%ld names: %d, the rest of %s hidden (%d)\n", autotest_frame(), nk, seen, nhid); }
@@ -1311,11 +1290,11 @@ void sub_004c2640_orig(CPU *c);
 void sub_004c2640(CPU *c){
     uint32_t it = c->ecx, pl = player();
     sub_004c2640_orig(c);
-    const char *no = !atomic_load(&I.page) ? "no page for it" : !P.label || !ok(it, IT_LABEL + 4u) ? "no label" :
+    const char *no = !atomic_load(&I.page) ? "no page for it" : !P.label || !guest_ok(it, IT_LABEL + 4u) ? "no label" :
                      network_race() ? "a race over the network" : !car_of(pl) ? "no car" :
                      mover_type(pl) != MOVER_DRIVE ? "not the drive camera" : 0;
     fprintf(stderr, "[photo] f=%ld the pause menu's Replay%s, Photo Mode %s%s (camera %u)\n", autotest_frame(),
-            ok(it, IT_GREY) && MR8(it + IT_GREY) ? " (greyed out)" : "", no ? "not: " : "after it", no ? no : "", mover_type(pl));
+            guest_ok(it, IT_GREY) && MR8(it + IT_GREY) ? " (greyed out)" : "", no ? "not: " : "after it", no ? no : "", mover_type(pl));
     P.after = no ? 0u : it;
     P.coop_after = no ? it : 0u;        /* coop.c's Add Player 2 after Photo Mode, or after Replay without it */
 }
@@ -1333,13 +1312,13 @@ static void add_item(CPU *c){
     if (it && it == P.coop_after){ P.coop_after = 0; coop_item(c, menu); }
     if (!it || it != P.after) return;
     P.after = 0;
-    uint32_t n = ITEM_BYTES, ph = gcall(c, FN_NEW, 0, 1, &n);
-    if (!ok(ph, ITEM_BYTES)) return;
+    uint32_t n = ITEM_BYTES, ph = gcall_main(c, FN_NEW, 0, 1, &n);
+    if (!guest_ok(ph, ITEM_BYTES)) return;
     uint32_t arg[3] = { ICON_PHOTO, P.label, 0 };
-    gcall(c, FN_ITEM, ph, 3, arg);
+    gcall_main(c, FN_ITEM, ph, 3, arg);
     MR32(ph) = VT_REPLAY;
     P.coop_after = ph;
-    gcall(c, FN_ADD_ITEM, menu, 1, &ph);
+    gcall_main(c, FN_ADD_ITEM, menu, 1, &ph);
 }
 /* Their action (thiscall: package, message, ...; ret 0x14): Photo Mode's Accept asks for photo mode, then resumes
  * the game as the menu's Resume does; Save's is savegame.c's; Replay's as the game has it. */
@@ -1353,7 +1332,7 @@ static void act(CPU *c){
     if (co == 1){ POP32(c->eip); c->esp += 0x14u; return; }
     if (co == 2) return;
     uint32_t it = c->ecx, msg = MR32(c->esp + 8u);
-    if (msg != MSG_ACCEPT || !ok(it, IT_LABEL + 4u) || MR32(it + IT_LABEL) != P.label || MR8(it + IT_GREY)){ sub_004c26b0(c); return; }
+    if (msg != MSG_ACCEPT || !guest_ok(it, IT_LABEL + 4u) || MR32(it + IT_LABEL) != P.label || MR8(it + IT_GREY)){ sub_004c26b0(c); return; }
     P.pause_at = autotest_frame();
     fprintf(stderr, "[photo] f=%ld the pause menu's Photo Mode\n", autotest_frame());
     if (MR32(G_RACEKIND) == 0u) sub_004c2510(c); else sub_004c24c0(c);
@@ -1377,9 +1356,9 @@ static void act(CPU *c){
 int photo_hides(uint32_t ri){
     if (!P.on || P.show == SHOW_ALL) return 0;
     if (!P.show) return 1;
-    uint32_t mine = car_of(player()), car = ok(ri, 3) ? MR32(ri) : 0;   /* (a render info's car at its +0) */
-    if (mine && ri == rd32(mine + CAR_RENDER)) return !(P.show & SHOW_MINE);
-    return !ok(car, CAR_BLINKOUT) ? 0 : !kind_shown(car_kind(car, mine));
+    uint32_t mine = car_of(player()), car = guest_ok(ri, 3) ? MR32(ri) : 0;   /* (a render info's car at its +0) */
+    if (mine && ri == guest_rd32(mine + CAR_RENDER)) return !(P.show & SHOW_MINE);
+    return !guest_ok(car, CAR_BLINKOUT) ? 0 : !kind_shown(car_kind(car, mine));
 }
 #define SIZE_MODEL_A   40            /* the table's first: the full model from this size */
 void sub_0048acb0_orig(CPU *c);

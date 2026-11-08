@@ -29,6 +29,7 @@
  * event is won.  Nothing else changes: such a part is bought like any other and
  * is then the car's, in the profile too. */
 #include "cpu.h"
+#include "guest.h"
 #include <stdio.h>
 
 #define G_CAREER       0x0085ad40u
@@ -41,12 +42,10 @@
 #define LEVEL_UNIQUE   4u
 #define F_STAGE        4u             /* 0x515500's filter: the stage's unlocks (the shops) */
 
-static int committed(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
-
 /* Career 0x500B80 with stage 5's final event: Caleb's race won */
 int uniques_caleb_beaten(void){
     uint32_t si = MR32(G_S5_INFO);
-    if (!committed(si, SI_FINAL + 4u)) return 0;
+    if (!guest_ok_bytes(si, SI_FINAL + 4u)) return 0;
     uint32_t h = MR32(si + SI_FINAL), n = MR32(G_CAREER + C_NEVENTS);
     if (!h || n > C_MAXEVENTS) return 0;
     for (uint32_t i = 0; i < n; i++){
@@ -62,7 +61,7 @@ void sub_00515500_orig(CPU *c);
 void sub_00515500(CPU *c){
     uint32_t filter = MR32(c->esp + 4u), slot = MR32(c->esp + 8u), part = MR32(c->esp + 12u);
     sub_00515500_orig(c);
-    if ((c->eax & 0xffu) || !(filter & F_STAGE) || !committed(part, P_LEVEL + 1u)) return;
+    if ((c->eax & 0xffu) || !(filter & F_STAGE) || !guest_ok_bytes(part, P_LEVEL + 1u)) return;
     if ((MR8(part + P_LEVEL) >> 5) != LEVEL_UNIQUE || !uniques_caleb_beaten()) return;
     c->eax = (c->eax & ~0xffu) | 1u;
     if (!g_said){

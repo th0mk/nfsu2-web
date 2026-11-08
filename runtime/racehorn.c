@@ -30,6 +30,7 @@
  * Only in the browser, where Online and the virtual LAN are; the Mac's LAN
  * has no such port (the weak stand-ins below). */
 #include "cpu.h"
+#include "guest.h"
 #include "horn.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,8 +67,6 @@ __attribute__((weak)) int host_status_slot(const char *name){ (void)name; return
 __attribute__((weak)) void host_status_set_n(const int *slot, const double *value, int n){ (void)slot; (void)value; (void)n; }
 const char *autotest_top_fng(void);
 
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
-static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
 static void rd3(uint32_t a, float *o){ o[0] = MRF32(a); o[1] = MRF32(a + 4u); o[2] = MRF32(a + 8u); }
 static uint32_t now_ms(void){
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -81,18 +80,18 @@ static uint32_t fnv1a(const char *s){
 /* the name of the player whose car this is (printable, at most 15
  * characters), "" for none */
 static void car_name(uint32_t car, char *o){
-    int i = ok(car, 0x9e0) ? (int16_t)MR16(car + 0xau) : -1;
-    uint32_t pl = i >= 0 && i < 6 ? rd32(G_NETPLAYERS + 4u * (uint32_t)i) : 0;
+    int i = guest_ok(car, 0x9e0) ? (int16_t)MR16(car + 0xau) : -1;
+    uint32_t pl = i >= 0 && i < 6 ? guest_rd32(G_NETPLAYERS + 4u * (uint32_t)i) : 0;
     int n = 0;
-    if (ok(pl, NP_NAME + NAME_N))
+    if (guest_ok(pl, NP_NAME + NAME_N))
         for (; n < NAME_N - 1; n++){ uint8_t ch = MR8(pl + NP_NAME + (uint32_t)n); if (ch < 0x20 || ch > 0x7e) break; o[n] = (char)ch; }
     o[n] = 0;
 }
 /* the car has hydraulics, so the stick click is not the horn (horn.h; as
  * roam_game.c's has_hydraulics: RideInfo +0x581, or G_HYD_LEVEL's when not -1) */
 static int has_hydraulics(uint32_t car){
-    uint32_t ride = ok(car, 0x14) ? rd32(car + 0x10u) : 0;
-    int32_t lv = ok(ride, 0x581) ? (int8_t)MR8(ride + 0x581u) : 0, ov = (int32_t)rd32(G_HYD_LEVEL);
+    uint32_t ride = guest_ok(car, 0x14) ? guest_rd32(car + 0x10u) : 0;
+    int32_t lv = guest_ok(ride, 0x581) ? (int8_t)MR8(ride + 0x581u) : 0, ov = (int32_t)guest_rd32(G_HYD_LEVEL);
     return (ov > -1 ? ov : lv) != 0;
 }
 
@@ -254,9 +253,9 @@ void racehorn_frame(CPU *c){
     uint32_t now = now_ms(), from;
     static uint8_t m[8 + 0x400];                         /* (a car state: racenet.c's N2CS, up to a bit stream's 0x400 bytes) */
     int n;
-    uint32_t pl = rd32(G_PLAYER1), me = pl ? rd32(pl + 4u) : 0, w = rd32(G_WORLD);
+    uint32_t pl = guest_rd32(G_PLAYER1), me = pl ? guest_rd32(pl + 4u) : 0, w = guest_rd32(G_WORLD);
     float dt = MRF32(G_WORLDDT);
-    int racing = rd32(G_FLOW) == 6u && (rd32(G_NETMODE) & 0x208u) && ok(me, 0x9e0) && ok(w, 0x80);
+    int racing = guest_rd32(G_FLOW) == 6u && (guest_rd32(G_NETMODE) & 0x208u) && guest_ok(me, 0x9e0) && guest_ok(w, 0x80);
     int runs = racing && dt > 0.f && dt < 1.f;           /* not paused, not loading */
     char mine[NAME_N];
     car_name(me, mine);
@@ -281,16 +280,16 @@ void racehorn_frame(CPU *c){
     /* the horns heard here */
     if (!runs && !g_active) return;                      /* free roam may have the voices */
     float L[3] = {0}, f[3] = {1.f, 0.f, 0.f}, v[3] = {0};
-    uint32_t cam = rd32(G_VIEW1 + 0x40u);
-    if (runs && ok(cam, 0x60)){ rd3(cam + 0x40u, L); rd3(cam + 0x50u, f); }
+    uint32_t cam = guest_rd32(G_VIEW1 + 0x40u);
+    if (runs && guest_ok(cam, 0x60)){ rd3(cam + 0x40u, L); rd3(cam + 0x50u, f); }
     else if (runs){ rd3(me + 0x60u, L); rd3(me + 0x90u, f); }
     if (runs) rd3(me + 0x70u, v);
     horn_begin(runs ? L : 0, f, v);
     if (horn) horn_sound(fnv1a(mine), mine, horn_mine(), 0, 0);
     for (int j = 0; j < NHORNS; j++){
         if (!runs || !g_h[j].on || now - g_h[j].at >= STALE_MS) continue;
-        uint32_t car = rd32(w);
-        for (int k = 0; car && car != w && k < 64 && ok(car, 0x9e0); k++, car = rd32(car)){
+        uint32_t car = guest_rd32(w);
+        for (int k = 0; car && car != w && k < 64 && guest_ok(car, 0x9e0); k++, car = guest_rd32(car)){
             char nm[NAME_N];
             if (car == me) continue;
             car_name(car, nm);
@@ -305,8 +304,8 @@ void racehorn_frame(CPU *c){
     static int nlog;
     if (runs && !g_active && ++nlog <= 10){              /* a race starts (or goes on): who is in it, by name */
         char line[200]; int o = snprintf(line, sizeof line, "[horn] race: me %s, cars", mine[0] ? mine : "(no name)");
-        uint32_t car = rd32(w);
-        for (int k = 0; car && car != w && k < 64 && ok(car, 0x9e0) && o < (int)sizeof line - 20; k++, car = rd32(car)){
+        uint32_t car = guest_rd32(w);
+        for (int k = 0; car && car != w && k < 64 && guest_ok(car, 0x9e0) && o < (int)sizeof line - 20; k++, car = guest_rd32(car)){
             char nm[NAME_N]; car_name(car, nm);
             o += snprintf(line + o, sizeof line - (size_t)o, " %s", nm[0] ? nm : "-");
         }

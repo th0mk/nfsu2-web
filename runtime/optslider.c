@@ -22,12 +22,12 @@
  * before's (parts_ready; the pause menu's UI_PauseOptions.fng has the bar's
  * only for its seven). */
 #include "optslider.h"
+#include "guest.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
-void dispatch_indirect(CPU *c, uint32_t addr);
 
 #define FN_NEW        0x00575620u   /* cdecl (size): operator new */
 #define FN_WIDGET     0x0051e840u   /* thiscall (screen +0xFC, +0x10C, +0x114, +0x11C, 1): a slider entry */
@@ -55,23 +55,6 @@ static OptSlider *g_sl[SLIDERS];
 static int g_nsl;
 static uint32_t g_scr;                           /* guest memory: scratch for strings */
 
-/* a guest function with ecx and stack arguments, the CPU as it was after */
-static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    CPU save = *c;
-    c->esp = (c->esp - 256u) & ~15u;
-    for (int i = n - 1; i >= 0; i--) PUSH32(arg[i]);
-    c->ecx = ecx;
-    PUSH32(fn);                                  /* the callee's ret pops it */
-    dispatch_indirect(c, fn);
-    uint32_t r = c->eax;
-    *c = save;
-    return r;
-}
-static void gstr(uint32_t a, const char *s, uint32_t cap){
-    uint32_t i = 0;
-    for (; s[i] && i + 1 < cap; i++) MR8(a + i) = (uint8_t)s[i];
-    MR8(a + i) = 0;
-}
 static uint32_t fbits(float f){ uint32_t u; memcpy(&u, &f, 4); return u; }
 /* the slider an entry is, by its class; 0: none of ours */
 static OptSlider *slider_of(uint32_t self){
@@ -101,7 +84,7 @@ static void os_label(CPU *c){
     uint32_t obj = MR32(c->ecx + W_LABEL);
     OptSlider *s = slider_of(c->ecx);
     if (obj && g_scr && s){
-        gstr(g_scr, s->label(), 64);
+        guest_write_str(g_scr, s->label(), 64);
         gcall(c, FN_FE_SETSTR, obj, 1, &g_scr);
         MR32(obj + 0x1cu) |= 2u;                 /* a text of its own, as FEPrintf leaves it (0x537B30) */
     }
@@ -120,7 +103,6 @@ static void os_init(CPU *c){
 }
 
 /* ---- the entry's parts ------------------------------------------------------ */
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
 /* the address of the object list's "first" (a package's +0x4C, a group's
  * +0x64) that holds o */
 static uint32_t fe_list_of(uint32_t first, uint32_t o, int depth){
@@ -136,16 +118,16 @@ static uint32_t fe_list_of(uint32_t first, uint32_t o, int depth){
  * the drawing data an image or a string needs to be drawn at all); intro.c's
  * title line too */
 uint32_t fe_copy(CPU *c, uint32_t pk, uint32_t o, uint32_t hash){
-    uint32_t l = ok(pk, 0x54) && ok(o, 0x5c) && ok(MR32(o), 8) ? fe_list_of(pk + 0x4cu, o, 0) : 0;
+    uint32_t l = guest_ok(pk, 0x54) && guest_ok(o, 0x5c) && guest_ok(MR32(o), 8) ? fe_list_of(pk + 0x4cu, o, 0) : 0;
     if (!l) return 0;
     uint32_t n = 0, last = 0;
     for (uint32_t it = MR32(l); it && n < 4096; it = MR32(it + 4u)){ last = it; n++; }
     if (n != MR32(l - 4u) || last != MR32(l + 4u)) return 0;          /* not the count and last we take it for */
     uint32_t one = 1, cl = gcall(c, MR32(MR32(o) + 4u), o, 1, &one);
-    if (!ok(cl, 0x5c)) return 0;
+    if (!guest_ok(cl, 0x5c)) return 0;
     MR32(cl + 0x58u) = 0;
     uint32_t dn = MR32(o + 0x30u), d0 = MR32(o + 0x2cu), d1 = MR32(cl + 0x2cu), ty = MR32(o + 0x18u);
-    if ((ty == 1u || ty == 2u) && MR32(cl + 0x30u) == dn && dn && dn <= 0x100u && ok(d0, dn) && ok(d1, dn) && d0 != d1)
+    if ((ty == 1u || ty == 2u) && MR32(cl + 0x30u) == dn && dn && dn <= 0x100u && guest_ok(d0, dn) && guest_ok(d1, dn) && d0 != d1)
         for (uint32_t i = 0; i < dn; i++) MR8(d1 + i) = MR8(d0 + i);
     MR32(cl + 0x10u) = hash;
     uint32_t nx = MR32(o + 4u);
@@ -166,12 +148,12 @@ void optslider_frame(CPU *c){
     if (!g_cp.n) return;
     uint32_t pk = gcall(c, FN_FE_PACKAGE, 0, 1, &g_cp.pkname);
     for (uint32_t i = 0; i < g_cp.n && pk == g_cp.pk; i++)              /* each still the package's, by its name too */
-        if (!ok(g_cp.o[i], 0x5c) || !ok(g_cp.cl[i], 0x5c) || MR32(g_cp.o[i] + 0x10u) != g_cp.ho[i] || MR32(g_cp.cl[i] + 0x10u) != g_cp.hc[i]
+        if (!guest_ok(g_cp.o[i], 0x5c) || !guest_ok(g_cp.cl[i], 0x5c) || MR32(g_cp.o[i] + 0x10u) != g_cp.ho[i] || MR32(g_cp.cl[i] + 0x10u) != g_cp.hc[i]
             || !fe_list_of(pk + 0x4cu, g_cp.o[i], 0) || !fe_list_of(pk + 0x4cu, g_cp.cl[i], 0)) pk = 0;
     if (pk != g_cp.pk){ g_cp.n = 0; return; }                         /* the screen is gone, and its objects */
     for (uint32_t i = 0; i < g_cp.n; i++){
         uint32_t d0 = MR32(g_cp.o[i] + 0x2cu), d1 = MR32(g_cp.cl[i] + 0x2cu), ch = 0;
-        if (!ok(d0, 16) || !ok(d1, 16)) continue;
+        if (!guest_ok(d0, 16) || !guest_ok(d1, 16)) continue;
         for (uint32_t k = 0; k < 16u; k += 4u) if (MR32(d1 + k) != MR32(d0 + k)){ MR32(d1 + k) = MR32(d0 + k); ch = 1; }
         if (ch) MR32(g_cp.cl[i] + 0x1cu) |= 0x400000u;                 /* changed, as the FE's setters mark it */
     }
@@ -181,7 +163,7 @@ static uint32_t part(CPU *c, uint32_t pk, uint32_t base, uint32_t n, uint32_t *h
     int k = 0;
     for (; base && k < 32 && MR8(base + (uint32_t)k); k++) nm[k] = (char)MR8(base + (uint32_t)k);
     snprintf(nm + k, cap - (size_t)k, "%u", n);
-    gstr(g_scr, nm, 48);
+    guest_write_str(g_scr, nm, 48);
     *hash = gcall(c, FN_FE_HASH, 0, 1, &g_scr);
     return gcall(c, FN_PKG_FIND, pk, 1, hash);
 }

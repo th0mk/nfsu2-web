@@ -10,13 +10,7 @@
 #include <setjmp.h>
 #include <unistd.h>
 
-/* getenv() SCANS the environment array and takes a lock on every call.  On
- * per-draw paths (e.g. the "PDLIST" check in SetVertexShaderConstantF was
- * the FIRST term of the && chain) that has a measurable cost: in the
- * profile getenv+__findenv_locked ate 3% of the guest thread.
- * Environment variables do not change during a run -> resolve once, keep. */
-#define ENVC(nm_) ({ static const char *_ev_; static int _ei_; \
-                     if (!_ei_){ _ei_ = 1; _ev_ = getenv(nm_); } _ev_; })
+#include "setting.h"      /* ENVC: getenv once per call site (per-draw paths) */
 
 jmp_buf g_exit_jmp;
 int g_exit_code = 0;

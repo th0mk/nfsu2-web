@@ -38,6 +38,7 @@
  * NFSU2_MENU_DUMP=<package names> prints those packages' objects once.
  * Original: no scaling. */
 #include "cpu.h"
+#include "guest.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,21 +74,20 @@ static int g_installed;
 static uint32_t g_bar;                          /* the help bar's package, once drawn */
 static float g_last[2] = { 1.f, 1.f };          /* the scales logged last: the arrows', the bar's */
 
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
 static const char *pkg_name(uint32_t pkg){
-    if (!ok(pkg, 0x50u)) return 0;
+    if (!guest_ok_bytes(pkg, 0x50u)) return 0;
     uint32_t s = MR32(pkg + 0x0cu);
-    if (!ok(s, 64u)) return 0;
+    if (!guest_ok_bytes(s, 64u)) return 0;
     return (const char *)(g_mem + s);
 }
 static uint32_t field(int j){ return (j < 2 ? D_POS : D_SIZE) + 4u * (uint32_t)(j & 1); }
 
 /* ---- the dump ---------------------------------------------------------- */
 static void dump_obj(uint32_t o, int depth){
-    for (int n = 0; o && n < MAX_OBJS && ok(o, 0x70u); n++, o = MR32(o + O_NEXT)){
+    for (int n = 0; o && n < MAX_OBJS && guest_ok_bytes(o, 0x70u); n++, o = MR32(o + O_NEXT)){
         uint32_t d = MR32(o + O_DATA), t = MR32(o + O_TYPE);
         float v[4] = {0};
-        if (ok(d, 0x44u)) for (int j = 0; j < 4; j++) v[j] = MRF32(d + field(j));
+        if (guest_ok_bytes(d, 0x44u)) for (int j = 0; j < 4; j++) v[j] = MRF32(d + field(j));
         fprintf(stderr, "[menusize] %*s%08x t=%u fl=%08x hash=%08x pos=%.1f,%.1f size=%.2f,%.2f\n",
                 depth * 2, "", o, t, MR32(o + O_FLAGS), MR32(o + O_HASH), (double)v[0], (double)v[1], (double)v[2], (double)v[3]);
         if (t == T_GROUP) dump_obj(MR32(o + O_KIDS), depth + 1);
@@ -155,9 +155,9 @@ static void put(uint32_t o, Kept *k, const float want[4]){
 static void apply_bar(uint32_t pkg, float s){
     uint32_t obj[MAX_OBJS]; Kept *k[MAX_OBJS]; int n = 0;
     float px = 0.f, py = 0.f; int pivot = 0;
-    for (uint32_t o = MR32(pkg + P_OBJS); o && n < MAX_OBJS && ok(o, 0x30u); o = MR32(o + O_NEXT)){
+    for (uint32_t o = MR32(pkg + P_OBJS); o && n < MAX_OBJS && guest_ok_bytes(o, 0x30u); o = MR32(o + O_NEXT)){
         uint32_t t = MR32(o + O_TYPE), d = MR32(o + O_DATA);
-        if ((t != T_IMAGE && t != T_STRING) || !ok(d, 0x44u) || !(k[n] = kept(d))) continue;
+        if ((t != T_IMAGE && t != T_STRING) || !guest_ok_bytes(d, 0x44u) || !(k[n] = kept(d))) continue;
         if (t == T_IMAGE && k[n]->own[2] > FRAME_W){
             float r = k[n]->own[0] + k[n]->own[2] * 0.5f, b = k[n]->own[1] + k[n]->own[3] * 0.5f;
             if (!pivot || r > px) px = r;
@@ -178,9 +178,9 @@ static void apply_bar(uint32_t pkg, float s){
 static const uint32_t ARROWS[] = { 0x444969fdu, 0x444969feu };
 static void apply_arrows(uint32_t pkg, float s){
     int n = 0;
-    for (uint32_t o = MR32(pkg + P_OBJS); o && n < MAX_OBJS && ok(o, 0x30u); o = MR32(o + O_NEXT), n++){
+    for (uint32_t o = MR32(pkg + P_OBJS); o && n < MAX_OBJS && guest_ok_bytes(o, 0x30u); o = MR32(o + O_NEXT), n++){
         uint32_t h = MR32(o + O_HASH), d = MR32(o + O_DATA);
-        if (MR32(o + O_TYPE) != T_IMAGE || (h != ARROWS[0] && h != ARROWS[1]) || !ok(d, 0x44u)) continue;
+        if (MR32(o + O_TYPE) != T_IMAGE || (h != ARROWS[0] && h != ARROWS[1]) || !guest_ok_bytes(d, 0x44u)) continue;
         Kept *k = kept(d);
         float want[4] = { k->own[0], k->own[1], k->own[2] * s, k->own[3] * s };
         put(o, k, want);
@@ -203,7 +203,7 @@ static void apply(uint32_t pkg, int bar){
 void menusize_obj(CPU *c){
     if (!g_installed) return;
     uint32_t pkg = c->edi;
-    if (!ok(pkg, 0x50u) || c->ebx != MR32(pkg + P_OBJS)) return;   /* once a package: at its first object */
+    if (!guest_ok_bytes(pkg, 0x50u) || c->ebx != MR32(pkg + P_OBJS)) return;   /* once a package: at its first object */
     const char *nm = pkg_name(pkg);
     if (!nm) return;
     dump(pkg, nm);
@@ -224,7 +224,7 @@ static void bar_msg(CPU *c){
     }
     static uint32_t mask; static long changed;
     long metal_frames(void), f = metal_frames();
-    uint32_t m = ok(c->ecx, 0x70u) ? MR32(c->ecx + HB_MASK) : 0u;
+    uint32_t m = guest_ok_bytes(c->ecx, 0x70u) ? MR32(c->ecx + HB_MASK) : 0u;
     if (m != mask){ mask = m; changed = f; }
     uint8_t l = MR8(MOUSE_WENT_DOWN), r = MR8(MOUSE_WENT_DOWN + 3u);
     if (f - changed > 1 || g_last[1] == 1.f || !(l | r)){ sub_0055dfa0(c); return; }

@@ -32,6 +32,7 @@
  * ART_F_27's (unlock level, price, owner) with their own key, names and those
  * two attributes. */
 #include "cpu.h"
+#include "guest.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,7 +63,6 @@ static uint32_t bhash(const char *s){
     for (; *s; s++) h = h * 33u + (uint8_t)*s;
     return h;
 }
-static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
 
 /* the chunk with the seven parts in it, in guest memory for good; 0: as it is (logged why) */
 static uint32_t grown(uint32_t chunk){
@@ -190,7 +190,7 @@ int vinylpacks_have(void){ return g_have; }
  * the copy's model names into pointers), with the mod packs' parts too */
 static void loader(CPU *c){
     uint32_t chunk = MR32(c->esp + 4u), copy = 0;
-    if (ok(chunk, 16u) && MR32(chunk) == CHUNK_PARTS && ok(chunk, MR32(chunk + 4u) + 8u)){
+    if (guest_ok_bytes(chunk, 16u) && MR32(chunk) == CHUNK_PARTS && guest_ok_bytes(chunk, MR32(chunk + 4u) + 8u)){
         if (fileio_vinyl_packs() > 0) copy = grown(chunk);
         uint32_t m = modpacks_grow(copy ? copy : chunk);     /* the mods' parts at its end (runtime/modpacks.c) */
         if (m && copy){ gheap_free(1, g_raw); g_raw = 0; }  /* (copied again: the loader keeps that one) */
@@ -247,8 +247,8 @@ static void tex_in(CPU *c){
     if (keep < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_VINYL_PLACES"); keep = s && *s && e && *e == '1'; }
     if (packs < 0) packs = fileio_vinyl_packs() > 0;
     uint32_t blk = MR32(c->esp + 4u), ent = MR32(c->esp + 8u), req = MR32(c->esp + 12u);
-    uint32_t n = packs && ok(ent, 0x10u) ? MR32(ent + 0xcu) : 0u, ti = blk + n - TI_TAIL;
-    if (blk && n >= TI_TAIL && ok(blk, n)){
+    uint32_t n = packs && guest_ok_bytes(ent, 0x10u) ? MR32(ent + 0xcu) : 0u, ti = blk + n - TI_TAIL;
+    if (blk && n >= TI_TAIL && guest_ok_bytes(blk, n)){
         uint32_t img = MR32(ti + TI_IMG), pal = MR32(ti + TI_IMG + 4u);
         if (!keep && img >= OLD_IMG && img < OLD_IMG + 2u * NEW_N * OLD_STEP && pack_texture(ti)){
             MR32(ti + TI_IMG) = img = PACK_IMG + (img - OLD_IMG);
@@ -257,12 +257,12 @@ static void tex_in(CPU *c){
         }
         /* the place 0x494C10 gives 0x494A50: the textures in it besides the block's own */
         uint32_t len = pal != 0xffffffffu ? MR32(ti + TI_IMG_SZ + 4u) + pal - img : MR32(ti + TI_IMG_SZ);
-        uint32_t hold = ok(req, REQ_PACK + 4u) ? MR32(req + REQ_PACK) : 0u, pack = ok(hold, 0x74u) ? MR32(hold + 0x70u) : 0u;
-        uint32_t list = ok(pack, 0x78u) ? MR32(pack + 0x70u) : 0u, tab = ok(list, 0x78u) ? MR32(list + 0x74u) : 0u;
+        uint32_t hold = guest_ok_bytes(req, REQ_PACK + 4u) ? MR32(req + REQ_PACK) : 0u, pack = guest_ok_bytes(hold, 0x74u) ? MR32(hold + 0x70u) : 0u;
+        uint32_t list = guest_ok_bytes(pack, 0x78u) ? MR32(pack + 0x70u) : 0u, tab = guest_ok_bytes(list, 0x78u) ? MR32(list + 0x74u) : 0u;
         uint32_t cnt = tab ? MR32(pack + 0x74u) : 0u, h = MR32(ti + 0x24u);
-        for (uint32_t i = 0; i < cnt && i < 0x10000u && ok(tab + i * 8u, 8u); i++){
+        for (uint32_t i = 0; i < cnt && i < 0x10000u && guest_ok_bytes(tab + i * 8u, 8u); i++){
             uint32_t o = MR32(tab + i * 8u + 4u);
-            if (!o || o == ti || !ok(o, 0x7cu) || MR32(o + 0x24u) == h || !MR32(o + TI_IMG_SZ)) continue;
+            if (!o || o == ti || !guest_ok_bytes(o, 0x7cu) || MR32(o + 0x24u) == h || !MR32(o + TI_IMG_SZ)) continue;
             uint32_t at = MR32(o + TI_IMG);
             if ((int32_t)at < (int32_t)img || (int32_t)at >= (int32_t)(img + len)) continue;
             if (g_takes++ < 8){
