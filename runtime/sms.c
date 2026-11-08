@@ -26,6 +26,7 @@
  * body is ours is not added again (the profile has it from an earlier game). */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,10 +46,6 @@ int mprace_owns_input(void);
 #define G_SMS_N       0x00838450u
 #define G_POOL        0x00838428u   /* the career data's names */
 #define FN_SMS_ADD    0x00529670u   /* thiscall inbox (entry, body, subject, %s) -> the message, 0: full */
-#define FN_NEW        0x00575620u   /* cdecl (size): operator new */
-#define G_FLOW        0x008654a4u   /* 6: in the world */
-#define G_GAMEMODE    0x00850078u   /* 1: career */
-#define G_CAREER_RACE 0x00863470u   /* the career race being run, 0: free roam */
 #define G_ENGAGE      0x008900d8u   /* the engage manager: [it] 4 = free to engage (what 0x529750 waits for too) */
 #define FREE_S        3             /* this long in free roam first */
 #define FROM          "nfsu2.xyz"

@@ -50,7 +50,7 @@ static void mm_collect(CPU *c){
     for (unsigned j = 0; j < 2; ++j){
         uint32_t name = 0xd09400u;
         snprintf((char *)g_mem + name, 160, "PlayerCarIndicator_%u", j+1);
-        hashes[j] = gcall(c, 0x505450u, 0, 1, &name);
+        hashes[j] = gcall(c, FN_FE_HASH, 0, 1, &name);
     }
     mm_first_extra = split_coop_hud() ? 1 : 2;
     for (int k = 0; k < split_render_limit(); ++k){

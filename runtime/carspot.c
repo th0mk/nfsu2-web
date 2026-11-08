@@ -15,9 +15,9 @@
  * the airport's car park, which every career can reach, and the next save
  * keeps that. */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 
-#define G_CAREER        0x0085ad40u   /* Career */
 #define C_SPOT          0x8750u       /* float[3]: the kept place */
 #define C_SPOT_HEADING  0x8760u       /* u16 */
 #define PLACE_MAX       100000.f      /* farther out than this (m): no place on the map */

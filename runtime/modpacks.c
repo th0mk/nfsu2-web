@@ -38,6 +38,7 @@
  *    English text) into the game's language table (language.c). */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "setting.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -440,15 +441,13 @@ int vinylpacks_have(void);                              /* ... the car part data
 #define R_PARTS       0x18u         /* +8 car type, +0xC + 4 x slot: the keys */
 #define N_SLOTS       0xaau
 #define FN_TYPE_INFO  0x00610130u   /* cdecl (car type) -> its info (+0x840: what a ride's Init takes) */
-#define FN_RIDE_INIT  0x00610270u   /* thiscall ride (that, 1, 0, 0) */
 #define FN_RIDE_STOCK 0x00637040u   /* thiscall ride (0): every slot its stock part */
 #define RIDE_PARTS    0x590u        /* a ride's parts: +4 x slot */
-#define CARS0_OF(p)   (0x0083ad90u + (uint32_t)(p) * 0xab4cu)   /* a player's cars (garage.c CARS0, CARS_SZ) */
+#define CARS0_OF(p)   (G_FECARS + (uint32_t)(p) * 0xab4cu)   /* a player's cars (garage.c's G_FECARS, CARS_SZ) */
 #define K_PART        0u            /* an entry's kind: a slot's part */
 #define K_HEAD        3u            /* ... the file's head: its profile, its write counter */
 #define HEAD_MAGIC    0x4448504du   /* "MPHD" */
 #define ADDON_MAX     40            /* (20 Customize cars, 10 slots, 6 presets a player) */
-#define G_CARTYPES    0x008a1cccu   /* CarTypeInfo[] (0x890 bytes each: +0 its name, +0xD0 its hash) */
 #define CARTYPE_SZ    0x890u
 #define CARTYPES_N    46u           /* 0x610130 looks a car type up among these */
 #define KEY_AT(r, s)  ((r) + R_PARTS + 0xcu + 4u * (s))
@@ -978,7 +977,6 @@ void modparts_deleted(const char *name){
  * race's (the game's LAN car message, 0x5F04D0: thiscall (ride, message, ?),
  * ret 0xC, the ride Init'ed (+0 its car type) and its parts set). */
 #define FN_GETCARPART  0x0061b980u  /* thiscall CarPartDB (type, slot, key, prev, -1) */
-#define G_CARPARTDB    0x008a2b68u
 #define FN_PARTS_ON    0x0061bcd0u  /* thiscall ride: UpdatePartsEnabled */
 int modpacks_others_original(void){
     static int v = -1;

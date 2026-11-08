@@ -3,6 +3,7 @@
  * Guest calls run through the lifted dispatcher, never native x86 pointers. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 void garage_split_keep(CPU *c);            /* garage.c: slots 6-10 aside for the mode */
 #include <string.h>
 #include <stdlib.h>
@@ -24,9 +25,9 @@ int coop_in(void);
 static int split_racing(void){
 #ifdef __wasm__
     if (MR32(0x8707e0u) != 3) return 0;
-    if (MR32(0x850078u) == 4) return MR32(0x89e7c0u) == 2;
+    if (MR32(G_GAMEMODE) == 4) return MR32(0x89e7c0u) == 2;
     /* co-op: player 2 in free roam (coop.c's), or a career race the two race together (the game's two humans) */
-    return MR32(0x850078u) == 1 && MR32(SPLIT_PLAYERS_COUNT) == 2 && (coop_in() || coop_racing_together());
+    return MR32(G_GAMEMODE) == 1 && MR32(SPLIT_PLAYERS_COUNT) == 2 && (coop_in() || coop_racing_together());
 #else
     return 0;
 #endif
@@ -37,7 +38,7 @@ static float split_coop_scale(void){ return 0.7f; }
 static int split_coop_hud(void){
 #ifdef __wasm__
     /* (a career race together has the game's own 2P HUDs, made for halves) */
-    return split_racing() && MR32(0x850078u) == 1 && !coop_racing_together();
+    return split_racing() && MR32(G_GAMEMODE) == 1 && !coop_racing_together();
 #else
     return 0;
 #endif
@@ -95,7 +96,7 @@ static unsigned split_pad_of(unsigned seat){
 void split_keyboard_device(PadState *pad){
     /* the game's pad device converts every seat's input: it must exist (split screen: a keyboard seat; co-op: player
      * 2's device, whose controller the page keeps from driving this pad) */
-    int need = MR32(0x850078u) == 4 ? split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0 : coop_device() >= 0;
+    int need = MR32(G_GAMEMODE) == 4 ? split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0 : coop_device() >= 0;
     if (!pad->connected && need){
         memset(pad, 0, sizeof *pad);
         pad->connected = 1; pad->family = PADF_XBOX;
@@ -121,8 +122,8 @@ static void split_kb_read(int side, int both, PadState *pad){
     /* driving: in the world (a split race: as the two-keyboard layout has it, its pause menu too); co-op: with no menu
      * or dialog up, where the arrows as a stick would be a second press of each (the pad's menu keystrokes,
      * dinput_pad.c) */
-    int split = MR32(0x850078u) == 4;
-    int racing = MR32(0x8654a4u) == 6 && (split || coop_driving());
+    int split = MR32(G_GAMEMODE) == 4;
+    int racing = MR32(G_FLOW) == 6 && (split || coop_driving());
     /* START: Enter (only Enter's player's while two share the keyboard), and Space's player's Space outside a
      * split race (in one it is the handbrake; co-op's player 2 pauses with the keyboard's Esc) */
     if ((!both || side == SPLIT_KB_ENTER) && (keys[0x1c] || keys[0x9c])) pad->buttons |= 1u << PAD_START;
@@ -163,7 +164,7 @@ int split_kb_hidden(unsigned dik){
 #endif
 int split_read_local(unsigned seat, PadState *pad){
 #ifdef __wasm__
-    if (MR32(0x850078u) != 4 && coop_wanted()) return split_coop_seat(seat, pad);
+    if (MR32(G_GAMEMODE) != 4 && coop_wanted()) return split_coop_seat(seat, pad);
     int side = split_kb_of(seat);
     if (side >= 0){ split_kb_read(side, split_kb_seat[0] >= 0 && split_kb_seat[1] >= 0, pad); return 1; }
     return gamepad_read_local(split_pad_of(seat), pad);
@@ -184,7 +185,7 @@ static int split_requested(void){
 #ifdef __wasm__
     /* on hot paths (the settings reads, 0x55DDA0's callers, every frame's hooks): the game mode first, and the
      * environment read once */
-    if (MR32(0x850078u) != 4) return 0;
+    if (MR32(G_GAMEMODE) != 4) return 0;
     static int env = -1;
     if (env < 0){ const char *s = getenv("NFSU2_SPLIT_PLAYERS"); env = s ? atoi(s) : 0; }
     int n = split_menu_players ? split_menu_players : env;
@@ -201,7 +202,7 @@ static int split_pause_port = -1, split_pause_seen, split_pause_released;
  * lend it their own pad while they own the pause menu. */
 void sub_0050d2d0_orig(CPU *c);
 void sub_0050d2d0(CPU *c){
-    if ((split_requested() || ((coop_in() || coop_racing_together()) && MR32(0x850078u) != 4)) && MR32(c->esp) == 0x4eb46eu){
+    if ((split_requested() || ((coop_in() || coop_racing_together()) && MR32(G_GAMEMODE) != 4)) && MR32(c->esp) == 0x4eb46eu){
         unsigned port = MR32(c->esp + 4);
         if (port < 6){
             split_pause_port = (int)port;
@@ -230,7 +231,7 @@ static void split_pause_refresh(CPU *c){
 }
 int split_menu_pad(PadState *pad){
 #ifdef __wasm__
-    if (split_carsel_active && MR32(0x850078u) == 4 && MR32(0x8654a4u) != 6){
+    if (split_carsel_active && MR32(G_GAMEMODE) == 4 && MR32(G_FLOW) != 6){
         if (!split_joined[split_seat]){
             if (split_seat) split_read_local((unsigned)split_seat-1, pad);
             pad->buttons &= 1u << PAD_B;
@@ -244,7 +245,7 @@ int split_menu_pad(PadState *pad){
         }
         return 1;
     }
-    if (split_pause_port < 0 || !(split_requested() || ((coop_in() || coop_racing_together()) && MR32(0x850078u) != 4))) return 0;
+    if (split_pause_port < 0 || !(split_requested() || ((coop_in() || coop_racing_together()) && MR32(G_GAMEMODE) != 4))) return 0;
     /* co-op: player 1's pause is the game's own (its controller already drives this pad) */
     if (!split_requested() && split_pause_port == 0) return 0;
     split_read_local((unsigned)split_pause_port, pad);
@@ -397,13 +398,13 @@ void sub_006373e0(CPU *c){
         MR32(c->esp + 4) = index;
         MR32(c->esp + 16) = SPLIT_NAMES + index * 16;
         uint32_t skin = index + 1;
-        gcall(c, 0x61c280u, MR32(c->esp + 12), 1, &skin);
+        gcall(c, FN_RIDE_SKINS, MR32(c->esp + 12), 1, &skin);
     }
     sub_006373e0_orig(c);
 }
 
 static uint32_t split_alloc(CPU *c, uint32_t size){
-    return gcall(c, 0x575620u, 0, 1, &size);
+    return gcall(c, FN_NEW, 0, 1, &size);
 }
 
 /* Native frontend flow. The extra option uses Quick Race's real vtable;
@@ -555,7 +556,7 @@ static void split_count_scheme(CPU *c, int save){
         MRF32(d+0x38)=MRF32(d+0x3c)=0.8f;
         MR32(split_title_obj+0x1c)|=0x400000u;
     }
-    if(split_logo_obj) gcall(c,0x50ca00u,0,1,&split_logo_obj);
+    if(split_logo_obj) gcall(c,FN_FE_HIDE,0,1,&split_logo_obj);
     split_spacing_apply(0);
 }
 static void split_count_restore_scheme(CPU *c){
@@ -642,7 +643,7 @@ static void split_count_open(CPU *c, unsigned players){
     /* Hide unused shared icons before the first animated frame. */
     uint32_t node; memcpy(&node,split_main_carousel+4,4);
     for(unsigned k=0;node && node!=menu+0x50 && k<32;k++,node=MR32(node)){
-        if(k>=3){ uint32_t image=MR32(node-4+0x10); if(image) gcall(c,0x50ca00u,0,1,&image); }
+        if(k>=3){ uint32_t image=MR32(node-4+0x10); if(image) gcall(c,FN_FE_HIDE,0,1,&image); }
     }
     split_menu_fade_in(c);
     split_count_bar(c);
@@ -864,7 +865,7 @@ static void split_add_menu(CPU *c, uint32_t menu){
     uint32_t p = split_alloc(c, 0x48);
     if (!p) return;
     uint32_t a[] = {0x883e25d6u, 0x6a2b93ebu, 0};
-    gcall(c, 0x51f670u, p, 3, a);
+    gcall(c, FN_ITEM, p, 3, a);
     MR32(p) = 0x790c30u;
     split_option = p;
     gcall(c, MR32(MR32(menu) + 0x18), menu, 1, &p);
@@ -875,7 +876,7 @@ void sub_0055b5c0_orig(CPU *c);
 void sub_0055b5c0(CPU *c){ sub_0055b5c0_orig(c); }
 static void split_save_seat(int seat){
     unsigned twin = seat & 1;
-    split_cars[seat] = MR32(0x83aab8u + twin * 4);
+    split_cars[seat] = MR32(G_QR_CAR + twin * 4);
     split_ports[seat] = MR32(0x83a9d8u + twin * 4);
     split_gears[seat] = MR8(0x83aa79u + twin * 0x28);
     split_picked[seat] = 1;
@@ -884,7 +885,7 @@ static void split_save_seat(int seat){
 static void split_restore_seat(int seat){
     if (!split_picked[seat]) return;
     unsigned twin = seat & 1;
-    MR32(0x83aab8u + twin * 4) = split_cars[seat];
+    MR32(G_QR_CAR + twin * 4) = split_cars[seat];
     MR32(0x83a9d8u + twin * 4) = split_ports[seat];
     MR8(0x83aa79u + twin * 0x28) = split_gears[seat];
 }
@@ -912,7 +913,7 @@ static void split_seat_title(CPU *c){
     split_label(c, "2P_PressStart.fng", 0x2ebb974du, title);
     split_text(SPLIT_FE_TEXT+256, "Player_Name");
     uint32_t p = SPLIT_FE_TEXT+256;
-    uint32_t hash = gcall(c, 0x505450u, 0, 1, &p);
+    uint32_t hash = gcall(c, FN_FE_HASH, 0, 1, &p);
     split_label_text(SL_PLAYER_UP, (unsigned)split_seat + 1, title, sizeof title);
     split_label(c, "UI_QRCarSelect.fng", hash, title);
     split_label(c, "GarageMain.fng", hash, title);
@@ -994,7 +995,7 @@ static void split_minimap_names(CPU *c){
     for (unsigned i = 0; i < 140; ++i){
         if (i < 4) snprintf((char *)g_mem + name, 160, "%s", fixed[i]);
         else snprintf((char *)g_mem + name, 160, (char *)g_mem + MR32(0x7f6828u + ((i - 4) / 8) * 8), (i - 4) % 8);
-        split_minimap_hashes[i] = gcall(c, 0x505450u, 0, 1, &name);
+        split_minimap_hashes[i] = gcall(c, FN_FE_HASH, 0, 1, &name);
     }
 }
 static unsigned split_hud_data_count, split_hud_copy;
@@ -1161,7 +1162,7 @@ static void split_init_view(CPU *c, unsigned seat){
 }
 
 static uint32_t split_find_car(CPU *c, unsigned index){
-    uint32_t end = gcall(c, 0x502fd0u, 0, 0, 0), list = MR32(0x890080u);
+    uint32_t end = gcall(c, 0x502fd0u, 0, 0, 0), list = MR32(G_WORLD);
     if (!list) return 0;
     uint32_t node = MR32(list);
     for (unsigned guard = 0; node && node != end && guard < 1024; ++guard, node = MR32(node))
@@ -1183,7 +1184,7 @@ void sub_005f4250(CPU *c){
     if (n){ MR32(0x85ad28u) = 0; split_carsel_active = 0; }
     if (MR32(0x89e7c0u) != 2) return;
     for (unsigned index = 2; index < (unsigned)n; ++index){
-        uint32_t racer = gcall(c, 0x5ed920u, 0x89e7a0u, 1, &index);
+        uint32_t racer = gcall(c, 0x5ed920u, G_RACEPARAMS, 1, &index);
         uint32_t car = split_find_car(c, index);
         if (!racer || MR32(racer + 4) != 1 || !car) continue;
         uint32_t player = split_alloc(c, 0x9c0);
@@ -1239,7 +1240,7 @@ static int split_clone_hud(CPU *c, uint32_t src, uint32_t dst){
     uint32_t ne = split_alloc(c, 0x54);
     if (!ne) return 0;
     gcall(c, 0x51b8e0u, ne, 1, &copy);
-    uint32_t head = 0x8637b4u, node = ne + 4, first = MR32(head);
+    uint32_t head = G_FEMGR, node = ne + 4, first = MR32(head);
     MR32(node) = first; MR32(node + 4) = head; MR32(first + 4) = node; MR32(head) = node;
     return 1;
 }
@@ -1406,7 +1407,7 @@ void sub_005e4e70(CPU *c){
     int n = split_requested();
     /* co-op free roam (coop.c): two players' areas of the city, as two players' split race (the 1.5x); a career race
      * the two race together too (two views; the game's own two-human pool is smaller than one human's) */
-    int coop = MR32(0x850078u) == 1 && ((MR32(0x89e7b0u) == 0 && coop_wanted()) || coop_racing_together());
+    int coop = MR32(G_GAMEMODE) == 1 && ((MR32(G_RACETYPE) == 0 && coop_wanted()) || coop_racing_together());
     if (coop) n = 2;
     coop_note_pools(coop);
     if (n && (MR32(0x89e7c0u) == 2 || coop)){
@@ -1432,7 +1433,7 @@ void split_second_pool(CPU *c){
     int n = split_requested();
     /* co-op free roam: room for player 2's car (another of player 1's) beside the game's 11000 KB; online free
      * roam's own size (roam_game.c, 48000 KB and up) has it already */
-    if (MR32(0x850078u) == 1 && MR32(0x89e7b0u) == 0 && coop_wanted() && MR32(c->esp + 4) < 17000u * 1024u)
+    if (MR32(G_GAMEMODE) == 1 && MR32(G_RACETYPE) == 0 && coop_wanted() && MR32(c->esp + 4) < 17000u * 1024u)
         MR32(c->esp + 4) = 17000u * 1024u;
     if (n && MR32(0x89e7c0u) == 2){
         uint64_t bytes = (uint64_t)MR32(0x7fa9d4u) * 512 * n;
@@ -1511,7 +1512,7 @@ void sub_005cfd60_orig(CPU *c);
 void sub_005cfd60(CPU *c){
 #ifdef __wasm__
     uint32_t port = MR32(c->esp + 4u), type = MR32(c->esp + 8u), previous = MR32(c->esp + 12u);
-    if (MR32(0x850078u) != 4 && (coop_in() || coop_racing_together()) && MR32(0x8654a4u) == 6 && port < 2){
+    if (MR32(G_GAMEMODE) != 4 && (coop_in() || coop_racing_together()) && MR32(G_FLOW) == 6 && port < 2){
         /* co-op free roam: port 0 stays the game's own (player 1's keys and controller); port 1 is player 2's seat.
          * With the keyboard shared, player 1's arrows' half joins port 0's own (player 2's keys are hidden from it) */
         static uint32_t port_type;
@@ -1538,7 +1539,7 @@ void sub_005cfd60(CPU *c){
         c->eax = SPLIT_INPUT_CURRENT + port * 16u;
         return;
     }
-    if (MR32(0x850078u) == 4 && MR32(0x8654a4u) == 6 && port < 6){
+    if (MR32(G_GAMEMODE) == 4 && MR32(G_FLOW) == 6 && port < 6){
         static uint32_t port_type;
         if (!port){
             split_pause_refresh(c);
@@ -1667,7 +1668,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
         uint32_t view = MR32(c->esi + 0x1ec);
         if (split_racing() && view) for (uint32_t seat = 0; seat < (unsigned)split_render_limit(); ++seat)
             if (MR32(view + 4) == (uint32_t)split_view_id(seat)){
-                c->eax = gcall(c, 0x5ed980u, 0x89e7a0u, 1, &seat); break;
+                c->eax = gcall(c, 0x5ed980u, G_RACEPARAMS, 1, &seat); break;
             }
         return 1;
     }
@@ -1714,7 +1715,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
     if (ip == 0x6312b0u && split_racing() && MR32(c->edi+4) == 4){
         unsigned seat = (unsigned)reflection_seat;
         c->esi = MR32(SPLIT_PLAYERS_INDEX + seat*4);
-        c->eax = gcall(c, 0x5ed980u, 0x89e7a0u, 1, &seat);
+        c->eax = gcall(c, 0x5ed980u, G_RACEPARAMS, 1, &seat);
         return 1;
     }
     /* The native streak pass hard-codes view 1 and shares a persistent
@@ -1861,7 +1862,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
         }
         return 1;
     }
-    if (ip == 0x498070u && MR32(0x850078u) == 4){
+    if (ip == 0x498070u && MR32(G_GAMEMODE) == 4){
         uint32_t player = MR32(0x85ad28u), msg = MR32(c->esp + 4);
         if (player < 2){
             static uint32_t held[6];
@@ -1895,7 +1896,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
         }
         return 1;
     }
-    if (ip == 0x4fc1f0u && MR32(0x850078u) == 4){
+    if (ip == 0x4fc1f0u && MR32(G_GAMEMODE) == 4){
         split_carsel_active = 1;
         uint32_t msg = MR32(c->esp+4);
         if (msg == 0xc98356bau) split_seat_title(c);
@@ -1923,7 +1924,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
             memcpy(g_mem + 0x83a9d0u + 0x1677cu, g_mem + 0x83a9d0u + 0x3c0u, 0x26f6u * 4);
             garage_split_keep(c);
             MR32(0x83a9d0u + 0x20354u) = MR32(0x83a9d0u + 0xe8u);
-            MR32(0x850078u) = 4;
+            MR32(G_GAMEMODE) = 4;
             for (unsigned i = 0; i < 13; ++i) MR8(0x83aac4u + i * 0x14u) = 2;
             MR32(0x85ad28u) = 0; MR32(0x7f4454u) = 1; MR32(0x7f4458u) = 2;
             split_seat = 0; split_carsel_active = 0;

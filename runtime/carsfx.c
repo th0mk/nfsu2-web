@@ -77,6 +77,7 @@
  * about half a megabyte each decoded). */
 #include "carsfx.h"
 #include "cpu.h"
+#include "game.h"
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -100,7 +101,6 @@ int fileio_resolve_game(const char *win, char *out, size_t outsz);     /* fileio
 #define XFADE     96                 /* output samples: a grain that does not follow the last one fades in */
 #define ENG_ATT   0.06f              /* s: an engine fades in, */
 #define ENG_REL   0.15f              /* ...and out */
-#define G_VOLUMES 0x0083aa28u        /* the game's volumes (floats): +0 Master, +0x10 Sound Effects, +0x14 Engine */
 
 enum { S_ENGAGE, S_RELEASE, S_PURGE, S_PURGE_START, S_PUMP, S_CLUNK, S_CLICK, S_VALVE, S_THUMP, S_N };
 static const char *const k_bank[2] = { "SOUND\\NOS\\Nitrous_01_MB.abk", "SOUND\\NOS\\Hydraulics_00_MB.abk" };

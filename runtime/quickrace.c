@@ -42,10 +42,10 @@
  * laps u16 +0xA, Lap KO u8 +0x10}}, mode 0xC's at +0x100 / +0x101 / +0x11C
  * (0x5026F0, 0x502710, 0x502910). */
 #include "cpu.h"
+#include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 
-#define GAME_TYPE    0x00850078u   /* the front end's game type */
 #define T_QUICKRACE  2u
 #define QR           0x0083aab4u   /* the Quick Race settings */
 #define RACE_LAPS    0x0089e7bcu   /* the race's laps */
@@ -57,7 +57,7 @@
 #define M_DRAG       2u            /* Quick Race's modes: 0 Circuit, 1 Sprint, 2 Drag, 4 URL, 9 Free Run */
 #define KO_N         5             /* laps and opponents when Lap KO goes on */
 
-static int quick_race(void){ return MR32(GAME_TYPE) == T_QUICKRACE; }
+static int quick_race(void){ return MR32(G_GAMEMODE) == T_QUICKRACE; }
 static uint32_t qr_mode(void){ return MR32(QR); }
 static uint32_t qr_humans_at(uint32_t m){ return m == 0xcu ? QR + 0x100u : QR + 0x10u + m * 20u; }
 static uint32_t qr_opp_at(uint32_t m){ return m == 0xcu ? QR + 0x101u : QR + 0x11u + m * 20u; }
@@ -76,7 +76,7 @@ int quickrace_hook(CPU *c, uint32_t ip){
     case HOOK_SITE(0x004aa283): {            /* LapCounter::Update: test eax, eax (a track without laps) */
         if (!c->eax && MR32(RACE_LAPS) == 1u){
             static uint32_t said;
-            if (said != MR32(0x0089e7a0u)){ said = MR32(0x0089e7a0u); fprintf(stderr, "[qr] track %u: one lap, the HUD shows COMPLETED %%\n", said); }
+            if (said != MR32(G_RACEPARAMS)){ said = MR32(G_RACEPARAMS); fprintf(stderr, "[qr] track %u: one lap, the HUD shows COMPLETED %%\n", said); }
             c->eax = 1u;
         }
         return 1; }

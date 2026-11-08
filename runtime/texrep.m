@@ -66,6 +66,7 @@
 #import <Metal/Metal.h>
 #import <Cocoa/Cocoa.h>
 #include "cpu.h"
+#include "game.h"
 #include "texrep.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -313,7 +314,7 @@ static unsigned long g_lat_hist[8];                               /* publish lat
 static long g_lat_max;
 static unsigned long g_pub_race, g_load_race;                     /* while GameFlow = 6 (race / free roam) */
 static unsigned long g_mipstat[4];                                /* main thread: replaced binds by mip filter */
-static int in_race(void){ return mem_is_committed(0x8654a4u) && MR32(0x8654a4u) == 6u; }
+static int in_race(void){ return mem_is_committed(G_FLOW) && MR32(G_FLOW) == 6u; }
 
 static unsigned long long phys_mem(void){
     uint64_t m = 0; size_t l = sizeof m;

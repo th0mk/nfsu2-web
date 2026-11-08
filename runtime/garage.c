@@ -2,7 +2,7 @@
  * taken from the garage for 80 % of the money spent on it.
  *
  * The game's own garage (SPEED2.EXE, checked against players' saves):
- *  - the player's cars are records in FEDatabase +0x3C0 (CARS0, player 2's
+ *  - the player's cars are records in FEDatabase +0x3C0 (G_FECARS, player 2's
  *    CARS_SZ on): 48 stock cars, 20 customized ones (Customize), the career's
  *    5 (+0x5954, 0x7F8 bytes each, their count 5 at +0x812C), 6 presets and
  *    12 others, and a table of the 91 (+0x9BD8, made by 0x5036F0) that every
@@ -58,6 +58,7 @@
  * backs it up and syncs it with the save folder. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <string.h>
@@ -69,7 +70,6 @@ int fileio_resolve_save(const char *win, char *out, size_t outsz);
 
 #define FEDB            0x0083a9d0u   /* FEDatabase */
 #define FEDB_KEPT       0x16778u      /* ... the payload it compares with (0x52A460 makes it, 0x5032C0 frees it) */
-#define CARS0           0x0083ad90u   /* player 1's cars (FEDatabase +0x3C0) */
 #define CARS_SZ         0xab4cu       /* player 2's follow */
 #define C_SLOTS         0x5954u       /* the career's 5 */
 #define C_TABLE         0x9bd8u       /* the 91 records' table */
@@ -89,7 +89,6 @@ int fileio_resolve_save(const char *win, char *out, size_t outsz);
 #define P_NAME          53761u        /* the payload: the profile's name, 32 bytes */
 #define PROFILE_SIZE    54966u
 #define PAYLOAD_AT      36u
-#define CAREER          0x0085ad40u
 #define K_BANK          0x7134u
 #define K_STAGES        0x73c0u       /* the first stage's reward mark (+0x72D8 +0xE8) */
 #define K_STAGE_SZ      0x104u
@@ -97,8 +96,6 @@ int fileio_resolve_save(const char *win, char *out, size_t outsz);
 #define K_STAGE         0x7af8u       /* the stage: 0 the prologue, 1-5, 6 the career done (0x529230 loads it) */
 #define K_HAS_CAR       0x873du
 #define K_CAR           0x8740u       /* the car the career drives (0x863480) */
-#define G_GAMEMODE      0x00850078u   /* 1 career */
-#define G_QR_CAR        0x0083aab8u   /* each player's car in Quick Race, LAN, Online (+4 player 2) */
 #define G_HELPBAR       0x008384d8u   /* the PC help bar */
 #define FN_REC_NEW      0x00525cf0u   /* thiscall record: its constructor (vtable 0x79B12C) */
 #define FN_PARTS_CLEAR  0x00503e70u   /* thiscall record +0x434 */
@@ -175,7 +172,7 @@ static uint64_t fnv(uint32_t a, uint32_t n){
 
 /* --- the slots ------------------------------------------------------------- */
 /* which player's cars db is (0, 1), -1: none of theirs */
-static int player_of(uint32_t db){ return db == CARS0 ? 0 : db == CARS0 + CARS_SZ ? 1 : -1; }
+static int player_of(uint32_t db){ return db == G_FECARS ? 0 : db == G_FECARS + CARS_SZ ? 1 : -1; }
 static uint32_t slot(uint32_t db, unsigned i){
     int p = player_of(db);
     return i < 5u ? db + C_SLOTS + i * REC_SZ : X_AT(p) + (i - 5u) * REC_SZ;
@@ -190,7 +187,7 @@ static uint32_t xfind(uint32_t db, uint32_t h){
 /* whose car the record r is (0, 1: the table's or ours), -1 none of theirs */
 static int record_player(uint32_t r){
     for (int p = 0; p < 2; p++){
-        uint32_t db = CARS0 + (uint32_t)p * CARS_SZ;
+        uint32_t db = G_FECARS + (uint32_t)p * CARS_SZ;
         if (r >= db && r < db + CARS_SZ) return p;
         if (g_blk && r >= X_AT(p) && r < X_AT(p) + XN * REC_SZ) return p;
     }
@@ -240,7 +237,7 @@ static int ensure(CPU *c){
     g_blk = b;
     gcall(c, FN_REC_NEW, TEMPLATE, 0, 0);
     gcall(c, FN_PARTS_CLEAR, TEMPLATE + R_PARTS, 0, 0);
-    xinit(c, CARS0); xinit(c, CARS0 + CARS_SZ);
+    xinit(c, G_FECARS); xinit(c, G_FECARS + CARS_SZ);
     return 1;
 }
 
@@ -329,8 +326,8 @@ static uint32_t g_sw_at[2], g_sw_was[2];
 static void swap_in(void){
     int career = MR32(G_GAMEMODE) == 1u;
     for (int p = 0; p < 2; p++){
-        uint32_t db = CARS0 + (uint32_t)p * CARS_SZ;
-        uint32_t h = career ? MR32(CAREER + K_CAR) : MR32(G_QR_CAR + 4u * (uint32_t)p);
+        uint32_t db = G_FECARS + (uint32_t)p * CARS_SZ;
+        uint32_t h = career ? MR32(G_CAREER + K_CAR) : MR32(G_QR_CAR + 4u * (uint32_t)p);
         uint32_t x = career && p ? 0 : xfind(db, h);
         g_sw_at[p] = 0;
         if (!x) continue;
@@ -375,7 +372,7 @@ void sub_00516480(CPU *c){
 void sub_00532830_orig(CPU *c);
 void sub_00532830(CPU *c){
     sub_00532830_orig(c);
-    if (g_blk) open_to(CARS0, 2u);
+    if (g_blk) open_to(G_FECARS, 2u);
 }
 /* Each stage's reward opens a slot (the game's), and one more: compared on
  * the stages' reward marks.  Career::Update (0x551320) gives them, from its
@@ -385,13 +382,13 @@ static int g_in_stage;
 static unsigned g_loads;
 static void stages(CPU *c, void (*orig)(CPU *)){
     if (g_in_stage || !g_blk){ orig(c); return; }
-    uint32_t was[K_STAGES_N]; unsigned n = 0, open0 = open_n(CARS0), loads = g_loads;
-    for (unsigned k = 0; k < K_STAGES_N; k++) was[k] = MR32(CAREER + K_STAGES + k * K_STAGE_SZ);
+    uint32_t was[K_STAGES_N]; unsigned n = 0, open0 = open_n(G_FECARS), loads = g_loads;
+    for (unsigned k = 0; k < K_STAGES_N; k++) was[k] = MR32(G_CAREER + K_STAGES + k * K_STAGE_SZ);
     g_in_stage = 1; orig(c); g_in_stage = 0;
-    for (unsigned k = 0; k < K_STAGES_N; k++) n += !was[k] && MR32(CAREER + K_STAGES + k * K_STAGE_SZ);
+    for (unsigned k = 0; k < K_STAGES_N; k++) n += !was[k] && MR32(G_CAREER + K_STAGES + k * K_STAGE_SZ);
     if (!n || loads != g_loads) return;
-    open_to(CARS0, open0 + 2u * n);
-    fprintf(stderr, "[garage] a new stage: %u of %u slots open\n", open_n(CARS0), SLOTS);
+    open_to(G_FECARS, open0 + 2u * n);
+    fprintf(stderr, "[garage] a new stage: %u of %u slots open\n", open_n(G_FECARS), SLOTS);
 }
 void sub_00551320_orig(CPU *c);
 void sub_00551320(CPU *c){ stages(c, sub_00551320_orig); }
@@ -407,17 +404,17 @@ void sub_00532cf0(CPU *c){ stages(c, sub_00532cf0_orig); }
  * career that had 8 cars and 10). */
 void garage_split_keep(CPU *c){
     if (!g_blk) return;
-    xsave(c, CARS0, g_split.cars); g_split.on = 1;
+    xsave(c, G_FECARS, g_split.cars); g_split.on = 1;
     fprintf(stderr, "[garage] split screen: slots 6-10 kept aside, %u cars of yours, %u of %u slots open\n",
-            owned_n(CARS0), open_n(CARS0), SLOTS);
+            owned_n(G_FECARS), open_n(G_FECARS), SLOTS);
 }
 void sub_00515d70_orig(CPU *c);
 void sub_00515d70(CPU *c){
     sub_00515d70_orig(c);
     if (!g_blk || !g_split.on) return;
-    xload(c, CARS0, g_split.cars); g_split.on = 0;
+    xload(c, G_FECARS, g_split.cars); g_split.on = 0;
     fprintf(stderr, "[garage] split screen's end: slots 6-10 as they were, %u cars of yours, %u of %u slots open\n",
-            owned_n(CARS0), open_n(CARS0), SLOTS);
+            owned_n(G_FECARS), open_n(G_FECARS), SLOTS);
 }
 
 /* --- the profile ------------------------------------------------------------ */
@@ -448,11 +445,11 @@ static uint32_t first_car(uint32_t db, unsigned n){
 static void state_of(CPU *c, uint32_t db, State *st){
     xsave(c, db, st->cars);
     st->drive = st->qr = st->stand = 0;
-    if (db != CARS0) return;
-    uint32_t stand = first_car(CARS0, 5u);
+    if (db != G_FECARS) return;
+    uint32_t stand = first_car(G_FECARS, 5u);
     if (!stand) return;
-    if (xowned(CARS0, MR32(CAREER + K_CAR))) st->drive = MR32(CAREER + K_CAR);
-    if (xowned(CARS0, MR32(G_QR_CAR))) st->qr = MR32(G_QR_CAR);
+    if (xowned(G_FECARS, MR32(G_CAREER + K_CAR))) st->drive = MR32(G_CAREER + K_CAR);
+    if (xowned(G_FECARS, MR32(G_QR_CAR))) st->qr = MR32(G_QR_CAR);
     if (st->drive || st->qr) st->stand = stand;
 }
 static int differ(const State *a, const State *b){
@@ -468,11 +465,11 @@ static void payload(CPU *c){
     static State st0;
     State *st = &st0;
     state_of(c, db, st);
-    uint32_t k = MR32(CAREER + K_CAR), q = MR32(G_QR_CAR);
-    if (st->drive) MR32(CAREER + K_CAR) = st->stand;
+    uint32_t k = MR32(G_CAREER + K_CAR), q = MR32(G_QR_CAR);
+    if (st->drive) MR32(G_CAREER + K_CAR) = st->stand;
     if (st->qr) MR32(G_QR_CAR) = st->stand;
     sub_0052a280_orig(c);
-    MR32(CAREER + K_CAR) = k; MR32(G_QR_CAR) = q;
+    MR32(G_CAREER + K_CAR) = k; MR32(G_QR_CAR) = q;
     /* kept by name and car part: the newest of each (a payload made again
      * while nothing changed takes its place, not an older one's) */
     char name[33]; name_of(out, name);
@@ -528,7 +525,7 @@ void sub_0052a4c0(CPU *c){
     uint32_t kept = MR32(c->ecx + FEDB_KEPT);
     sub_0052a4c0_orig(c);
     if ((c->eax & 0xffu) || !kept || !g_kept.on || !g_blk) return;
-    uint32_t kdb = CARS0 + (uint32_t)g_kept.p * CARS_SZ;
+    uint32_t kdb = G_FECARS + (uint32_t)g_kept.p * CARS_SZ;
     modparts_hide(c, kdb, g_kept.p);              /* (as the kept state was made: the stand-ins in) */
     state_of(c, kdb, &g_now);
     modparts_show();
@@ -618,7 +615,7 @@ static int read_garage(const char *name, uint64_t fp, State *st){
 }
 static void load_state(CPU *c, uint32_t db, const State *st){
     xload(c, db, st->cars);
-    if (db == CARS0 && (st->drive || st->qr)){ g_back.on = 1; g_back.drive = st->drive; g_back.qr = st->qr; g_back.stand = st->stand; }
+    if (db == G_FECARS && (st->drive || st->qr)){ g_back.on = 1; g_back.drive = st->drive; g_back.qr = st->qr; g_back.stand = st->stand; }
 }
 /* thiscall cars (in, size): a profile's cars into these; ours from its GARAGE
  * file, or, the game going back to the payload it kept (0x5347C0), as they
@@ -683,7 +680,6 @@ static void cars_loaded(CPU *c){
 #define CUSTOM_SZ       0x434u
 #define PRESET_AT       0x8130u       /* the 6 presets (0x438) */
 #define PRESET_SZ       0x438u
-#define G_CARTYPES      0x008a1cccu
 static void addon_cars(CPU *c, uint32_t db, int p, const char *name){
     (void)name;
     uint32_t types = MR32(G_CARTYPES);
@@ -788,10 +784,10 @@ void sub_00534770(CPU *c){
 /* a car handle at at (the career's, the Quick Race one) that names an empty
  * slot 6-10: the first car you have */
 static void not_empty(uint32_t at, const char *what){
-    uint32_t h = MR32(at), r = xfind(CARS0, h), to;
-    if (!r || MR8(r + R_OWNED) || !(to = first_car(CARS0, SLOTS))) return;
+    uint32_t h = MR32(at), r = xfind(G_FECARS, h), to;
+    if (!r || MR8(r + R_OWNED) || !(to = first_car(G_FECARS, SLOTS))) return;
     MR32(at) = to;
-    fprintf(stderr, "[garage] %s was in the empty slot %d: now the one in slot %d\n", what, slot_of(CARS0, r) + 1, slot_of(CARS0, garage_find(CARS0, to)) + 1);
+    fprintf(stderr, "[garage] %s was in the empty slot %d: now the one in slot %d\n", what, slot_of(G_FECARS, r) + 1, slot_of(G_FECARS, garage_find(G_FECARS, to)) + 1);
 }
 /* thiscall profile (in, size, 1): a profile loaded (its cars 0x516850, the
  * career 0x529230, the options); the cars driven as they were, if the
@@ -801,33 +797,33 @@ void sub_005344d0(CPU *c){
     uint32_t db = c->ecx + PR_CARS;
     g_topup = 0; g_nlost = 0;
     sub_005344d0_orig(c);
-    if (!g_blk || db != CARS0) return;
+    if (!g_blk || db != G_FECARS) return;
     if (g_topup){
         /* no slots 6-10 saved (an older page's profile, the PC game's): 2 a
          * stage, as the slots the profile has open may be the game's 1 a
          * stage or more (a profile of ours without its GARAGE file) */
-        uint32_t stage = MR32(CAREER + K_STAGE);
-        open_to(CARS0, stage <= 1u ? 2u : 2u * stage);
-        fprintf(stderr, "[garage] %s: no slots 6-10 saved, stage %u: %u of %u slots open\n", g_topup_name, stage, open_n(CARS0), SLOTS);
+        uint32_t stage = MR32(G_CAREER + K_STAGE);
+        open_to(G_FECARS, stage <= 1u ? 2u : 2u * stage);
+        fprintf(stderr, "[garage] %s: no slots 6-10 saved, stage %u: %u of %u slots open\n", g_topup_name, stage, open_n(G_FECARS), SLOTS);
         g_topup = 0;
     }
     if (g_back.on){
         uint32_t r;
-        if (g_back.drive && MR32(CAREER + K_CAR) == g_back.stand && (r = xowned(CARS0, g_back.drive))){
-            MR32(CAREER + K_CAR) = g_back.drive;
-            fprintf(stderr, "[garage] the career drives the car in slot %d\n", slot_of(CARS0, r) + 1);
+        if (g_back.drive && MR32(G_CAREER + K_CAR) == g_back.stand && (r = xowned(G_FECARS, g_back.drive))){
+            MR32(G_CAREER + K_CAR) = g_back.drive;
+            fprintf(stderr, "[garage] the career drives the car in slot %d\n", slot_of(G_FECARS, r) + 1);
         }
-        if (g_back.qr && MR32(G_QR_CAR) == g_back.stand && xowned(CARS0, g_back.qr)) MR32(G_QR_CAR) = g_back.qr;
+        if (g_back.qr && MR32(G_QR_CAR) == g_back.stand && xowned(G_FECARS, g_back.qr)) MR32(G_QR_CAR) = g_back.qr;
         g_back.on = 0;
     }
-    not_empty(CAREER + K_CAR, "the career's car");
+    not_empty(G_CAREER + K_CAR, "the career's car");
     not_empty(G_QR_CAR, "the Quick Race car");
     /* a Quick Race car among the stock cars the load took out (cars_stock_fix): the first stock car */
     for (int i = 0; i < g_nlost; i++){
         uint32_t h = MR32(G_QR_CAR);
-        if (h != g_lost[i] || garage_find(CARS0, h)) continue;
+        if (h != g_lost[i] || garage_find(G_FECARS, h)) continue;
         for (uint32_t k = 0; k < 48u; k++){
-            uint32_t r = CARS0 + k * 0x1cu;
+            uint32_t r = G_FECARS + k * 0x1cu;
             if (!MR32(r + 0x10u)) continue;
             MR32(G_QR_CAR) = MR32(r + R_HANDLE);
             fprintf(stderr, "[garage] the Quick Race car 0x%08x was a stock car of a car type this game has not: now stock car %u (0x%08x)\n",
@@ -843,11 +839,11 @@ void sub_005344d0(CPU *c){
      * car for one to trade (0x4ED9E0: Career::GetCar() 0x513C30, the slots' record of the handle, 0, called
      * through) and built the new one at address 0, and the next world load ended in error 134, at every load of
      * that profile.  Before the first car (the prologue, the first car lot) the career has none: left as it is. */
-    uint32_t h = MR32(CAREER + K_CAR), to;
-    if (MR32(CAREER + K_STAGE) >= 1u && slot_of(CARS0, garage_find(CARS0, h)) < 0 && (to = first_car(CARS0, SLOTS))){
-        gcall(c, FN_SET_CAR, CAREER, 1, &to);
+    uint32_t h = MR32(G_CAREER + K_CAR), to;
+    if (MR32(G_CAREER + K_STAGE) >= 1u && slot_of(G_FECARS, garage_find(G_FECARS, h)) < 0 && (to = first_car(G_FECARS, SLOTS))){
+        gcall(c, FN_SET_CAR, G_CAREER, 1, &to);
         fprintf(stderr, "[garage] the career's car 0x%08x was in none of the slots: now the one in slot %d (0x%08x)\n",
-                h, slot_of(CARS0, garage_find(CARS0, to)) + 1, MR32(CAREER + K_CAR));
+                h, slot_of(G_FECARS, garage_find(G_FECARS, to)) + 1, MR32(G_CAREER + K_CAR));
     }
 }
 
@@ -856,7 +852,7 @@ void sub_005344d0(CPU *c){
 int garage_hook(CPU *c, uint32_t ip){
     if (ip != HOOK_SITE(0x00547685)) return 0;    /* mov ecx, [esp+0x10]: esi the car or 0 */
     if (!c->esi){
-        uint32_t x = xfind(CARS0, MR32(CAREER + K_CAR));
+        uint32_t x = xfind(G_FECARS, MR32(G_CAREER + K_CAR));
         if (x){ c->esi = x; fprintf(stderr, "[garage] the shop's buy: for the car in slot %u\n", 6u + (x - X_AT(0)) / REC_SZ); }
     }
     return 1;
@@ -867,9 +863,9 @@ int garage_hook(CPU *c, uint32_t ip){
 void sub_0054e6e0_orig(CPU *c);
 void sub_0054e6e0(CPU *c){
     if (g_blk && MR32(G_GAMEMODE) == 1u && pkg_is(MR32(c->esp + 8u), SELECT_PKG)){
-        unsigned cars = owned_n(CARS0);
+        unsigned cars = owned_n(G_FECARS);
         if (cars >= 2u) MR32(c->esp + 4u) |= HB_TRADE;
-        fprintf(stderr, "[garage] the garage: %u cars, %u of %u slots open%s\n", cars, open_n(CARS0), SLOTS, cars >= 2u ? ", Trade Car" : "");
+        fprintf(stderr, "[garage] the garage: %u cars, %u of %u slots open%s\n", cars, open_n(G_FECARS), SLOTS, cars >= 2u ? ", Trade Car" : "");
     }
     sub_0054e6e0_orig(c);
 }
@@ -883,14 +879,14 @@ void sub_0052d330(CPU *c){
 
 static uint32_t g_trade;          /* the handle Trade Car asks about */
 static void handles_move(uint32_t from, uint32_t to){
-    if (MR32(CAREER + K_CAR) == from) MR32(CAREER + K_CAR) = to;
+    if (MR32(G_CAREER + K_CAR) == from) MR32(G_CAREER + K_CAR) = to;
     if (MR32(G_QR_CAR) == from) MR32(G_QR_CAR) = to;
 }
 static int trade_ask(CPU *c, uint32_t scr){
     uint32_t it = MR32(scr + SC_ITEM);
-    if (!g_blk || !it || MR8(it + IT_LOCKED) || MR8(it + IT_FREE) || owned_n(CARS0) < 2u) return 0;
-    uint32_t h = MR32(it + IT_HANDLE), r = garage_find(CARS0, h);
-    if (!r || slot_of(CARS0, r) < 0 || !MR8(r + R_OWNED)) return 0;
+    if (!g_blk || !it || MR8(it + IT_LOCKED) || MR8(it + IT_FREE) || owned_n(G_FECARS) < 2u) return 0;
+    uint32_t h = MR32(it + IT_HANDLE), r = garage_find(G_FECARS, h);
+    if (!r || slot_of(G_FECARS, r) < 0 || !MR8(r + R_OWNED)) return 0;
     g_trade = h;
     /* the dialog's text is a printf format, and the question's "80% of its cost" is no format: "%s" with it; the
      * text it made is printed as a format once more on the screen, so with its % doubled ("80% of" was "800f") */
@@ -907,20 +903,20 @@ static int trade_ask(CPU *c, uint32_t scr){
     return 1;
 }
 static void trade(CPU *c, uint32_t scr){
-    uint32_t r = garage_find(CARS0, g_trade);
-    int s = r ? slot_of(CARS0, r) : -1;
+    uint32_t r = garage_find(G_FECARS, g_trade);
+    int s = r ? slot_of(G_FECARS, r) : -1;
     uint32_t pkg = MR32(scr + SC_PACKAGE);
     uint32_t a[4] = { pkg, S_GROUP, S_UNDIM, 1u };
     gcall(c, FN_SHOW, 0, 4, a);
-    if (s < 0 || !MR8(r + R_OWNED) || owned_n(CARS0) < 2u) return;
+    if (s < 0 || !MR8(r + R_OWNED) || owned_n(G_FECARS) < 2u) return;
     uint32_t spent = MR32(r + R_SPENT), pay = (uint32_t)((uint64_t)spent * TRADE_PCT / 100u);
-    MR32(CAREER + K_BANK) += pay;
+    MR32(G_CAREER + K_BANK) += pay;
     fresh(r, g_trade, 0);
     modparts_car_gone(0, r, g_trade);            /* (modpacks.c: the car sold is no car of the profile any more) */
     /* the game counts on slot 1 having a car (the car lot's Back): the last car moves there */
     if (s == 0){
         for (int k = (int)SLOTS - 1; k > 0; k--){
-            uint32_t q = slot(CARS0, (unsigned)k);
+            uint32_t q = slot(G_FECARS, (unsigned)k);
             if (!MR8(q + R_OWNED)) continue;
             uint32_t hq = MR32(q + R_HANDLE);
             for (uint32_t o = 4u; o < REC_SZ; o += 4u) if (o != R_HANDLE) MR32(r + o) = MR32(q + o);
@@ -932,14 +928,14 @@ static void trade(CPU *c, uint32_t scr){
         }
     }
     /* the one you drive, and the Quick Race car: not the empty slot, the first car you have */
-    uint32_t kr = garage_find(CARS0, MR32(CAREER + K_CAR)), qr = garage_find(CARS0, MR32(G_QR_CAR));
-    if (kr && slot_of(CARS0, kr) >= 0 && !MR8(kr + R_OWNED)){
-        uint32_t h = first_car(CARS0, SLOTS);
-        gcall(c, FN_SET_CAR, CAREER, 1, &h);
+    uint32_t kr = garage_find(G_FECARS, MR32(G_CAREER + K_CAR)), qr = garage_find(G_FECARS, MR32(G_QR_CAR));
+    if (kr && slot_of(G_FECARS, kr) >= 0 && !MR8(kr + R_OWNED)){
+        uint32_t h = first_car(G_FECARS, SLOTS);
+        gcall(c, FN_SET_CAR, G_CAREER, 1, &h);
     }
-    if (qr && slot_of(CARS0, qr) >= 0 && !MR8(qr + R_OWNED)) MR32(G_QR_CAR) = first_car(CARS0, SLOTS);
+    if (qr && slot_of(G_FECARS, qr) >= 0 && !MR8(qr + R_OWNED)) MR32(G_QR_CAR) = first_car(G_FECARS, SLOTS);
     fprintf(stderr, "[garage] traded the car in slot %d for $%u (%u %% of $%u spent on it), %u cars left, the bank $%u\n",
-            s + 1, pay, TRADE_PCT, spent, owned_n(CARS0), MR32(CAREER + K_BANK));
+            s + 1, pay, TRADE_PCT, spent, owned_n(G_FECARS), MR32(G_CAREER + K_BANK));
     MR32(scr + SC_AT) = 1u;                      /* the list starts again at its first */
     gcall(c, FN_SELECT_MAKE, scr, 0, 0);
     uint32_t hb[2] = { MR32(scr + SC_BUTTONS), pkg };

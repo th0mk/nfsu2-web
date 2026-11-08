@@ -30,9 +30,9 @@
  * is then the car's, in the profile too. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include <stdio.h>
 
-#define G_CAREER       0x0085ad40u
 #define C_NEVENTS      0x7afcu        /* career: events with a record */
 #define C_EVENTS       0x7b00u        /* career: those records, 8 bytes {hash, ..., +6 state (1 won)} */
 #define C_MAXEVENTS    0x181u         /* room up to +0x8708 */

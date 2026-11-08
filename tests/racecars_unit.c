@@ -96,11 +96,11 @@ static void rows_id(uint32_t car){
     for (uint32_t i = 0; i < 9; i++) MRF32(car + CAR_ROWS + 0x10u * (i / 3) + 4u * (i % 3)) = r[i];
 }
 static void race_setup(void){
-    uint32_t g[] = { G_FLOW, G_NETMODE, G_WORLD, G_PLAYER1, G_WORLDDT, G_RACE, G_NETPLAYERS };
+    uint32_t g[] = { G_FLOW, G_GAMEMODE, G_WORLD, G_PLAYER1, G_WORLDDT, G_RACE, G_NETPLAYERS };
     for (unsigned i = 0; i < sizeof g / sizeof g[0]; i++) commit(g[i], 32);
     commit(W, 0x100); commit(CAR_A, 0xa00); commit(CAR_B, 0xa00); commit(CAR_ME, 0xa00); commit(CTL_A, 0x200);
     commit(PL, 16); commit(RC, 0x100); commit(STACK - 0x4000u, 0x8000u);
-    MR32(G_FLOW) = 6; MR32(G_NETMODE) = 0x200;
+    MR32(G_FLOW) = 6; MR32(G_GAMEMODE) = 0x200;
     MR32(G_WORLD) = W; MR32(W) = CAR_A; MR32(CAR_A) = CAR_B; MR32(CAR_B) = CAR_ME; MR32(CAR_ME) = W;
     MR32(G_PLAYER1) = PL; MR32(PL + 4u) = CAR_ME;
     MR32(G_RACE) = RC; MR32(RC) = RC_RACING;

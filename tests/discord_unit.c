@@ -116,7 +116,7 @@ static void mem_setup(void){
     W32(G_CARTYPES, ct);
     /* racers (player 1 = racer 0, car type 0) */
     uint32_t racers = galloc(4u * 0x940u);
-    W32(G_RACE + R_RACERS, racers); W32(G_RACE + R_NRACERS, 4); W32(G_RACE + R_HUMAN, 0);
+    W32(G_RACEPARAMS + R_RACERS, racers); W32(G_RACEPARAMS + R_NRACERS, 4); W32(G_RACEPARAMS + R_HUMAN, 0);
     W32(racers + 0x10u, 0);
     /* player object and race status: 4 entries, player 1 = entry 2 */
     g_car = galloc(64); g_player = galloc(64); W32(g_player + 4, g_car); W32(G_PLAYER1, g_player);
@@ -129,37 +129,37 @@ static void mem_setup(void){
     /* entries 4 and 5 are never written by the game: they keep what the
      * memory held, here the 0xEE fill of the game's own pool */
     memset(g_mem + g_rs + RS_ENTRY + 4u * RS_ENTRY_SZ, 0xEE, 2u * RS_ENTRY_SZ);
-    W32(G_RSTATUS, g_rs);
+    W32(G_RACE, g_rs);
     /* front-end car record for the quick-race handle */
     /* a stock record (class 0x79aadc, type at +0x18) and a customized one
      * (class 0x79b12c, type name hash at +0x20) */
     uint32_t rec = galloc(64); W32(rec, 0x0079aadcu); W32(rec + 8, 0xa8ecfbe4u); W32(rec + 0x18, 1);
-    W32(G_FE_CARS + 0x9bd8u + 5u * 4u, rec); W32(G_FE_CAR_QR, 0xa8ecfbe4u);
+    W32(G_FECARS + 0x9bd8u + 5u * 4u, rec); W32(G_QR_CAR, 0xa8ecfbe4u);
     uint32_t rec2 = galloc(64); W32(rec2, 0x0079b12cu); W32(rec2 + 8, 0x6996c983u); W32(rec2 + 0x20, bhash("PEUGOT"));
-    W32(G_FE_CARS + 0x9bd8u + 9u * 4u, rec2);
+    W32(G_FECARS + 0x9bd8u + 9u * 4u, rec2);
     W32(ct + 0xd0u, bhash("PEUGOT")); W32(ct + 0x890u + 0xd0u, bhash("350Z"));
-    memcpy(g_mem + G_PROFILE, "CLAUDE", 7);
+    memcpy(g_mem + G_PROFILE_NAME, "CLAUDE", 7);
 }
 static uint32_t entry(int i){ return g_rs + RS_ENTRY + (uint32_t)i * RS_ENTRY_SZ; }
 static void set_race(uint32_t track, uint32_t kind, uint32_t laps, int p2p, int drag, int drift, int url, int sx){
-    W32(G_RACE + R_TRACK, track); W32(G_RACE + R_KIND, kind); W32(G_RACE + R_LAPS, laps);
-    W32(G_RACE + R_P2P, (uint32_t)p2p); W8(G_RACE + R_DRAG, (uint8_t)drag); W8(G_RACE + R_DRIFT, (uint8_t)drift);
-    W8(G_RACE + R_URL, (uint8_t)url); W8(G_RACE + R_SHORT, (uint8_t)sx); W32(G_RACE + R_REVERSE, 0);
+    W32(G_RACEPARAMS + R_TRACK, track); W32(G_RACEPARAMS + R_KIND, kind); W32(G_RACEPARAMS + R_LAPS, laps);
+    W32(G_RACEPARAMS + R_P2P, (uint32_t)p2p); W8(G_RACEPARAMS + R_DRAG, (uint8_t)drag); W8(G_RACEPARAMS + R_DRIFT, (uint8_t)drift);
+    W8(G_RACEPARAMS + R_URL, (uint8_t)url); W8(G_RACEPARAMS + R_SHORT, (uint8_t)sx); W32(G_RACEPARAMS + R_REVERSE, 0);
 }
 /* game situations used by the tests */
 static void sit_boot(void){ W32(G_FLOW, 0); g_top = 0; g_scr = 0; }
-static void sit_menus(void){ W32(G_FLOW, 3); W32(G_FE_MODE, 2); g_top = "GarageMain.fng"; g_scr = "UI_Main.fng"; }
-static void sit_custom(void){ W32(G_FLOW, 3); W32(G_FE_MODE, 32); g_top = "GarageMain.fng"; g_scr = "UI_GenericParts_Browser.fng"; }
-static void sit_loading(void){ W32(G_FLOW, 4); W32(G_FE_MODE, 2); set_race(4014, 1, 3, 0, 0, 0, 0, 0); g_top = "PC_Loading.fng"; g_scr = "PC_Loading.fng"; }
+static void sit_menus(void){ W32(G_FLOW, 3); W32(G_GAMEMODE, 2); g_top = "GarageMain.fng"; g_scr = "UI_Main.fng"; }
+static void sit_custom(void){ W32(G_FLOW, 3); W32(G_GAMEMODE, 32); g_top = "GarageMain.fng"; g_scr = "UI_GenericParts_Browser.fng"; }
+static void sit_loading(void){ W32(G_FLOW, 4); W32(G_GAMEMODE, 2); set_race(4014, 1, 3, 0, 0, 0, 0, 0); g_top = "PC_Loading.fng"; g_scr = "PC_Loading.fng"; }
 static void sit_race(int lap_done, int pos){
-    W32(G_FLOW, 6); W32(G_FE_MODE, 2); set_race(4014, 1, 3, 0, 0, 0, 0, 0);
+    W32(G_FLOW, 6); W32(G_GAMEMODE, 2); set_race(4014, 1, 3, 0, 0, 0, 0, 0);
     g_top = "HUD_SingleRace.fng"; g_scr = "HUD_SingleRace.fng";
     W32(g_rs, 4); W32(g_rs + 0x14, 4000u * 30u);          /* racing, clock at 30 s */
     for (int i = 0; i < 4; i++){ W8(entry(i) + 9, (uint8_t)lap_done); W8(entry(i) + 0xa, (uint8_t)(i + 1)); }
     W8(entry(2) + 0xa, (uint8_t)pos);                     /* player 1's entry */
 }
 static void sit_roam(void){
-    W32(G_FLOW, 6); W32(G_FE_MODE, 1); set_race(4000, 0, 0, 0, 0, 0, 0, 0); W32(G_STAGE, 1);
+    W32(G_FLOW, 6); W32(G_GAMEMODE, 1); set_race(4000, 0, 0, 0, 0, 0, 0, 0); W32(G_STAGE, 1);
     g_top = "HUD_SingleRace.fng"; g_scr = "Chyron_IG.fng";
     W32(G_NIS_ACTIVE2, 0);
 }
@@ -234,16 +234,16 @@ static void case_state(void){
     sit_menus();                                        expect("main menu", "In the menus", "");
     g_scr = "GenericDialog_SMALL.fng";                  expect("dialog over the menu", "In the menus", "");
     sit_custom();                                       expect("customize (parts)", "Customizing", "Nissan 350Z");
-    W32(G_FE_CAR_QR, 0x6996c983u);                      expect("customize a customized car", "Customizing", "Peugeot 206");
-    W32(G_FE_CAR_QR, 0x12345678u);                      expect("customize, unknown handle", "Customizing", "");
-    W32(G_FE_CAR_QR, 0xa8ecfbe4u);
+    W32(G_QR_CAR, 0x6996c983u);                      expect("customize a customized car", "Customizing", "Peugeot 206");
+    W32(G_QR_CAR, 0x12345678u);                      expect("customize, unknown handle", "Customizing", "");
+    W32(G_QR_CAR, 0xa8ecfbe4u);
     sit_loading();                                      expect("loading a race", "Loading\xE2\x80\xA6", "Circuit \xE2\x80\x94 Resort Loop");
     sit_race(0, 2); W32(g_rs, 3); W32(g_rs + 0x14, 0);  expect("countdown", "Circuit \xE2\x80\x94 Resort Loop", "On the starting line");
     sit_race(1, 2);                                     expect("circuit lap 2", "Circuit \xE2\x80\x94 Resort Loop", "Lap 2/3 \xC2\xB7 2nd of 4");
     Presence p; sample(&p);
     CHECK(p.start == (int64_t)time(0) - 30 || p.start == (int64_t)time(0) - 29, "state race timer anchored on the race clock (start %lld)", (long long)p.start);
-    W32(G_RACE + R_REVERSE, 1);                         expect("reversed track", "Circuit \xE2\x80\x94 Resort Loop Reverse", "Lap 2/3 \xC2\xB7 2nd of 4");
-    W32(G_RACE + R_REVERSE, 0);
+    W32(G_RACEPARAMS + R_REVERSE, 1);                         expect("reversed track", "Circuit \xE2\x80\x94 Resort Loop Reverse", "Lap 2/3 \xC2\xB7 2nd of 4");
+    W32(G_RACEPARAMS + R_REVERSE, 0);
     g_top = "UI_pause.fng";                             expect("paused", "Circuit \xE2\x80\x94 Resort Loop", "Paused");
     sit_race(3, 1);                                     expect("finished", "Circuit \xE2\x80\x94 Resort Loop", "Finished 1st of 4");
     { Presence a, b; sample(&a); W32(g_rs + 0x14, 4000u * 5u);   /* the clock stops or jumps after the finish */
@@ -266,15 +266,15 @@ static void case_state(void){
     set_race(4014, 3, 3, 0, 0, 0, 0, 0);                expect("lap knockout", "Lap Knockout \xE2\x80\x94 Resort Loop", "Lap 1/3 \xC2\xB7 3rd of 4");
     set_race(4999, 1, 3, 0, 0, 0, 0, 0);                expect("odd track name (cp1252)",
         "Circuit \xE2\x80\x94 Caf\xC3\xA9 \xE2\x80\x9CQuote\xE2\x80\x9D \\ Back\xE2\x82\xAC", "Lap 1/3 \xC2\xB7 3rd of 4");
-    W32(G_FE_MODE, 1); set_race(4014, 1, 3, 0, 0, 0, 0, 0);
+    W32(G_GAMEMODE, 1); set_race(4014, 1, 3, 0, 0, 0, 0, 0);
                                                         expect("career race", "Career Circuit \xE2\x80\x94 Resort Loop", "Lap 1/3 \xC2\xB7 3rd of 4");
     sit_roam();                                         expect("career free roam", "Career \xE2\x80\x94 Stage 1", "Free roaming as CLAUDE");
     W32(G_STAGE, 0);                                    expect("career prologue (stage 0)", "Career \xE2\x80\x94 Prologue", "Free roaming as CLAUDE");
     W32(G_STAGE, 5);                                    expect("career stage 5", "Career \xE2\x80\x94 Stage 5", "Free roaming as CLAUDE");
     W32(G_STAGE, 6);                                    expect("career complete (stage 6)", "Career \xE2\x80\x94 Complete", "Free roaming as CLAUDE");
     W32(G_STAGE, 1);
-    memcpy(g_mem + G_PROFILE, "A\"B\\\x01\xE9", 7);    expect("odd profile name", "Career \xE2\x80\x94 Stage 1", "Free roaming as A\"B\\ \xC3\xA9");
-    memcpy(g_mem + G_PROFILE, "CLAUDE", 7);
+    memcpy(g_mem + G_PROFILE_NAME, "A\"B\\\x01\xE9", 7);    expect("odd profile name", "Career \xE2\x80\x94 Stage 1", "Free roaming as A\"B\\ \xC3\xA9");
+    memcpy(g_mem + G_PROFILE_NAME, "CLAUDE", 7);
     W32(G_NIS_ACTIVE2, 1);                              expect("in-engine cutscene", "Watching a cutscene", "");
     W32(G_NIS_ACTIVE2, 0);
     g_top = "UI_Pause.fng";                             expect("career paused", "Career \xE2\x80\x94 Stage 1", "Paused");
@@ -283,9 +283,9 @@ static void case_state(void){
     g_top = "HUD_SingleRace.fng";                       expect("free roam, 2 friends", "Career \xE2\x80\x94 Stage 1", "Free roam with 2 friends");
     g_test_friends = 1;                                 expect("free roam, 1 friend", "Career \xE2\x80\x94 Stage 1", "Free roam with 1 friend");
     g_minimal = 1;                                      expect("free roam, friend, minimal", "", "");
-    g_minimal = 0; W32(G_FE_MODE, 2); set_race(4000, 0, 0, 0, 0, 0, 0, 0);
+    g_minimal = 0; W32(G_GAMEMODE, 2); set_race(4000, 0, 0, 0, 0, 0, 0, 0);
                                                         expect("free run (not career), friend", "Free Run", "Peugeot 206");
-    W32(G_FE_MODE, 1); g_test_friends = 0;              expect("free roam, friends gone", "Career \xE2\x80\x94 Stage 1", "Free roaming as CLAUDE");
+    W32(G_GAMEMODE, 1); g_test_friends = 0;              expect("free roam, friends gone", "Career \xE2\x80\x94 Stage 1", "Free roaming as CLAUDE");
     g_top = "UI_Pause.fng";
     /* the car lot: UI_CareerCarLot, GarageMain (backdrop) and Chyron_FE come in one frame */
     W32(G_FLOW, 3); W32(G_STAGE, 0); g_top = "GarageMain.fng"; g_scr = "Chyron_FE.fng";
@@ -294,13 +294,13 @@ static void case_state(void){
     g_batch_t[0] = "UI_Main.fng"; g_batch_t[1] = "GarageMain.fng"; g_batch_t[2] = 0; g_scr = "GarageMain.fng";
                                                         expect("career menus", "In the menus", "Career \xE2\x80\x94 Prologue");
     g_batch_t[0] = 0; W32(G_STAGE, 1); W32(G_FLOW, 6);
-    W32(G_FE_MODE, 2); set_race(4000, 0, 0, 0, 0, 0, 0, 0); g_top = "HUD_SingleRace.fng";
+    W32(G_GAMEMODE, 2); set_race(4000, 0, 0, 0, 0, 0, 0, 0); g_top = "HUD_SingleRace.fng";
                                                         expect("free run", "Free Run", "Peugeot 206");
-    W32(G_FLOW, 3); W32(G_FE_MODE, 1); g_top = "PC_Loading.fng"; g_scr = "IG_PlayMovie.fng";
+    W32(G_FLOW, 3); W32(G_GAMEMODE, 1); g_top = "PC_Loading.fng"; g_scr = "IG_PlayMovie.fng";
                                                         expect("story movie", "Watching a cutscene", "");
     W32(G_FLOW, 4);                                     expect("movie skipped, loading", "Loading\xE2\x80\xA6", "Career");
     /* LAN play: the LAN screens while a LAN session is open, a network race */
-    g_test_lan = 1; W32(G_FLOW, 3); W32(G_FE_MODE, 2);
+    g_test_lan = 1; W32(G_FLOW, 3); W32(G_GAMEMODE, 2);
     g_top = g_scr = "UI_PC_LAN_ServerSelect.fng";       expect("LAN server list", "LAN lobby", "Looking for games");
     g_top = g_scr = "UI_OLMAIN.fng";                    expect("LAN main menu", "LAN lobby", "");
     g_top = g_scr = "UI_OLCarSelect.fng";               expect("LAN car choice", "LAN lobby", "Choosing a car");
@@ -310,7 +310,7 @@ static void case_state(void){
     g_scr = "GenericDialog_SMALL.fng";                  expect("dialog over the game room", "LAN lobby", "In a game room");
     W32(G_FLOW, 4); set_race(4014, 1, 2, 0, 0, 0, 0, 0); g_top = g_scr = "PC_Loading.fng";
                                                         expect("LAN race loading", "Loading\xE2\x80\xA6", "LAN race \xE2\x80\x94 Circuit \xE2\x80\x94 Resort Loop");
-    sit_race(0, 2); W32(G_RACE + R_LAPS, 2); W32(G_NET_CLIENT, 1);
+    sit_race(0, 2); W32(G_RACEPARAMS + R_LAPS, 2); W32(G_NET_CLIENT, 1);
                                                         expect("LAN race", "LAN race \xE2\x80\x94 Circuit \xE2\x80\x94 Resort Loop", "Lap 1/2 \xC2\xB7 2nd of 4");
     g_top = "UI_pause.fng";                             expect("LAN race pause menu (not paused)", "LAN race \xE2\x80\x94 Circuit \xE2\x80\x94 Resort Loop", "Lap 1/2 \xC2\xB7 2nd of 4");
     W32(G_NET_CLIENT, 0); W32(G_NET_HOST, 1); set_race(4123, 1, 1, 1, 0, 0, 0, 0); g_top = "HUD_SingleRace.fng";
@@ -334,7 +334,7 @@ static void case_state(void){
     g_minimal = 0;
     /* robustness: tables missing or garbage must not crash and must not invent text */
     W32(G_LANG_N, 0x7fffffffu); sit_race(1, 2);         expect("no string table", "Circuit", "Lap 2/3 \xC2\xB7 2nd of 4");
-    W32(G_RSTATUS, 0x7ff00000u);                        expect("race status unmapped", "Circuit", "");
+    W32(G_RACE, 0x7ff00000u);                        expect("race status unmapped", "Circuit", "");
 }
 
 /* ---- the mock -------------------------------------------------------- */
@@ -435,7 +435,7 @@ int main(int argc, char **argv){
         /* a burst of first-line changes faster than Discord allows */
         for (int k = 0; k < 16; k++){ if (k & 1) sit_menus(); else sit_custom(); run_frames(0.2); }
         /* odd characters through to the wire */
-        sit_roam(); memcpy(g_mem + G_PROFILE, "A\"B\\\x01\xE9", 7); run_frames(DS_RATE_WIN + 1.0);
+        sit_roam(); memcpy(g_mem + G_PROFILE_NAME, "A\"B\\\x01\xE9", 7); run_frames(DS_RATE_WIN + 1.0);
         sit_menus(); run_frames(DS_RATE_WIN + 1.0);      /* the last state must win (coalescing) */
         double ms = timed_shutdown();
         CHECK(ms < DS_QUIT_WAIT_MS, "ipc quit took %.0f ms", ms);

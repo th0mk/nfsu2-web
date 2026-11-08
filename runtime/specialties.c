@@ -37,6 +37,7 @@
  * screens' vtables): dispatch_patch, no change to the lift. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -55,10 +56,8 @@ void sub_00560550(CPU *c);
 #define FN_ATTR         0x0061b500u   /* thiscall part (hash, default) -> attribute */
 #define FN_LIST_SELECT  0x005386a0u   /* thiscall list (item) */
 #define FN_HUD_SHOW     0x00548d20u   /* thiscall gauge screen (): the current item's labels and preview */
-#define FN_HIDE         0x0050ca00u   /* cdecl (object) */
 #define FN_SHOW         0x0050ca50u   /* cdecl (object) */
 #define FN_PART_FIRST   0x0061ba30u   /* thiscall parts (car type, slot, 0, -1): the slot's first part */
-#define G_PARTS         0x008a2b68u   /* the car part database */
 #define G_HUD_STAGE     0x00838560u
 #define G_FE_RIDE       0x008392c0u   /* the front end's ride of the car: +0 car type, +0x590 + 4 x slot its parts */
 #define G_COL_BACKING   0x00839c24u   /* the gauge screen's colours: slot 164 */
@@ -107,7 +106,7 @@ static uint32_t stock_item(CPU *c, uint32_t scr){
  * what a car has in them before its gauges are changed */
 static uint32_t first_part(CPU *c, uint32_t type, uint32_t slot){
     uint32_t a[4] = { type, slot, 0, 0xffffffffu };
-    return gcall(c, FN_PART_FIRST, G_PARTS, 4, a);
+    return gcall(c, FN_PART_FIRST, G_CARPARTDB, 4, a);
 }
 static uint32_t key_of(uint32_t part){ return guest_ok_bytes(part, 4u) ? MR32(part) : 0u; }
 
@@ -150,8 +149,8 @@ static void hud_new(CPU *c){
     uint32_t first = MR32(scr + S_LIST + 4u) - 4u, last = MR32(scr + S_LIST + 8u) - 4u;
     gcall(c, FN_SHOW, 0, 1, &up);
     gcall(c, FN_SHOW, 0, 1, &down);
-    if (item == first) gcall(c, FN_HIDE, 0, 1, &up);
-    else if (item == last) gcall(c, FN_HIDE, 0, 1, &down);
+    if (item == first) gcall(c, FN_FE_HIDE, 0, 1, &up);
+    else if (item == last) gcall(c, FN_FE_HIDE, 0, 1, &down);
     fprintf(stderr, "[shop] f=%ld Custom Gauges: the list on the gauge fitted\n", autotest_frame());
 }
 

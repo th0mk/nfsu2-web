@@ -62,6 +62,7 @@
  * (tests/scripts/pad_look.txt; roam_look_a.txt in free roam). */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "coop.h"
 #include "gamepad.h"
 #include <math.h>
@@ -71,10 +72,7 @@
 #include <strings.h>
 #include <time.h>
 
-#define G_FLOW       0x008654a4u   /* 6: in the world */
-#define G_RACE       0x00890118u   /* the race status: +0 4 racing (free roam too), 6 paused */
 #define G_PLAYER1    SPLIT_PLAYERS_INDEX   /* Player*: +4 its car, +0x9A4 its HUD, +0x238 its camera mover */
-#define G_FENG       0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define PL_CAR       4u
 #define PL_HUD       0x9a4u
 #define PL_MOVER     0x238u

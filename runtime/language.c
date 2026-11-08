@@ -62,6 +62,8 @@
  * are VileStuff's English Subtitles Fixed (tools/langpacks.py --subs): whole,
  * and with who speaks them. */
 #include "cpu.h"
+#include "guest.h"
+#include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <stdlib.h>
@@ -151,7 +153,6 @@ int language_no_profile(const char *name){
 void dispatch_indirect(CPU *c, uint32_t addr);
 #define G_LANG      0x008383d8u
 #define G_LANG_N    0x008383d0u
-#define FN_NEW      0x00575620u    /* cdecl (size): operator new */
 #define OWN_MAX     64         /* roam_game.c 4, sms.c 5, mpcredit.c 2, photo.c 1, vinylcat.c 1, modpacks.c a rim brand's each */
 static struct { uint32_t hash; char text[1024]; } g_own[OWN_MAX];
 static int g_nown, g_own_merged;            /* texts named; how many of them the copy has */
@@ -175,7 +176,7 @@ static uint32_t guest_new(CPU *c, uint32_t size){
     CPU save = *c;
     c->esp = (c->esp - 256u) & ~15u;
     PUSH32(size);
-    PUSH32(0x00581475u);                        /* the hook's return address: the callee's ret pops it */
+    PUSH32(GUEST_RET_MAINLOOP);                        /* the hook's return address: the callee's ret pops it */
     dispatch_indirect(c, FN_NEW);
     uint32_t r = c->eax;
     *c = save;

@@ -53,6 +53,7 @@
  */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,17 +68,11 @@ void mprot_arm(uint32_t);
 void autotest_tap(unsigned dik, long frames);
 
 /* ---- guest globals (v1.2 NA) ---------------------------------------------- */
-#define G_FLOW          0x008654a4u   /* TheGameFlowManager state (6 = in game) */
-#define G_WORLD         0x00890080u   /* World*: +0/+4 car list (bTList), +0x10 count */
 #define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* PlayersByNumber[0] (Player*), +4 = car */
-#define G_RACE          0x00890118u   /* race coordinator: +0 state, +0x24 racers */
-#define G_CAREER_RACE   0x00863470u   /* Career 0x85AD40 +0x8730: race being run (0 = roam) */
 #define G_HOTPOS        0x00890140u
 #define G_HOTPOS_ANGLE  0x008900d0u
 #define G_HOTPOS_JUMP   0x008900cdu
 #define G_HOTPOS_VALID  0x008900ceu
-#define G_CARTYPES      0x008a1cccu   /* CarTypeInfo[], 0x890 bytes, +0 name */
-#define HOOK_MAINLOOP   0x00581475u
 
 uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 /* ---- expressions ---------------------------------------------------------- */
@@ -108,7 +103,7 @@ static uint32_t eval(const char *s){ xp = s; return x_expr(); }
 /* Call guest function fn (any convention: esp and every register are restored
  * afterwards).  Only from the main-loop hook. */
 static uint32_t guest_call(CPU *c, uint32_t fn, uint32_t ecx, uint32_t edx, int n, const uint32_t *arg){
-    return guest_call_ex(c, fn, ecx, edx, n, arg, HOOK_MAINLOOP, 512u);
+    return guest_call_ex(c, fn, ecx, edx, n, arg, GUEST_RET_MAINLOOP, 512u);
 }
 
 #define QMAX 32
@@ -136,8 +131,7 @@ static int roaming(void){
  * roam_game.c's roaming() has it.  The crib's Performance Tuning test runs are one racer and no career race
  * too, but a race on a track of their own (a circuit 4705, 0x4FEF80; a drag 4709 with the drag byte set,
  * 0x4FEFF0): read as free roam, a drag test run on a phone had no gear buttons (a player's report). */
-#define G_TRACK         0x0089e7a0u
-int roam_exploring(void){ return roaming() && rd32(G_TRACK) % 1000u == 0; }
+int roam_exploring(void){ return roaming() && rd32(G_RACEPARAMS) % 1000u == 0; }
 /* One line per car of the world list (World +0 head; the list node is the
  * car's first two dwords). */
 static void log_cars(const char *why){
@@ -205,7 +199,6 @@ void sub_00604260(CPU *c){
 #define FN_CAR_SETPHYSICS  0x005f46a0u   /* thiscall (mode) */
 #define FN_CAR_SETPOSITION 0x005fbd60u   /* thiscall (pos*, speed, u16 heading, flag) */
 #define FN_CAR_SECTION     0x005f6cd0u   /* thiscall () */
-#define G_WORLDTIMER       0x0086518cu   /* int, 1/4000 s */
 static struct { int on, direct, nocol, replay; uint32_t car; float cx, cy, cz, r, w; uint32_t t0; long remode;
                 float lx, ly, lz; uint32_t lwt; long lf; double jsum, jmax; long jn; } G;
 
@@ -236,18 +229,17 @@ static void trace_tick(void){
             fputc('\n', cf); }
     }
     fprintf(g_trace, "%ld,%u,%u,%.4f,%.6f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", autotest_frame(),
-            MR32(G_WORLDTIMER), MR32(0x008651acu), hfr_sim_ms(), (double)ts.tv_sec + ts.tv_nsec / 1e9,
-            (double)MRF32(0x00865154u), (double)MRF32(car + 0x60u), (double)MRF32(car + 0x64u), (double)MRF32(car + 0x68u),
+            MR32(G_WORLDTIMER), MR32(G_REALTIMER), hfr_sim_ms(), (double)ts.tv_sec + ts.tv_nsec / 1e9,
+            (double)MRF32(G_WORLDDT), (double)MRF32(car + 0x60u), (double)MRF32(car + 0x64u), (double)MRF32(car + 0x68u),
             (double)MRF32(car + 0x70u), (double)MRF32(car + 0x74u), (double)MRF32(car + 0x78u),
-            (double)MRF32(car + 0x50u), (double)MRF32(car + 0x54u), (double)MRF32(car + 0x58u), (double)MRF32(car + 0x42cu),
-            (double)MRF32(car + 0x440u));
+            (double)MRF32(car + 0x50u), (double)MRF32(car + 0x54u), (double)MRF32(car + 0x58u), (double)MRF32(car + CAR_FWD_SPEED),
+            (double)MRF32(car + CAR_RPM));
 }
 /* Simulation clock for samples.  At the main-loop hook the car's position
  * already includes this frame's world dt ([0x865154]) while WorldTimer
  * (0x86518C) does not yet (run roam-22: displacement / (v * wdt) = 0.99..1.01
  * per frame, against 0.5..2.0 with WorldTimer differences), so samples are
  * stamped with the sum of world dt, in WorldTimer units (1/4000 s). */
-#define G_WORLDDT 0x00865154u
 static double g_simt;
 static uint32_t sim_now(void){ return (uint32_t)(int64_t)(g_simt * 4000.0 + 0.5); }
 static void rec_tick(void){
@@ -258,8 +250,8 @@ static void rec_tick(void){
     g_rec_next = wt + 200u;                                    /* 4000 units/s */
     Sample *s = &g_rec[g_nrec++];
     s->wt = wt; rd3(car + 0x60u, s->p); rd3(car + 0x70u, s->v); rd3(car + 0x90u, s->f); rd3(car + 0xa0u, s->l);
-    rd3(car + 0xb0u, s->u); rd3(car + 0x110u, s->w); s->spd = MRF32(car + 0x42cu); s->rpm = MRF32(car + 0x440u);
-    s->gear = (int)MR32(car + 0x434u);
+    rd3(car + 0xb0u, s->u); rd3(car + 0x110u, s->w); s->spd = MRF32(car + CAR_FWD_SPEED); s->rpm = MRF32(car + CAR_RPM);
+    s->gear = (int)MR32(car + CAR_GEAR);
 }
 /* rotation rows (f, l, u) <-> quaternion */
 static void m2q(const float *f, const float *l, const float *u, float *q){
@@ -357,10 +349,7 @@ static void ghost_on(CPU *c, int k, int direct, int nocol, int replay){
  * loader at 0x8A3288, (ride, 0, 0) -> handle) + Service (0x63BCD0 (0, 0)),
  * and applied once CarLoader's entry for the handle reports loaded (0x610910;
  * entries are on the list at loader +0x58, handle at +0x123C). */
-#define FN_MALLOC          0x00575620u   /* cdecl (size) */
-#define FN_RIDE_INIT       0x00610270u   /* thiscall (type, 1, 0, 0) */
 #define FN_RIDE_STOCKPARTS 0x00637040u   /* thiscall (0) */
-#define FN_RIDE_SKINS      0x0061c280u   /* thiscall (n): DUMMY_SKIN<n> etc. */
 #define FN_CAR_SETRIDE     0x00601110u   /* thiscall (RideInfo*) */
 #define G_CARLOADER        0x008a3288u
 #define FN_LOADER_LOAD     0x0063bc70u   /* thiscall (ride, 0, 0) -> handle */
@@ -384,7 +373,7 @@ static void ghost_ride(CPU *c, const char *what){
         return;
     }
     uint32_t type = (uint32_t)atoi(what), sz = 0x900u;
-    uint32_t ride = guest_call(c, FN_MALLOC, 0, 0, 1, &sz);
+    uint32_t ride = guest_call(c, FN_NEW, 0, 0, 1, &sz);
     if (!ride){ fprintf(stderr, "[roam] ghost ride: malloc failed\n"); return; }
     for (uint32_t i = 0; i < sz; i += 4) MR32(ride + i) = 0;
     if (!strncasecmp(what, "copy", 4)){       /* "copyK": racer record K's ride, own skin slot */
@@ -450,7 +439,7 @@ static struct { uint32_t rec, handle; int n, pending; long since; } SP;
 static void spawn_start(CPU *c){
     uint32_t me = player_car(), sz = 0x940u;
     if (!me || SP.pending){ fprintf(stderr, "[roam] spawn: no player / busy\n"); return; }
-    uint32_t rec = guest_call(c, FN_MALLOC, 0, 0, 1, &sz);
+    uint32_t rec = guest_call(c, FN_NEW, 0, 0, 1, &sz);
     if (!rec) return;
     memcpy(g_mem + rec, g_mem + 0x890aa0u, 0x940);
     MR8(rec + 1u) = (uint8_t)(103 + SP.n); MR8(rec + 0x900u) = 0;
@@ -533,7 +522,7 @@ static void ghost_tick(CPU *c){
             MRF32(car + 0xd0u + 4u * (uint32_t)i) = P.f[i]; MRF32(car + 0xe0u + 4u * (uint32_t)i) = P.l[i];
             MRF32(car + 0xf0u + 4u * (uint32_t)i) = P.u[i]; }
         MR16(car + 0x40cu) = (uint16_t)(int)(atan2f(P.f[1], P.f[0]) / (2.f * 3.14159265f) * 65536.f);
-        MRF32(car + 0x42cu) = P.spd; MRF32(car + 0x430u) = P.spd; MRF32(car + 0x440u) = P.rpm; MR32(car + 0x434u) = (uint32_t)P.gear;
+        MRF32(car + CAR_FWD_SPEED) = P.spd; MRF32(car + CAR_SPEED) = P.spd; MRF32(car + CAR_RPM) = P.rpm; MR32(car + CAR_GEAR) = (uint32_t)P.gear;
         /* wheel spin: speed / tyre radius per wheel (RidePhysicsInfo +0x20 +0x30k), as SetPosition does
          * (whether the renderer uses these or +0x4E8/+0x4F8 is UNVERIFIED) */
         uint32_t ph = MR32(car + 0x20u);
@@ -569,7 +558,7 @@ static void ghost_tick(CPU *c){
         float m[16] = { fx, fy, 0, 0,  -fy, fx, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
         for (int i = 0; i < 16; i++){ MRF32(car + 0x90u + 4u * (uint32_t)i) = m[i]; MRF32(car + 0xd0u + 4u * (uint32_t)i) = m[i]; }
         MRF32(car + 0x110u) = 0; MRF32(car + 0x114u) = 0; MRF32(car + 0x118u) = G.w;
-        MR16(car + 0x40cu) = hd; MRF32(car + 0x42cu) = v; MRF32(car + 0x430u) = v;
+        MR16(car + 0x40cu) = hd; MRF32(car + CAR_FWD_SPEED) = v; MRF32(car + CAR_SPEED) = v;
         guest_call(c, FN_CAR_SECTION, car, 0, 0, 0);
     }
 }
@@ -696,7 +685,7 @@ static void shop_go(const char *nm){
  * name), as career.c's careergo does */
 static void race_go(void){
     for (int i = 0; i < 64; i++){
-        uint32_t r = rd32(0x85ad40u + 0x71c8u + 4u * (uint32_t)i);
+        uint32_t r = rd32(G_CAREER + 0x71c8u + 4u * (uint32_t)i);
         uint32_t m = guest_ok(r, 0x40) ? marker_by_hash(MR32(r + 0x28u)) : 0;
         if (!m) continue;
         double a = atan2((double)MRF32(m + 0x10u), (double)MRF32(m + 0xcu));
@@ -728,7 +717,7 @@ static void snapshot(CPU *c, const char *path){
     if (!o){ fprintf(stderr, "[roam] snapshot: cannot write %s\n", p); return; }
     uint32_t n = 0;
     for (uint32_t b = 0; b < (1u << 18); b++) if ((g_cbits[b >> 3] >> (b & 7)) & 1) n++;
-    uint32_t hdr[14] = { 1u, HOOK_MAINLOOP, c->eax, c->ecx, c->edx, c->ebx, c->esp, c->ebp, c->esi, c->edi, c->fs_base,
+    uint32_t hdr[14] = { 1u, GUEST_RET_MAINLOOP, c->eax, c->ecx, c->edx, c->ebx, c->esp, c->ebp, c->esi, c->edi, c->fs_base,
                          (uint32_t)c->fcw, n, 0 };
     fwrite("NFSUSNP1", 1, 8, o); fwrite(hdr, 4, 13, o);
     for (uint32_t b = 0; b < (1u << 18); b++){
@@ -863,7 +852,7 @@ int roam_hook(CPU *c, uint32_t ip){
  * MC_Main.fng (memory-card prompts) are on them while GetTopPackage still
  * names the screen below. */
 static uint32_t fe_mgr(void){
-    uint32_t fe = rd32(0x8384c4u);
+    uint32_t fe = rd32(G_FENG);
     if (!fe || !guest_ok(fe, 11)) return 0;
     uint32_t mg = MR32(fe + 8u);
     return guest_ok(mg, 0xf7) ? mg : 0;

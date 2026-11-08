@@ -51,6 +51,7 @@
  * puts that name in the game's own fields as the server's answer arrives.
  */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,13 +60,11 @@ int winsock_online(void);                    /* winsock.c: online on (browser, N
 unsigned roam_plat_name(char out[33]);       /* web/roam_web.c: the name picked on the page while the game runs */
 
 #define G_PROFILE          0x00850080u  /* the online/LAN profile object */
-#define G_NETMODE          0x00850078u  /* 8 online, 0x200 LAN */
 #define G_STAGE            0x008500d0u  /* +0x50: the login stage */
 #define G_ACCOUNT          0x008500d8u  /* +0x58: online account name, 16 bytes */
 #define G_PERSONA          0x008500ecu  /* +0x6c: online persona, 16 bytes */
 #define G_PASSWORD         0x00850100u  /* +0x80: online password, 16 bytes */
-#define G_FLOW             0x00836370u  /* the login screens' flow object */
-#define G_PROFILE_NAME     0x0083a9e0u  /* the career profile's name, 16 bytes ("No Profile") */
+#define G_LOGIN_FLOW       0x00836370u  /* the login screens' flow object */
 #define G_NETGAME          0x0089cf48u
 #define FN_NETCONN_STARTUP 0x00585640u  /* cdecl () */
 #define FN_SET_STAGE       0x005031b0u  /* thiscall profile, (stage) */
@@ -153,7 +152,7 @@ void sub_004effd0(CPU *c){
     char name[16]; const char *from = "";
     uint32_t fe = MR32(c->esp + 4u), stage = MR32(G_STAGE);
     g_auto = 0;
-    if (!winsock_online() || MR32(G_NETMODE) != 8u || stage == 1u){ sub_004effd0_orig(c); return; }
+    if (!winsock_online() || MR32(G_GAMEMODE) != 8u || stage == 1u){ sub_004effd0_orig(c); return; }
     if (!player_name(name, &from)){
         fprintf(stderr, "[online] no name for the Online menu (set roam_name, or load a profile): the EA Login screens\n");
         sub_004effd0_orig(c); return;
@@ -171,7 +170,7 @@ void sub_004effd0(CPU *c){
     fprintf(stderr, "[online] Online menu as %s (%s): no EA Login screens\n", name, from);
     memcpy(g_name, name, sizeof g_name); g_auto = 1;
     a[0] = fe; a[1] = S_OLMAIN; a[2] = 0; call(c, FN_FE_SWITCH, 0, 3, a);
-    c->eax = MR32(G_FLOW);
+    c->eax = MR32(G_LOGIN_FLOW);
     POP32(c->eip);
 }
 
@@ -180,7 +179,7 @@ void sub_004effd0(CPU *c){
 void sub_004f19a0_orig(CPU *c);
 void sub_004f19a0(CPU *c){
     uint32_t self = c->ecx, msg = MR32(c->esp + 4u), stage = MR32(G_STAGE);
-    int failed = g_auto && MR32(G_NETMODE) == 8u && stage < 12u && MR8(self + 0x154u) == 1u
+    int failed = g_auto && MR32(G_GAMEMODE) == 8u && stage < 12u && MR8(self + 0x154u) == 1u
                  && (msg == MSG_PERS_OK || msg == MSG_AUTH_OK || msg == MSG_CANCEL);
     sub_004f19a0_orig(c);
     if (!failed) return;

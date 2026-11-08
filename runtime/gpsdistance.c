@@ -6,6 +6,7 @@
  * frame, so no pointer outlives a HUD (shops, races, pause).  "[gps]" log line when one is made. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "splitscreen_mem.h"
 #include "gpsdistance_format.h"
 #include <math.h>
@@ -45,11 +46,11 @@ void gpsdistance_hud(CPU *c){
     static uint32_t hash;
     if (!hash){
         strcpy((char *)g_mem + scratch, "GPS_DISTANCE");
-        hash = one(c, 0x505450u, 0, scratch);
+        hash = one(c, FN_FE_HASH, 0, scratch);
     }
     uint32_t args[2] = {pkg, hash};
     uint32_t obj = call(c, 0x537a10u, 0, 2, args);
-    int on = car && MR8(0x8385b9u) && !MR32(0x89e7b0u) &&
+    int on = car && MR8(0x8385b9u) && !MR32(G_RACETYPE) &&
         ((MR32(part + 0x10u) & MR32(part + 0x18u)) ||
          (MR32(part + 0x14u) & MR32(part + 0x1cu)));
     /* GPS::GetState (0x501100): 1/2 report no satellite/path, 4 is off.
@@ -59,18 +60,18 @@ void gpsdistance_hud(CPU *c){
         uint32_t state = call(c, 0x501100u, 0x838590u, 0, NULL);
         on = state == 0 || state == 3;
     }
-    if (!on){ if (obj) one(c, 0x50ca00u, 0, obj); return; }
+    if (!on){ if (obj) one(c, FN_FE_HIDE, 0, obj); return; }
     float dx = MRF32(0x8385a0u) - MRF32(car + 0x50u);
     float dy = MRF32(0x8385a4u) - MRF32(car + 0x54u);
     float distance = hypotf(dx, dy);
     if (!isfinite(distance) || distance >= 1000000.f){
-        if (obj) one(c, 0x50ca00u, 0, obj);
+        if (obj) one(c, FN_FE_HIDE, 0, obj);
         return;
     }
     int made = !obj;
     if (!obj){
         strcpy((char *)g_mem + scratch, "ONLINE_PLAYER_1");
-        args[1] = one(c, 0x505450u, 0, scratch);
+        args[1] = one(c, FN_FE_HASH, 0, scratch);
         uint32_t source = call(c, 0x537a10u, 0, 2, args);
         if (!source) return;
         /* Use the same ownership-checked clone path as multiplayer HUD labels.
@@ -100,7 +101,7 @@ void gpsdistance_hud(CPU *c){
     }
     if (!same){
         strcpy((char *)g_mem + scratch, text);
-        one(c, 0x535fe0u, obj, scratch);
+        one(c, FN_FE_SETSTR, obj, scratch);
         MR32(obj + 0x1cu) |= 2u;
     }
     one(c, 0x50ca50u, 0, obj);

@@ -20,6 +20,7 @@
  * them for the list's last entry too, which ours makes one more. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <string.h>
@@ -29,13 +30,9 @@ void win32_reg_put_dword(const char *nm, uint32_t v);
 
 #define REG_NAME      "ShowPlayerNames"
 #define A_NAMES       0x008500c9u   /* byte: Show Player Names, 1 = on */
-#define FN_NEW        0x00575620u   /* cdecl (size): operator new */
 #define FN_TOGGLE     0x0051e230u   /* thiscall (screen +0xFC, +0x10C, +0x114, +0x11C, 1): a toggle entry */
 #define FN_ADD        0x0054ef30u   /* thiscall screen (entry, 1): Options > Gameplay's list takes a toggle */
 #define FN_ADD_PAUSE  0x0054f170u   /* thiscall screen (entry, 1): the pause menu's */
-#define FN_FE_HASH    0x00505450u   /* cdecl (name) -> hash */
-#define FN_FE_PACKAGE 0x0052cef0u   /* cdecl (package name) -> FEPackage* */
-#define FN_PKG_FIND   0x00517f80u   /* thiscall package (hash) -> its object, 0: none */
 #define VT_NAMES      0x00791b70u   /* Show Player Names' class (UI_OLMAIN's Options) */
 #define MSG_LEFT      0x9120409eu
 #define MSG_RIGHT     0xb5971bf1u

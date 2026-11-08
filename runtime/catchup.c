@@ -37,11 +37,11 @@
  *            by the race's progress after it (GLOBALB +0x504) only scales M - 1
  * Quick Race keeps its own option, and a race over the network has no AI. */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
 
-#define G_CAREER        0x0085ad40u   /* the career: +0x8730 the career race being run, 0 none */
 #define CAREER_RACE     0x8730u
 #define DRV_PACE        0x770u            /* AI driver: M, the target speed's factor */
 #define DRV_VEHICLE     0x4u

@@ -19,6 +19,7 @@
  * benchmark can split the race into tier-up and warm parts and count late
  * frames itself. */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,7 +76,7 @@ void gcpu_frame(void){
     if (g_last >= 0){
         double ms = b - g_last;
         g_frame_ms = ms;
-        uint32_t flow = mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u;
+        uint32_t flow = mem_is_committed(G_FLOW) ? MR32(G_FLOW) : 0u;
         dist_add(&g_flow[flow & 7], ms);
         if (g_nwin < (int)(sizeof g_win / sizeof g_win[0])) g_win[g_nwin++] = (float)ms;
         if (g_fr_on < 0){ const char *e = getenv("NFSU2_GCPU_FRAMES"); g_fr_on = e && *e == '1'; }

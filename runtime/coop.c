@@ -23,6 +23,7 @@
  */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "splitscreen_mem.h"
 #include "gamepad.h"
 #include "kbd.h"
@@ -37,12 +38,7 @@
 
 long autotest_frame(void);
 
-#define G_FLOW        0x008654a4u   /* GameFlowManager state: 6 in the world */
-#define G_GAMEMODE    0x00850078u   /* 1 career */
-#define G_WORLD       0x00890080u   /* World*: +0 car list, +0x10 cars, +0x14/+0x18 AI range */
-#define G_RACEPARAMS  0x0089e7a0u   /* +0x10 race type (0 free roam), +0x20 local humans, +0x70 records, +0x74 count */
 #define G_HUMANS      0x0089e7c0u
-#define G_PROFILE0    0x0083a9e0u   /* user 0's profile: +0 name */
 #define G_RECORDS     0x00890160u   /* racer records (AddRacer copies into the next) */
 #define REC_SZ        0x940u
 
@@ -50,7 +46,6 @@ long autotest_frame(void);
 #define FN_ADDRACER   0x00601600u   /* thiscall race params (record) */
 #define FN_CREATECAR  0x00606480u   /* ecx grid {vec3, +0x10 u16 heading}, edx record, (driver, start) */
 #define FN_INDEXCARS  0x005f0d20u   /* thiscall World */
-#define FN_NEW        0x00575620u   /* cdecl (size): operator new */
 #define FN_PLAYER     0x005f1670u   /* thiscall Player ctor (port, index) */
 #define FN_ATTACHCAR  0x005f3e10u   /* thiscall Player (car) */
 #define FN_PLAYER_END 0x005f1cc0u   /* thiscall Player: the dtor's body (the last Player in order) */
@@ -127,10 +122,7 @@ static int coop_new_car(CPU *c, uint32_t w, uint32_t ride, uint32_t *out);
  * faults), then a paint slot of its own: DUMMY_SKIN53, past every one roam_game.c's cars take (5 and up, made by it,
  * roam_game_coop_skin).  The car loader loads it (Load 0x63BC70, Service; Loaded 0x610910 on its entry; WaitForLoad
  * 0x61CA50) before CreateCar; Unload 0x63AE00 when player 2 is gone or the world ended. */
-#define CARS0         0x0083ad90u
 #define FN_PHYSINFO   0x005ac6e0u   /* thiscall (ride + 0x10): the ride's physics info's ctor */
-#define FN_RIDEINIT   0x00610270u   /* thiscall ride (type, 0, 0, 0) */
-#define FN_SKIN       0x0061c280u   /* thiscall ride (n): DUMMY_SKIN<n> / WHEEL / SPINNER */
 #define G_CARLOADER   0x008a3288u   /* entries on +0x58, handle at entry +0x123C */
 #define FN_LOAD       0x0063bc70u   /* thiscall (ride, 0, 0) -> handle */
 #define FN_SERVICE    0x0063bcd0u   /* thiscall (0, 0) */
@@ -139,7 +131,6 @@ static int coop_new_car(CPU *c, uint32_t w, uint32_t ride, uint32_t *out);
 #define FN_UNLOAD     0x0063ae00u   /* thiscall (handle) */
 #define COOP_RIDE     0x00d0f000u   /* player 2's ride (0x900) */
 #define COOP_SKIN     53u
-#define G_CARTYPES    0x008a1cccu   /* CarTypeInfo[] (0x890): +0 name, +0xC0 the make, +0xD0 the name's hash */
 #define G_CARTYPES_N  0x2eu
 #define G_LANG_N      0x008383d0u   /* the game's texts: count, then sorted {hash, text} */
 #define G_LANG_TAB    0x008383d8u
@@ -164,8 +155,8 @@ static int coop_garage(uint32_t out[10]){
     int n = 0;
     for (unsigned i = 0; i < 10; i++){
         uint32_t r;
-        if (i < 5) r = CARS0 + 0x5954u + i * 0x7f8u;
-        else { char nm[24]; snprintf(nm, sizeof nm, "CAREER_SLOT_%u", i); r = garage_find(CARS0, bhash(nm)); }
+        if (i < 5) r = G_FECARS + 0x5954u + i * 0x7f8u;
+        else { char nm[24]; snprintf(nm, sizeof nm, "CAREER_SLOT_%u", i); r = garage_find(G_FECARS, bhash(nm)); }
         if (r && mem_is_committed(r + 0x7f7u) && MR32(r) == 0x0079b12cu && MR8(r + 0x7f5u)) out[n++] = r;
     }
     return n;
@@ -221,10 +212,10 @@ static int coop_build_ride(CPU *c, uint32_t rec, uint32_t ride){
     memset(g_mem + ride, 0, 0x900);
     call(c, FN_PHYSINFO, ride + 0x10u, 0, 0, 0);
     uint32_t ia[4] = { 0xffffffffu, 0, 0, 0 };
-    call(c, FN_RIDEINIT, ride, 0, 4, ia);
+    call(c, FN_RIDE_INIT, ride, 0, 4, ia);
     uint32_t ba[3] = { 1, ride, 0 };
     call(c, MR32(MR32(rec) + 0xcu), rec, 0, 3, ba);
-    uint32_t sk = COOP_SKIN; call(c, FN_SKIN, ride, 0, 1, &sk);
+    uint32_t sk = COOP_SKIN; call(c, FN_RIDE_SKINS, ride, 0, 1, &sk);
     return 1;
 }
 /* a record of player 1's garage now (not sold, this profile's) */
@@ -317,7 +308,7 @@ static int coop_make(CPU *c){
 }
 /* player 2's racer name: player 1's profile name and " 2" */
 static void coop_racer_name(void){
-    char name[32]; snprintf(name, sizeof name, "%.13s 2", (const char *)g_mem + G_PROFILE0);
+    char name[32]; snprintf(name, sizeof name, "%.13s 2", (const char *)g_mem + G_PROFILE_NAME);
     memset(g_mem + COOP_NAME, 0, 32); memcpy(g_mem + COOP_NAME, name, strlen(name));
 }
 /* a car for player 2 in this world: a human's racer record with player 1's ride, CreateCar at COOP_GRID */
@@ -400,13 +391,13 @@ uint32_t coop_fe_top(uint32_t mg){
  * take the whole keyboard, and read port 0 as well) */
 int coop_driving(void){
     if (!coop_in() && !coop_racing_together()) return 0;
-    uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0, p1 = MR32(SPLIT_PLAYERS_INDEX);
+    uint32_t fe = MR32(G_FENG), mg = fe ? MR32(fe + 8u) : 0, p1 = MR32(SPLIT_PLAYERS_INDEX);
     return mg && p1 && fe_named(coop_fe_top(mg), MR32(p1 + 0x9a4u));
 }
 void sub_0050c8e0_orig(CPU *c);
 void sub_0050c8e0(CPU *c){
     sub_0050c8e0_orig(c);
-    uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0;
+    uint32_t fe = MR32(G_FENG), mg = fe ? MR32(fe + 8u) : 0;
     if (mg && c->eax == MR32(mg + 0xe4u)) c->eax = coop_fe_top(mg);
 }
 
@@ -421,9 +412,9 @@ void sub_00581820(CPU *c){
 }
 /* the first join in a world whose pools are one player's: the reload, from player 1's place (no menu up, one racer) */
 static int coop_reload_now(CPU *c){
-    uint32_t car1 = p1_car(), rs = MR32(G_RACESTATUS), race = MR32(0x890118u);
+    uint32_t car1 = p1_car(), rs = MR32(G_RACESTATUS), race = MR32(G_RACE);
     if (!car1 || !rs || MR32(rs) != 4u || !race || MR32(race + 0x24u) != 1u) return 0;
-    uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0, p1 = MR32(SPLIT_PLAYERS_INDEX);
+    uint32_t fe = MR32(G_FENG), mg = fe ? MR32(fe + 8u) : 0, p1 = MR32(SPLIT_PLAYERS_INDEX);
     if (!mg || !p1 || !fe_named(coop_fe_top(mg), MR32(p1 + 0x9a4u))) return 0;
     for (unsigned i = 0; i < 3; i++) MRF32(G_START_POS + 4u * i) = MRF32(car1 + 0x60u + 4u * i);
     MR16(G_START_HEAD) = MR16(car1 + 0x40cu);
@@ -440,7 +431,7 @@ int mprace_phase(void);
 static int coop_rt;
 /* the front end's main menu up, no lobby race's trip under way (mprace.h: MPR_OUT .. MPR_BACK) */
 static int coop_main_menu(void){
-    uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0, top = mg ? MR32(mg + 0xe4u) : 0;
+    uint32_t fe = MR32(G_FENG), mg = fe ? MR32(fe + 8u) : 0, top = mg ? MR32(mg + 0xe4u) : 0;
     const char *nm = top ? gstr_at(MR32(top + 0xcu)) : 0;
     int ph = mprace_phase();
     return nm && !strcasecmp(nm, "MC_Main.fng") && !(ph >= 1 && ph <= 4);
@@ -517,7 +508,7 @@ void sub_005eb040(CPU *c){
 
 /* the garage car player 2 takes unless it picks (and the car dialog's first): player 1's own, else the first */
 static uint32_t coop_default_car(void){
-    uint32_t g[10], mine = garage_find(CARS0, MR32(0x00863480u));
+    uint32_t g[10], mine = garage_find(G_FECARS, MR32(G_CAREER_CAR));
     int n = coop_garage(g);
     for (int i = 0; i < n; i++) if (g[i] == mine) return g[i];
     return n ? g[0] : 0;
@@ -538,13 +529,13 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
         fprintf(stderr, "[coop] f=%ld script: join (%s)\n", f, dev == COOP_DEV_KB ? "the keyboard's WASD half" : a2);
     } else if (!strcasecmp(sub, "garage2")){
         /* test only (scripts): the career's slot 2 a copy of slot 1, for a garage of two cars */
-        uint32_t r0 = CARS0 + 0x5954u, r1 = r0 + 0x7f8u, h1 = MR32(r1 + 8u);
+        uint32_t r0 = G_FECARS + 0x5954u, r1 = r0 + 0x7f8u, h1 = MR32(r1 + 8u);
         memcpy(g_mem + r1, g_mem + r0, 0x7f8);
         MR32(r1 + 8u) = h1 ? h1 : bhash("CAREER_SLOT_1"); MR8(r1 + 0x7f4u) = 0; MR8(r1 + 0x7f5u) = 1;
         uint32_t g[10]; fprintf(stderr, "[coop] f=%ld script: garage of %d cars\n", f, coop_garage(g));
     } else if (!strcasecmp(sub, "finish")){
         /* test only: player 2's racer finishes now, through the coordinator's FinishRacer (as career.c's racewin) */
-        uint32_t rc = MR32(0x00890118u), p2 = MR32(SPLIT_PLAYERS_INDEX + 4u), car = p2 ? MR32(p2 + 4u) : 0, n = rc ? MR32(rc + 0x24u) : 0, i;
+        uint32_t rc = MR32(G_RACE), p2 = MR32(SPLIT_PLAYERS_INDEX + 4u), car = p2 ? MR32(p2 + 4u) : 0, n = rc ? MR32(rc + 0x24u) : 0, i;
         for (i = 0; car && i < n && i < 8u && MR32(rc + 0xbd0u + 4u * i) && MR32(MR32(rc + 0xbd0u + 4u * i)) != car; i++) ;
         if (!car || i >= n || i >= 8u) fprintf(stderr, "[coop] f=%ld script: finish: player 2 is not racing\n", f);
         else { uint32_t a[4] = { i, 0, 0, 1u }; call(c, 0x00606cb0u, rc, 0, 4, a);
@@ -562,7 +553,7 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
                 f, coop_want, coop_dev, coop_pl, coop_car, MR32(SPLIT_PLAYERS_COUNT),
                 car1 ? MRF32(car1 + 0x60u) : 0.f, car1 ? MRF32(car1 + 0x64u) : 0.f,
                 coop_car ? MRF32(coop_car + 0x60u) : 0.f, coop_car ? MRF32(coop_car + 0x64u) : 0.f);
-        uint32_t rc = MR32(0x00890118u), n = rc ? MR32(rc + 0x24u) : 0;   /* the race coordinator */
+        uint32_t rc = MR32(G_RACE), n = rc ? MR32(rc + 0x24u) : 0;   /* the race coordinator */
         fprintf(stderr, "[coop] f=%ld state: humans %u AI %u, players", f, MR32(G_HUMANS), MR32(0x0089e7c4u));
         for (uint32_t i = 0; i < 4 && i < MR32(SPLIT_PLAYERS_COUNT); i++){ uint32_t pl = MR32(SPLIT_PLAYERS_INDEX + 4u * i);
             fprintf(stderr, " 0x%08x(car 0x%08x)", pl, pl ? MR32(pl + 4u) : 0); }
@@ -580,7 +571,6 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
  * (0x558750, IG_GenericDialog_MED.fng; its answers come back to the menu, so to this item): player 2 presses START on
  * a controller (a local seat's START, input_web.c's join stamp), or picks Keyboard (the keyboard's WASD half); Cancel
  * or Back leaves it.  Remove Player 2 lets player 2 go.  Both then resume the game. */
-#define FN_ITEM       0x0051f670u   /* thiscall (icon, label, 0; ret 0xC): a menu item */
 #define FN_ADD_ITEM   0x0050dab0u   /* thiscall (item; ret 4): a menu's AddOption */
 #define VT_REPLAY     0x007954f0u
 #define ITEM_BYTES    0x48u
@@ -590,7 +580,6 @@ int coop_cmd(CPU *c, const char *args, long *wait_start){
 #define MSG_BACK      0x911ab364u   /* PAD_BACK */
 #define FN_DIALOG2    0x00558750u   /* cdecl (from, dialog package, label1, label2, msg1, msg2, back msg, first, fmt, ...) */
 #define FN_FE_MSG     0x0055dda0u   /* cdecl (message, package name): a message to a package */
-#define G_DLG_ID      0x00838974u   /* the dialog up now (0 none) */
 #define ICON_COOP     0x84d1d864u   /* (Replay's video camera until a two-player icon is drawn) */
 #define MSG_KB        0xc0c0a001u   /* our dialog's answers */
 #define MSG_CANCEL    0xc0c0a002u
@@ -703,7 +692,7 @@ int coop_act(CPU *c){
         fprintf(stderr, "[coop] f=%ld Remove Player 2\n", f);
         coop_leave(); coop_resume(c); return 2;
     }
-    if (msg == MSG_ACCEPT && !MR32(G_DLG_ID)){
+    if (msg == MSG_ACCEPT && !MR32(G_DLG)){
         coop_texts(c);
         char *s = (char *)g_mem + COOP_STR;
         memset(s, 0, 0x200);
@@ -717,7 +706,7 @@ int coop_act(CPU *c){
             coop_ask_stamps[k] = gamepad_local_join_stamp(k);
             PadState p; if (gamepad_read_local(k, &p) && (p.buttons & 1u << PAD_START)) coop_ask_held |= 1u << k;
         }
-        fprintf(stderr, "[coop] f=%ld Add Player 2: asking (dialog %08x)\n", f, MR32(G_DLG_ID));
+        fprintf(stderr, "[coop] f=%ld Add Player 2: asking (dialog %08x)\n", f, MR32(G_DLG));
         return 1;
     }
     return 0;
@@ -757,10 +746,10 @@ static void coop_pick_frame(CPU *c){
         } else if (v == MSG_PBACK){
             fprintf(stderr, "[coop] f=%ld Add Player 2: no car picked\n", autotest_frame());
             coop_pick_dev = -1; coop_pick_open = 0;
-        } else if (!d && !MR32(G_DLG_ID)){ coop_pick_dev = -1; coop_pick_open = 0; }   /* gone another way */
+        } else if (!d && !MR32(G_DLG)){ coop_pick_dev = -1; coop_pick_open = 0; }   /* gone another way */
         return;
     }
-    if (!coop_pick_show || MR32(G_DLG_ID)) return;            /* the last dialog still going */
+    if (!coop_pick_show || MR32(G_DLG)) return;            /* the last dialog still going */
     coop_texts(c);
     char nm[64]; coop_car_name(g[coop_pick_i], nm, sizeof nm);
     char *s = (char *)g_mem + COOP_STR;
@@ -789,7 +778,7 @@ int coop_dialog_answer(CPU *c, uint32_t msg){
 /* the generic dialog up now (the FE manager's screens: n = [0x8637B4]; until n is the head: screen [n + 0x10]) */
 #define VT_DIALOG     0x0079c88cu
 static uint32_t coop_dialog(void){
-    uint32_t head = 0x008637b4u, n = MR32(head);
+    uint32_t head = G_FEMGR, n = MR32(head);
     for (int k = 0; n && n != head && k < 64; k++, n = MR32(n)){
         uint32_t scr = MR32(n - 4u + 0x14u);
         if (scr && MR32(scr) == VT_DIALOG) return scr;
@@ -798,7 +787,7 @@ static uint32_t coop_dialog(void){
 }
 /* while the dialog asks: a START on a controller's seat makes it player 2's; the dialog goes with Back */
 static void coop_ask_frame(CPU *c){
-    if (coop_resume_next && !MR32(G_DLG_ID)){
+    if (coop_resume_next && !MR32(G_DLG)){
         coop_resume_next = 0;
         if (coop_ask_pkg){ uint32_t a[2] = { MSG_BACK, coop_ask_pkg }; call(c, FN_FE_MSG, 0, 0, 2, a); }
         fprintf(stderr, "[coop] f=%ld Add Player 2: the pause menu resumes\n", autotest_frame());
@@ -810,13 +799,13 @@ static void coop_ask_frame(CPU *c){
         if (v == MSG_KB || v == MSG_CANCEL || v == MSG_DBACK){ coop_dialog_answer(c, v); return; }
     }
     if (!coop_asking) return;
-    if (!MR32(G_DLG_ID) && coop_close_steps){
+    if (!MR32(G_DLG) && coop_close_steps){
         /* the dialog went after player 2's START: the car next */
         coop_asking = coop_close_steps = 0;
         coop_pick_begin(coop_close_dev);
         return;
     }
-    if (!MR32(G_DLG_ID)){ coop_asking = 0; return; }   /* gone another way */
+    if (!MR32(G_DLG)){ coop_asking = 0; return; }   /* gone another way */
     for (unsigned k = 0; k < 6 && !coop_close_steps; k++){
         /* the page's join stamp (a START claims a seat, readable once let go), or a START read from the seat */
         uint32_t st = gamepad_local_join_stamp(k);
@@ -844,8 +833,6 @@ void coop_ask_frame_(CPU *c){ coop_ask_frame(c); coop_pick_frame(c); coop_outrun
  * first (the game ranks the opponent first, and only an AI's road path moves it); the game decides it once the other
  * is 300 m behind and ends it (0x5F8490, the World one human's again).  No career effect: the career's outrun result
  * (0x541320: the stake, the outrun's win, its SMS) is skipped for it. */
-#define G_RACE        0x00890118u   /* race coordinator: +0x24 racers, +0x30 racers (0x1F0 each: +0 car, +0x10 completion), +0xBD0/+0xBD4 the order */
-#define G_RACETYPE    0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define G_ENCOUNTERS  0x0085ef70u
 #define G_OUTRUN_ST   (G_ENCOUNTERS + 0x1ae8u)   /* 2: a tuner's outrun can be taken */
 #define G_ENGAGE      0x00838590u
@@ -1111,7 +1098,7 @@ static void coop_rt_humans(const char *when){
 }
 void sub_00499b50_orig(CPU *c);
 void sub_00499b50(CPU *c){
-    if (coop_rt_go || !coop_in() || MR32(G_DLG_ID)){ coop_rt_go = 0; sub_00499b50_orig(c); return; }
+    if (coop_rt_go || !coop_in() || MR32(G_DLG)){ coop_rt_go = 0; sub_00499b50_orig(c); return; }
     /* the question first; the race starts on its answer (coop_rt_frame) */
     coop_texts(c);
     char *s = (char *)g_mem + COOP_STR;
@@ -1129,10 +1116,10 @@ static void coop_rt_frame(CPU *c){
     if (!coop_rt_ask) return;
     uint32_t d = coop_dialog(), v = d ? MR32(d + 0x50u) : 0;
     if (v != MSG_RT_TOGETHER && v != MSG_RT_ALONE && v != MSG_RT_BACK){
-        if (!d && !MR32(G_DLG_ID)){ coop_rt_ask = 0; MR8(coop_rt_card + 0x51u) = 0; }   /* gone another way */
+        if (!d && !MR32(G_DLG)){ coop_rt_ask = 0; MR8(coop_rt_card + 0x51u) = 0; }   /* gone another way */
         return;
     }
-    if (MR32(G_DLG_ID)) return;                                /* the dialog still going: start once it went */
+    if (MR32(G_DLG)) return;                                /* the dialog still going: start once it went */
     coop_rt_ask = 0;
     /* (the card marks itself started, +0x51, once its start returns (0x499C9D) and then takes no Accept or Back: the
      * card's again for another try or for Back) */
@@ -1186,11 +1173,11 @@ int coop_hook(CPU *c, uint32_t ip){
         return 1;
     case HOOK_SITE(0x00525fb9):                 /* 0x525ED0: human esi's car handle in edi, its user's table in edx */
         if (coop_racing_together() && c->esi == 1u){
-            uint32_t want = MR32(0x00863480u), tab = CARS0 + 0x9bd8u;
+            uint32_t want = MR32(G_CAREER_CAR), tab = G_FECARS + 0x9bd8u;
             for (uint32_t i = 0; coop_car_rec && i < 0x5bu; i++) if (MR32(tab + 4u * i) == coop_car_rec){ want = MR32(coop_car_rec + 8u); break; }
-            c->edi = want; c->edx = CARS0; MR32(c->esp + 0x1cu) = CARS0;
+            c->edi = want; c->edx = G_FECARS; MR32(c->esp + 0x1cu) = G_FECARS;
             fprintf(stderr, "[coop] f=%ld the career race: player 2's car 0x%08x (%s)\n", autotest_frame(), want,
-                    want == MR32(0x00863480u) ? "player 1's car" : "player 2's pick");
+                    want == MR32(G_CAREER_CAR) ? "player 1's car" : "player 2's pick");
         }
         return 1;
     }

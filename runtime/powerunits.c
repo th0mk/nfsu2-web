@@ -33,6 +33,7 @@
  * which ours makes one more. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <string.h>
@@ -44,16 +45,11 @@ const char *language_name(void);
 
 #define REG_NAME      "PowerUnits"
 #define A_KMH         0x0083aa1au   /* byte: Speedometer Units, 1 = km/h */
-#define FN_NEW        0x00575620u   /* cdecl (size): operator new */
 #define FN_TOGGLE     0x0051e230u   /* thiscall (screen +0xFC, +0x10C, +0x114, +0x11C, 1): a toggle entry */
 #define FN_ADD        0x0054ef30u   /* thiscall screen (entry, 1): Options > Gameplay's list takes a toggle */
 #define FN_ADD_PAUSE  0x0054f170u   /* thiscall screen (entry, 1): the pause menu's */
 #define FN_MODE       0x005026f0u   /* thiscall 0x83AAB4: the game mode (2: the pause menu has no Explore Map Mode) */
 #define FN_FE_STRING  0x0050c900u   /* cdecl (string object, hash): its text, in the game's language */
-#define FN_FE_SETSTR  0x00535fe0u   /* thiscall string object (char*): its text */
-#define FN_FE_HASH    0x00505450u   /* cdecl (name) -> hash */
-#define FN_FE_PACKAGE 0x0052cef0u   /* cdecl (package name) -> FEPackage* */
-#define FN_PKG_FIND   0x00517f80u   /* thiscall package (hash) -> its object, 0: none */
 #define VT_SPEEDO     0x00791c90u   /* Speedometer Units' class */
 #define VT_N          18
 #define M_ACT         0x0049aed8u   /* our methods 1 and 3 */

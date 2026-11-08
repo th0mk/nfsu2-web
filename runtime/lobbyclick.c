@@ -28,11 +28,11 @@
  * is up and no mouse button is down.  Original: the click on OK also
  * selects the game under it. */
 #include "cpu.h"
+#include "game.h"
 
 #define FN_LOBBY_MSG  0x004fcda0u   /* thiscall (msg, obj, a3, a4), ret 0x10 */
 #define MSG_MOUSE     0x9803f6e2u   /* the lobby's mouse: 0x4faa60, unless +0x1cd */
 #define LB_ASKING     0x1cdu        /* byte: one of the lobby's questions is up */
-#define G_DLG         0x00838974u   /* the dialog up now, 0 none */
 #define G_MOUSE_DOWN  0x008763f1u   /* left button down; right +3, middle +6 */
 
 void sub_004fcda0(CPU *c);

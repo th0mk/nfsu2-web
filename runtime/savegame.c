@@ -65,6 +65,7 @@
  * game. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include <math.h>
 #include <stdio.h>
 #include <strings.h>
@@ -74,10 +75,7 @@ int career_fe_active(const char *name);
 int mprace_car_ok(void);              /* mprace.c: the career has a car of its own (not a new one's prologue) */
 int roam_game_in_lobby(void);         /* roam_game.c: in a free-roam race lobby (its trip can start any moment) */
 
-#define G_GAMEMODE     0x00850078u   /* 1 the career */
-#define G_RACEKIND     0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player*: +4 its car */
-#define G_PROFILE      0x0083a9e0u   /* the profile's name, 32 bytes; +0x20 1: a profile is loaded */
 #define G_MC_JOB       0x00836514u   /* the save screen's job: 0 none */
 #define G_MC_MANAGER   0x00836498u   /* the save screen's manager: +6 the overwrite question answered Yes this game, */
 #define MGR_YES        6u
@@ -85,15 +83,12 @@ int roam_game_in_lobby(void);         /* roam_game.c: in a free-roam race lobby 
 #define FN_LIB_FLAGS   0x006fbfccu   /* thiscall (the +0x5C) (on, bits; ret 8): the library's flags on or off */
 #define LIB_ASKED      0x100u        /* ... set: the overwrite question answered Yes (not asked again) */
 #define G_AUTOSAVE     0x00844ad9u   /* byte: Save at Autosave */
-#define G_CAREER       0x0085ad40u
 #define C_KEEP         0x8744u       /* byte: the world's next load puts the car at the place below */
 #define C_PLACE        0x8750u       /* float[3] */
 #define C_HEADING      0x8760u       /* u16 */
 #define CAR_PLACE      0x60u
 #define CAR_VELOCITY   0x70u
 #define CAR_HEADING    0x40cu
-#define FN_NEW         0x00575620u   /* cdecl (size): operator new */
-#define FN_ITEM        0x0051f670u   /* thiscall (icon, label, 0; ret 0xC): a menu item's constructor */
 #define FN_ADD_ITEM    0x0050dab0u   /* thiscall (item; ret 4): a menu's AddOption */
 #define FN_MC_JOB      0x004a3100u   /* cdecl (package, package to tell, job, 0, 0, 0, 0) */
 #define VT_EXPLORE     0x007954d8u   /* Return to Explore Mode's class */
@@ -121,8 +116,8 @@ static uint32_t player_car(void){ uint32_t p = guest_rd32(G_PLAYER1), car = p ? 
 
 /* why Save cannot run now (0: it can) */
 static const char *not_now(void){
-    if (MR32(G_GAMEMODE) != 1u || MR32(G_RACEKIND) != 0u) return "not career free roam";
-    if (!MR8(G_PROFILE + 0x20u)) return "no profile loaded";
+    if (MR32(G_GAMEMODE) != 1u || MR32(G_RACETYPE) != 0u) return "not career free roam";
+    if (!MR8(G_PROFILE_NAME + 0x20u)) return "no profile loaded";
     if (!mprace_car_ok()) return "no car of the career's own yet";
     if (roam_game_in_lobby()) return "in a race lobby";
     if (S.pending || career_fe_active(MC_PACKAGE)) return "a save runs";
@@ -141,7 +136,7 @@ static const char *not_now(void){
 /* photo.c's AddOption patch, after the game's add: after Return to Explore Mode, Save */
 void savegame_item(CPU *c, uint32_t menu, uint32_t it){
     if (!guest_ok(it, IT_LABEL + 4u) || MR32(it) != VT_EXPLORE || MR32(it + IT_LABEL) != LBL_EXPLORE) return;
-    if (MR32(G_GAMEMODE) != 1u || MR32(G_RACEKIND) != 0u) return;
+    if (MR32(G_GAMEMODE) != 1u || MR32(G_RACETYPE) != 0u) return;
     uint32_t n = ITEM_BYTES, sv = gcall_main(c, FN_NEW, 0, 1, &n);
     if (!guest_ok(sv, ITEM_BYTES)) return;
     uint32_t arg[3] = { ICON_SAVE, LBL_SAVE, 0 };

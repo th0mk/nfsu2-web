@@ -23,19 +23,15 @@
  * only for its seven). */
 #include "optslider.h"
 #include "guest.h"
+#include "game.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
 
-#define FN_NEW        0x00575620u   /* cdecl (size): operator new */
 #define FN_WIDGET     0x0051e840u   /* thiscall (screen +0xFC, +0x10C, +0x114, +0x11C, 1): a slider entry */
 #define FN_SET        0x004ff550u   /* thiscall slider (float): its value, within its range */
-#define FN_FE_HASH    0x00505450u   /* cdecl (name) -> hash */
-#define FN_FE_PACKAGE 0x0052cef0u   /* cdecl (package name) -> FEPackage* */
-#define FN_PKG_FIND   0x00517f80u   /* thiscall package (hash) -> its object, 0: none */
-#define FN_FE_SETSTR  0x00535fe0u   /* thiscall string object (char*): its text */
 #define VT_ENGINE     0x007919e8u   /* Engine Volume's class */
 #define VT_N          19
 #define M_ACT         0x0049a947u   /* our methods 1, 3 and 17 */

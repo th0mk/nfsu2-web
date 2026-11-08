@@ -7,6 +7,7 @@
  *   2) visited set: each node at most once per top-level walk
  * That way the walk terminates and the game can make progress.            */
 #include "cpu.h"
+#include "game.h"
 #include "guest_span.h"
 #include <stdio.h>
 #include <math.h>
@@ -465,10 +466,9 @@ static int force_rain(void){
  * and LAN keep the game's clock. */
 int roam_game_shared_weather(void);       /* roam_game.c: free roam's world with free-roam multiplayer on */
 #define A_WORLD_T   0x007fb718u           /* WorldTimer in seconds (float) */
-#define A_TICKS     0x0086518cu           /* WorldTimer in ticks: a new value each world step */
 static float shared_weather_t(void){
     static uint32_t at = ~0u; static float t;
-    uint32_t tick = MR32(A_TICKS);
+    uint32_t tick = MR32(G_WORLDTIMER);
     if (tick != at){                      /* the clock once a step: the car physics asks once per car */
         struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
         t = (float)((double)(ts.tv_sec % 360) + (double)ts.tv_nsec * 1e-9);
@@ -496,7 +496,6 @@ void hfr_rain_update(CPU *c);          /* framerate.c: sub_0061f120_orig at any 
 void sub_0061f120_orig(CPU *c);
 int photo_weather(void);
 int photo_stands(void);
-#define A_WORLDDT_O 0x00865154u
 #define RAIN_PRIME  40
 static void photo_rain(CPU *c, uint32_t rain){
     static int was = -1, prime;
@@ -505,17 +504,17 @@ static void photo_rain(CPU *c, uint32_t rain){
     MRF32(rain + 0x5094u) = (float)pw; MRF32(rain + 0x1f0u) = (float)pw;
     if (pw == 1){ MRF32(rain + 0x5098u) = 0.0f; MRF32(rain + 0x509cu) = 0.0f; }   /* an overcast sky with it */
     if (!photo_stands()){ hfr_rain_update(c); return; }
-    float dt = MRF32(A_WORLDDT_O);
+    float dt = MRF32(G_WORLDDT);
     uint32_t ret = MR32(c->esp);
     for (; prime > 0; prime--){                 /* (the call pops its return: pushed again for the next) */
-        MRF32(A_WORLDDT_O) = 1.f / 60.f; c->ecx = rain;
+        MRF32(G_WORLDDT) = 1.f / 60.f; c->ecx = rain;
         sub_0061f120_orig(c);
         c->esp -= 4u; MR32(c->esp) = ret;
         MRF32(rain + 0x1f0u) = (float)pw;
     }
-    MRF32(A_WORLDDT_O) = 1e-4f; c->ecx = rain;
+    MRF32(G_WORLDDT) = 1e-4f; c->ecx = rain;
     hfr_rain_update(c);
-    MRF32(A_WORLDDT_O) = dt;
+    MRF32(G_WORLDDT) = dt;
 }
 void sub_0061f120(CPU *c){
     void split_rain_begin(CPU *); void split_rain_end(void);
@@ -544,7 +543,7 @@ void sub_0060faa0_orig(CPU *c);
 void sub_0060faa0(CPU *c){
     static int ft = -1, done = 0; static long calls = 0;
     if (ft < 0){ const char *e = getenv("FORCETOD"); ft = e ? atoi(e) : 0; }
-    if (ft > 0 && !done && MR32(0x8654a4u) == 6u && MR32(0x8a1c78u) != 0u && ++calls >= ft &&
+    if (ft > 0 && !done && MR32(G_FLOW) == 6u && MR32(0x8a1c78u) != 0u && ++calls >= ft &&
         MR32(0x8a1c8cu) == 0u){
         static int st = -1;
         if (st < 0){ const char *e = getenv("FORCETOD_STATE"); st = e ? atoi(e) : 2; if (st < 1 || st > 4) st = 2; }
@@ -1023,7 +1022,6 @@ void sub_00559c90(CPU *c){
  * the ways that put another name there still do.  NFSU2_TEST_MC_STALE=1
  * (test aid): the game's way, the field holding 0xEF bytes. */
 #define MC_NAME         0x6cu         /* the screen's profile name, 32 bytes */
-#define PROFILE_NAME    0x0083a9e0u   /* the profile's name, 32 bytes; +0x20 a byte, 1: a profile is loaded */
 void sub_004e8b70_orig(CPU *c);
 void sub_004e8b70(CPU *c){
     static int stale = -1;
@@ -1031,9 +1029,9 @@ void sub_004e8b70(CPU *c){
     uint32_t self = c->ecx;
     sub_004e8b70_orig(c);
     if (!self || !mem_is_committed(self + MC_NAME) || !mem_is_committed(self + MC_NAME + 31u)) return;
-    int named = MR8(PROFILE_NAME + 0x20u) != 0;
+    int named = MR8(G_PROFILE_NAME + 0x20u) != 0;
     for (uint32_t i = 0; i < 32u; i++)
-        MR8(self + MC_NAME + i) = stale ? 0xefu : named ? MR8(PROFILE_NAME + i) : 0u;
+        MR8(self + MC_NAME + i) = stale ? 0xefu : named ? MR8(G_PROFILE_NAME + i) : 0u;
 }
 
 /* --- sub_004ff3b0: a first profile's name box starts with Your name ---
@@ -1082,7 +1080,7 @@ void sub_004ff3b0(CPU *c){
         for (uint32_t i = 0; i <= len; i++) if (MR8(def + i) != MR8(self + TXT_TEXT + i)) return;
     }
     char name[NEW_PROFILE_MOST]; uint32_t n = 0;
-    if (want && !MR8(PROFILE_NAME + 0x20u))
+    if (want && !MR8(G_PROFILE_NAME + 0x20u))
         for (const char *p = want; *p && n < NEW_PROFILE_MOST; p++) if (name_char((uint8_t)*p)) name[n++] = *p;
     if (!n){
         uint32_t bad = 0;
@@ -1206,7 +1204,6 @@ void sub_0050c2c0(CPU *c){
  * the game makes it for a new profile, and the records that leaves unused get
  * the index of none (-1, as their constructor 0x503A00 leaves it); the
  * profile keeps the table at its next save. */
-#define FECARS          0x0083ad90u
 #define FECARS_PLAYER   0xab4cu
 #define STOCK_N         48u
 #define STOCK_SZ        0x1cu
@@ -1229,7 +1226,7 @@ int cars_stock_fix(CPU *c, uint32_t db, uint32_t *lost, int max){
     if (bad == STOCK_N) return 0;
     uint32_t r = db + bad * STOCK_SZ;
     fprintf(stderr, "[cars] %s's stock car %u (handle 0x%08x) has car type %u, none of the game's %u (%d such): "
-            "the stock cars made again, as for a new profile\n", db == FECARS ? "player 1" : "player 2", bad, MR32(r + 8u),
+            "the stock cars made again, as for a new profile\n", db == G_FECARS ? "player 1" : "player 2", bad, MR32(r + 8u),
             MR32(r + 0x18u), CARTYPES_N, n);
     CPU save = *c;
     c->esp = (c->esp - 256u) & ~15u;
@@ -1245,7 +1242,7 @@ int cars_stock_fix(CPU *c, uint32_t db, uint32_t *lost, int max){
 }
 void sub_004df9c0(CPU *c){
     uint32_t who = MR32(c->ecx + 0xecu), lost[1];
-    if (who < 2u) cars_stock_fix(c, FECARS + who * FECARS_PLAYER, lost, 0);
+    if (who < 2u) cars_stock_fix(c, G_FECARS + who * FECARS_PLAYER, lost, 0);
     sub_004df9c0_orig(c);
 }
 
@@ -1326,7 +1323,6 @@ void sub_00483e40(CPU *c){
  * waits (the reads serviced, 0x57EF60, until busy is clear).
  * NFSU2_TEST_LOADER_OVERLAP=1 (test aid): the game's way. */
 #define CARLOADER_BUSY  0x008a329cu
-#define CARTYPEINFO     0x008a1cccu   /* -> 46 x 0x890 bytes: +0 the name, +0xD0 the hash */
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);   /* com.c */
 long autotest_frame(void);
 void sub_0061c600_orig(CPU *c);
@@ -1340,7 +1336,7 @@ void sub_0061c600(CPU *c){
         clock_gettime(CLOCK_MONOTONIC, &t0);
         while (MR32(CARLOADER_BUSY)) call_guest(c, 0x0057ef60u, 0, 0);
         clock_gettime(CLOCK_MONOTONIC, &t1);
-        uint32_t h = MR32(c->esp + 4u), t = MR32(CARTYPEINFO);
+        uint32_t h = MR32(c->esp + 4u), t = MR32(G_CARTYPES);
         char nm[16] = "?";
         for (uint32_t k = 0; t && k < 46u; k++)
             if (MR32(t + k * 0x890u + 0xd0u) == h){
@@ -1519,7 +1515,6 @@ void reads_frame(CPU *c){
 __attribute__((weak)) int roam_texlist_engine;
 /* damage.c: a racer's engine texture on its lists too, while the crash damage is on (a lost hood shows the engine) */
 __attribute__((weak)) int damage_texlist_engine(uint32_t ride);
-#define G_CARTYPES_TL   0x008a1cccu   /* CarTypeInfo[], 0x890 bytes: +0x20 the name its textures go by (0x631E20's %s) */
 static void texlist_add(uint32_t list, uint32_t at, uint32_t cnt, uint32_t h){
     uint32_t n = MR32(list + cnt);
     if (n >= TEXLIST_MAX) return;
@@ -1527,7 +1522,7 @@ static void texlist_add(uint32_t list, uint32_t at, uint32_t cnt, uint32_t h){
     MR32(list + at + 4u * n) = h; MR32(list + cnt) = n + 1u;
 }
 static void texlist_engine(uint32_t list, uint32_t ride){
-    uint32_t types = MR32(G_CARTYPES_TL), t = MR32(ride), a = types + t * 0x890u + 0x20u;
+    uint32_t types = MR32(G_CARTYPES), t = MR32(ride), a = types + t * 0x890u + 0x20u;
     if (!types || t >= 256u || !mem_is_committed(a + 0x20u)) return;
     char nm[40]; uint32_t i = 0;
     for (; i < 31u && MR8(a + i); i++) nm[i] = (char)MR8(a + i);
@@ -1807,7 +1802,6 @@ void sub_00574670(CPU *restrict c){
  * full.  NFSU2_PARTMEMO=0 (test aid): asked every time; 2: asked every time,
  * each kept answer checked against it ("[parts] DIFFERS"). */
 #define PARTMEMO_N      262144                  /* a power of two: 4 MB */
-#define G_CARPARTDB_OBJ 0x008a2b68u
 void sub_0061b980_orig(CPU *c);
 static struct { uint32_t key, prev, part; uint8_t type, slot, lvl, used; } g_pm[PARTMEMO_N];
 static uint32_t g_pm_n, g_pm_tabs[4];
@@ -1815,7 +1809,7 @@ static void newgetcarpart(CPU *restrict c){
     static int mode = -1;
     if (mode < 0){ const char *e = getenv("NFSU2_PARTMEMO"); mode = e && *e == '0' ? 0 : e && *e == '2' ? 2 : 1; }
     uint32_t e = c->esp, db = c->ecx;
-    if (!mode || db != G_CARPARTDB_OBJ || !mem_is_committed(e + 0x14u)){ sub_0061b980_orig(c); return; }
+    if (!mode || db != G_CARPARTDB || !mem_is_committed(e + 0x14u)){ sub_0061b980_orig(c); return; }
     uint32_t type = MR32(e + 4u), slot = MR32(e + 8u), key = MR32(e + 12u), prev = MR32(e + 16u), lvl = MR32(e + 20u);
     if (type > 0xffu || slot > 0xffu || (int32_t)lvl < -128 || (int32_t)lvl > 127){ sub_0061b980_orig(c); return; }
     uint32_t tabs[4] = { MR32(db), MR32(0x008a1cb8u), MR32(0x008a1cbcu), MR32(0x008a1cc8u) };   /* parts, owners, their count, attributes */

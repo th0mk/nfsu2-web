@@ -82,6 +82,7 @@
  *              (F7)
  */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -103,14 +104,12 @@ static const char *const g_fx_name[FX_N] = { "ticks", "timer", "particles", "tra
 #define M_AUTO     (-3)
 
 /* ---- game addresses (SPEED2.EXE v1.2 NA) ------------------------------ */
-#define A_FLOW        0x008654a4u   /* GameFlowManager state, 6 = racing */
 #define A_CAP         0x00865558u   /* minimum frame time (game's request) */
 #define A_CAP_DEF     0x007fb710u   /* default cap, 1/120 */
 #define A_PLAYBACK    0x008650d0u   /* JoyLog playback active */
 #define A_CARRY       0x00865148u   /* FrameTimeUpdate carry (1/4000 domain) */
 #define A_TICKS       0x00865140u   /* ticks this frame */
 #define A_REALDT      0x00865198u   /* real dt (s) = ticks * [A_TICK_S] */
-#define A_WORLDDT     0x00865154u   /* world dt (s), consumed by 0x57A0E0 */
 #define A_TICK_HZ     0x007a061cu   /* 1800.0 */
 #define A_TICK_4K     0x007a0aa8u   /* 4000/1800 */
 #define A_TICK_S      0x007a0618u   /* 1/1800 */
@@ -119,8 +118,6 @@ static const char *const g_fx_name[FX_N] = { "ticks", "timer", "particles", "tra
 #define A_RTF_COPY    0x007fb704u
 #define A_RTF_TICK    0x007fb70cu   /* RealTimeFrames this tick */
 #define A_SIXTY       0x00787590u   /* 60.0 */
-#define A_REALTIMER   0x008651acu   /* RealTimer, 1/4000 s */
-#define A_WORLDTIMER  0x0086518cu   /* WorldTimer, 1/4000 s */
 #define A_WORLD_S     0x007fb718u   /* WorldTimer in seconds (float) */
 #define A_WTF         0x007fb720u   /* WorldTimeFrames */
 #define A_WTF_REST    0x00865158u   /* WorldTimeFrames remainder (s) */
@@ -128,14 +125,10 @@ static const char *const g_fx_name[FX_N] = { "ticks", "timer", "particles", "tra
 #define A_U4000       0x00784268u   /* 1/4000 */
 #define A_FRAMECNT    0x00870818u   /* eFrameCounter (render) */
 #define A_STREAK_FC   0x008a44ecu   /* UpdateCarStreakingFlares: last frame */
-#define A_CARLIST     0x00890080u   /* car list head (sentinel) */
 #define A_RACERS      SPLIT_PLAYERS_ORDER   /* racer infos, [+4] = car */
 #define A_NRACERS     SPLIT_PLAYERS_COUNT
 #define A_SND_ON      0x007faaa8u
 #define A_SND_PAUSE   0x0082b8dcu
-#define A_ONLINE      0x0089cf69u   /* World+0x21 (byte): online session */
-#define A_NET_CLIENT  0x008669f4u   /* client race state, > 0 in a network race */
-#define A_NET_HOST    0x00866a14u   /* host race state, > 0 in a network race */
 
 #define TICK_HZ   3600              /* tick base with the ticks fix */
 #define TICK_MAX  180               /* 50 ms = 3 x [0x7875BC], the game's max dt */
@@ -390,7 +383,7 @@ static int io_frame(uint64_t now){
  * section (0x5E6C10, which holds the GIL while it services the reads) before
  * the section was in, and stayed there (replay_pause.txt, 11-04) */
 static int ff_flow(void){
-    uint32_t f = MR32(A_FLOW);
+    uint32_t f = MR32(G_FLOW);
     if (f != 3u && f != 6u) return 0;
     const char *autotest_top_fng(void), *autotest_screen(void);
     const char *t = autotest_top_fng(), *s = autotest_screen();
@@ -422,7 +415,7 @@ static uint64_t g_wh[WH_BINS];       /* guest work time per counted frame, 0.25 
 static uint64_t g_sleep_all_ns = 0;  /* pacer sleep, all frames (perflog) */
 static double   g_race_ms = -1;      /* world time at which GameFlow last became 6 */
 double hfr_sim_ms(void){ return g_sim_ms; }
-double hfr_race_start_ms(void){ return MR32(A_FLOW) == 6u ? g_race_ms : -1; }
+double hfr_race_start_ms(void){ return MR32(G_FLOW) == 6u ? g_race_ms : -1; }
 uint64_t hfr_paced_sleep_us(void){ return g_sleep_all_ns / 1000u; }
 
 /* Interval histograms: presentedTime (what the display showed; metal.m
@@ -660,27 +653,27 @@ static void trace_row(const Stat *f, uint64_t sleep){
     float x = 0, y = 0, z = 0, sp = 0, di = 0;
     if (car && mem_is_committed(car + 0x8ff)){
         x = MRF32(car + 0x60); y = MRF32(car + 0x64); z = MRF32(car + 0x68);
-        sp = MRF32(car + 0x430); di = MRF32(car + 0x8fc); }
+        sp = MRF32(car + CAR_SPEED); di = MRF32(car + 0x8fc); }
     fprintf(g_trace, "%llu,%.6f,%.6f,%.6f,%d,%u,%.7g,%.7g,%.4f,%.4f,%.4f,%.4f,%.3f,%u,%u,%u,%u,"
             "%llu,%.5f,%.5f,%llu,%.3f,%.3f",
             (unsigned long long)++g_trace_n, (g_f.t - g_trace_t0) / 1e9, g_trace_sim, g_trace_real,
             g_f.slots, MR32(A_TICKS), (double)MRF32(A_REALDT), g_f.wdt,
-            x, y, z, sp, di, MR32(A_REALTIMER), MR32(A_WORLDTIMER), MR32(A_RTF), MR32(A_WTF),
+            x, y, z, sp, di, MR32(G_REALTIMER), MR32(G_WORLDTIMER), MR32(A_RTF), MR32(A_WTF),
             (unsigned long long)g_f.au_upd, g_f.au_dt, g_f.part, (unsigned long long)g_f.trail,
             g_f.work / 1e6, sleep / 1e6);
     /* every car of the World (0x609CE0: [world+0x1C+4i], i < [world+0x10]):
      * the AI drives whole laps by itself, a long deterministic physics test */
-    uint32_t w = MR32(A_CARLIST), nw = w && mem_is_committed(w + 0x2f) ? MR32(w + 0x10) : 0;
+    uint32_t w = MR32(G_WORLD), nw = w && mem_is_committed(w + 0x2f) ? MR32(w + 0x10) : 0;
     for (uint32_t i = 0; i < 4; i++){
         uint32_t cr = i < nw ? MR32(w + 0x1c + 4 * i) : 0;
         if (cr && mem_is_committed(cr + 0x433))
             fprintf(g_trace, ",%.4f,%.4f,%.4f,%.4f", MRF32(cr + 0x60), MRF32(cr + 0x64), MRF32(cr + 0x68),
-                    MRF32(cr + 0x430));
+                    MRF32(cr + CAR_SPEED));
         else fprintf(g_trace, ",,,,");
     }
     /* car+0x42C > 0 gates the streak/NOS trail drawing (0x61B04E) */
     { uint32_t c0 = nw ? MR32(w + 0x1c) : 0;
-      fprintf(g_trace, ",%.4f", c0 && mem_is_committed(c0 + 0x42f) ? (double)MRF32(c0 + 0x42c) : 0.0);
+      fprintf(g_trace, ",%.4f", c0 && mem_is_committed(c0 + CAR_FWD_SPEED + 3u) ? (double)MRF32(c0 + CAR_FWD_SPEED) : 0.0);
       /* the player's streak trail: distance newest -> oldest ring entry (F3) */
       double span = 0;
       uint32_t r = c0 && mem_is_committed(c0 + 0x557) ? MR32(c0 + 0x554) : 0;
@@ -707,7 +700,7 @@ static void trace_row(const Stat *f, uint64_t sleep){
  * slots it skipped were just measured by pace() */
 static void frame_close(uint64_t now, uint64_t sleep, uint64_t missed){
     if (!g_f.t) return;
-    int racing = MR32(A_FLOW) == 6u;
+    int racing = MR32(G_FLOW) == 6u;
     if (racing || g_log == 2){
         Stat f; memset(&f, 0, sizeof f);
         f.frames = 1; f.slots = (uint64_t)g_f.slots; f.missed = missed;
@@ -715,7 +708,7 @@ static void frame_close(uint64_t now, uint64_t sleep, uint64_t missed){
         f.wall_s = (now - g_f.t) / 1e9;
         f.real_s = MRF32(A_REALDT);
         f.sim_s  = g_f.wdt;
-        f.rtimer = MR32(A_REALTIMER) - g_f.rt0; f.wtimer = MR32(A_WORLDTIMER) - g_f.wt0;
+        f.rtimer = MR32(G_REALTIMER) - g_f.rt0; f.wtimer = MR32(G_WORLDTIMER) - g_f.wt0;
         f.rtf = MR32(A_RTF) - g_f.rtf0; f.wtf = MR32(A_WTF) - g_f.wtf0;
         f.au_upd = g_f.au_upd; f.au_dt = g_f.au_dt; f.part_s = g_f.part; f.trail_samples = g_f.trail;
         stat_add(&g_sec, &f);
@@ -734,12 +727,12 @@ static void frame_close(uint64_t now, uint64_t sleep, uint64_t missed){
 }
 static void frame_open(uint64_t now, int slots){
     static uint32_t flow_prev = 0;
-    uint32_t flow = MR32(A_FLOW);
+    uint32_t flow = MR32(G_FLOW);
     if (flow == 6u && flow_prev != 6u) g_race_ms = g_sim_ms;
     flow_prev = flow;
     memset(&g_f, 0, sizeof g_f);
     g_f.t = now; g_f.slots = slots;
-    g_f.rt0 = MR32(A_REALTIMER); g_f.wt0 = MR32(A_WORLDTIMER);
+    g_f.rt0 = MR32(G_REALTIMER); g_f.wt0 = MR32(G_WORLDTIMER);
     g_f.rtf0 = MR32(A_RTF); g_f.wtf0 = MR32(A_WTF);
 }
 
@@ -766,7 +759,7 @@ static double   g_tick_acc = 0;
 /* A network race: the World constructor's test for the 30 fps cap
  * (0x5FF652) and World::IsOnline (0x5F00F0). */
 static int net_race(void){
-    return MR8(A_ONLINE) || (int32_t)MR32(A_NET_CLIENT) > 0 || (int32_t)MR32(A_NET_HOST) > 0;
+    return MR8(G_NET_ONLINE) || (int32_t)MR32(G_NET_CLIENT) > 0 || (int32_t)MR32(G_NET_HOST) > 0;
 }
 /* The World constructor (thiscall, returns this) asks a network race for 30
  * fps (0x5FF67C: SetFrameRate [0x7A572C]), and only the race intro's NIS end
@@ -909,7 +902,7 @@ void sub_0057ead0(CPU *c){
 void sub_0057a050_orig(CPU *c);
 void sub_0057a050(CPU *c){
     float dt = MRF32(A_REALDT), carry0 = MRF32(A_RT_CARRY);
-    uint32_t frames0 = MR32(A_RTF), timer0 = MR32(A_REALTIMER);
+    uint32_t frames0 = MR32(A_RTF), timer0 = MR32(G_REALTIMER);
     sub_0057a050_orig(c);
     if (g_fix & FX_RTF){
         int n0 = (int)(((double)dt + (double)carry0) * (double)MRF32(A_SIXTY));
@@ -921,7 +914,7 @@ void sub_0057a050(CPU *c){
         double ex = (double)dt * 4000.0 + g_rt_carry;
         double u = floor(ex + 0.5);
         g_rt_carry = ex - u;
-        MR32(A_REALTIMER) = timer0 + (uint32_t)(int32_t)u;
+        MR32(G_REALTIMER) = timer0 + (uint32_t)(int32_t)u;
     }
 }
 
@@ -941,16 +934,16 @@ static double world_clock(void){
 }
 void sub_0057a0e0_orig(CPU *c);
 void sub_0057a0e0(CPU *c){
-    float wdt = MRF32(A_WORLDDT);
-    uint32_t w0 = MR32(A_WORLDTIMER);
+    float wdt = MRF32(G_WORLDDT);
+    uint32_t w0 = MR32(G_WORLDTIMER);
     double x0 = world_clock();
     sub_0057a0e0_orig(c);
     if (wdt == 0.f) return;
     g_f.wdt += wdt; g_sim_ms += wdt * 1e3;
     if (g_fix & FX_TIMER){
         double u = floor(world_clock() * 4000.0 + 0.5) - floor(x0 * 4000.0 + 0.5);
-        MR32(A_WORLDTIMER) = w0 + (uint32_t)(int32_t)u;
-        MRF32(A_WORLD_S) = (float)((double)(int32_t)MR32(A_WORLDTIMER) * (double)MRF32(A_U4000));
+        MR32(G_WORLDTIMER) = w0 + (uint32_t)(int32_t)u;
+        MRF32(A_WORLD_S) = (float)((double)(int32_t)MR32(G_WORLDTIMER) * (double)MRF32(A_U4000));
     }
 }
 
@@ -1028,7 +1021,7 @@ void sub_0061ad80(CPU *c){
     float dt = MRF32(A_REALDT);
     g_tr_time += dt > 0.f && dt < 0.25f ? dt : 0.0;
     uint32_t rings[TR_CARS]; int idx0[TR_CARS], nc = 0;
-    uint32_t head = MR32(A_CARLIST);
+    uint32_t head = MR32(G_WORLD);
     if (head && mem_is_committed(head + 3)){
         for (uint32_t e = MR32(head); e && e != head && nc < TR_CARS && mem_is_committed(e + 0x557); e = MR32(e)){
             uint32_t r = MR32(e + 0x554);
@@ -1139,17 +1132,17 @@ void sub_0061f120_orig(CPU *c);
 #define RAIN_VMAX     50.0          /* m/s: the game's cap, 1 / 0.02 */
 void hfr_rain_update(CPU *c){
     uint32_t rain = c->ecx;
-    double s = 60.0 * MRF32(A_WORLDDT);
+    double s = 60.0 * MRF32(G_WORLDDT);
     uint32_t view = rain && mem_is_committed(rain + RAIN_FALL + 0x9fu) ? MR32(rain + 0x1ecu) : 0;
     uint32_t cam = view && mem_is_committed(view + 0x43u) ? MR32(view + 0x40u) : 0;
     if ((g_fix & FX_RAIN) && s > 1.5 && at_30()){
-        float wdt = MRF32(A_WORLDDT);
+        float wdt = MRF32(G_WORLDDT);
         uint32_t ret = MR32(c->esp);                         /* popped by the call: pushed again for the second */
-        MRF32(A_WORLDDT) = wdt * 0.5f;
+        MRF32(G_WORLDDT) = wdt * 0.5f;
         sub_0061f120_orig(c);
         c->esp -= 4u; MR32(c->esp) = ret; c->ecx = rain;
         sub_0061f120_orig(c);
-        MRF32(A_WORLDDT) = wdt;
+        MRF32(G_WORLDDT) = wdt;
         return;
     }
     if (!(g_fix & FX_RAIN) || !(s > 0.0 && s < 1.0) || !cam || !mem_is_committed(cam + 0x1ebu)){

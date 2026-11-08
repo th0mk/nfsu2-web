@@ -68,6 +68,7 @@
  */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,7 +83,6 @@ long autotest_frame(void);
 void autotest_tap(unsigned dik, long frames);
 
 /* ---- guest globals (v1.2 NA, verified in our exe) ------------------------ */
-#define G_FLOW          0x008654a4u   /* TheGameFlowManager state (6 = in game) */
 #define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* PlayersByNumber[0] (Player*) */
 #define G_HOTPOS        0x00890140u   /* hot-position vec3 used by the jump */
 #define G_HOTPOS_ANGLE  0x008900d0u   /* u16 */
@@ -91,7 +91,6 @@ void autotest_tap(unsigned dik, long frames);
 #define FN_AUTOPILOT_ON  0x005fae20u  /* Player::AutoPilotOn(this) */
 #define FN_AUTOPILOT_OFF 0x005faf10u  /* Player::AutoPilotOff(this) */
 #define FN_SETINPUTMODE  0x00605c70u  /* Player::SetInputMode(this, mode) */
-#define MAINLOOP_RET     0x00581475u
 /* Race coordinator ([0x890118]): +0x00 RCSTATE (4 = race in progress, 7 =
  * post-race), +0x24 racer count, +0x30 racers (0x1F0 bytes each: +0x00 car,
  * +0x0A current position, +0x0C final position, +0x10 u16 completion type,
@@ -99,7 +98,6 @@ void autotest_tap(unsigned dik, long frames);
  * position.  FinishRacer(sortedIndex, position (0 = next free), flag,
  * completionType) at 0x606CB0 (thiscall, ret 0x10) is what the coordinator
  * itself calls when a racer crosses the line (0x608C48: (i, 0, 0, 1)). */
-#define G_RACE           0x00890118u
 #define FN_FINISHRACER   0x00606cb0u
 #define RCSTATE_RACING   4u
 #define RACING_CAR_NORMAL_COMPLETION 1u
@@ -115,9 +113,6 @@ void autotest_tap(unsigned dik, long frames);
  * Markers: PathsData (0x88F298) +0x434 count, +0x438 size, +0x43C blob of
  * variable-size records (+0 type, +4 x, +8 y, +0xC/+0x10 heading, +0x14 z
  * for event markers, +0x30 hash, +0x42 record size). */
-#define G_CAREER         0x0085ad40u
-#define G_RACES          0x008383e0u
-#define G_NRACES         0x008383e4u
 #define G_SHOPS          0x008383f0u
 #define G_NSHOPS         0x008383f4u
 #define G_STRPOOL        0x00838428u
@@ -287,12 +282,10 @@ static void race_tick(CPU *c){
  * position of the player whose number is in +0xBF0); the coordinator then
  * calls FinishRacer with completion 6 (won) or 7 (lost) and
  * Career::OnOutrunFinish pays out.  `outrunwin` posts "player 1st". */
-#define G_RACETYPE       0x0089e7b0u   /* 7 = outrun */
-#define G_CARMGR         0x00890080u
 #define G_OUTRUN_STATE   (0x0085ef70u + 0x1ae8u)
 #define RACETYPE_OUTRUN  7u
 static uint32_t outrun_car(uint32_t k){   /* k = 0: the nearest one on the map */
-    uint32_t cm = MR32(G_CARMGR), best = 0, me = MR32(MR32(G_PLAYER1) + 4u);
+    uint32_t cm = MR32(G_WORLD), best = 0, me = MR32(MR32(G_PLAYER1) + 4u);
     if (!cm || !mem_is_committed(cm + 0x40) || !me) return 0;
     uint32_t lo = MR32(cm + 0x14u), hi = MR32(cm + 0x18u);
     float bd = 1e30f;
@@ -355,8 +348,8 @@ static void outrun_win(void){
  * GenericDialog_SMALL.fng are on these lists while GetTopPackage still names
  * the screen underneath. */
 static uint32_t fe_mgr(void){
-    if (!mem_is_committed(0x8384c4u)) return 0;
-    uint32_t fe = MR32(0x8384c4u);
+    if (!mem_is_committed(G_FENG)) return 0;
+    uint32_t fe = MR32(G_FENG);
     if (!fe || !mem_is_committed(fe + 11)) return 0;
     uint32_t mg = MR32(fe + 8u);
     return mg && mem_is_committed(mg + 0xf7u) ? mg : 0;
@@ -656,7 +649,7 @@ static double guest_call_st0(CPU *c, uint32_t fn, uint32_t ecx){
     CPU save = *c;
     c->esp = (c->esp - 256u) & ~15u;
     c->ecx = ecx;
-    PUSH32(MAINLOOP_RET);
+    PUSH32(GUEST_RET_MAINLOOP);
     dispatch_indirect(c, fn);
     double r = c->st[c->top & 7];
     *c = save;
@@ -760,7 +753,7 @@ static void bot_drive(long f){
     uint32_t m = marker_by_hash(MR32(B.show + 0x2cu)), car = player1_ok() ? MR32(MR32(G_PLAYER1) + 4u) : 0;
     if (!m || !car || !mem_is_committed(car + 0x440)){ drive_stop(); B.phase = BOT_IDLE; return; }
     float x = MRF32(car + 0x60u), y = MRF32(car + 0x64u), dx = MRF32(m + 4u) - x, dy = MRF32(m + 8u) - y;
-    float d = sqrtf(dx * dx + dy * dy), sp = MRF32(car + 0x430u);
+    float d = sqrtf(dx * dx + dy * dy), sp = MRF32(car + CAR_SPEED);
     float h = MR16(car + 0x40cu) / 65536.f * 6.2831853f;
     if (f - B.dv.t0 > 4800){
         fprintf(stderr, "[bot] f=%ld %s: drove for %ld frames, %.1f m short of the marker, no engage dialog, skipped\n",
@@ -971,7 +964,7 @@ static void uniques_list(CPU *c, int won){
     uint32_t car = MR32(0x008389acu), ct = 0;      /* set in the front end (garage, shops), 0 in free roam */
     if (car && mem_is_committed(car) && mem_is_committed(MR32(car) + 7u)) ct = gcall_main(c, MR32(MR32(car) + 4u), car, 0, 0);
     fprintf(stderr, "[career] f=%ld uniques: Caleb beaten %d, shown car 0x%08x, car type %u, game mode %u, garage flag %u\n",
-            autotest_frame(), uniques_caleb_beaten(), car, ct, MR32(0x00850078u), MR32(0x0083898cu));
+            autotest_frame(), uniques_caleb_beaten(), car, ct, MR32(G_GAMEMODE), MR32(0x0083898cu));
     if (!car || ct > 64u) return;
     unsigned tot = 0, tshop = 0, tgar = 0, parts = 0;
     for (uint32_t slot = 0; slot < 0x4cu; slot++){
@@ -981,7 +974,7 @@ static void uniques_list(CPU *c, int won){
         uint32_t prev = 0, price = 0;
         for (int k = 0; k < 4096; k++){
             uint32_t a[4] = { ct, slot, 0, 0xffffffffu }, b[5] = { prev, ct, slot, 0, 0xffffffffu };
-            uint32_t p = prev ? gcall_main(c, 0x0061ba50u, 0x008a2b68u, 5, b) : gcall_main(c, 0x0061ba30u, 0x008a2b68u, 4, a);
+            uint32_t p = prev ? gcall_main(c, 0x0061ba50u, G_CARPARTDB, 5, b) : gcall_main(c, 0x0061ba30u, G_CARPARTDB, 4, a);
             if (!p || p == prev || !mem_is_committed(p + 13u)) break;
             prev = p; all++; lv[MR8(p + 5u) >> 5]++;
             if ((MR8(p + 5u) >> 5) != 4u) continue;
@@ -1053,7 +1046,7 @@ void look_frame_end(void);
 void sub_004022c0_orig(CPU *c);
 void sub_004022c0(CPU *c){
     if (MR32(c->esp) == LOOK_END_RET) look_frame_end();
-    else if (MR32(c->esp) == MAINLOOP_RET){
+    else if (MR32(c->esp) == GUEST_RET_MAINLOOP){
         if (!g_hooked) bot_init();
         g_hooked = 1;
         while (g_qh != g_qt){ Job *j = &g_q[g_qh]; g_qh = (g_qh + 1) % QMAX; run_job(c, j->line); }
@@ -1183,7 +1176,7 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
         /* cargo K [BEHIND]: jump BEHIND m (default 12) behind the K-th car of
          * the car manager [0x890080] (+0x10 count, +0x1C car pointers; car
          * +0x60 position, +0x40C heading), e.g. to challenge an outrun tuner */
-        uint32_t cm = MR32(0x890080u), k = eval(a1), n = cm ? MR32(cm + 0x10u) : 0;
+        uint32_t cm = MR32(G_WORLD), k = eval(a1), n = cm ? MR32(cm + 0x10u) : 0;
         float back = a2[0] ? (float)atof(a2) : 12.f;
         if (!cm || k >= n || k >= 64){ fprintf(stderr, "[career] f=%ld cargo %u: no such car (%u)\n", f, k, n); return 1; }
         uint32_t car = MR32(cm + 0x1cu + 4u * k);

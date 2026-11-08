@@ -31,13 +31,13 @@
  * (stock parts) at the world's load; NFSU2_TEST_TRAFFIC_GAME=1 leaves the three checks as the game has them. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "widescreen.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
-#define G_CARTYPES      0x008a1cccu
 #define CT_SIZE         0x890u
 #define CT_USE          0x844u
 #define USE_TRAFFIC     2u
@@ -46,9 +46,7 @@
 #define RC_RIDE         0x10u
 #define KIND_PLAYER     1u
 #define KIND_RACER      2u
-#define FN_RIDE_INIT    0x00610270u   /* thiscall (type, 1, 0, 0) */
 #define FN_RIDE_STOCK   0x00637040u   /* thiscall (0) */
-#define FN_RIDE_SKINS   0x0061c280u   /* thiscall (n) */
 
 #define CT_SPOTS        0x720u        /* the count; +4 split screen's; the spots at +0x10 and +0x70 */
 #define SPOT_SIZE       0x10u

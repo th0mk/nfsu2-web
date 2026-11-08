@@ -43,6 +43,7 @@
  * license_plate*.txt; "[plates]" log lines. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "coop.h"
 #include "names.h"
 #include "plate_image.h"
@@ -59,12 +60,6 @@ const char *autotest_screen_batch(int i);       /* autotest.c: the screens the f
 void metal_upload_texture(unsigned id, unsigned level, const void *data, unsigned pitch, unsigned w, unsigned h, unsigned fmt);
 
 #define GPTR(a)         (g_mem + (uint32_t)(a))   /* guest memory as a host pointer */
-#define G_FLOW          0x008654a4u   /* 3 the front end, 6 in the world */
-#define G_GAMEMODE      0x00850078u   /* 4: a split race (Quick Race's split screen) */
-#define G_NET_ONLINE    0x0089cf69u   /* byte: an online session */
-#define G_NET_CLIENT    0x008669f4u   /* > 0 in a network race */
-#define G_NET_HOST      0x00866a14u
-#define FN_NEW          0x00575620u   /* cdecl (size): operator new */
 #define FN_FREE         0x00575630u   /* cdecl (p): operator delete */
 #define FN_TEXINFO      0x004901d0u   /* cdecl (hash, default, 0) -> the TextureInfo loaded of that name */
 #define FN_TEX_CREATE   0x005ce170u   /* thiscall TextureInfo: its D3D texture from +0x70's pixels */

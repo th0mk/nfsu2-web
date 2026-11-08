@@ -4,6 +4,7 @@
 #include <time.h>
 #include <stdatomic.h>
 #include "cpu.h"
+#include "game.h"
 #include "d3d9_tables.h"
 #include <stdio.h>
 #include <string.h>
@@ -3247,7 +3248,7 @@ int com_call(CPU *c, uint32_t magic){
                     fprintf(stderr,"  [flow] frame %u: %s  flag(865498)=%u (8654a4)=%u\n",
                             g_present_no, cur,
                             mem_is_committed(0x00865498u)?MR8(0x00865498u):999u,
-                            mem_is_committed(0x008654a4u)?MR32(0x008654a4u):999u);
+                            mem_is_committed(G_FLOW)?MR32(G_FLOW):999u);
                 }
             }
             /* PRESENTBT: work out the structure of the main loop. */

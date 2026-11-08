@@ -150,6 +150,7 @@
  * Drift battles between players (roam_game.c du_*, db_*) are drift mode with a clock: drift_battle_* below. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "coop.h"
 #include "kbd.h"
 #include "widescreen.h"           /* HOOK_SITE */
@@ -166,28 +167,17 @@ __attribute__((weak)) int host_status_slot(const char *name){ (void)name; return
 __attribute__((weak)) void host_status_set_n(const int *slot, const double *value, int n){ (void)slot; (void)value; (void)n; }
 
 #define DIK_X          0x2du         /* in none of the game's key maps (its F2 is the map) */
-#define G_FLOW         0x008654a4u   /* 6: in the world */
-#define G_GAMEMODE     0x00850078u   /* 1 career, 8 Online, 0x200 LAN */
-#define G_RACE         0x00890118u   /* the race coordinator: +0 state (4 racing, 6 paused), +0x24 racers, +0xBD0 the racers */
-#define G_RACEKIND     0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define G_DRIFTRACE    0x0089e7d9u   /* byte: a drift event */
 #define G_DRAGRACE     0x0089e7d8u   /* byte: a drag event */
 #define G_FORCEDRIFT   0x00890104u   /* the drift-event switch */
-#define G_TXT_ON       0x0083a9c0u   /* byte: the game's text entry (0x83A7B0) takes the typing ... */
-#define G_TXT_REC      0x0083a9c4u   /* ... for this record (0: none) */
-#define G_CAREER_RACE  0x00863470u   /* the career race being run (0 = free roam) */
 #define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player* of player 1, then 2: +4 its car, +0x10 its number, +0x9A4 its HUD */
 #define G_PSET         0x0083aa64u   /* PlayerSettings, 0x28 each: +0x10 the camera view */
-#define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_STYLES       0x00864624u   /* the style table: 0x30 each, +7 the modes' mask */
 #define G_STYLEPOOL    0x00864628u
-#define G_CAREER_CAR   0x00863480u   /* the career car's handle (CAREER_SLOT_n) */
-#define G_FECARS       0x0083ad90u   /* player 1's front-end cars (garage.c's CARS0): the career car's record */
 #define FN_POOL_ALLOC  0x00440e50u   /* cdecl (pool) */
 #define FN_CAR_TUNED   0x005f6c20u   /* thiscall car (1): its physics again, from its ride's tuning and parts */
 #define FN_STYLE_INIT  0x0056d650u   /* thiscall style */
 #define FN_CAMERA_KEY  0x005f2fa0u   /* thiscall Player (step): the next camera view */
-#define FN_FE_HIDE     0x0050ca00u   /* cdecl (FE object, 0: none) */
 #define HUD_STYLES     0x4cu         /* HUD: its style points (0x4DA900): +0x34, +0x38 the popup list's title and points */
 #define HUD_DRIFT      0x2cu         /* HUD: its drift part (0x4DA590) */
 #define N_STYLES       39
@@ -255,7 +245,7 @@ int coop_in(void);
 static int roam_world(void){
     uint32_t r = race(), pl = guest_rd32(G_PLAYER1);
     return !coop_in() && guest_rd32(G_FLOW) == 6u && r && MR32(r + 0x24u) == 1u && (MR32(r) == 4u || MR32(r) == 6u) && !guest_rd32(G_CAREER_RACE) &&
-           guest_rd32(G_RACEKIND) == 0u && !(guest_rd32(G_GAMEMODE) & 0x208u) && !MR8(G_DRIFTRACE) && pl && guest_rd32(pl + 4u);
+           guest_rd32(G_RACETYPE) == 0u && !(guest_rd32(G_GAMEMODE) & 0x208u) && !MR8(G_DRIFTRACE) && pl && guest_rd32(pl + 4u);
 }
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(void){

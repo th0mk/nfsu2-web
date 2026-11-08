@@ -52,6 +52,7 @@
  * the situation -> text table.
  */
 #include "cpu.h"
+#include "game.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -799,8 +800,7 @@ void discord_shutdown(void){
  * Game state (game thread, guest memory; SPEED2.EXE v1.2 NA addresses,
  * found in the exe and checked at run time, see the doc for how)
  * ====================================================================== */
-#define G_FLOW         0x008654a4u  /* GameFlowManager: 3 front end, 4/5 loading, 6 in the world */
-#define G_RACE         0x0089e7a0u  /* race parameters, filled before a track loads: */
+/* G_RACEPARAMS (game.h): the race parameters, filled before a track loads: */
 #define   R_TRACK        0x00u      /*   int  track number (4014 ...; n*1000 = free roam) */
 #define   R_REVERSE      0x04u      /*   int  1: reversed (routes "B") */
 #define   R_KIND         0x10u      /*   int  0 free roam, 1 race, 3 lap knockout */
@@ -813,17 +813,14 @@ void discord_shutdown(void){
 #define   R_HUMAN        0x68u      /*   int  racer index of player 1 */
 #define   R_RACERS       0x70u      /*   ptr  racer records, 0x940 bytes each; +0x10 car type */
 #define   R_NRACERS      0x74u      /*   int  */
-#define G_FE_MODE      0x00850078u  /* front-end game mode: 1 career */
 #define G_STAGE        0x00862838u  /* career stage (career +0x7AF8): 0 prologue, 1..5, 6 = career complete */
-#define G_PROFILE      0x0083a9e0u  /* player 1 profile name, char[16] */
 #define G_LANG_N       0x008383d0u  /* localised strings: count */
 #define G_LANG_TAB     0x008383d8u  /*   sorted {u32 hash, char *text} */
 #define G_TRACKS       0x00883da0u  /* TrackInfo[], 0x128 bytes; +0x8a int16 number */
 #define G_TRACKS_N     0x00883da4u
-#define G_CARTYPES     0x008a1cccu  /* CarTypeInfo[], 0x890 bytes; +0 name ("CAR_NAME_<name>"), +0xc0 make, +0xd0 name hash */
 #define G_CARTYPES_N   0x2eu        /*   46 entries (0x610130's loop bound) */
 #define G_PLAYER1      SPLIT_PLAYERS_INDEX  /* Player*; +4 its car */
-#define G_RSTATUS      0x00890118u  /* race status: +0 state (3 countdown, 4 racing), +0x14 clock (1/4000 s), */
+/* G_RACE (game.h): the race status: +0 state (3 countdown, 4 racing), +0x14 clock (1/4000 s), */
 #define   RS_COUNT       0x24u      /*   racer entries in use: the game fills entry [+0x24] and then */
                                     /*   counts it (0x6018ac); the entries past it are never written and */
                                     /*   hold whatever the memory held before (0xEE fill from the game's */
@@ -838,10 +835,8 @@ int roam_game_friends(void);                    /* roam_game.c: free-roam friend
 int winsock_session_active(void);               /* winsock.c: a LAN session is open (the game's WSAStartup
                                                    on its LAN screens up to the last WSACleanup) */
 /* A network race: World::IsOnline (0x5F00F0), as framerate.c tests it:
- * World+0x21 online flag, client / host race state > 0. */
-#define G_NET_ONLINE   0x0089cf69u
-#define G_NET_CLIENT   0x008669f4u
-#define G_NET_HOST     0x00866a14u
+ * World+0x21 online flag, client / host race state > 0 (game.h G_NET_ONLINE,
+ * G_NET_CLIENT, G_NET_HOST). */
 
 static int committed_range(uint32_t a, uint32_t n){
     if (!n) return 1;
@@ -933,9 +928,6 @@ static void car_type_name(uint32_t type, char *out, size_t osz){
 }
 /* The car the front end has selected: career car (career mode) or player 1's
  * quick-race/customize car, looked up in the front-end car records. */
-#define G_FE_CARS      0x0083ad90u  /* FEDatabase+0x3c0: +0x9bd8 0x5b record pointers; record +8 handle */
-#define G_FE_CAR_QR    0x0083aab8u  /* player 1's car handle (quick race, customize) */
-#define G_FE_CAR_CAR   0x00863480u  /* career car handle */
 /* A record's car type, as its class's GetType (vtable slot 1) computes it:
  * stock cars (vtable 0x79aadc, 0x503a30) keep the index at +0x18; customized
  * cars (0x79b12c, 0x503ae0) keep the car type's name hash at +0x20, matched
@@ -953,9 +945,9 @@ static int fe_record_type(uint32_t r){
 uint32_t garage_find(uint32_t db, uint32_t h);   /* the table's, then the garage's slots 6-10 */
 static void fe_car(int career, char *out, size_t osz){
     out[0] = 0;
-    uint32_t h = R32(career ? G_FE_CAR_CAR : G_FE_CAR_QR);
-    if (!h || !committed_range(G_FE_CARS + 0x9bd8u, 0x5bu * 4u)) return;
-    uint32_t r = garage_find(G_FE_CARS, h);
+    uint32_t h = R32(career ? G_CAREER_CAR : G_QR_CAR);
+    if (!h || !committed_range(G_FECARS + 0x9bd8u, 0x5bu * 4u)) return;
+    uint32_t r = garage_find(G_FECARS, h);
     if (r){ int t = fe_record_type(r); if (t >= 0) car_type_name((uint32_t)t, out, osz); }
 }
 static const char *ordinal(int n){
@@ -1060,7 +1052,7 @@ typedef struct { int ok, laps_done, pos, nracers, state, drift_rank; float drift
 /* Player 1's entry in the race status (matched by its car object). */
 static RacerView player_status(void){
     RacerView v; memset(&v, 0, sizeof v);
-    uint32_t rs = R32(G_RSTATUS), pl = R32(G_PLAYER1);
+    uint32_t rs = R32(G_RACE), pl = R32(G_PLAYER1);
     if (!rs || !pl || !committed_range(rs, RS_ENTRY + 6 * RS_ENTRY_SZ)) return v;
     uint32_t car = R32(pl + 4), n = MR32(rs + RS_COUNT);
     if (n > 6) n = 6;
@@ -1095,7 +1087,7 @@ static void career_stage(char *out, size_t osz){
 }
 static void player_car(char *out, size_t osz){
     out[0] = 0;
-    uint32_t n = R32(G_RACE + R_NRACERS), hi = R32(G_RACE + R_HUMAN), base = R32(G_RACE + R_RACERS);
+    uint32_t n = R32(G_RACEPARAMS + R_NRACERS), hi = R32(G_RACEPARAMS + R_HUMAN), base = R32(G_RACEPARAMS + R_RACERS);
     if (!base || hi >= n || n > 32) return;
     car_type_name(R32(base + hi * 0x940u + 0x10u), out, osz);
 }
@@ -1130,8 +1122,8 @@ static void ds_sample(Presence *p){
 
     char *d = p->details, *st = p->state;
     const size_t dz = sizeof p->details, sz = sizeof p->state;
-    uint32_t rp = G_RACE, track = R32(rp + R_TRACK), kind = R32(rp + R_KIND);
-    int career = R32(G_FE_MODE) == 1;
+    uint32_t rp = G_RACEPARAMS, track = R32(rp + R_TRACK), kind = R32(rp + R_KIND);
+    int career = R32(G_GAMEMODE) == 1;
     char tname[160] = "", car[160] = "";
 
     /* Movies first, they run in any flow state.  A story FMV is the current
@@ -1174,7 +1166,7 @@ static void ds_sample(Presence *p){
             p->phase = paused ? PH_PAUSED : career ? PH_ROAM : PH_FREERUN;
             if (career){
                 career_stage(d, dz);
-                uint8_t raw[16]; gstr(G_PROFILE, raw, sizeof raw);
+                uint8_t raw[16]; gstr(G_PROFILE_NAME, raw, sizeof raw);
                 char prof[64]; guest_to_utf8(prof, sizeof prof, raw, sizeof raw);
                 /* runtime/language.c: the game's "No Profile" in its language, in the game's bytes */
                 int language_no_profile(const char *name);
@@ -1270,14 +1262,14 @@ void discord_trace_raw(void){
     const char *top = autotest_top_fng(), *scr = autotest_screen();
     RacerView v = player_status();
     char car[128]; player_car(car, sizeof car);
-    char fcar[128]; fe_car(R32(G_FE_MODE) == 1, fcar, sizeof fcar);
-    char tn[128]; track_name(R32(G_RACE + R_TRACK), R32(G_RACE + R_REVERSE) == 1, tn, sizeof tn);
+    char fcar[128]; fe_car(R32(G_GAMEMODE) == 1, fcar, sizeof fcar);
+    char tn[128]; track_name(R32(G_RACEPARAMS + R_TRACK), R32(G_RACEPARAMS + R_REVERSE) == 1, tn, sizeof tn);
     dlog("raw: flow=%u top=%s screen=%s fe_mode=%u stage=%u track=%u (%s) kind=%u laps=%u car=\"%s\" "
          "rs=%d/%d pos=%d laps_done=%d racers=%d drift=%.0f clock=%u fecar=\"%s\" nis=%d",
-         R32(G_FLOW), top ? top : "-", scr ? scr : "-", R32(G_FE_MODE), R32(G_STAGE),
-         R32(G_RACE + R_TRACK), tn, R32(G_RACE + R_KIND), R32(G_RACE + R_LAPS), car,
+         R32(G_FLOW), top ? top : "-", scr ? scr : "-", R32(G_GAMEMODE), R32(G_STAGE),
+         R32(G_RACEPARAMS + R_TRACK), tn, R32(G_RACEPARAMS + R_KIND), R32(G_RACEPARAMS + R_LAPS), car,
          v.ok, v.state, v.pos, v.laps_done, v.nracers, v.drift, v.clock, fcar, nis_playing());
-    uint32_t rs = R32(G_RSTATUS);
+    uint32_t rs = R32(G_RACE);
     if (rs && committed_range(rs, RS_ENTRY + 6 * RS_ENTRY_SZ)){
         char o[256]; size_t n = 0;
         int cnt = (int)MR32(rs + RS_COUNT); if (cnt < 0 || cnt > 6) cnt = 6;

@@ -13,15 +13,13 @@
  * set that long (STUCK frames) is cleared, as the game leaves them with nothing engaged, and logged.  And an Engage
  * pressed at a marker that brings no screen up within a second logs what Engage tests, for the next report. */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 #include <string.h>
 
 const char *autotest_top_fng(void);
 long autotest_frame(void);
 
-#define G_GAMEMODE      0x00850078u   /* 1 the career */
-#define G_RACETYPE      0x0089e7b0u   /* 0 free roam */
-#define CAREER          0x0085ad40u
 #define C_ENGAGING      0x7138u       /* byte: an Engage under way */
 #define G_PREVIEW       0x0085ef6cu   /* byte: the showcase preview's sub-mode on */
 #define G_ENGAGE_MGR    0x008900d8u   /* -> the engage manager: +0 its state (4 free) */
@@ -45,10 +43,10 @@ void engage_frame(CPU *c){
     int roam = MR32(G_GAMEMODE) == 1u && MR32(G_RACETYPE) == 0u && top && !strcasecmp(top, "HUD_SingleRace.fng");
     int idle = roam && ok4(mgr) && MR32(mgr) == ENGAGE_FREE;
     /* a byte left set with nothing engaged */
-    if (idle && MR8(CAREER + C_ENGAGING)){
+    if (idle && MR8(G_CAREER + C_ENGAGING)){
         if (!stuck_eng) stuck_eng = f;
         else if (f - stuck_eng >= STUCK){
-            MR8(CAREER + C_ENGAGING) = 0; stuck_eng = 0;
+            MR8(G_CAREER + C_ENGAGING) = 0; stuck_eng = 0;
             fprintf(stderr, "[engage] f=%ld the career was left engaging with nothing engaged (Career +0x7138): cleared, Enter at a marker works again\n", f);
         }
     } else stuck_eng = 0;
@@ -64,7 +62,7 @@ void engage_frame(CPU *c){
     uint32_t marker = ok4(pl + PL_MARKER) ? MR32(pl + PL_MARKER) : 0u;
     if (held && !was_held && roam && marker && pressed_at < 0){
         pressed_at = f;
-        snap[0] = marker; snap[1] = MR8(CAREER + C_ENGAGING); snap[2] = MR8(G_PREVIEW);
+        snap[0] = marker; snap[1] = MR8(G_CAREER + C_ENGAGING); snap[2] = MR8(G_PREVIEW);
         snap[3] = ok4(mgr) ? MR32(mgr) : 0xffffffffu; snap[4] = ok4(mgr + 0x4cu) ? MR32(mgr + 0x4cu) : 0xffffffffu;
         snap[5] = MR32(G_GAMEMODE);
     }

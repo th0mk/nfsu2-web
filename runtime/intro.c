@@ -44,6 +44,7 @@
  * are never touched. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "kbd.h"
 #include "gamepad.h"
 #include <stdio.h>
@@ -245,11 +246,6 @@ uint32_t fe_copy(CPU *c, uint32_t pk, uint32_t o, uint32_t hash);
 #define LINE_SIZE     0.75f         /* of the copyright's size */
 #define H_COPYRIGHT   0xc70ccfc7u
 #define H_PRESS       0xc4df3ff2u   /* "Press Enter Key" (its group slides in) */
-#define FN_NEW        0x00575620u   /* cdecl (size): operator new */
-#define FN_FE_HASH    0x00505450u   /* cdecl (name) -> an FE object name's hash */
-#define FN_FE_PACKAGE 0x0052cef0u   /* cdecl (package name) -> FEPackage*, 0: not loaded */
-#define FN_PKG_FIND   0x00517f80u   /* thiscall package (hash) -> its object, 0: none */
-#define FN_FE_SETSTR  0x00535fe0u   /* thiscall string object (char*): its text */
 
 static struct { uint32_t scr, hash; int off, told; } g_tl;
 

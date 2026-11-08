@@ -149,6 +149,7 @@
  *        NUMPAD0..9 ...), or a number (0x1c = DIK code), or VK_xx / vk:0xNN.
  */
 #include "cpu.h"
+#include "game.h"
 #include "coop.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -517,8 +518,8 @@ static int fe_is(const char *want){
     return 0;
 }
 const char *autotest_top_fng(void){
-    if (!mem_is_committed(0x8384c4u)) return 0;
-    uint32_t fe = MR32(0x8384c4u);
+    if (!mem_is_committed(G_FENG)) return 0;
+    uint32_t fe = MR32(G_FENG);
     if (!fe || !mem_is_committed(fe + 11)) return 0;
     uint32_t mg = MR32(fe + 8);                       /* GetTopPackage (0x50C8E0) */
     if (!mg || !mem_is_committed(mg + 0xe7)) return 0;
@@ -542,7 +543,7 @@ static uint32_t tr_rd(uint32_t a, int *ok){
     *ok = 0; return 0;
 }
 static uint32_t tr_racer(int want_human, int slot){
-    int ok = 1; uint32_t gs = tr_rd(0x890118u, &ok);
+    int ok = 1; uint32_t gs = tr_rd(G_RACE, &ok);
     if (!ok || !gs) return 0;
     uint32_t n = tr_rd(gs + 0x24u, &ok);
     if (!ok || n > 16) return 0;
@@ -1018,7 +1019,7 @@ static void status_line(double t, double tms, const char *label){
             label ? " " : "", label ? label : "", g_frame, tms / 1e3, dt > 0 ? nf / dt : 0.0,
             dt > 0 ? 100.0 * (cpu - g_st_cpu) / dt : 0.0,
             nf > 0 ? (gcpu - g_st_gcpu) / nf : 0.0,
-            mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u, rss, ms);
+            mem_is_committed(G_FLOW) ? MR32(G_FLOW) : 0u, rss, ms);
     g_st_t = t; g_st_f = g_frame; g_st_cpu = cpu; g_st_gcpu = gcpu;
 }
 
@@ -1047,8 +1048,8 @@ static FILE *g_ctrace;
 uint32_t autopilot_vehicle(void);        /* career.c: player 1's vehicle, 0 = none */
 static void car_trace(void){
     static uint32_t last_w = 0, nclock = 0;
-    if (!mem_is_committed(0x8654a7u) || MR32(0x8654a4u) != 6u) return;
-    uint32_t w = MR32(0x00890080u);
+    if (!mem_is_committed(G_FLOW + 3u) || MR32(G_FLOW) != 6u) return;
+    uint32_t w = MR32(G_WORLD);
     if (!w || !mem_is_committed(w + 0x3f)) return;
     uint32_t n = MR32(w + 0x10); if (n > 8) n = 8;
     uint32_t me = autopilot_vehicle();
@@ -1063,18 +1064,18 @@ static void car_trace(void){
         fprintf(stderr, "[ctclock] %lld.%06ld\n", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000));
     const char *top = autotest_top_fng();
     fprintf(g_ctrace, "%lld.%06ld,%ld,%d,%.7f,%u,%u,%u", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000), g_frame,
-            top && !strncasecmp(top, "HUD_", 4), (double)MRF32(0x00865558u), MR32(0x0086518cu),
-            MR32(0x008651acu), n);
+            top && !strncasecmp(top, "HUD_", 4), (double)MRF32(0x00865558u), MR32(G_WORLDTIMER),
+            MR32(G_REALTIMER), n);
     uint32_t cars[8] = {0};
     for (uint32_t i = 0; i < 8; i++){
         uint32_t car = i < n ? MR32(w + 0x1c + 4 * i) : 0;
         if (car && mem_is_committed(car + 0x433)){
             cars[i] = car;
             fprintf(g_ctrace, ",%d,%.3f,%.3f,%.3f,%.3f", car == me, (double)MRF32(car + 0x60), (double)MRF32(car + 0x64),
-                    (double)MRF32(car + 0x68), (double)MRF32(car + 0x430));
+                    (double)MRF32(car + 0x68), (double)MRF32(car + CAR_SPEED));
         } else fprintf(g_ctrace, ",,,,,");
     }
-    fprintf(g_ctrace, ",%.6f", (double)MRF32(0x00865154u));
+    fprintf(g_ctrace, ",%.6f", (double)MRF32(G_WORLDDT));
     for (uint32_t i = 0; i < 8; i++){
         uint32_t car = cars[i];
         if (car)
@@ -1104,7 +1105,7 @@ void autotest_on_present(CPU *c){
     double tms = ts - g_t0;
 
     if (g_fng_log == 2 && (g_frame == 400 || g_frame == 1500)){
-        uint32_t fe = mem_is_committed(0x8384c4u) ? MR32(0x8384c4u) : 0;
+        uint32_t fe = mem_is_committed(G_FENG) ? MR32(G_FENG) : 0;
         uint32_t mg = (fe && mem_is_committed(fe + 11)) ? MR32(fe + 8) : 0;
         uint32_t pk = (mg && mem_is_committed(mg + 0xe7)) ? MR32(mg + 0xe4) : 0;
         fprintf(stderr, "[fngdbg] f=%ld fe=%08x mgr=%08x info=%08x\n", g_frame, fe, mg, pk);
@@ -1123,7 +1124,7 @@ void autotest_on_present(CPU *c){
         const char *t = autotest_top_fng();
         if (t && strcmp(t, last)){ snprintf(last, sizeof last, "%s", t);
             fprintf(stderr, "[fng] f=%ld top package %s (flow=%u)\n", g_frame, t,
-                    mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u); }
+                    mem_is_committed(G_FLOW) ? MR32(G_FLOW) : 0u); }
     }
     /* scheduled releases */
     for (int i = 0; i < g_nrel; ){

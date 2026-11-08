@@ -27,7 +27,7 @@ void sub_005bc180(CPU *c){
         uint32_t fx = MR32(split_view(split_view_id(k)) + 0x60);
         float t = MRF32(0x7d7d3cu);
         if (MR8(0x870904u)) t = MRF32(0x7ff7c8u);
-        else if (MR32(0x8654a4u) != 6) t = MRF32(0x7a20a8u);
+        else if (MR32(G_FLOW) != 6) t = MRF32(0x7a20a8u);
         else if (fx && MR32(fx + 0x3c)) t = MRF32(fx + 0x1e0);
         float lo = MRF32(0x7ff0fcu), rate = MRF32(0x800b90u);
         split_ob_smooth[k] = (1.f-rate)*split_ob_smooth[k] + rate*(lo+(MRF32(0x7ff100u)-lo)*t);

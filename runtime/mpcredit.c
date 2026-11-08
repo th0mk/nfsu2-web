@@ -98,6 +98,7 @@
  * world. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "mpcredit.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,10 +108,6 @@
 long autotest_frame(void);
 int career_fe_active(const char *name);
 
-#define G_CAREER        0x0085ad40u
-#define G_GAMEMODE      0x00850078u   /* 1 career */
-#define G_RACES         0x008383e0u   /* the career's race table ([0x8383E4] races of 0x88 bytes) */
-#define G_NRACES        0x008383e4u
 #define G_STRPOOL       0x00838428u   /* the career tables' strings: a race's name at +[race +0] (u16) */
 #define G_SNAPSHOT      0x00851148u   /* the crib's snapshot of the profile (0: none) */
 #define G_POINTS        0x007f7ac8u   /* the margin's points by race type: 7 x 0x1C (+0 type, +4 its first step) */
@@ -140,15 +137,11 @@ int career_fe_active(const char *name);
 #define SP_BONUS        0x0cu         /* a sponsor: its signing bonus (int16) */
 #define FN_SP_NAMEHASH  0x005129f0u   /* thiscall sponsor: the hash of "SPONSOR_<its name>" */
 #define FN_TEXT         0x004ffa80u   /* cdecl (hash): the game's text for it */
-#define FN_MALLOC       0x00575620u
 #define FN_DIALOG2      0x00558750u   /* cdecl (from package, dialog package, label1, label2, msg1, msg2, back msg, first, fmt, ...) */
-#define G_DLG           0x00838974u   /* the dialog up now (0 none) */
 #define FN_CRIB_MSG     0x004af3a0u   /* UI_CareerCrib's message handler (thiscall msg, obj, a3, a4; ret 0x10) */
-#define G_FEMGR_LIST    0x008637b4u   /* the FE manager's screens: n = [it]; until n == it: screen [n - 4 + 0x14], n = [n] */
 #define G_MOVIES        0x008382a0u   /* the movies to play: 4 names of 0x40 */
 #define G_MOVIE_AT      0x0083856cu   /* ...the one playing */
 #define G_MOVIE_MODE    0x00838568u   /* what follows the movie screen (0x54AF80): 5 nothing */
-#define G_FE            0x008384c4u   /* the FE manager */
 #define FN_FE_ADD       0x00555e80u   /* cdecl (package, 0): the package added, over the others */
 #define FN_MOVIE_PREP   0x0043b640u   /* thiscall 0x827E88: as 0x53D7A0 before its movie */
 #define MSG_CRIB_GO     0x451e768eu   /* to the crib: "Return to Explore Mode?" Yes (0x4AF360: the save, if any) */
@@ -160,11 +153,10 @@ int career_fe_active(const char *name);
 #define RACE_LAST       0x04cce3e1u   /* S5_CIRCUIT_36, the career's last race (0x513A50: Scene15) */
 #define MSG_SIGN        0x4d504301u   /* our answers (not the game's messages: its screens ignore them) */
 #define MSG_NEXT        0x4d504302u
-#define HOOK_MAINLOOP   0x00581475u
 
 /* a guest function with ecx and stack arguments from the main-loop hook, 512 bytes below its stack (guest.h) */
 static uint32_t call(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
-    return guest_call_ex(c, fn, ecx, c->edx, n, arg, HOOK_MAINLOOP, 512u);
+    return guest_call_ex(c, fn, ecx, c->edx, n, arg, GUEST_RET_MAINLOOP, 512u);
 }
 static uint32_t fbits(float f){ uint32_t u; memcpy(&u, &f, 4); return u; }
 static const char *race_name(uint32_t r){
@@ -253,8 +245,8 @@ static void sponsor_name(CPU *c, uint32_t sp, char *lat, int nl, char *utf, int 
 static void gs(uint32_t a, const char *s, uint32_t cap){ uint32_t i = 0; for (; s[i] && i + 1 < cap; i++) MR8(a + i) = (uint8_t)s[i]; MR8(a + i) = 0; }
 /* the crib screen's package name (the FE's own string), else ours */
 static uint32_t crib_name(void){
-    uint32_t n = guest_rd32(G_FEMGR_LIST);
-    for (int k = 0; n && n != G_FEMGR_LIST && k < 256; k++, n = guest_rd32(n)){
+    uint32_t n = guest_rd32(G_FEMGR);
+    for (int k = 0; n && n != G_FEMGR && k < 256; k++, n = guest_rd32(n)){
         uint32_t sc = guest_rd32(n - 4u + 0x14u), nm = sc ? guest_rd32(sc + 4u) : 0;
         if (guest_ok(nm, 18) && !strcasecmp((const char *)(g_mem + nm), "UI_CareerCrib.fng")) return nm;
     }
@@ -318,7 +310,7 @@ static int sp_tx(void){
 static int ui_ready(CPU *c){
     if (!g_ui.patched){ dispatch_patch(FN_CRIB_MSG, crib_msg); g_ui.patched = 1; }
     /* (scratch: the dialog's package +0, its format +0x38, its text +0x40, the crib's name +0x200, the movie's +0x220) */
-    if (!g_ui.str){ uint32_t sz = 0x240u; g_ui.str = call(c, FN_MALLOC, 0, 1, &sz); }
+    if (!g_ui.str){ uint32_t sz = 0x240u; g_ui.str = call(c, FN_NEW, 0, 1, &sz); }
     static int lang = -1;
     if (!g_ui.lab_sign || lang != sp_tx()){
         char s[48]; lang = sp_tx();
@@ -354,7 +346,7 @@ static int ui_ask(CPU *c){
  * 0x827E88 first: without it the movies stopped after about 2.5 s; the package added over the others, 0x555E80, as
  * 0x4C57C0 adds PC_Loading) */
 static int ui_movie(CPU *c){
-    if (!ui_ready(c) || !guest_rd32(G_FE)) return 0;
+    if (!ui_ready(c) || !guest_rd32(G_FENG)) return 0;
     for (uint32_t k = 0; k < 4; k++) MR8(G_MOVIES + 0x40u * k) = 0;
     for (int k = 0; k < g_ui.nscene; k++) gs(G_MOVIES + 0x40u * (uint32_t)k, g_ui.scene[k], 0x40);
     MR32(G_MOVIE_AT) = 0; MR32(G_MOVIE_MODE) = 5; MR32(G_MOVIES_DONE) = 0;
@@ -484,7 +476,6 @@ static int win_now(CPU *c, uint32_t r, float margin){
 #define PEND_MAX 32
 #define PEND_FILE       "MPWINS.DAT"
 #define PEND_MAGIC      0x574d324eu   /* "N2MW" */
-#define G_P1_NAME       0x0083a9e0u   /* player 1's profile (FEDatabase +0x10): its name, 32 bytes, first */
 int fileio_resolve_save(const char *win, char *out, size_t outsz);
 int fileio_resolve_save_w(const char *win, char *out, size_t outsz);
 unsigned garage_profile_loads(void);
@@ -497,7 +488,7 @@ static struct {
 /* the profile in play (player 1's name in the FEDatabase; "" none) */
 static void live_profile(char out[33]){
     unsigned i = 0;
-    for (; i < 32u; i++){ uint8_t ch = MR8(G_P1_NAME + i); if (ch < 0x20u || ch == 0x7fu) break; out[i] = (char)ch; }
+    for (; i < 32u; i++){ uint8_t ch = MR8(G_PROFILE_NAME + i); if (ch < 0x20u || ch == 0x7fu) break; out[i] = (char)ch; }
     out[i] = 0;
 }
 static uint32_t race_by_hash(uint32_t h){

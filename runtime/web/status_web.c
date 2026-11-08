@@ -5,6 +5,7 @@
  * "frames" still counts the game's presents, so the overlay shows the game's
  * frame rate rather than the page's display rate. */
 #include "cpu.h"
+#include "game.h"
 #include "status_proto.h"
 #include "host_abi.h"
 #include <pthread.h>
@@ -107,7 +108,7 @@ static int manual_gearbox(int race){
     return g == 1u || g == 3u;
 }
 static int drive_state(void){
-    unsigned flow = mem_is_committed(0x8654a7u) ? MR32(0x8654a4u) : 0u;
+    unsigned flow = mem_is_committed(G_FLOW + 3u) ? MR32(G_FLOW) : 0u;
     const char *top = autotest_top_fng();
     int hud = top && !strncasecmp(top, "HUD_", 4) && strcasecmp(top, "HUD_World_Loading.fng");
     int nis = mem_is_committed(0x827ecbu) && (MR32(0x827e98u) | MR32(0x827eb0u) | MR32(0x827ec8u));
@@ -171,7 +172,6 @@ static void roam_state(void){
  * crash), not where a stray tap at speed would set it back on the road. */
 #define PL_MARKER    0x9acu
 #define PL_CAR       4u
-#define CAR_SPEED    0x430u           /* float: m/s */
 #define G_OUTRUN_ST  0x00860a58u      /* Career4230 (0x85EF70) +0x1AE8 */
 #define G_HYD_LEVEL  0x007e949cu      /* int: every car's hydraulics level, -1: each its own */
 #define G_HYD_ON     0x007e94a0u      /* byte: the hydraulics at all */

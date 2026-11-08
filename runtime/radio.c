@@ -28,6 +28,7 @@
  * track is over).
  * Outside the browser (the Mac port and its tests) the wrappers at the end call the game's own code. */
 #include "cpu.h"
+#include "game.h"
 #include "guest_span.h"
 
 /* ---- the game's functions (sub_ names are the lifter's; tools/genstamp.sh reads the _orig ones from here) ---- */
@@ -51,7 +52,6 @@ void guest_noyield(int d);        /* win32_ext.c: no fair yield, a free mutex ta
 #define TRAX_WORDS         3u            /* in an entry: pointers to the artist, the title and the third line */
 #define TRAX_START_INDEX   8u            /* 0x004580e0: the table index is the second stack argument */
 #define GAME_MUSIC_VOLUME  0x0083aa34u   /* float: the Game Music Volume slider, 1.0 = 100% */
-#define GAME_STATE         0x008654a4u   /* 6 while racing or in free roam */
 #define GAME_FLOW          0x0082b884u   /* pointer to the game flow object */
 #define FLOW_MODE          0x90u         /* in it: 1 in the menus, garages and shops */
 #define MIXER_INPUT_COUNT  0x008b47f8u   /* byte */
@@ -348,7 +348,7 @@ static void take_page_now(const HostStatusRadio *r){
 /* the Game Music Volume slider counts while driving; in the menus the game's own music is at the menu's level */
 static float track_volume(void){
     float slider = MRF32(GAME_MUSIC_VOLUME);
-    return MR32(GAME_STATE) == 6u && slider >= 0.0f && slider <= 1.0f ? PIPELINE_SCALE * slider : PIPELINE_SCALE;
+    return MR32(G_FLOW) == 6u && slider >= 0.0f && slider <= 1.0f ? PIPELINE_SCALE * slider : PIPELINE_SCALE;
 }
 
 /* The rings hold the track at RADIO_RATE, the reader hands the mixer frames at the mixer's rate: a song of the game is

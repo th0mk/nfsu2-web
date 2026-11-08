@@ -36,6 +36,7 @@
  * script command "lights ..." (lightkey_script), tests/web/scripts/lightkey_*.txt, tests/scripts/roam_lights_*.txt. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "kbd.h"
 #include "gamepad.h"
 #include <math.h>
@@ -51,13 +52,8 @@ int dikbd_ours(unsigned dik, const char *what);           /* ...0 while one of t
 const char *dik_name(unsigned dik);                       /* dikeys.c */
 
 #define DIK_G        0x22u         /* the key's default */
-#define G_FLOW       0x008654a4u   /* 6: in the world */
-#define G_RACE       0x00890118u   /* the race status: +0 4 racing (free roam too), 6 paused */
 #define G_PLAYER1    SPLIT_PLAYERS_INDEX   /* Player*: +4 its car, +0x9A4 its HUD, +0x238 its camera mover */
-#define G_FENG       0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_FREEZE     0x00890084u   /* the world stands (photo mode) */
-#define G_TXT_ON     0x0083a9c0u   /* byte: the game's text entry takes the typing ... */
-#define G_TXT_REC    0x0083a9c4u   /* ... for this record (0: none) */
 #define PL_CAR       4u
 #define PL_HUD       0x9a4u
 #define PL_MOVER     0x238u

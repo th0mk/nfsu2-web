@@ -24,13 +24,12 @@
  * the same in memory, once the tables are loaded (a profile keeps none of it:
  * with the setting off again a career is as it was; races open stay open). */
 #include "cpu.h"
+#include "game.h"
 #include "setting.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
 
-#define G_RACES         0x008383e0u   /* the races, RACE_SZ each, [G_NRACES] of them */
-#define G_NRACES        0x008383e4u
 #define G_STAGES        0x0083841cu   /* the stages, STAGE_SZ each, [G_NSTAGES] of them */
 #define G_NSTAGES       0x00838418u
 #define RACE_SZ         0x88u

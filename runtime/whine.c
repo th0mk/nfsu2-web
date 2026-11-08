@@ -65,6 +65,7 @@
  * older than STALE_MS (a parked game). */
 #include "whine.h"
 #include "cpu.h"
+#include "game.h"
 #include "splitscreen_mem.h"
 #include "setting.h"
 #include <math.h>
@@ -77,11 +78,6 @@
 
 int fileio_mod_pack(const char *rel, char *out, size_t outsz);   /* fileio.c: MODPACKS/<rel>'s host path */
 
-#define G_FLOW     0x008654a4u        /* GameFlowManager: 6 in the world */
-#define G_STEP     0x00865154u        /* this frame's world step (s), 0 while the world stands */
-#define G_VOLUMES  0x0083aa28u        /* the game's volumes (floats 0..1): +0 Master, +0x14 Engine */
-#define CAR_SPEED  0x430u             /* Car: speed (m/s), the engine sound's */
-#define CAR_GEAR   0x434u             /* ...gear: 0 reverse, 1 neutral, 2 first .. */
 #define STALE_MS   250u
 #define SEATS      4                  /* local players with a whine of their own (split screen has at most 4) */
 #define LEVEL      1.65f              /* 165 % of the mod's Volume (above: why, and measured) */
@@ -243,7 +239,7 @@ void whine_frame(void){
     whine_init();
     if (!g_on || __atomic_load_n(&g_ready, __ATOMIC_ACQUIRE) < 0) return;
     int flow6 = mem_is_committed(G_FLOW + 3u) && MR32(G_FLOW) == 6u;
-    float dt = flow6 ? MRF32(G_STEP) : 0.f;
+    float dt = flow6 ? MRF32(G_WORLDDT) : 0.f;
     int run = flow6 && dt > 0.f && dt < 0.25f;
     int n = split_render_limit();
     if (n < 1) n = 1;

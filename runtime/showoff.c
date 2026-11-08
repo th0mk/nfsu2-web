@@ -54,6 +54,7 @@
  * Tests: tests/scripts/showoff_*.txt; "[showoff]" log lines. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "coop.h"
 #include "kbd.h"
 #include "gamepad.h"
@@ -69,19 +70,10 @@ void dispatch_patch(uint32_t a, void (*f)(CPU *));
 long autotest_frame(void);
 
 #define DIK_O          0x18u         /* in none of the game's key maps */
-#define G_FLOW         0x008654a4u   /* 6: in the world */
-#define G_GAMEMODE     0x00850078u   /* 1 career, 8 Online, 0x200 LAN */
-#define G_RACE         0x00890118u   /* the race coordinator: +0 state (4 racing, 6 paused), +0x24 racers */
-#define G_RACEKIND     0x0089e7b0u   /* 0 free roam, 7 an outrun */
-#define G_CAREER_RACE  0x00863470u   /* the career race being run (0 = free roam) */
 #define G_FREEZE       0x00890084u   /* the world stands (photo mode) */
 #define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player*: +4 its car, +0x9A4 its HUD */
-#define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
-#define G_TXT_ON       0x0083a9c0u   /* byte: the game's text entry takes the typing ... */
-#define G_TXT_REC      0x0083a9c4u   /* ... for this record (0: none) */
 #define G_BANKS        0x00827c9cu   /* the animation banks: a list, each entry 4 into its bank (0x433A30); the end 0x827C98 */
 #define G_SOUND        0x0082b884u   /* +0x78 the world's sounds (0x481500 plays one), +0x90 1 in the front end */
-#define FN_MALLOC      0x00575620u   /* cdecl (size) */
 #define FN_NODE_INIT   0x00433a80u   /* thiscall node (type, speed, part, kind, style 22), ret 0x14 */
 #define FN_NODE_GO     0x00433d50u   /* cdecl (node, 2 open / 3 close / 0 opened / 1 closed) */
 #define FN_ATTR        0x0060fef0u   /* thiscall part (attribute's hash, 0) -> the attribute (+4 its value) */
@@ -96,7 +88,6 @@ long autotest_frame(void);
 #define S_STYLE22      0x007a8770u   /* "_STYLE22_HOOD" */
 #define S_STYLE22CF    0x007a875cu   /* "_STYLE22_HOOD_CF" */
 #define CAR_RI         0x554u        /* car: its render info */
-#define CAR_SPEED      0x42cu        /* car: its speed (m/s, forward) */
 #define RI_RIDE        0x04u         /* render info: the ride */
 #define RI_TYPE        0x08u         /* render info: its CarTypeInfo (+0 the name, +0xD0 its hash) */
 #define RIDE_HOOD      0x5b4u        /* ride slot 9 */
@@ -154,7 +145,7 @@ static uint32_t bank_of(uint32_t type){
 static int roam_world(void){
     uint32_t r = guest_rd32(G_RACE), pl = guest_rd32(G_PLAYER1);
     return guest_rd32(G_FLOW) == 6u && guest_ok(r, 0x28) && MR32(r + 0x24u) == 1u && (MR32(r) == 4u || MR32(r) == 6u) &&
-           !guest_rd32(G_CAREER_RACE) && guest_rd32(G_RACEKIND) == 0u && !(guest_rd32(G_GAMEMODE) & 0x208u) && pl && guest_rd32(pl + 4u);
+           !guest_rd32(G_CAREER_RACE) && guest_rd32(G_RACETYPE) == 0u && !(guest_rd32(G_GAMEMODE) & 0x208u) && pl && guest_rd32(pl + 4u);
 }
 /* the HUD is the top package: no screen over it */
 static int hud_on_top(void){
@@ -214,7 +205,7 @@ uint32_t showoff_pad(uint32_t b, uint32_t D){
 static int mem_ok(CPU *c){
     if (S.mem) return 1;
     uint32_t sz = SO_CARS * 4u * NODE_SZ + SO_TYPES * 64u;
-    S.mem = gcall_main(c, FN_MALLOC, 0, 1, &sz);
+    S.mem = gcall_main(c, FN_NEW, 0, 1, &sz);
     if (!S.mem){ fprintf(stderr, "[showoff] guest malloc failed\n"); return 0; }
     for (uint32_t i = 0; i < sz; i += 4) MR32(S.mem + i) = 0;
     return 1;
@@ -379,7 +370,7 @@ uint8_t showoff_mine(void){ return S.car[0].car ? S.car[0].want : 0; }
 void showoff_frame(CPU *c){
     int world = roam_world(), top = world && hud_on_top() && !guest_rd32(G_FREEZE);
     uint32_t pl = guest_rd32(G_PLAYER1), car = pl ? guest_rd32(pl + 4u) : 0;
-    float v = guest_ok(car, 0x9e0) ? fabsf(MRF32(car + CAR_SPEED)) : 0.f;
+    float v = guest_ok(car, 0x9e0) ? fabsf(MRF32(car + CAR_FWD_SPEED)) : 0.f;
     if (!(v == v)) v = 0.f;
     int stands = top && v < OPEN_MPS;
     S.gate = top; S.moving = !stands;

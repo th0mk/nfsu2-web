@@ -31,6 +31,7 @@
  * has no such port (the weak stand-ins below). */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "horn.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,13 +39,8 @@
 #include <strings.h>
 #include <time.h>
 
-#define G_FLOW       0x008654a4u   /* 6: in the world */
-#define G_NETMODE    0x00850078u   /* 8 Online, 0x200 LAN (1 career) */
-#define G_WORLD      0x00890080u   /* World*: +0 the cars' list (a car's first two dwords are its node) */
 #define G_PLAYER1    SPLIT_PLAYERS_INDEX   /* Player*: +4 car */
-#define G_WORLDDT    0x00865154u   /* float: this frame's world dt (s) */
 #define G_VIEW1      0x00832e50u   /* eView 1: +0x40 camera (+0x40 position, +0x50 forward) */
-#define G_NETPLAYERS 0x0089cf50u   /* the network race's players: 6 pointers (0x89CF48 + 8), name at +0x12 */
 #define G_HYD_LEVEL  0x007e949cu   /* int: every car's hydraulics level, -1: each its own (a debug setting) */
 #define NP_NAME      0x12u
 #define HORN_PORT    3659u         /* next to the race link's 3658; the game binds neither else */
@@ -255,7 +251,7 @@ void racehorn_frame(CPU *c){
     int n;
     uint32_t pl = guest_rd32(G_PLAYER1), me = pl ? guest_rd32(pl + 4u) : 0, w = guest_rd32(G_WORLD);
     float dt = MRF32(G_WORLDDT);
-    int racing = guest_rd32(G_FLOW) == 6u && (guest_rd32(G_NETMODE) & 0x208u) && guest_ok(me, 0x9e0) && guest_ok(w, 0x80);
+    int racing = guest_rd32(G_FLOW) == 6u && (guest_rd32(G_GAMEMODE) & 0x208u) && guest_ok(me, 0x9e0) && guest_ok(w, 0x80);
     int runs = racing && dt > 0.f && dt < 1.f;           /* not paused, not loading */
     char mine[NAME_N];
     car_name(me, mine);

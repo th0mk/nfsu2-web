@@ -106,12 +106,12 @@ void dispatch_indirect(CPU *c, uint32_t addr){
 #define STACK  0x00130000u
 static CPU g_c;
 static void race_setup(void){
-    uint32_t g[] = { G_FLOW, G_NETMODE, G_NET_HOST, G_WORLD, G_PLAYER1, G_WORLDDT, G_RACE, G_WORLDTIME, G_NETPLAYERS,
+    uint32_t g[] = { G_FLOW, G_GAMEMODE, G_NET_HOST, G_WORLD, G_PLAYER1, G_WORLDDT, G_RACE, G_WORLDTIMER, G_NETPLAYERS,
                      G_MYSLOT, G_HOSTSLOT, G_SLOTBITS, G_SLOTMIN };
     for (unsigned i = 0; i < sizeof g / sizeof g[0]; i++) commit(g[i], 32);
     commit(W, 0x100); commit(CAR_A, 0xa00); commit(CAR_ME, 0xa00); commit(PL, 16); commit(RC, 0xc00);
     commit(STACK - 0x4000u, 0x8000u);
-    MR32(G_FLOW) = 6; MR32(G_NETMODE) = 8; MR32(G_NET_HOST) = 0;
+    MR32(G_FLOW) = 6; MR32(G_GAMEMODE) = 8; MR32(G_NET_HOST) = 0;
     MR32(G_WORLD) = W; MR32(W) = CAR_A; MR32(CAR_A) = CAR_ME; MR32(CAR_ME) = W;
     MR32(G_PLAYER1) = PL; MR32(PL + 4u) = CAR_ME;
     MR32(G_RACE) = RC; MR32(RC) = RC_RACING; MR32(RC + 0x24u) = 0;
@@ -120,7 +120,7 @@ static void race_setup(void){
     MR16(CAR_A + 0xau) = 0xffffu; MR16(CAR_ME + 0xau) = 0xffffu;
     g_c.esp = STACK;
 }
-static void frame(void){ racenet_frame(&g_c); g_fake_ns += 20000000u; MR32(G_WORLDTIME) += 80u; }
+static void frame(void){ racenet_frame(&g_c); g_fake_ns += 20000000u; MR32(G_WORLDTIMER) += 80u; }
 /* a car state message: kind 2, then at bit 40 the slot in 3 bits */
 static int carspam(uint8_t *m, uint32_t slot, int len){
     memset(m, 0, CS_HDR + (size_t)len);
@@ -210,20 +210,20 @@ static void put_state(float t, const float *p, const float *v, const float *w, c
 static void blend(void){ g_c.esp = STACK - 0x100u; g_c.ecx = CTL; MRF32(INPUT + 0x214u) = 0.7f; sub_005f8af0(&g_c); }
 static float dist3(const float *a, const float *b){ float d = 0; for (int i = 0; i < 3; i++) d += (a[i] - b[i]) * (a[i] - b[i]); return sqrtf(d); }
 static void fidelity(void){
-    uint32_t g[] = { G_RATES, G_CLK_TARGET, G_CLK_FLAG, G_CLK_ECHO, G_REALTIME, G_WORLDTIME_S };
+    uint32_t g[] = { G_RATES, G_CLK_TARGET, G_CLK_FLAG, G_CLK_ECHO, G_REALTIMER, G_WORLDTIME_S };
     for (unsigned i = 0; i < sizeof g / sizeof g[0]; i++) commit(g[i], 32);
     commit(BSTREAM, 0x410); commit(BSOUT, 0x410); commit(CTL, 0x200); commit(INPUT, 0x220); commit(STATE, 0x100);
-    MR32(G_NET_HOST) = 0; MR32(G_NETMODE) = 8;
+    MR32(G_NET_HOST) = 0; MR32(G_GAMEMODE) = 8;
 
     /* rates: every field group at RATE_HZ in a network race, the game's back after */
-    MR32(G_NETMODE) = 1; frame(); MR32(G_NETMODE) = 8;   /* (the earlier cases raced with this page: its values back) */
+    MR32(G_GAMEMODE) = 1; frame(); MR32(G_GAMEMODE) = 8;   /* (the earlier cases raced with this page: its values back) */
     MR32(G_RATES) = 20; MR32(G_RATES + 4) = 10; MR32(G_RATES + 8) = 5; MR32(G_RATES + 12) = 5;
     frame();
     int on = MR32(G_RATES) == RATE_HZ && MR32(G_RATES + 4) == RATE_HZ && MR32(G_RATES + 12) == RATE_HZ;
-    MR32(G_NETMODE) = 1; frame();
+    MR32(G_GAMEMODE) = 1; frame();
     int back = MR32(G_RATES) == 20 && MR32(G_RATES + 4) == 10 && MR32(G_RATES + 8) == 5 && MR32(G_RATES + 12) == 5;
     CHECK(on && back, "rates: %u a second for every field in a race (%d), the game's 20/10/5/5 after it (%d)", RATE_HZ, on, back);
-    MR32(G_NETMODE) = 8;
+    MR32(G_GAMEMODE) = 8;
 
     /* the race clock: answers whose round trips wait 0-80 ms on the way back
      * (a queue, the creator's frame) say the clock is up to 40 ms earlier;
@@ -274,20 +274,20 @@ static void fidelity(void){
     K.th = theta; K.at = r; K.frac = 0; K.irate = 0; K.wok = 0;
     double rr = r;
     setwall(rr);
-    MR32(G_WORLDTIME) = (uint32_t)((rr + theta - 0.05) * 4000.0 + 0.5);
+    MR32(G_WORLDTIMER) = (uint32_t)((rr + theta - 0.05) * 4000.0 + 0.5);
     MRF32(G_WORLDDT) = 0.0083f;
     clock_frame();
-    int steady = 1; double left = 0; uint32_t prev = MR32(G_WORLDTIME);
+    int steady = 1; double left = 0; uint32_t prev = MR32(G_WORLDTIMER);
     for (int f = 0; f < 240; f++){                       /* 2 s */
         rr += 0.0083; setwall(rr);
         uint32_t adv = 33u;                              /* the world's step: the frame's time */
-        MR32(G_WORLDTIME) += adv; prev += adv;
+        MR32(G_WORLDTIMER) += adv; prev += adv;
         K.at = rr;
         clock_frame();
-        int32_t d = (int32_t)(MR32(G_WORLDTIME) - prev);
+        int32_t d = (int32_t)(MR32(G_WORLDTIMER) - prev);
         if (d > 7 || d < -7) steady = 0;
-        prev = MR32(G_WORLDTIME);
-        left = rr + theta - (double)MR32(G_WORLDTIME) * 0.00025;
+        prev = MR32(G_WORLDTIMER);
+        left = rr + theta - (double)MR32(G_WORLDTIMER) * 0.00025;
     }
     CHECK(steady && fabs(left) < 0.001 && fabsf(MRF32(G_WORLDDT) - 0.0083f) < 1e-6f,
           "clock: WorldTimer to the estimate (%.2f ms left after 2 s, at most a fifth of a frame a frame %d), the step untouched", left * 1e3, steady);
@@ -303,10 +303,10 @@ static void fidelity(void){
             while (acc >= 1.0 / 60 && steps < 3){ acc -= 1.0 / 60; steps++; }
             for (int k = 0; k < (steps ? steps : 1); k++){
                 setwall(rr + 0.0001 * k);
-                if (steps) MR32(G_WORLDTIME) += 67u;      /* 16.75 ms */
+                if (steps) MR32(G_WORLDTIMER) += 67u;      /* 16.75 ms */
                 K.at = rr; clock_frame();
             }
-            double l = rr + theta - (double)MR32(G_WORLDTIME) * 0.00025;
+            double l = rr + theta - (double)MR32(G_WORLDTIMER) * 0.00025;
             if (f >= 300 && f < 600) h1 += l / 300; else if (f >= 600) h2 += l / 300;
             if (f >= 300 && fabs(l) > mx) mx = fabs(l);
         }
@@ -317,24 +317,24 @@ static void fidelity(void){
     double lag = 0;
     for (int f = 0; f < 480; f++){
         rr += 0.0083; setwall(rr);
-        MR32(G_WORLDTIME) += 31u;                        /* 7.75 ms of the frame's 8.3: 7 % short */
+        MR32(G_WORLDTIMER) += 31u;                        /* 7.75 ms of the frame's 8.3: 7 % short */
         K.at = rr; clock_frame();
-        if (f > 240){ double l = fabs(rr + theta - (double)MR32(G_WORLDTIME) * 0.00025); if (l > lag) lag = l; }
+        if (f > 240){ double l = fabs(rr + theta - (double)MR32(G_WORLDTIMER) * 0.00025); if (l > lag) lag = l; }
     }
     CHECK(lag < 0.003, "clock: our own world 7 %% short of the wall clock, WorldTimer kept to it (at most %.2f ms off after 2 s)", lag * 1e3);
-    MR32(G_WORLDTIME) = (uint32_t)((rr + theta - 0.4) * 4000.0 + 0.5); K.at = rr;
+    MR32(G_WORLDTIMER) = (uint32_t)((rr + theta - 0.4) * 4000.0 + 0.5); K.at = rr;
     uint32_t hard = K.hard; clock_frame();
-    CHECK(K.hard == hard + 1 && fabs(rr + theta - (double)MR32(G_WORLDTIME) * 0.00025) < 0.001, "clock: 400 ms off set at once");
+    CHECK(K.hard == hard + 1 && fabs(rr + theta - (double)MR32(G_WORLDTIMER) * 0.00025) < 0.001, "clock: 400 ms off set at once");
     /* the creator: its own clock on the wall clock from the race's start (its clock is everyone's) */
-    MR32(G_NET_HOST) = 1; MR32(G_WORLDTIME) = 4000u; K.wok = 0; K.frac = 0; clock_frame();
+    MR32(G_NET_HOST) = 1; MR32(G_WORLDTIMER) = 4000u; K.wok = 0; K.frac = 0; clock_frame();
     {
-        double hr0 = rr, hw0 = (double)MR32(G_WORLDTIME) * 0.00025, acc = 0, h1 = 0, h2 = 0, mx = 0;
+        double hr0 = rr, hw0 = (double)MR32(G_WORLDTIMER) * 0.00025, acc = 0, h1 = 0, h2 = 0, mx = 0;
         for (int f = 0; f < 900; f++){
             rr += 0.022; acc += 0.022 * 0.97;            /* its world 3 % slow, catch-up steps */
             int steps = 0;
             while (acc >= 1.0 / 60 && steps < 3){ acc -= 1.0 / 60; steps++; }
-            for (int k = 0; k < (steps ? steps : 1); k++){ setwall(rr + 0.0001 * k); if (steps) MR32(G_WORLDTIME) += 67u; clock_frame(); }
-            double o = ((double)MR32(G_WORLDTIME) * 0.00025 - hw0) - (rr - hr0);
+            for (int k = 0; k < (steps ? steps : 1); k++){ setwall(rr + 0.0001 * k); if (steps) MR32(G_WORLDTIMER) += 67u; clock_frame(); }
+            double o = ((double)MR32(G_WORLDTIMER) * 0.00025 - hw0) - (rr - hr0);
             if (f >= 300 && f < 600) h1 += o / 300; else if (f >= 600) h2 += o / 300;
             if (f >= 300 && fabs(o) > mx) mx = fabs(o);
         }
@@ -342,8 +342,8 @@ static void fidelity(void){
               "clock: the creator's clock on the wall clock, its world 3 %% slow: %.2f then %.2f ms off on average, at most %.1f ms",
               h1 * 1e3, h2 * 1e3, mx * 1e3);
     }
-    MR32(RC) = 0; uint32_t w1 = MR32(G_WORLDTIME); rr += 0.08; setwall(rr); clock_frame();
-    CHECK(MR32(G_WORLDTIME) == w1, "clock: out of the race the game's own (untouched)");
+    MR32(RC) = 0; uint32_t w1 = MR32(G_WORLDTIMER); rr += 0.08; setwall(rr); clock_frame();
+    CHECK(MR32(G_WORLDTIMER) == w1, "clock: out of the race the game's own (untouched)");
     MR32(RC) = RC_RACING; MR32(G_NET_HOST) = 0; K.wok = 0;
 
     /* carried on along its curve: a car on a 100 m circle at 40 m/s, states
@@ -382,37 +382,37 @@ static void fidelity(void){
         po->s[0] = keep[0]; po->s[1] = keep[1]; po->n = kn; po->old_states = 0;
     }
     /* the blend: put through the game's apply, the owner's controls kept */
-    MR32(G_WORLDTIME) = (uint32_t)((t0 + 1.f / 30.f + 0.1f) * 4000.f); MRF32(G_WORLDDT) = 0.0083f;
+    MR32(G_WORLDTIMER) = (uint32_t)((t0 + 1.f / 30.f + 0.1f) * 4000.f); MRF32(G_WORLDDT) = 0.0083f;
     MR32(CTL + CTL_NPRED) = 3; MR32(CTL + CTL_HIT) = 0;
     blend();
     float bp[3]; rd3(CTL + CTL_BLEND + 0x10u, bp);
-    float tw = (float)MR32(G_WORLDTIME) * 0.00025f, a2 = om * tw, tr2[3] = { R0 * sinf(a2), R0 * (1.f - cosf(a2)), 0 };
+    float tw = (float)MR32(G_WORLDTIMER) * 0.00025f, a2 = om * tw, tr2[3] = { R0 * sinf(a2), R0 * (1.f - cosf(a2)), 0 };
     CHECK(pp->steps == 1 && dist3(bp, tr2) < 0.02f && MRF32(INPUT + 0x214u) == 0.25f && MRF32(INPUT + 0x20cu) == 0.9f,
           "blend: the car where its owner has it at the step's start (%.3f m), its brake %.2f (not the game's 0.7)", dist3(bp, tr2), MRF32(INPUT + 0x214u));
     /* a stall: no state for STALL_S, none of the game's predictions: on its own, then a glide back */
-    MR32(G_WORLDTIME) += (uint32_t)(4000.f * (STALL_S + 0.1f)); MR32(CTL + CTL_NPRED) = 0;
+    MR32(G_WORLDTIMER) += (uint32_t)(4000.f * (STALL_S + 0.1f)); MR32(CTL + CTL_NPRED) = 0;
     float mark[3] = { 1.f, 2.f, 3.f };
     for (uint32_t k = 0; k < 3; k++) MRF32(CTL + CTL_BLEND + 0x10u + 4 * k) = mark[k];
     blend();
     rd3(CTL + CTL_BLEND + 0x10u, bp);
     CHECK(pp->own == 1 && dist3(bp, mark) < 1e-6f && MRF32(INPUT + 0x214u) == 0.25f, "stall: on its own physics, its brake %.2f", MRF32(INPUT + 0x214u));
-    float tnew = (float)MR32(G_WORLDTIME) * 0.00025f - 0.05f, an = om * tnew;
+    float tnew = (float)MR32(G_WORLDTIMER) * 0.00025f - 0.05f, an = om * tnew;
     float pn[3] = { R0 * sinf(an), R0 * (1.f - cosf(an)), 0 }, vn[3] = { V0 * cosf(an), V0 * sinf(an), 0 }, qn[4] = { 0, 0, sinf(an / 2), cosf(an / 2) };
     put_state(tnew, pn, vn, wz, qn, 0.f);
     float tg[3], tgv[3], tgq[4];
-    pred_at(pp, (float)MR32(G_WORLDTIME) * 0.00025f, tg, tgv, tgq);
+    pred_at(pp, (float)MR32(G_WORLDTIMER) * 0.00025f, tg, tgv, tgq);
     for (uint32_t k = 0; k < 3; k++) MRF32(CTL + CTL_BLEND + 0x10u + 4 * k) = tg[k] + (k == 0 ? 6.f : 0.f);   /* it ran 6 m off */
     MR32(CTL + CTL_NPRED) = 1;
     blend();
     float e0 = len3(pp->ep);
-    for (int f = 0; f < 60; f++){ MR32(G_WORLDTIME) += 33u; blend(); }
+    for (int f = 0; f < 60; f++){ MR32(G_WORLDTIMER) += 33u; blend(); }
     float e1 = len3(pp->ep);
-    for (int f = 0; f < 120; f++){ MR32(G_WORLDTIME) += 33u; blend(); }
+    for (int f = 0; f < 120; f++){ MR32(G_WORLDTIMER) += 33u; blend(); }
     CHECK(pp->glides == 1 && e0 > 5.5f && e0 < 6.f && e1 < 1.f && len3(pp->ep) < 0.02f && pp->snaps == 0,
           "stall: back from 6 m off gliding (%.2f m after the first step, %.2f m after 0.5 s, %.3f m after 1.5 s)", e0, e1, len3(pp->ep));
     /* a hit of this game after its newest state: on its own until a newer state */
-    MR32(CTL + CTL_HIT) = MR32(G_WORLDTIME); uint32_t own0 = pp->own_steps;
-    MR32(G_WORLDTIME) += 33u; blend();
+    MR32(CTL + CTL_HIT) = MR32(G_WORLDTIMER); uint32_t own0 = pp->own_steps;
+    MR32(G_WORLDTIMER) += 33u; blend();
     CHECK(pp->own_steps == own0 + 1, "hit: on its own after a hit here (%u)", pp->own_steps - own0);
     MR32(CTL + CTL_HIT) = 0;
 }

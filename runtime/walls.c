@@ -41,6 +41,7 @@
  * command (tests): walls [at X Y Z | bars | sweep | fling VX VY VZ]. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,10 +52,6 @@ long autotest_frame(void);
 int mprace_car_ok(void);              /* mprace.c: the career has a car of its own (not a new one's prologue) */
 void roam_game_jumped(void);          /* roam_game.c: friends' cars are ghosts until they are clear of ours */
 
-#define G_GAMEMODE      0x00850078u   /* 1 the career */
-#define G_RACEKIND      0x0089e7b0u   /* 0 free roam, 7 an outrun */
-#define G_FLOW          0x008654a4u   /* 6 in the world */
-#define G_WORLDDT       0x00865154u   /* float: this frame's world dt (s) */
 #define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* Player*: +4 its car */
 #define G_HOTPOS        0x00890140u   /* the hot-position jump: where, */
 #define G_HOTPOS_ANGLE  0x008900d0u   /* ...the heading (u16), */
@@ -342,7 +339,7 @@ static int check(long f, uint32_t car, int why){
 void walls_frame(void){
     long f = autotest_frame();
     uint32_t car = 0;
-    if (MR32(G_GAMEMODE) == 1u && MR32(G_RACEKIND) == 0u && MR32(G_FLOW) == 6u) car = player_car();
+    if (MR32(G_GAMEMODE) == 1u && MR32(G_RACETYPE) == 0u && MR32(G_FLOW) == 6u) car = player_car();
     if (!car){ S.in = 0; return; }
     if (!S.in){
         memset(&S, 0, sizeof S); S.in = mprace_car_ok() ? 1 : 2; S.since = f; S.jumped_at = -100000; S.stamp = MR32(car + CAR_RESET_T);

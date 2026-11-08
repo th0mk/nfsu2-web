@@ -12,6 +12,7 @@
  * volumes, G_VOLUMES) plays each kind at its slider times Master (0x45C210,
  * 0x471970: linear, of 0x7FFF). */
 #include "cpu.h"
+#include "game.h"
 #include "horn.h"
 #include "optslider.h"
 #include "widescreen.h"           /* HOOK_SITE */
@@ -26,7 +27,6 @@ const char *language_name(void);
 #define REG_NAME      "HornVolume"
 #define FN_ADD        0x0054f410u   /* thiscall screen (entry, 1): the Options list takes a slider */
 #define FN_ADD_PAUSE  0x0054f800u   /* thiscall screen (entry, 1): the pause menu's */
-#define G_VOLUMES     0x0083aa28u   /* the Audio options' volumes (floats 0 .. 1): +0 Master Volume */
 
 static int g_installed;
 static uint32_t g_pct = 100;                     /* the volume, percent, as the registry has it */

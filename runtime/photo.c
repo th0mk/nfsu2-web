@@ -95,6 +95,7 @@
  *               player's, 4 traffic, 5 a racer's) */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "coop.h"
 #include "kbd.h"
 #include <math.h>
@@ -126,14 +127,7 @@ __attribute__((weak)) void gw_photo(uint32_t state, uint32_t n, uint32_t target,
 __attribute__((weak)) uint32_t gw_photo_got(uint32_t gen){ (void)gen; return 0; }
 __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 
-#define G_FLOW         0x008654a4u   /* 6: in the world */
-#define G_RACE         0x00890118u   /* the race status: +0 4 racing, 6 paused */
-#define G_RACEKIND     0x0089e7b0u   /* 0 free roam */
-#define G_NET_ONLINE   0x0089cf69u   /* byte: an online session */
-#define G_NET_CLIENT   0x008669f4u   /* > 0 in a network race */
-#define G_NET_HOST     0x00866a14u
 #define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player*: +4 its car, +0x9A4 its HUD, +0x238 its camera mover */
-#define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_VIEW1        0x00832e50u   /* eView 1: +0x40 its camera (+0x40 position, +0x50 forward, +0xC4 the field of view) */
 #define G_FREEZE       0x00890084u
 #define G_EYE          0x007ec4d0u
@@ -144,12 +138,9 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 #define FN_OWN_CAMERA  0x005fa820u
 #define FN_REPLAY_ACT  0x004c26b0u
 #define FN_ADD_ITEM    0x0050dab0u   /* thiscall (item; ret 4): a menu's AddOption, its vtable's +0x18 */
-#define FN_ITEM        0x0051f670u   /* thiscall (icon, label, 0; ret 0xC): a menu item's constructor */
 #define VT_REPLAY      0x007954f0u   /* the Replay item's vtable */
 #define ITEM_BYTES     0x48u
 #define ICON_PHOTO     0x69cd72d1u   /* INGAME_ICON_VOIP_ON, unused: texrep_web.c draws a still camera there */
-#define FN_NEW         0x00575620u   /* cdecl (size): operator new */
-#define FN_FE_PACKAGE  0x0052cef0u   /* cdecl (package name) -> FEPackage* */
 #define PK_FIRST       0x4cu         /* an FEPackage's first object */
 #define OB_NEXT        4u            /* an FE object's next, */
 #define OB_TYPE        0x18u         /*   its type (5 a group), */
@@ -159,7 +150,6 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 #define HIDDEN_MAX     4096
 #define FN_VOLUMES     0x00469050u
 #define G_SOUND        0x0082b884u
-#define G_VOLUMES      0x0083aa28u
 #define VOL_BYTES      0x40u
 #define PL_CAR         4u
 #define PL_HUD         0x9a4u
@@ -209,7 +199,6 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 #define PATH_S         10.f          /* its time, s, unless the page says */
 #define PATH_S_MAX     120.f
 #define SPIN_MAX       90.f          /* turning by itself, degrees a second at most */
-#define G_WORLD        0x00890080u   /* World*: its car list (car +0 the next) has the World as its head and end */
 #define G_RAIN         0x00832eb4u   /* Rain* (eView 1 +0x64): +0x1F0 its strength, +0x5098/+0x509C the clouds */
 #define CAR_DRIVER     0x24u         /* 1 the player, 3 an AI racer, 4 traffic, 0 a free-roam player's (roam_game.c) */
 #define DRIVER_RACER   3u
@@ -1335,7 +1324,7 @@ static void act(CPU *c){
     if (msg != MSG_ACCEPT || !guest_ok(it, IT_LABEL + 4u) || MR32(it + IT_LABEL) != P.label || MR8(it + IT_GREY)){ sub_004c26b0(c); return; }
     P.pause_at = autotest_frame();
     fprintf(stderr, "[photo] f=%ld the pause menu's Photo Mode\n", autotest_frame());
-    if (MR32(G_RACEKIND) == 0u) sub_004c2510(c); else sub_004c24c0(c);
+    if (MR32(G_RACETYPE) == 0u) sub_004c2510(c); else sub_004c24c0(c);
 }
 
 /* ---- the cars in the picture ---------------------------------------------------------------------------------

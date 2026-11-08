@@ -26,6 +26,7 @@
  * last frame, no report), so the log gets how long ago the last frame was
  * and, after 3 s or more, the report then. */
 #include "cpu.h"
+#include "game.h"
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -113,7 +114,7 @@ __attribute__((weak)) int lifecycle_game_parked(void){ return 0; }
  * before it makes the file.  Also with NFSU2_WATCHDOG=0. */
 void watchdog_log_download(void){
     uint64_t last = atomic_load(&g_wd_present_us);
-    uint32_t flow = mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u;
+    uint32_t flow = mem_is_committed(G_FLOW) ? MR32(G_FLOW) : 0u;
     if (!last) fprintf(stderr, "[watchdog] log downloaded before the first frame (game flow %u)\n", flow);
     else {
         double ago = wd_since_s(wd_now_us(), last);
@@ -137,7 +138,7 @@ static void *wd_main(void *arg){
             atomic_store(&g_wd_present_us, wd_now_us());   /* the limit restarts on return */
             reported = 0; continue; }
         double stalled = wd_since_s(wd_now_us(), last);
-        uint32_t flow = mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u;
+        uint32_t flow = mem_is_committed(G_FLOW) ? MR32(G_FLOW) : 0u;
         double l = (flow == 3u || flow == 6u) ? lim : (lim > 20.0 ? lim : 20.0);
         if (stalled < l){ reported = 0; continue; }
         if (!reported){ reported = 1; wd_report(stalled, flow); }

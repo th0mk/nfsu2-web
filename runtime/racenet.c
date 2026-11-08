@@ -184,6 +184,7 @@
  */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "racenet.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -191,22 +192,14 @@
 #include <strings.h>
 #include <time.h>
 
-#define G_FLOW       0x008654a4u   /* 6: in the world */
-#define G_NETMODE    0x00850078u   /* 8 Online, 0x200 LAN (1 career) */
-#define G_NET_HOST   0x00866a14u   /* host race state, > 0: this game created the race */
-#define G_WORLD      0x00890080u   /* World*: +0 the cars' list (a car's first two dwords are its node) */
 #define G_PLAYER1    SPLIT_PLAYERS_INDEX   /* Player*: +4 car */
-#define G_WORLDDT    0x00865154u   /* float: this frame's world dt (s) */
-#define G_RACE       0x00890118u   /* the race coordinator*: +0 state, +0x24 racers, +0xBD0 racer pointers */
 #define RC_RACING    4u            /*   (a network race stays at 4 behind the results, until it is left) */
 #define RCR_DONE     0x10u         /* a racer: +0 its car, +0x10 u16 how it finished, 0 not yet */
-#define G_NETPLAYERS 0x0089cf50u   /* the network race's players: 6 pointers, name at +0x12 */
 #define NP_NAME      0x12u
 #define CTL_CAR      0x10u         /* a remote car's controller: its world car */
 #define CTL_PREV_V   0x140u        /*   the car's velocity as the last blend left it (3 floats) */
 #define CTL_HIT      0x184u        /*   world time (1/4000 s) of the last hit it saw */
 #define ST_TIME      0x7cu         /* a car state: float, the sender's race clock (s) */
-#define G_WORLDTIME  0x0086518cu   /* the race clock (WorldTimer, 1/4000 s), slaved to the creator's */
 #define CAR_POS      0x60u         /* a car: position, velocity (3 floats each) */
 #define CAR_VEL      0x70u
 #define HIT_M        80.f          /* m: a remote car farther from the player's is out of reach of a hit here */
@@ -230,7 +223,6 @@
 #define G_SLOTBITS   0x008691b4u   /* a slot's bits in a message, and the least slot (0x583F80) */
 #define G_SLOTMIN    0x008691b8u
 #define FN_JOIN_MSG  0x0058e900u   /* a joiner's handler of the creator's messages (cdecl: the bytes, the length, 0) */
-#define HOOK_MAINLOOP 0x00581475u  /* the return address of guest calls from the main-loop hook */
 #define MSG_CARSPAM  2u
 #define BS_BYTES     0x400u        /* a bit stream: the bytes, then +0x400 the bits written */
 #define CS_HDR       8u
@@ -259,7 +251,6 @@
 #define G_CLK_TARGET 0x00869234u   /* the clock the game steers WorldTimer to (1/4000 s) */
 #define G_CLK_FLAG   0x00866758u   /*   (byte: steer to it) */
 #define G_CLK_ECHO   0x007fbe60u   /* float: the newest echo of our real-time clock the creator answered */
-#define G_REALTIME   0x008651acu   /* RealTimer (1/4000 s) */
 #define G_WORLDTIME_S 0x007fb718u  /* float: WorldTimer in seconds (0x57A0E0 keeps it with each step) */
 #define BS_READ      0x404u        /* a bit stream: the bits read */
 #define CK_N         128           /* clock samples kept */
@@ -434,7 +425,7 @@ static float stall_s(void){
  * others still race, and still come) */
 static int in_race(void){
     uint32_t w = guest_rd32(G_WORLD), rc = guest_rd32(G_RACE);
-    return guest_rd32(G_FLOW) == 6u && (guest_rd32(G_NETMODE) & 0x208u) && guest_ok(w, 0x80) && guest_rd32(rc) == RC_RACING;
+    return guest_rd32(G_FLOW) == 6u && (guest_rd32(G_GAMEMODE) & 0x208u) && guest_ok(w, 0x80) && guest_rd32(rc) == RC_RACING;
 }
 static int is_host(void){ return (int32_t)guest_rd32(G_NET_HOST) > 0; }
 static uint32_t ms_now(void){ return (uint32_t)(now_us() / 1000u); }
@@ -575,7 +566,7 @@ void sub_005f8900(CPU *c){
             e->g100 += g > 100000u; e->g250 += g > 250000u; e->g500 += g > 500000u;
         } else e->first = t;
         if (guest_ok(st, ST_TIME + 4u)){                        /* the state's age by this game's race clock */
-            float age = (float)guest_rd32(G_WORLDTIME) * 0.00025f - MRF32(st + ST_TIME);
+            float age = (float)guest_rd32(G_WORLDTIMER) * 0.00025f - MRF32(st + ST_TIME);
             if (__builtin_isfinite(age)){
                 if (!e->n || age < e->age_min) e->age_min = age;
                 if (!e->n || age > e->age_max) e->age_max = age;
@@ -746,7 +737,7 @@ void racenet_carspam(CPU *c, const uint8_t *m, int n, uint32_t from){
     for (uint32_t i = 0; i < len; i++) MR8(buf + i) = m[CS_HDR + i];
     c->esp = buf - 64u;
     PUSH32(0); PUSH32(len); PUSH32(buf);
-    PUSH32(HOOK_MAINLOOP);
+    PUSH32(GUEST_RET_MAINLOOP);
     g_direct = 1;
     dispatch_indirect(c, FN_JOIN_MSG);
     g_direct = 0;
@@ -928,7 +919,7 @@ void sub_005f8af0(CPU *c){
     if (!p || !p->n || !guest_ok(car, 0x9e0) || !guest_ok(ctl + CTL_BLEND, 0x50u)) return;
     float h = MRF32(G_WORLDDT);
     if (!(h > 0.f && h < 0.25f)) h = 0.f;
-    float now = (float)guest_rd32(G_WORLDTIME) * 0.00025f + lead_s(), age = now - p->s[1].t;
+    float now = (float)guest_rd32(G_WORLDTIMER) * 0.00025f + lead_s(), age = now - p->s[1].t;
     uint32_t hit = guest_rd32(ctl + CTL_HIT);
     /* stalled: no state for STALL_S and none of the game's predictions left
      * (while one lives the game's blend puts the car on it: carried on here) */
@@ -1115,14 +1106,14 @@ void sub_005891b0(CPU *c){
 static void clock_put(uint32_t wt, double d){
     K.frac += d * 4000.0;
     int32_t n = (int32_t)K.frac;
-    if (n){ MR32(G_WORLDTIME) = wt + (uint32_t)n; K.frac -= n; MRF32(G_WORLDTIME_S) = (float)((double)(wt + (uint32_t)n) * 0.00025); }
+    if (n){ MR32(G_WORLDTIMER) = wt + (uint32_t)n; K.frac -= n; MRF32(G_WORLDTIME_S) = (float)((double)(wt + (uint32_t)n) * 0.00025); }
     K.wok = 1;
 }
 static void clock_frame(void){
     double r = wall_s(), fdt = K.prev_r > 0 ? r - K.prev_r : 0;
     K.prev_r = r;
-    uint32_t wt = guest_rd32(G_WORLDTIME);
-    if (!(guest_rd32(G_NETMODE) & 0x208u)){ memset(&K, 0, sizeof K); return; }
+    uint32_t wt = guest_rd32(G_WORLDTIMER);
+    if (!(guest_rd32(G_GAMEMODE) & 0x208u)){ memset(&K, 0, sizeof K); return; }
     if (!clock_on() || !in_race()){ K.wok = 0; K.irate = 0; return; }
     if (!(fdt > 0 && fdt < 1.0)) fdt = 0;
     double target;
@@ -1138,7 +1129,7 @@ static void clock_frame(void){
     if (ae > CK_HARD){
         double t = target * 4000.0;
         if (!(t > 0 && t < 4.0e9)){ K.wok = 0; return; }
-        MR32(G_WORLDTIME) = (uint32_t)(t + 0.5); MRF32(G_WORLDTIME_S) = (float)((double)MR32(G_WORLDTIME) * 0.00025);
+        MR32(G_WORLDTIMER) = (uint32_t)(t + 0.5); MRF32(G_WORLDTIME_S) = (float)((double)MR32(G_WORLDTIMER) * 0.00025);
         K.frac = 0; K.hard++; K.wok = 1;
         return;
     }
@@ -1159,7 +1150,7 @@ static void clock_frame(void){
 static void rates_frame(void){
     static uint32_t was[4]; static int set;
     if (!guest_ok(G_RATES, 15u)) return;
-    int want = (guest_rd32(G_NETMODE) & 0x208u) && rate_hz() > 0;
+    int want = (guest_rd32(G_GAMEMODE) & 0x208u) && rate_hz() > 0;
     if (want && !set){ for (uint32_t k = 0; k < 4; k++) was[k] = MR32(G_RATES + 4u * k); set = 1; }
     if (want) for (uint32_t k = 0; k < 4; k++){ if (MR32(G_RATES + 4u * k) != (uint32_t)rate_hz()) MR32(G_RATES + 4u * k) = (uint32_t)rate_hz(); }
     else if (set){ for (uint32_t k = 0; k < 4; k++) MR32(G_RATES + 4u * k) = was[k]; set = 0; }
@@ -1190,7 +1181,7 @@ void racenet_heard(uint8_t *m, int n, uint32_t from){
     f->n++; f->sum += fps; if (fps < f->lo) f->lo = fps;
     f->slow += m[10]; if (longest > f->longest_ms) f->longest_ms = longest;
     uint32_t theirs = (uint32_t)m[12] | (uint32_t)m[13] << 8 | (uint32_t)m[14] << 16 | (uint32_t)m[15] << 24;
-    f->clock += ((double)theirs - (double)guest_rd32(G_WORLDTIME)) / 4.0;   /* ms, the way's delay in it */
+    f->clock += ((double)theirs - (double)guest_rd32(G_WORLDTIMER)) / 4.0;   /* ms, the way's delay in it */
 }
 
 /* this game's player has finished the race (or left it: the coordinator's
@@ -1297,7 +1288,7 @@ static float jumps_add(Jumps *j, const float *p, uint64_t dt, float step){
 void racenet_frame(CPU *c){
     (void)c;
     uint32_t pl = guest_rd32(G_PLAYER1), me = pl ? guest_rd32(pl + 4u) : 0, w = guest_rd32(G_WORLD), rc = guest_rd32(G_RACE);
-    int racing = guest_rd32(G_FLOW) == 6u && (guest_rd32(G_NETMODE) & 0x208u) && guest_ok(me, 0x9e0) && guest_ok(w, 0x80) && guest_rd32(rc) == RC_RACING &&
+    int racing = guest_rd32(G_FLOW) == 6u && (guest_rd32(G_GAMEMODE) & 0x208u) && guest_ok(me, 0x9e0) && guest_ok(w, 0x80) && guest_rd32(rc) == RC_RACING &&
                  !finished(rc, me);
     uint64_t t = now_us();
     rates_frame();
@@ -1335,7 +1326,7 @@ void racenet_frame(CPU *c){
     float wdt = MRF32(G_WORLDDT), fdt = (float)dt / 1e6f, step = wdt > 0.f && wdt < 1.f ? wdt : fdt;
     static int trace = -1;                           /* NFSU2_RACENET_TRACE=1: every frame of every car (tests) */
     if (trace < 0){ const char *e = getenv("NFSU2_RACENET_TRACE"); trace = e && e[0] == '1'; }
-    static uint32_t clk_prev; uint32_t clk = guest_rd32(G_WORLDTIME);
+    static uint32_t clk_prev; uint32_t clk = guest_rd32(G_WORLDTIMER);
     float drt = clk_prev ? (float)(int32_t)(clk - clk_prev) * 0.00025f : 0.f;
     clk_prev = clk;
     uint32_t car = guest_rd32(w);
@@ -1375,7 +1366,7 @@ void racenet_frame(CPU *c){
         memcpy(m, "N2FS", 4); m[4] = 1;
         m[6] = (uint8_t)fps10; m[7] = (uint8_t)(fps10 >> 8); m[8] = (uint8_t)ms; m[9] = (uint8_t)(ms >> 8);
         m[10] = (uint8_t)(R.wslow > 255u ? 255u : R.wslow);
-        uint32_t clk = guest_rd32(G_WORLDTIME);
+        uint32_t clk = guest_rd32(G_WORLDTIMER);
         m[12] = (uint8_t)clk; m[13] = (uint8_t)(clk >> 8); m[14] = (uint8_t)(clk >> 16); m[15] = (uint8_t)(clk >> 24);
         memcpy(m + 16, R.me, strlen(R.me));
         send_all(m, 0);

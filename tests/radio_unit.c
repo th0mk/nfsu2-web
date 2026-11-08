@@ -94,8 +94,8 @@ static void reset(void){
 
 static void steps(int n){ while (n-- > 0) step(); }
 static void seconds(int n){ steps(n * STEPS_PER_SECOND); }
-static void in_main_menu(void){ MR32(FLOW + FLOW_MODE) = 1u; MR32(GAME_STATE) = 0u; }
-static void in_race(void){ MR32(FLOW + FLOW_MODE) = 2u; MR32(GAME_STATE) = 6u; }
+static void in_main_menu(void){ MR32(FLOW + FLOW_MODE) = 1u; MR32(G_FLOW) = 0u; }
+static void in_race(void){ MR32(FLOW + FLOW_MODE) = 2u; MR32(G_FLOW) = 6u; }
 static void radio_switched_on(void){ g_page.on = 1; steps(1); }
 static void radio_switched_off(void){ g_page.on++; }
 static void radio_switched_on_unseen(void){ g_page.on++; }

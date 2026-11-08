@@ -32,6 +32,7 @@
  * category byte names none (0x1F), then it is put back. */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "widescreen.h"           /* HOOK_SITE */
 #include <stdio.h>
 #include <string.h>
@@ -45,7 +46,6 @@ uint32_t language_text(uint32_t hash);
 #define FN_ADD_CAT     0x00545920u   /* thiscall screen (category, icon, label) */
 #define FN_PART_FIRST  0x0061ba30u   /* thiscall parts (car, slot, 0, -1): the car's first part of the slot */
 #define FN_PART_NEXT   0x0061ba50u   /* thiscall parts (part, car, slot, 0, -1): the next one */
-#define G_PARTS        0x008a2b68u   /* the car part database */
 #define G_FECAR        0x008389acu   /* the front end's car: vtbl[1] its car type */
 #define G_SLOT_KIND    0x00802960u   /* per slot: the kind its parts' byte +4 has (0x60FEE0) */
 #define SLOT_VINYL     0x40u
@@ -57,7 +57,6 @@ uint32_t language_text(uint32_t hash);
 #define CAT_NONE       0x1fu
 #define LEFT_OUT       "DEBUG VINYL"
 #define NOUT           16
-#define G_CARTYPES     0x008a1cccu   /* CarTypeInfo[] (0x890 each): +0 the type's name, as CARS/<name>/ has it */
 #define CARTYPES_N     46u
 
 /* the vinyls whose pictures only some cars' VINYLS.BIN have (by the type's name; the texture's name after the car's) */
@@ -129,7 +128,7 @@ static int hidden_vinyls(CPU *c, uint32_t car, uint32_t *out, int *nout){
     char tn[40];
     type_name(car, tn, sizeof tn);
     uint32_t kind = MR32(G_SLOT_KIND + 4u * SLOT_VINYL), a[5] = { car, SLOT_VINYL, 0, 0xffffffffu, 0 };
-    uint32_t p = gcall(c, FN_PART_FIRST, G_PARTS, 4, a);
+    uint32_t p = gcall(c, FN_PART_FIRST, G_CARPARTDB, 4, a);
     int n = 0, guard = 0;
     char list[640]; size_t o = 0; list[0] = 0;
     while (p && guest_ok_bytes(p, 14u) && guard++ < 4096){
@@ -145,7 +144,7 @@ static int hidden_vinyls(CPU *c, uint32_t car, uint32_t *out, int *nout){
                                       !drop ? "" : strcmp(nm, LEFT_OUT) ? " (not this car's)" : " (left out)");
         }
         uint32_t b[5] = { p, car, SLOT_VINYL, 0, 0xffffffffu };
-        p = gcall(c, FN_PART_NEXT, G_PARTS, 5, b);
+        p = gcall(c, FN_PART_NEXT, G_CARPARTDB, 5, b);
     }
     if (logged != car){
         logged = car;

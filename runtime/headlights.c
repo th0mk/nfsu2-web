@@ -49,6 +49,7 @@
  *   higher (a car on a bridge overhead, a test of the cut); the script
  *   command "headlights MODE" sets it for an A/B within one run. */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,8 +67,6 @@ int photo_dark(uint32_t car);                    /* photo.c: a car whose headlig
 #define HL_ENABLE    0x00870cc4u   /* g_CarHeadlightEnable */
 #define HL_BIAS      0x0080052cu   /* B: x, y offsets after the projection */
 #define G_PLAYERS    SPLIT_PLAYERS_ORDER   /* Player*[]: +4 car (0x5BDAA0 takes the colour from [0]) */
-#define G_WORLD      0x00890080u   /* World*: its car list (car +0 next) has the World as head and end */
-#define G_GAMEMODE   0x00850078u   /* 8 online, 0x200 LAN */
 #define GM_NETWORK   0x208u
 #define CAR_DRIVER   0x24u         /* 0x5EBA30's type: 1 the player, 3 an AI racer, 4 traffic, 0 none */
 #define DRIVER_TRAFFIC 4u

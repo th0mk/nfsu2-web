@@ -86,29 +86,21 @@
  */
 #include "cpu.h"
 #include "guest.h"
+#include "game.h"
 #include "roam_core.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#define G_FLOW       0x008654a4u   /* 6: in the world */
-#define G_NETMODE    0x00850078u   /* 8 Online, 0x200 LAN */
-#define G_WORLD      0x00890080u   /* World*: +0 the cars' list */
 #define G_PLAYER1    SPLIT_PLAYERS_INDEX   /* Player*: +4 car */
-#define G_WORLDDT    0x00865154u   /* float: this step's world dt (s) */
-#define G_RACE       0x00890118u   /* the race coordinator*: +0 state */
 #define RC_RACING    4u
-#define G_NETPLAYERS 0x0089cf50u   /* the race's players by slot: 6 pointers, name at +0x12 (a car's slot: +0xA) */
 #define CAR_SLOT     0x0au         /* a car: int16, its player's race slot (0x5F9840: the players by slot) */
 #define CAR_CTL      0x30u         /* a car: its input (+0x20C throttle, +0x210 handbrake, +0x214 brake, u16 +0x1E0 steer) */
 #define CAR_POS      0x60u
 #define CAR_VEL      0x70u
 #define CAR_ROWS     0x90u         /* the orientation's rows: forward, left (+0xA0), up (+0xB0) */
 #define CAR_SPIN     0x110u
-#define CAR_SPEED    0x42cu
-#define CAR_GEAR     0x434u
-#define CAR_RPM      0x440u
 #define CTL_CAR      0x10u         /* a remote car's controller: its world car */
 #define CTL_PREV_V   0x140u
 #define CTL_HIT      0x184u        /*   world time (1/4000 s) of the last hit it saw */
@@ -217,7 +209,7 @@ int racecars_on(void){ opts(); return O.on; }
 
 static int in_race(void){
     uint32_t w = guest_rd32(G_WORLD), rc = guest_rd32(G_RACE);
-    return guest_rd32(G_FLOW) == 6u && (guest_rd32(G_NETMODE) & 0x208u) && guest_ok(w, 0x80) && guest_rd32(rc) == RC_RACING;
+    return guest_rd32(G_FLOW) == 6u && (guest_rd32(G_GAMEMODE) & 0x208u) && guest_ok(w, 0x80) && guest_rd32(rc) == RC_RACING;
 }
 static uint32_t my_car(void){ uint32_t pl = guest_rd32(G_PLAYER1); return pl ? guest_rd32(pl + 4u) : 0; }
 /* the car is on the world's list */
@@ -356,7 +348,7 @@ static int own_state(rc_state *s, uint32_t car){
     rd3(car + CAR_POS, s->p); rd3(car + CAR_VEL, s->v); rd3(car + CAR_SPIN, s->w);
     rd3(car + CAR_ROWS, f); rd3(car + CAR_ROWS + 0x10u, l); rd3(car + CAR_ROWS + 0x20u, u);
     rc_m2q(f, l, u, s->q);
-    s->speed = MRF32(car + CAR_SPEED); s->rpm = MRF32(car + CAR_RPM); s->gear = (int8_t)MR32(car + CAR_GEAR);
+    s->speed = MRF32(car + CAR_FWD_SPEED); s->rpm = MRF32(car + CAR_RPM); s->gear = (int8_t)MR32(car + CAR_GEAR);
     uint32_t ctl = guest_rd32(car + CAR_CTL);
     if (guest_ok(ctl, 0x220)){
         s->throttle = MRF32(ctl + 0x20cu); s->brake = MRF32(ctl + 0x214u);

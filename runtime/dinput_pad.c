@@ -80,6 +80,7 @@
  *   NFSU2_FF_LOG=1      log the effects the game creates, changes, starts and
  *                       stops, and the motor levels when they change      */
 #include "cpu.h"
+#include "game.h"
 #include "gamepad.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -596,7 +597,7 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
     if (ch) ours_from(ch, s->wheel);
     else ours_config();
     uint32_t hold = k_ours[OUR_HOLD].idx >= 0 ? 1u << k_ours[OUR_HOLD].bit : 0u;
-    uint32_t b = MR32(0x850078u) == 4 || !hold || g_ours[OUR_HOLD] == PAD_THEIRS ? s->buttons : showoff_pad(s->buttons, hold);
+    uint32_t b = MR32(G_GAMEMODE) == 4 || !hold || g_ours[OUR_HOLD] == PAD_THEIRS ? s->buttons : showoff_pad(s->buttons, hold);
     b = lobby_pad(b, ch, s->wheel);
     uint32_t pov[4] = { pov_of(!!(b & 1u << PAD_DUP), !!(b & 1u << PAD_DDOWN),
                                !!(b & 1u << PAD_DLEFT), !!(b & 1u << PAD_DRIGHT)),
@@ -690,8 +691,8 @@ static void fe_keys(Dev *d, uint32_t buttons){
     if (on < 0) on = gamepad_env_flag("NFSU2_PAD_FE_KEYS", 1);
     uint32_t press = buttons & ~d->fe_prev, rel = d->fe_prev & ~buttons;
     d->fe_prev = buttons;
-    if (!on || !mem_is_committed(0x8654a7u)) return;
-    int fe = MR32(0x8654a4u) == 3u;
+    if (!on || !mem_is_committed(G_FLOW + 3u)) return;
+    int fe = MR32(G_FLOW) == 3u;
     fe_key(&d->fe_down[0], !!(press & 1u << PAD_A), !!(rel & 1u << PAD_A), fe, 0x0D, 0x1C, 0x0D);
     fe_key(&d->fe_down[1], !!(press & 1u << PAD_B), !!(rel & 1u << PAD_B), fe, 0x1B, 0x01, 0x1B);
     fe_key(&d->fe_down[2], !!(press & 1u << PAD_BACK), !!(rel & 1u << PAD_BACK), fe, 'Q', 0x10, 'q');
@@ -1006,8 +1007,8 @@ static float g_jolt_age, g_jolt_logt;   /* world seconds since this car appeared
 static void ff_jolt(void){
     uint32_t pl = mem_is_committed(SPLIT_PLAYERS_INDEX + 3u) ? MR32(SPLIT_PLAYERS_INDEX) : 0u;
     uint32_t car = pl && mem_is_committed(pl + 7u) ? MR32(pl + 4u) : 0u;
-    float dt = MRF32(0x865154u);
-    if (MR32(0x8654a4u) != 6u || !car || !mem_is_committed(car + 0x7bu)){ g_jolt_car = 0; g_jolt = 0; return; }
+    float dt = MRF32(G_WORLDDT);
+    if (MR32(G_FLOW) != 6u || !car || !mem_is_committed(car + 0x7bu)){ g_jolt_car = 0; g_jolt = 0; return; }
     float v[3] = { MRF32(car + 0x70u), MRF32(car + 0x74u), MRF32(car + 0x78u) };
     if (!isfinite(v[0]) || !isfinite(v[1]) || !isfinite(v[2])) return;
     if (!(dt > 0.f && dt < 0.25f)) return;              /* the world stands (pause, a menu over it) */
@@ -1475,7 +1476,6 @@ void sub_005c1000(CPU *c){
 #define G_MOUSE_MID  0x008763f7u   /* byte: the mouse's middle button is down */
 #define G_SHOWCASE   0x008363fcu   /* byte: the showcase turns the car */
 #define G_VIEW_IDLE  0x00837aa0u   /* when the viewer was last turned (the showcase starts a while after) */
-#define G_FE_TIME    0x008651acu   /* the game's time */
 int career_fe_active(const char *name);
 void sub_004a5d90_orig(CPU *c);
 void sub_004a5d90(CPU *c){
@@ -1499,7 +1499,7 @@ void sub_004a5d90(CPU *c){
     MRF32(v + VW_TURN) = x;
     MRF32(v + VW_TILT) = y;
     MR8(G_SHOWCASE) = 0;
-    MR32(G_VIEW_IDLE) = MR32(G_FE_TIME);
+    MR32(G_VIEW_IDLE) = MR32(G_REALTIMER);
     if (!turning && pad_log()) fprintf(stderr, "[pad] the right stick turns the car (viewer 0x%08x, the car at %.0f degrees)\n", v, MRF32(v + VW_ANGLE));
     turning = v;
 }
