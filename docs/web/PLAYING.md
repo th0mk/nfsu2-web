@@ -881,11 +881,13 @@ Good to know:
   30 seconds (a player you block in EA Messenger never sends you one again). Your friends see the name of
   the world you play in, nobody else (it is told to the server only once you have a friend, and kept in memory only).
 - **Messages to friends:** a friend's message shows in the log on the left, where quick chat's phrases show, with an
-  envelope, and **I Write back** under it. In free roam press **I**: a card in quick chat's place answers the newest
-  message, or, with none to answer, lists your friends (where each one plays) for **1** to **9** to pick one. Type
-  (120 characters at most), **Enter** sends, **Esc** closes; the game gets no keys while the card is open. Your own
-  message shows in the log as "To Bo ...". On a touch screen tap a message to answer it, or the chat button's
-  **Message a friend**. On the start page, the envelope on a friend in the Friends tab opens your conversation, lime
+  envelope. An envelope with the number of unread messages stays under the log until you open them. In free roam press
+  **I**: a card in quick chat's place opens the conversation with the friend who wrote last, or, with nothing to read
+  or answer, lists your friends (unread first, and where each one plays) for **1** to **9** to pick one. The card shows
+  your last 40 messages with that friend (the mouse wheel or **Page Up** and **Page Down** scroll back). Type (120
+  characters at most), **Enter** sends, **Tab** lists your friends, **Esc** closes; the game gets no keys while the card
+  is open. Your own message shows in the log as "To Bo ...". On a touch screen tap a message or the envelope to open
+  the conversation, or the chat button's **Message a friend**. On the start page, the envelope on a friend in the Friends tab opens your conversation, lime
   with a dot while there are messages you have not read. A message reaches your friend at once wherever their page is
   open (in the game's Online mode, in EA Messenger); a friend who is away gets it when they are back (it waits 7
   days), and your log says "(gets it when back)". A message that came while you were in a race, a shop or a menu

@@ -1243,7 +1243,7 @@ function notice(text: string, who?: string) {
   const line = roamLine('quiet', '', text.startsWith(who) ? [b, text.slice(who.length)] : [text]);
   placeNotices();
   box.append(line);
-  while (box.childElementCount > 4) box.firstElementChild!.remove();
+  trimNotices(box);
   setTimeout(() => line.remove(), 5000);
 }
 /** a hint from the game (roam_plat_hint), worded here: "ghost", as the car drives off the new career's start among
@@ -1374,9 +1374,13 @@ function roamLine(cls: string, icon: string, parts: (string | Node)[]): HTMLElem
 function iconLine(cls: string, icon: string, parts: (string | Node)[]): HTMLElement {
   const box = $('#notices'), line = roamLine(cls, icon, parts);
   box.append(line);
-  while (box.childElementCount > 4) box.firstElementChild!.remove();
+  trimNotices(box);
   setTimeout(() => line.remove(), 8000);
   return line;
+}
+/** the log keeps 4 lines: the oldest go, a friend's message (.msg) last */
+function trimNotices(box: HTMLElement) {
+  while (box.childElementCount > 4) (box.querySelector(':scope > :not(.msg):not(:last-child)') ?? box.firstElementChild!).remove();
 }
 /** a friend's message in the log (messages.ts): an envelope, the name, the text wrapping under the name; the player's
  *  own as "To <name>" with a note after it; on a touch screen a tap on a friend's answers it.  In the notices' box, for
@@ -1392,14 +1396,13 @@ function msgLine(name: string, text: string, out: boolean, note: string, ms: num
   line.style.animationDuration = `${ms}ms`;
   if (tap && touchFirst()) { line.classList.add('tap'); line.addEventListener('click', tap); }
   box.append(line);
-  while (box.childElementCount > 4) box.firstElementChild!.remove();
+  trimNotices(box);
   setTimeout(() => line.remove(), ms);
   return line;
 }
-/** "I Write back" under the newest friend's message (messages.ts), for ms, or "I Message" under a friend's notice
- *  (text); null: gone */
+/** "I Message" under a friend's notice (messages.ts), for ms; null: gone */
 let msgHintTimer = 0;
-function msgHint(ms: number | null, text = t('Write back')) {
+function msgHint(ms: number | null, text = '') {
   const box = $('#notices');
   box.querySelector('.msg-hint')?.remove();
   clearTimeout(msgHintTimer);

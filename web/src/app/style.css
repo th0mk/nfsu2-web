@@ -991,7 +991,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 @keyframes drift-pop { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 /* quick chat's lines in the log (shell.ts chatLine), a friend's coming into free roam (friendNotice) and a friend's
  * message (msgLine, messages.ts): a speech balloon or an envelope, 8 s; a message's note after it dim; on a touch
- * screen a tap on a friend's answers it; "I Write back" under the newest, the cards' key cap */
+ * screen a tap on a friend's opens the conversation; "I Message" under a friend's notice, the cards' key cap */
 .notices div.chat { animation-duration: 8s; }
 .notices .ic svg { fill: var(--lime); }
 .notices .msg i { font-style: normal; color: var(--muted); }
@@ -1009,7 +1009,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 /* photo mode (photo.ts): the panel, a column at the right edge in tabs (Take photo first under each; it scrolls on a
  * screen too short for it), a flash at each picture, the camera's hand on the picture; the page's other
  * things on the game hidden while it is on (its toasts stay: the picture's) */
-.stage.photo :is(.touch, .qc-lines, .qc-picker, .drift-panel, .drift-pop, .pause-hint, .friend-prompt, .notices, .lobby, .lobby-cover, .hud-fps, .stage-menu) {
+.stage.photo :is(.touch, .qc-lines, .qc-picker, .drift-panel, .drift-pop, .pause-hint, .friend-prompt, .notices, .msg-badge, .lobby, .lobby-cover, .hud-fps, .stage-menu) {
   display: none !important;
 }
 .stage.photo canvas { cursor: grab; }
@@ -1126,7 +1126,7 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
 /* quick chat's picker (quickchat.ts), a card (.ov-card) on the left in the notices' place (they step aside while it is
  * open); on a touch screen all sixteen at the top, four columns of buttons big enough to tap */
 .qc-picker { left: 16px; top: 40%; }
-.stage:has(> .qc-picker:not([hidden]):not([data-mode="touch"])) > .notices { visibility: hidden; }
+.stage:has(> .qc-picker:not([hidden]):not([data-mode="touch"])) > :is(.notices, .msg-badge) { visibility: hidden; }
 .qc-picker[data-mode="touch"] {
   left: 50% !important; top: calc(max(12px, env(safe-area-inset-top)) + 60px) !important; transform: translateX(-50%); z-index: 5;
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: min(640px, calc(100% - 32px));
@@ -1142,12 +1142,31 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
 .qc-say:active { border-color: var(--lime); color: var(--lime); }
 .qc-picker .qc-msg { grid-column: 1 / -1; text-align: center; }
 /* messages between friends (messages.ts): the card is quick chat's picker, in its place (the log steps aside as for the
- * picker), taking clicks: the friends to pick, where each plays on the right; or the message answered, a field for the
- * new one, the characters left.  On a touch screen at the top, as the picker's sheet, its rows and Send big enough to
- * tap */
+ * picker), taking clicks: the friends to pick, where each plays on the right; or the conversation, about eight lines of
+ * it with the rest a scroll away, a field for the new message, the characters left.  On a touch screen at the top, as
+ * the picker's sheet, its rows and Send big enough to tap.  .msg-badge: the unread count under the log (its place:
+ * FriendMessages.place), in the log's face */
 .msg-card { pointer-events: auto; outline: none; }
-.msg-quote { color: var(--muted); overflow-wrap: anywhere; }
-.msg-quote b { color: var(--lime); }
+.msg-thread {
+  display: flex; flex-direction: column; gap: 4px; max-height: calc(8.5 * 1.4em); overflow-y: auto; overscroll-behavior: contain;
+  overflow-wrap: anywhere; scrollbar-width: thin;
+}
+.msg-thread > div { flex: none; }
+.msg-thread b { color: var(--lime); }
+.msg-thread .me b { color: var(--muted); }
+.msg-thread i { font-style: normal; color: var(--muted); }
+.msg-card[data-mode="touch"] .msg-thread { max-height: min(calc(8.5 * 1.4em), 25vh); }
+.msg-count { color: var(--lime); }
+.msg-badge {
+  --u: 1px;
+  position: absolute; left: 16px; top: 60%; z-index: 3; display: flex; align-items: center; gap: 4px; pointer-events: none;
+  font: 400 max(13px, calc(11 * var(--u))) / 1.4 var(--font); color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 calc(3 * var(--u)) rgba(0, 0, 0, 0.5);
+}
+.msg-badge .ic { display: flex; color: var(--lime); }
+.msg-badge .ic svg { width: 1em; height: 1em; }
+.msg-badge b { font-weight: 700; color: var(--lime); }
+.msg-badge.tap { min-height: 40px; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
 .msg-input {
   display: block; box-sizing: border-box; width: 100%; padding: 0.3em 0.5em; border: 1px solid var(--edge); border-radius: 3px;
   background: var(--field); color: var(--text); font: inherit; outline: none;
@@ -1187,7 +1206,7 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
 .ov-go { font-weight: 700; color: var(--lime); }
 /* a key and what it does */
 .ov-act { display: flex; gap: 0.5em; align-items: center; }
-:is(.ov-act, .notices, .toast, .pause-hint, .friend-prompt) kbd {
+:is(.ov-act, .notices, .msg-badge, .toast, .pause-hint, .friend-prompt) kbd {
   flex: none; min-width: 1.7em; padding: 0 0.35em; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
   font: 400 0.85em/1.5 var(--font); text-align: center; color: var(--text); text-shadow: none;
 }

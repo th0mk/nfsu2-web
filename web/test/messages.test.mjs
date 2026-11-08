@@ -1,12 +1,13 @@
 // Messages between friends on the page (web/src/app/messages.ts), in a real browser (web/tools/browser.mjs):
 //   node --test web/test/messages.test.mjs
 // - in the game: a friend's message (one by one, or the ones that waited, with the list) on the log while the player
-//   drives in free roam, held until they do; "I Write back" under it; I answers the newest, else a friend to pick
-//   (1-9, in free roam first), Enter sends {op:"msg"}, Esc closes; the server's answer puts the player's own on the
+//   drives in free roam, held until they do; an envelope counts the unread until they are opened; I opens the newest
+//   unread conversation, else the newest message's, else a friend to pick (1-9, unread first, then in free roam), the
+//   card shows the conversation, Enter sends {op:"msg"}, Tab lists the friends, Esc closes; the server's answer puts the player's own on the
 //   log ("To Bo", a note when it waits) or says why not; no answer in 10 s: not sent; I never in a text field, with a
 //   modifier or while not driving; T stays the game's (its Career Status, issue #52), and I too while the player has
 //   one of the game's controls on it (the game's status "keys")
-// - the conversations: kept in this browser per claimed name, the friends' unread until shown
+// - the conversations: kept in this browser per claimed name, the friends' unread until opened
 // - the start page's conversation (ChatDialog): the messages kept, Send, what became of it, why one did not go
 // The module is bundled from web/src with esbuild into a blank page.
 import { test } from 'node:test';
@@ -69,12 +70,10 @@ test('in the game: messages on the log, I answers, Enter sends, the answer', asy
   const p = await page();
   await server(p, { ...list, mail: [{ from: 'Bo_', body: 'meet me at the airport', at: 1000 }] });
   assert.deepEqual(await take(p, 'lines'), ['< Bo_: meet me at the airport'], 'the ones that waited, with the list');
-  assert.deepEqual(await take(p, 'hints'), ['I']);
-  // I: the answer to the newest, the message quoted; the game's keys go to the field
+  // I: the conversation with the sender; the game's keys go to the field
   await p.keyboard.press('KeyI');
-  assert.equal(await card(p), 'Message Bo_ Bo_ meet me at the airport Enter sends · Esc closes 120');
+  assert.equal(await card(p), 'Message Bo_ Bo_ meet me at the airport Enter sends · Tab friends · Esc closes 120');
   assert.equal(await p.evaluate(() => document.activeElement?.className), 'msg-input');
-  assert.deepEqual(await take(p, 'hints'), [null], '"I Write back" goes');
   await p.keyboard.type('on my way');
   assert.match(await card(p), / 111$/, 'the characters left');
   await p.keyboard.press('Enter');
@@ -127,7 +126,7 @@ test('in the game: I with nothing to answer picks a friend; Esc; never in a fiel
   assert.deepEqual(await take(p, 'sent'), [{ op: 'where' }], 'where each plays now');
   assert.equal(await card(p), 'Message a friend 1 Bo_ free roam 2 Cy_ Online lobby 3 Gus offline Esc closes');
   await p.keyboard.press('Digit2');
-  assert.match(await card(p), /^Message Cy_ Enter sends/);
+  assert.match(await card(p), /^Message Cy_ No messages yet\. Enter sends/);
   await p.keyboard.press('Escape');
   assert.equal(await card(p), null);
   assert.equal(await p.evaluate(() => document.activeElement?.id), 'game');
@@ -180,7 +179,7 @@ test('in the game: a friend\'s notice offers I for a message to it, while the no
   await p.evaluate(() => /** @type {any} */ (window).msgs.offer('Cy_', 400));
   assert.deepEqual(await take(p, 'hints'), ['I Message'], 'the line under the notice');
   await p.keyboard.press('KeyI');
-  assert.match(await card(p) ?? '', /^Message Cy_ Enter sends/, 'I writes to that friend');
+  assert.match(await card(p) ?? '', /^Message Cy_ No messages yet\. Enter sends/, 'I writes to that friend');
   await p.keyboard.press('Escape');
   await wait(p, 450);
   await p.keyboard.press('KeyI');
@@ -207,11 +206,114 @@ test('in the game on a touch screen: the sheet\'s Message a friend, a tap on a f
   assert.equal(await p.$eval('.msg-card', c => c.dataset.mode), 'touch');
   assert.deepEqual(await p.$$eval('.msg-card button.msg-friend', bs => bs.map(b => b.dataset.friend)), ['Bo_', 'Cy_', 'Gus'], 'rows to tap, no keys');
   await p.click('.msg-card button[data-friend="Gus"]');
-  assert.match(await card(p), /^Message Gus Send 120$/);
+  assert.match(await card(p), /^Message Gus No messages yet\. Send 120$/);
   await p.fill('.msg-input', 'later');
   await p.click('.msg-send');
   assert.deepEqual((await take(p, 'sent')).at(-1), { op: 'msg', name: 'Gus', body: 'later', id: 1 });
   assert.equal(await card(p), null);
+  await p.close();
+});
+
+/** the envelope's text, or null when it is hidden */
+const badge = p => p.$eval('.msg-badge', b => b.hidden ? null : [...b.children].map(c => c.textContent).filter(Boolean).join(' '));
+const unread = (p, name) => p.evaluate(n => /** @type {any} */ (window).store.unread(n), name);
+
+test('in the game: the envelope counts what was not opened, I opens the newest first', async () => {
+  const p = await page();
+  await server(p, list);
+  assert.equal(await badge(p), null);
+  await server(p, { op: 'mail', from: 'Bo_', body: 'first', at: 1000 });
+  await server(p, { op: 'mail', from: 'Gus', body: 'second', at: 2000 });
+  await server(p, { op: 'mail', from: 'Zed', body: 'no friend any more', at: 3000 });
+  assert.equal((await take(p, 'lines')).length, 3, 'on the log as ever');
+  assert.equal(await unread(p, 'Bo_'), 1, 'a line in the log does not read it');
+  assert.equal(await badge(p), '2 I Read', 'only friends count: the others could never be opened');
+  // gone while the player is not driving, back when they are
+  await p.evaluate(() => { /** @type {any} */ (window).driving = false; });
+  await wait(p, 300);
+  assert.equal(await badge(p), null);
+  await p.evaluate(() => { /** @type {any} */ (window).driving = true; });
+  await wait(p, 300);
+  assert.equal(await badge(p), '2 I Read');
+  // no second label on the key while the envelope is up
+  await take(p, 'hints');
+  await p.evaluate(() => /** @type {any} */ (window).msgs.offer('Cy_', 5000));
+  assert.deepEqual(await take(p, 'hints'), []);
+  await p.keyboard.press('KeyI');
+  assert.match(await card(p), /^Message Gus Gus second/, 'the newest unread, ahead of the offer');
+  assert.equal(await unread(p, 'Gus'), 0);
+  assert.equal(await badge(p), null, 'not over the card');
+  await p.keyboard.press('Escape');
+  assert.equal(await badge(p), '1 I Read');
+  await p.keyboard.press('KeyI');
+  assert.match(await card(p), /^Message Bo_ Bo_ first/);
+  await p.keyboard.press('Escape');
+  assert.equal(await badge(p), null);
+  await p.close();
+});
+
+test('in the game: the card shows the whole conversation; Tab and the friend list', async () => {
+  const p = await page();
+  await server(p, list);
+  await server(p, where);
+  await p.evaluate(() => { const s = /** @type {any} */ (window).store;
+    s.add('Bo_', { dir: 'in', body: 'one', t: 1 }, false);
+    s.add('Bo_', { dir: 'out', body: 'two', t: 2, st: 'sent' }, false);
+    s.add('Bo_', { dir: 'in', body: 'three', t: 3 }, false);
+    s.add('Bo_', { dir: 'out', body: 'four', t: 4, st: 'kept' }, false);
+    s.add('Bo_', { dir: 'out', body: 'five', t: 5, st: 'failed' }, false); });
+  const whole = 'Message Bo_ Bo_ one You two Bo_ three You four (gets it when back) You five (not sent) Enter sends';
+  // nothing to answer: picked from the list, the player's own message the last
+  await p.keyboard.press('KeyI');
+  await p.keyboard.press('Digit1');
+  assert.ok((await card(p)).startsWith(whole), await card(p));
+  // Tab: the friends, and from there another conversation
+  await p.keyboard.press('Tab');
+  assert.match(await card(p), /^Message a friend 1 Bo_/);
+  await p.keyboard.press('Digit3');
+  assert.match(await card(p), /^Message Gus No messages yet\./);
+  await p.keyboard.press('Escape');
+  // unread first, its count on the row; a message that comes while the list is open leaves the digits as drawn
+  await server(p, { op: 'mail', from: 'Cy_', body: 'hello', at: 9 });
+  await server(p, { op: 'mail', from: 'Gus', body: 'hey', at: 10 });
+  await take(p, 'lines');
+  await p.keyboard.press('KeyI');
+  assert.match(await card(p), /^Message Gus /);
+  await p.keyboard.press('Tab');
+  assert.deepEqual(await p.$$eval('.msg-card .msg-friend', r => r.map(x => x.textContent)), ['1Cy_1Online lobby', '2Bo_free roam', '3Gusoffline']);
+  await p.keyboard.press('Escape');
+  await p.evaluate(() => { const w = /** @type {any} */ (window); w.store.read('Cy_'); w.msgs.newest = null; });
+  await p.keyboard.press('KeyI');
+  assert.match(await card(p), /^Message a friend 1 Bo_/);
+  await server(p, { op: 'mail', from: 'Gus', body: 'again', at: 11 });
+  await p.keyboard.press('Digit1');
+  assert.match(await card(p), /^Message Bo_ /, 'digit 1 is the row that was on the screen');
+  await p.close();
+});
+
+test('in the game: a message while the card is open', async () => {
+  const p = await page();
+  await server(p, list);
+  await server(p, { op: 'mail', from: 'Bo_', body: 'first', at: 1000 });
+  await take(p, 'lines');
+  await p.keyboard.press('KeyI');
+  await p.keyboard.type('half a mess');
+  // from the friend written to: in the conversation, read, the typing left alone
+  await server(p, { op: 'mail', from: 'Bo_', body: 'still there?', at: 2000 });
+  assert.match(await card(p), /^Message Bo_ Bo_ first Bo_ still there\? Enter sends/);
+  assert.equal(await p.$eval('.msg-input', i => i.value), 'half a mess');
+  assert.equal(await p.evaluate(() => document.activeElement?.className), 'msg-input');
+  assert.equal(await unread(p, 'Bo_'), 0);
+  assert.deepEqual(await take(p, 'lines'), [], 'no line for what the card shows');
+  // from another: not played out behind the card, on the log once it closes
+  await server(p, { op: 'mail', from: 'Gus', body: 'psst', at: 3000 });
+  await wait(p, 300);
+  assert.deepEqual(await take(p, 'lines'), []);
+  assert.equal(await unread(p, 'Gus'), 1);
+  await p.keyboard.press('Escape');
+  await wait(p, 300);
+  assert.deepEqual(await take(p, 'lines'), ['< Gus: psst']);
+  assert.equal(await badge(p), '1 I Read');
   await p.close();
 });
 
