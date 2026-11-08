@@ -1,0 +1,46 @@
+# Nitrous purge between players, instance A (acts): new career -> prologue
+# free roam, where both players start on the same spot; A puts the purge kit
+# PURGE_N of the CarPartDB (ride slot 0xA2, NOS_PURGE; "mp parts a2" lists
+# them, 24 is TYPE 2 RED) on its car ("mp setpart a2 N": its own car is not
+# loaded again, but the look it sends has it), drives about 20 m ahead of B
+# (roam_mp_purge_b.txt, which renders and has the command line), stops and
+# lets its nitrous out standing (ALT), again and again, its tank filled each
+# time.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp purge
++0    roam mp parts a2
++0    roam mp setpart a2 ${PURGE_N}
++30   roam mp purge
++900  log drive_ahead
++0    down UP
++130  up UP
++0    down DOWN
++60   up DOWN
++120  log purge
++0    loop 10
++0    poke [[0x8900ac]+4]+0x45c 40000  # a full shot again (the car's nitrous +0x41C: what is left)
++0    down ALT
++90   up ALT
++150  roam mp purge
++0    endloop
++0    roam mp status
++10   quit

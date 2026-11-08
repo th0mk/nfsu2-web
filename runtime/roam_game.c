@@ -11034,6 +11034,20 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
 #endif
         return 1;
     }
+    if (!strcasecmp(sub, "waitnos")){
+        /* "mp waitnos K TIMEOUT": slot K's car (K a name: that player's) has its nitrous on (nos_pose: the friend's is on) */
+        long tmo = atol(a2); if (tmo <= 0) tmo = 3000;
+        int k = atoi(a1);
+        if (a1[0] < '0' || a1[0] > '9'){ k = -1; for (int j = 0; j < NSLOT; j++) if (g_sl[j].st != SL_FREE && !strcasecmp(g_sl[j].name, a1)) k = j; }
+        uint32_t car = k >= 0 && k < NSLOT && g_sl[k].st == SL_ACTIVE ? g_sl[k].car : 0;
+        int on = ok(car, 0x9e0u) && MR32(car + CAR_NOS + 0x420u) != 0;
+        if (*wait_start < 0) *wait_start = f;
+        if (on || f - *wait_start >= tmo){
+            rlog("[roam] f=%ld mp waitnos %d %s after %ld frames\n", f, k, on ? "on" : "TIMEOUT", f - *wait_start);
+            *wait_start = -1; return 1;
+        }
+        return 0;
+    }
     if (!strcasecmp(sub, "waitsmoke")){
         /* "mp waitsmoke K ON TIMEOUT": native tyre emission on the receiving
          * car, not merely slip arriving over the network. */
@@ -11076,7 +11090,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         return 1;
     }
     if (!strcasecmp(sub, "cfgdump") || !strcasecmp(sub, "cfgtest") || !strcasecmp(sub, "parts") || !strcasecmp(sub, "setpart") ||
-        !strcasecmp(sub, "trunk") || !strcasecmp(sub, "engine")){
+        !strcasecmp(sub, "trunk") || !strcasecmp(sub, "engine") || !strcasecmp(sub, "purge")){
         if (g_njob == NJOB){ rlog("[roam] f=%ld mp %s: busy\n", f, sub); return 1; }
         snprintf(g_job[g_njob++], sizeof g_job[0], "%s", args);
         return 1;
@@ -11159,6 +11173,57 @@ static void run_job(CPU *c, const char *job){
             rlog("[roam] f=%ld mp engine %s (%s): %d model(s);%s\n", f, k < 0 ? "me" : g_sl[k].name, tn, nm, at ? ln : " no textures");
         }
         if (expect) rlog("[expect] %s mp engine: %d friend(s)' engine texture(s) not in\n", bad ? "FAIL" : "ok", bad);
+        return;
+    }
+    if (!strcasecmp(sub, "purge")){
+        /* "mp purge [expect NAME]": the player's car's and each shown friend's nitrous purge as its drawing has it
+         * (overrides.c sub_00634800): the purge kit in ride slot 0xA2 (NOS_PURGE) and its tints, the render info's
+         * purge emitters (+0x4C0 the hood's, +0x4C8 the wheels') and the colour each is drawn in (+0x30: cN one of
+         * the 12 shared colour entries at 0x8A3F60, c+ an entry of overrides.c's own, c- none: the emitters' own
+         * white), which of the 12 are taken (0x8A05D4) and which of the world's cars hold them (render info +0x2D49
+         * the hood's, +0x2D4A the wheels'); with "expect NAME": "[expect] PASS" when NAME's car has its purge's
+         * emitters, each with a colour */
+        char used[16] = {0}, who[400] = {0}; int wa = 0, want = !strcasecmp(a1, "expect"), seen = 0, bad = 0;
+        for (uint32_t i = 0; i < 12u; i++) used[i] = MR8(0x008a05d4u + i) ? '1' : '0';
+        uint32_t w = rd32(G_WORLD);
+        for (uint32_t e = ok(w, 0x20) ? MR32(w) : 0, i = 0; e && e != w && ok(e, 0x9e0) && i < 200 && wa < (int)sizeof who - 40; e = MR32(e), i++){
+            uint32_t ri = rd32(e + 0x554u), rec = rd32(e + 0x14u);
+            if (ok(ri, 0x2d50) && ((int8_t)MR8(ri + 0x2d49u) >= 0 || (int8_t)MR8(ri + 0x2d4au) >= 0))
+                wa += snprintf(who + wa, sizeof who - (size_t)wa, " car %08x (kind %u%s) %d/%d", e, ok(rec, 8) ? MR32(rec + 4u) : 0u,
+                               e == player_car() ? ", me" : "", (int8_t)MR8(ri + 0x2d49u), (int8_t)MR8(ri + 0x2d4au));
+        }
+        rlog("[roam] f=%ld mp purge: shared colours taken %s; the world's cars with one:%s\n", f, used, who[0] ? who : " none");
+        static const char *const at[6] = { "HOODHUE", "HOODSAT", "HOODLUM", "TIREHUE", "TIRESAT", "TIRELUM" };
+        for (int k = -1; k < NSLOT; k++){
+            uint32_t car = k < 0 ? player_car() : g_sl[k].st == SL_ACTIVE ? g_sl[k].car : 0;
+            uint32_t ride = ok(car, 0x9e0) ? rd32(car + 0x10u) : 0, ri = ok(car, 0x9e0) ? rd32(car + 0x554u) : 0;
+            if (!ok(ride, 0x8f0) || !ok(ri, 0x2d50)) continue;
+            uint32_t part = rd32(ride + 0x590u + 4u * 0xa2u);
+            char pn[48] = "-", av[160] = {0}, em[2][80] = {{0}}; int ap = 0, n = 0, coloured = 0;
+            if (ok(part, 0xe)){
+                uint32_t np = gcall0(c, FN_PART_NAME, part); if (np) cstr(np, pn, sizeof pn);
+                for (int i = 0; i < 6; i++){
+                    uint32_t a[2] = { bhash(at[i]), 0 }, v = rh_call(c, FN_PART_ATTR, part, 0, 2, a); float fv; memcpy(&fv, &v, 4);
+                    ap += snprintf(av + ap, sizeof av - (size_t)ap, " %s %g", at[i], (double)fv);
+                }
+            }
+            for (uint32_t l = 0; l < 2u; l++){
+                uint32_t head = ri + 0x4c0u + 8u * l; int p = 0;
+                for (uint32_t e = rd32(head), j = 0; e && e != head && ok(e, 0xd0) && j < 8u && p < (int)sizeof em[l] - 16; e = rd32(e), j++, n++){
+                    uint32_t col = rd32(e + 0x30u);
+                    coloured += col != 0;
+                    if (col >= 0x008a3f60u && col < 0x008a3f60u + 12u * 0x40u)
+                        p += snprintf(em[l] + p, sizeof em[l] - (size_t)p, " c%u", (col - 0x008a3f60u) / 0x40u);
+                    else p += snprintf(em[l] + p, sizeof em[l] - (size_t)p, " %s", col ? "c+" : "c-");
+                }
+                if (!p) snprintf(em[l], sizeof em[l], " none");
+            }
+            const char *nm = k < 0 ? "me" : g_sl[k].name;
+            if (want && !strcasecmp(nm, a2)){ seen = 1; bad = !n || coloured < n; }
+            rlog("[roam] f=%ld mp purge %s: kit %s%s; hood emitters%s, wheels'%s\n", f, nm, pn, av, em[0], em[1]);
+        }
+        if (want) rlog("[expect] %s f=%ld mp purge: %s's purge %s\n", seen && !bad ? "PASS" : "FAIL", f, a2,
+                       !seen ? "not shown" : bad ? "without its colour" : "in its colour");
         return;
     }
     if (!strcasecmp(sub, "trunk")){

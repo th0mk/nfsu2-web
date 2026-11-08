@@ -8,6 +8,7 @@
  * That way the walk terminates and the game can make progress.            */
 #include "cpu.h"
 #include "game.h"
+#include "guest.h"
 #include "guest_span.h"
 #include <stdio.h>
 #include <math.h>
@@ -1583,6 +1584,67 @@ void sub_00631e20(CPU *c){
         if (n2 > TEXLIST_MAX) MR32(list + 0x22cu) = TEXLIST_MAX;
     }
     if (eng) texlist_engine(list, ride);
+}
+
+/* --- sub_00634800(): a car's drawing made from its ride, thiscall (render info)
+ * Among the rest it gives the car the nitrous purge of the purge kit in ride
+ * slot 0xA2 (NOS_PURGE: the shop's TYPE 1 .. 3 nozzles, and TYPE 2 and 3 in a
+ * colour, "TYPE 2 RED"): two lists of emitters, clones of the emitter
+ * library's (0x48B8B0) named by the kit's HOODEMITTER (render info +0x4C0,
+ * the effect kind 0xD of 0x615CC0) and WHEELEMITTER (+0x4C8, kind 0xE), each
+ * tinted by the kit's HOODHUE, HOODSAT, HOODLUM and TIREHUE, TIRESAT, TIRELUM
+ * (TYPE 2 RED: hue 0.33, saturation 1): 0x48B920 shifts the emitters' own
+ * colours by those into a colour entry (0x40 bytes) and points each emitter
+ * at it (+0x30).  The entries are 12 shared ones (0x8A3F60), one taken for
+ * each list (+0x2D49 the hood's, +0x2D4A the wheels', -1 none; 0x8A05D4 says
+ * which are taken, and the render info's destructor 0x634630 gives its two
+ * back).  With none free a list keeps no colour (+0x30 0): that car's purge
+ * comes out in the emitters' own white, whatever its kit, and six cars with a
+ * kit take all twelve.  In free roam the game's three outrun tuners' cars
+ * hold six of them from the start (their kits), so past the third other car
+ * with a kit every purge came out plain white: at a car meet nearly all
+ * (tests/scripts/roam_mp_purge_b.txt).  Here a list left without a colour
+ * gets one all the same: an entry kept here for that emitter and tint, made
+ * once by 0x48B920 and kept for the session (at most the 63 kits' two lists;
+ * operator new: the C library's heap, never reset), the twelve shared ones
+ * still taken first. */
+#define RI_PURGE_HOOD   0x4c0u        /* render info: the hood's purge emitters (a list: +0 the first, +4 the last) */
+#define RI_PURGE_COLOUR 0x2d49u       /* ...+0 the hood's shared colour, +1 the wheels' (int8, -1 none) */
+#define RIDE_NOS_PURGE  0x818u        /* RideInfo: ride slot 0xA2's part (+0x590 + 4 x 0xA2) */
+#define FN_PART_ATTR    0x0061b500u   /* thiscall CarPart (attribute's name hash, 0) -> its value (0: none) */
+#define FN_PURGE_TINT   0x0048b920u   /* cdecl (emitter list, colour entry, hue, saturation, luminance) */
+static uint32_t bstring_hash(const char *s){ uint32_t h = 0xffffffffu; for (; *s; s++) h = h * 33u + (uint8_t)*s; return h; }   /* 0x43DB50 */
+void sub_00634800_orig(CPU *c);
+void sub_00634800(CPU *c){
+    static struct { uint32_t emitters, h, s, l, entry; } kept[160];
+    static int nkept, logged;
+    uint32_t ri = c->ecx;
+    sub_00634800_orig(c);
+    uint32_t ride = guest_rd32(ri + 4u), part = ride && guest_ok(ride, RIDE_NOS_PURGE + 3u) ? MR32(ride + RIDE_NOS_PURGE) : 0;
+    if (!guest_ok(ri, RI_PURGE_COLOUR + 1u) || !guest_ok(part, 0xe)) return;
+    static const char *const attr[2][4] = { { "HOODEMITTER", "HOODHUE", "HOODSAT", "HOODLUM" },
+                                            { "WHEELEMITTER", "TIREHUE", "TIRESAT", "TIRELUM" } };
+    for (uint32_t l = 0; l < 2u; l++){
+        uint32_t head = ri + RI_PURGE_HOOD + 8u * l, first = MR32(head);
+        if ((int8_t)MR8(ri + RI_PURGE_COLOUR + l) >= 0 || !first || first == head || !guest_ok(first, 0x33)) continue;
+        if (MR32(first + 0x30u)) continue;                              /* (coloured already) */
+        uint32_t v[4];
+        for (int i = 0; i < 4; i++){ uint32_t a[2] = { bstring_hash(attr[l][i]), 0 }; v[i] = gcall(c, FN_PART_ATTR, part, 2, a); }
+        int k = 0;
+        while (k < nkept && !(kept[k].emitters == v[0] && kept[k].h == v[1] && kept[k].s == v[2] && kept[k].l == v[3])) k++;
+        if (k == nkept){
+            if (nkept == (int)(sizeof kept / sizeof kept[0])) continue;
+            uint32_t sz = 0x50u, mem = gcall(c, FN_NEW, 0, 1, &sz);
+            if (!mem) continue;
+            kept[k].emitters = v[0]; kept[k].h = v[1]; kept[k].s = v[2]; kept[k].l = v[3];
+            kept[k].entry = (mem + 15u) & ~15u;                         /* 16-aligned, as the shared ones */
+            nkept++;
+        }
+        uint32_t a[5] = { head, kept[k].entry, v[1], v[2], v[3] };
+        gcall(c, FN_PURGE_TINT, 0, 5, a);
+        if (logged++ < 8) fprintf(stderr, "[purge] f=%ld a car's purge (%s): the 12 shared colours taken, one of the %d kept here\n",
+                                  autotest_frame(), l ? "wheels" : "hood", nkept);
+    }
 }
 
 /* --- sub_00639f20(texture set): a ride's textures let go, thiscall, ret 4 --

@@ -1,0 +1,53 @@
+# Nitrous purge between players, instance B (renders): new career -> prologue
+# free roam; once A (roam_mp_purge_a.txt) with a purge kit in a colour on its
+# car has driven ahead and lets its nitrous out standing, B jumps 4 m behind it
+# and 8 m to its left, turned to face its side ("mp follow Pur 4 8 -90"), and
+# dumps a frame every 10 frames while A purges: the purge comes out of its
+# nozzles in the kit's colour (TYPE 2 RED: red).  "mp purge" says which kit
+# each car has here and the colour its purge's emitters are drawn in; "mp
+# purge expect Pur" passes when A's are all in a colour.  The game has 12
+# purge colours for all its cars, and the three outrun tuners' cars of free
+# roam hold six: with 8 simulated players whose cars have kits in 8 colours
+# (roam_crowd_purge.parts, there before A) every colour is taken before A's
+# car comes (overrides.c sub_00634800).
+#   node web/tools/roam-pair.mjs --page play --play-only Vic --size 1600x900
+#        --a Vic:roam_mp_purge_b.txt --b Pur:roam_mp_purge_a.txt:PURGE_N=24 --stagger 45
+#        --crowd 8 --crowd-args "--room purge --parts @tests/scripts/roam_crowd_purge.parts --car 350Z --spread 15 --speed 5"
+#        --env NFSU2_ROAM_ROOM=purge
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitsolid 1 6000
++0    roam mp waitnos Pur 8000
++0    roam mp follow Pur 4 8 -90
++20   roam mp purge
++0    loop 6
++0    roam mp waitnos Pur 3000
++20   dump pu_a
++10   dump pu_b
++10   dump pu_c
++10   dump pu_d
++10   dump pu_e
++10   dump pu_f
++10   dump pu_g
++10   dump pu_h
++60   endloop
++0    roam mp purge expect Pur
++0    roam mp status
++10   quit
