@@ -1596,5 +1596,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "Op je wagen, ook voor andere spelers in Verkennen: tot 8 letters en cijfers.",
   "Original plate": "Oorspronkelijk kenteken",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "“{value}” is geen kenteken (letters A tot Z en cijfers, hooguit 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "“{value}” is geen kenteken (het leest als een scheldwoord)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "“{value}” is geen kenteken (het leest als een scheldwoord)",
+  "Smoother edges?": "Gladdere randen?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Anti-aliasing maakt kartelige randen glad. Op een tragere computer kan het de framerate verlagen. Je kunt het altijd wijzigen in de opties van het spel onder Beeld.",
+  "Keep off": "Uit laten",
+  "Drag to compare": "Sleep om te vergelijken"
 }

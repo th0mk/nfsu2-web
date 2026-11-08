@@ -1509,5 +1509,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "내 차에 표시되고, 자유 주행에서는 다른 플레이어도 봐요: 영문자와 숫자 최대 8자.",
   "Original plate": "기본 번호판",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "'{value}': 번호판으로 쓸 수 없음(A~Z 영문자와 숫자, 최대 8자)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "'{value}': 번호판으로 쓸 수 없음(비하 표현으로 읽힘)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "'{value}': 번호판으로 쓸 수 없음(비하 표현으로 읽힘)",
+  "Smoother edges?": "가장자리를 더 매끄럽게 할까요?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "안티에일리어싱은 들쭉날쭉한 가장자리를 매끄럽게 해 줘요. 느린 컴퓨터에서는 프레임 레이트가 떨어질 수 있어요. 게임의 디스플레이 옵션에서 언제든 바꿀 수 있어요.",
+  "Keep off": "끈 채로 두기",
+  "Drag to compare": "드래그해서 비교"
 }

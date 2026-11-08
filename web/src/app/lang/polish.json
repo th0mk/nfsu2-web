@@ -1654,5 +1654,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "Na twoim samochodzie, na przejażdżce widoczna też dla innych graczy: do 8 liter i cyfr.",
   "Original plate": "Oryginalna tablica",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "„{value}” to nie tablica rejestracyjna (litery od A do Z i cyfry, najwyżej 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}” to nie tablica rejestracyjna (brzmi jak obelga)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}” to nie tablica rejestracyjna (brzmi jak obelga)",
+  "Smoother edges?": "Gładsze krawędzie?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Wygładzanie krawędzi usuwa postrzępione brzegi. Na wolniejszym komputerze może obniżyć liczbę klatek. Możesz to zmienić w każdej chwili w opcjach Ekran w grze.",
+  "Keep off": "Zostaw wyłączone",
+  "Drag to compare": "Przeciągnij, aby porównać"
 }

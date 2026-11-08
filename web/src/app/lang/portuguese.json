@@ -1625,5 +1625,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "No seu carro, também para outros jogadores no Modo Livre: até 8 letras e números.",
   "Original plate": "Placa original",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" não é uma placa válida (letras de A a Z e números, no máximo 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" não é uma placa válida (soa como um insulto)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" não é uma placa válida (soa como um insulto)",
+  "Smoother edges?": "Bordas mais suaves?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "O anti-aliasing suaviza bordas serrilhadas. Em um computador mais lento, pode reduzir a taxa de quadros. Você pode mudar isso a qualquer momento nas opções de Tela do jogo.",
+  "Keep off": "Manter desligado",
+  "Drag to compare": "Arraste para comparar"
 }

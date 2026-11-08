@@ -1,0 +1,20 @@
+# The Full Scene Anti-Aliasing question's picture (tools/fsaapics.py): a Quick Race (Circuit, Resort Loop) to its
+# start, the cars parked on the grid during the countdown, dumped twice 3 frames apart (a dump can be dropped).  Run
+# once with reg=/tests/web/seed/registry_perf4_native.txt (FSAA off) and once with registry_perf4_fsaa.txt (on):
+#   node web/tools/run-page.mjs "<base>/test/play.html?wasm=/game.wasm&arg=/data/SPEED2.EXE&w=1280&h=720&fresh&dumpscale=1
+#        &env=NOMOVIES=1&env=NFSU2_HFR_LOCKSTEP=1&env=NFSU2_HFR_LOCKSTEP_WALL=15&script=/tests/web/scripts/fsaa_pics.txt
+#        &reg=/tests/web/seed/registry_perf4_fsaa.txt&save=on&artifacts=/artifacts/on_"
+0       waitfng UG_LS_Splash.fng 12000                  # title
++1000ms tapuntil RETURN MC_Background.fng 120 3000      # title -> profile prompt
++600ms  tapuntil RETURN GarageMain.fng 120 3000         # "No" -> main menu
++1500ms tapuntil RETURN UI_QRModeSelect.fng 240 3000    # Quick Race
++800ms  tapuntil RETURN UI_QRTrackSelect.fng 240 3000   # Circuit
++800ms  tapuntil RETURN UI_QRModeOptions.fng 240 3000   # Resort Loop
++800ms  tapuntil RETURN UI_QRCarSelect.fng 240 3000     # options
++800ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000 # car -> transmission
++800ms  tapuntil RETURN PC_Loading.fng 240 3000         # transmission -> loading
++0      waitmem 0x8654a4 6 6000
++0      log race_loaded
++200    dump fsaa_a
++3      dump fsaa_b
++10     quit

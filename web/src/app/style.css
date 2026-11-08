@@ -1268,6 +1268,26 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .dlg .row.end { margin-top: 8px; }
 /* a question answered by buttons in its body (vault-ui.ts askAtPlay): no footer, the dialog's padding under the text */
 .dlg:has(.row.end[hidden]) #confirm-body > :last-child { margin-bottom: 0; }
+/* two pictures of one moment, a line to drag between them (compare.ts): Play's Full Scene Anti-Aliasing question */
+.compare {
+  position: relative; height: 200px; margin-bottom: 16px; border-radius: 8px; overflow: hidden; background: var(--field);
+  touch-action: pan-y; user-select: none; -webkit-user-select: none;
+}
+.compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.compare .compare-after { clip-path: inset(0 0 0 var(--x, 50%)); }
+.compare-split { position: absolute; top: 0; bottom: 0; left: var(--x, 50%); width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
+.compare-split::after {
+  content: ""; position: absolute; top: 50%; left: 50%; width: 8px; height: 32px; margin: -16px 0 0 -4px; border-radius: 4px;
+  background: var(--text);
+}
+.compare-tag {
+  position: absolute; top: 8px; padding: 0 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.64);
+  font-size: 14px; line-height: 24px; pointer-events: none;
+}
+.compare-tag.before { left: 8px; }
+.compare-tag.after { right: 8px; }
+.compare input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+.compare:has(input:focus-visible) { outline: 2px solid var(--lime); outline-offset: 2px; box-shadow: 0 0 12px var(--lime-glow); }
 .dlg-field { display: flex; align-items: center; gap: 12px; }
 .dlg-field input[type="text"] { flex: 1; min-width: 0; }
 /* the changelog (changelog.ts): the Controls sheet's width, the releases scrolling under the title and Close */

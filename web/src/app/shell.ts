@@ -28,7 +28,8 @@ import { LastGameKeeper, lastGameEnd, lastGameLine, lastGameToOffer, type LastGa
 import { androidMajor, browserBrief, deviceBrief } from './devicelog';
 import { canFullscreen, enterFullscreen, exitFullscreen, fromHomeScreen, homeScreenInstead, isFullscreen, keepScreenOn, measureRefresh, settledSize, trackCanvasSize } from './display';
 import { deviceDefaults, deviceKind, heapWindow, isPhone, markTouch, noPinchZoom, noteGraphics, padSeen, phoneScreen, touchFirst } from './device';
-import { deviceSeed, phoneUpgrade } from './phonegraphics';
+import { deviceSeed, fsaaAnswer, fsaaAsk, phoneUpgrade } from './phonegraphics';
+import { compare, fetchPair } from './compare';
 import { markPad, padPress, pageDialog } from './padnav';
 import { controlsSheet, type ControlsSheet, type Tab } from './controls';
 import { TouchControls } from './touch';
@@ -353,9 +354,9 @@ let untrack: (() => void) | null = null;
  * the server keeps no cloud saves.  Turned on, the keyphrase is shown to keep (copy, download) before the game starts;
  * it failed, the reason.
  */
-async function askCloud() {
+async function askCloud(): Promise<boolean> {
   const games = gamesStarted(), played = playedMs();
-  if (testPage() || offline || !vault.offerable(games, played) || !await newestProfile()) return;
+  if (testPage() || offline || !vault.offerable(games, played) || !await newestProfile()) return false;
   const which = vault.offered(games, played);
   const p = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
   const body = document.createElement('div');
@@ -376,11 +377,36 @@ async function askCloud() {
   $<HTMLButtonElement>('#confirm-ok').focus();
   const on = await answer;
   log.add(`[app] cloud saves: ${on ? 'turned on' : 'not now'} (asked at Play, ${which})`);
-  if (!on) return;
+  if (!on) return true;
   const phrase = await enableCloud();
-  if (!phrase) return;
+  if (!phrase) return true;
   const claimed = name && info?.state === 'free' && !info.mine ? await claimQuietly(playDeps(), name, info, quietCheck) : null;
   await showPassphrase(phrase, claimed?.name ?? null, taken);
+  return true;
+}
+
+/**
+ * A returning player on a computer, once: the game's Full Scene Anti-Aliasing, which the browser game could not offer
+ * before (runtime/com.c MULTISAMPLING; a new computer's registry has it on: phonegraphics.ts deviceSeed), turned on or
+ * kept off, so the frame rate never drops unasked.  The player's car with it off and on, a line to drag between them
+ * (compare.ts: the server's TEXPACKS/fsaa-off.webp and fsaa-on.webp, tools/fsaapics.py; without them, or offline, the
+ * question alone).  Either answer, Esc too, is marked in registry.txt.  Not on phones or tablets, a test page, or
+ * playing without saving; at a Play where cloud saves were asked, the next one.
+ */
+async function askFsaa() {
+  if (testPage() || deviceKind() !== 'pc') return;
+  const text = await readText(SAVE, 'registry.txt').catch(() => null);
+  if (text === null || !fsaaAsk(text)) return;
+  const body = document.createElement('div');
+  const pair = await fetchPair('/data/TEXPACKS/fsaa-off.webp', '/data/TEXPACKS/fsaa-on.webp', 'image/webp');
+  const pic = pair ? compare(pair[0], pair[1], { before: t('Off'), after: t('On'), drag: t('Drag to compare') }) : null;
+  if (pic) body.append(pic.el);
+  body.append(Object.assign(document.createElement('p'),
+    { textContent: t('Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game\'s Display options.') }));
+  const on = await choiceBox(t('Smoother edges?'), body, t('Turn on'), t('Keep off')) === 'ok';
+  pic?.dispose();
+  await writeFile(SAVE, 'registry.txt', fsaaAnswer(text, on));
+  log.add(`[app] Full Scene Anti-Aliasing: ${on ? 'turned on' : 'kept off'} (asked once at Play${pic ? '' : ', without its picture'})`);
 }
 
 /** Cloud saves turned on (Play's question, or Claim under Your name without a keyphrase): the keyphrase made, or
@@ -621,7 +647,7 @@ async function startGame() {
     if (cloud === 'stop') { void audio?.close().catch(() => {}); startAudio = null; endStage(); return; }
     if (cloud === 'taken' || pulled) await loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`));
   }
-  if (!noSave) await askCloud();
+  if (!noSave && !await askCloud()) await askFsaa();
   const alone = await askFull(counts);
   // the name this game plays under, by the claims
   const playAs = alone ? null : await playName();

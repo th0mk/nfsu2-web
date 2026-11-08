@@ -1509,5 +1509,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "บนรถของคุณ ผู้เล่นคนอื่นก็เห็นขณะขับอิสระ: ตัวอักษร A–Z และตัวเลข ไม่เกิน 8 ตัว",
   "Original plate": "ป้ายทะเบียนเดิม",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "“{value}” ใช้เป็นป้ายทะเบียนไม่ได้ (ตัวอักษร A ถึง Z และตัวเลข ไม่เกิน 8 ตัว)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "“{value}” ใช้เป็นป้ายทะเบียนไม่ได้ (อ่านแล้วเป็นคำดูหมิ่น)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "“{value}” ใช้เป็นป้ายทะเบียนไม่ได้ (อ่านแล้วเป็นคำดูหมิ่น)",
+  "Smoother edges?": "ขอบเรียบขึ้นไหม",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "แอนตี้เอเลียสซิ่งช่วยให้ขอบที่เป็นหยักดูเรียบขึ้น บนคอมพิวเตอร์ที่ช้ากว่าอาจทำให้เฟรมเรตลดลง เปลี่ยนได้ทุกเมื่อในตัวเลือกการแสดงผลของเกม",
+  "Keep off": "ปิดไว้เหมือนเดิม",
+  "Drag to compare": "ลากเพื่อเปรียบเทียบ"
 }

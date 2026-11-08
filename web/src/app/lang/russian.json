@@ -1654,5 +1654,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "На вашей машине, в свободной езде его видят и другие игроки: до 8 букв A–Z и цифр.",
   "Original plate": "Оригинальный номер",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "«{value}» — не номер (буквы от A до Z и цифры, не больше 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "«{value}» — не номер (читается как оскорбление)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "«{value}» — не номер (читается как оскорбление)",
+  "Smoother edges?": "Более гладкие края?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Сглаживание убирает зубчатые края. На медленном компьютере оно может снизить частоту кадров. Изменить его можно в любой момент в настройках «Экран» в игре.",
+  "Keep off": "Оставить выключенным",
+  "Drag to compare": "Перетащите, чтобы сравнить"
 }

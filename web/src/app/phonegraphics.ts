@@ -8,7 +8,8 @@
 //
 // A computer's new registry has the game's Full Scene Anti-Aliasing on (runtime/com.c MULTISAMPLING: 4 samples, about
 // 1 to 1.5 ms more GPU time a frame at 2560x1440 on an M4 Pro, 2026-11-08); tablets' and phones' stay as the seed
-// (off; phones are not offered it).  A registry from before keeps its own.
+// (off; phones are not offered it).  A computer's registry from before, which could never have it (-1), is asked about
+// it once at Play (shell.ts askFsaa) and marked.
 
 /** the game's own options (registry DWORDs) a phone starts with */
 export const PHONE_GRAPHICS: Readonly<Record<string, number>> = {
@@ -46,6 +47,22 @@ export function phoneSeed(seed: string): string {
 
 /** the game's Full Scene Anti-Aliasing level a computer starts with: on (the option's one step) */
 export const COMPUTER_GRAPHICS: Readonly<Record<string, number>> = { g_FSAALevel: 1 };
+
+/** a value of ours in registry.txt: the start page asked this player about Full Scene Anti-Aliasing (shell.ts askFsaa) */
+export const FSAA_MARK = 'FsaaAsked';
+/** g_FSAALevel -1 as the game writes it: what every registry had while the browser game offered no multisampling */
+const FSAA_NEVER = 4294967295;
+
+/** a registry from before Full Scene Anti-Aliasing (still -1, never chosen) whose player was not asked yet */
+export function fsaaAsk(text: string): boolean {
+  const have = dwords(text);
+  return !have.has(FSAA_MARK.toLowerCase()) && have.get('g_fsaalevel') === FSAA_NEVER;
+}
+
+/** the registry after the question: Full Scene Anti-Aliasing on (its one step) or left as it was, and the mark */
+export function fsaaAnswer(text: string, on: boolean): string {
+  return withDwords(text, on ? { ...COMPUTER_GRAPHICS, [FSAA_MARK]: 1 } : { [FSAA_MARK]: 1 });
+}
 
 /** a new player's registry on this kind of device (device.ts deviceKind) */
 export function deviceSeed(kind: 'phone' | 'tablet' | 'pc', seed: string): string {

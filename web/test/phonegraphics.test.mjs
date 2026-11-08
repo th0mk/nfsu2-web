@@ -1,7 +1,7 @@
 // A phone's graphics (web/src/app/phonegraphics.ts): a new phone's registry is the built-in seed with six options
 // off and the mark; a phone from before gets them once while every graphics option still has the seed's value, and
 // only the mark when one was changed; a marked registry is left alone.  A new computer's registry has Full Scene
-// Anti-Aliasing on; a tablet's is the seed.
+// Anti-Aliasing on; a tablet's is the seed.  A registry from before it (-1) is asked about it once.
 //   node --test web/test/phonegraphics.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +12,7 @@ import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const js = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/phonegraphics.ts')], bundle: true, format: 'esm', write: false })).outputFiles[0].text;
-const { PHONE_GRAPHICS, PHONE_MARK, COMPUTER_GRAPHICS, deviceSeed, phoneSeed, phoneUpgrade, withDwords } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const { PHONE_GRAPHICS, PHONE_MARK, COMPUTER_GRAPHICS, FSAA_MARK, deviceSeed, fsaaAnswer, fsaaAsk, phoneSeed, phoneUpgrade, withDwords } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 const SEED = fs.readFileSync(path.join(ROOT, 'app/registry-defaults.txt'), 'utf8');
 
 const values = text => Object.fromEntries([...text.matchAll(/^d ([^=\n]+)=(\d+)\r?$/gm)].map(m => [m[1], +m[2]]));
@@ -76,4 +76,16 @@ test("a new computer's registry: the seed with Full Scene Anti-Aliasing on; a ta
   assert.equal(pc.split('\n').length, SEED.split('\n').length, 'the line replaced where it is');
   assert.equal(deviceSeed('tablet', SEED), SEED);
   assert.equal(deviceSeed('phone', SEED), phoneSeed(SEED));
+});
+
+test('a registry from before FSAA (-1) is asked once: on or kept off, marked either way; others are not asked', () => {
+  const before = withDwords(SEED, { g_RacingResolution: 1 }) + 's DI_Keyboard_0=12\n';
+  assert.equal(fsaaAsk(before), true);
+  const on = fsaaAnswer(before, true), off = fsaaAnswer(before, false);
+  assert.equal(values(on).g_FSAALevel, 1); assert.equal(values(on)[FSAA_MARK], 1);
+  assert.equal(values(off).g_FSAALevel, 4294967295); assert.equal(values(off)[FSAA_MARK], 1);
+  assert.ok(on.includes('s DI_Keyboard_0=12') && off.includes('s DI_Keyboard_0=12'), "the game's other lines kept");
+  assert.equal(fsaaAsk(on), false); assert.equal(fsaaAsk(off), false);
+  assert.equal(fsaaAsk(deviceSeed('pc', SEED)), false, "a new computer's: on already");
+  assert.equal(fsaaAsk(withDwords(SEED, { g_FSAALevel: 0 })), false, 'turned off in the game: its choice');
 });

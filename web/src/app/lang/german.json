@@ -1596,5 +1596,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "An deinem Wagen, in der freien Fahrt auch für andere Spieler: bis zu 8 Buchstaben und Ziffern.",
   "Original plate": "Originalkennzeichen",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "„{value}“ ist kein Kennzeichen (Buchstaben A bis Z und Ziffern, höchstens 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}“ ist kein Kennzeichen (es liest sich wie eine Beleidigung)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}“ ist kein Kennzeichen (es liest sich wie eine Beleidigung)",
+  "Smoother edges?": "Glattere Kanten?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Kantenglättung glättet gezackte Kanten. Auf einem langsameren Computer kann sie die Bildrate senken. Du kannst sie jederzeit in den Anzeige-Optionen des Spiels ändern.",
+  "Keep off": "Aus lassen",
+  "Drag to compare": "Zum Vergleichen ziehen"
 }

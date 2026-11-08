@@ -1654,5 +1654,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "На вашій машині, у вільній їзді його бачать і інші гравці: до 8 літер A–Z і цифр.",
   "Original plate": "Оригінальний номер",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "«{value}» — не номер (літери від A до Z і цифри, не більше 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "«{value}» — не номер (читається як образливе слово)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "«{value}» — не номер (читається як образливе слово)",
+  "Smoother edges?": "Плавніші краї?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Згладжування прибирає зубчасті краї. На повільнішому комп'ютері воно може знизити частоту кадрів. Змінити його можна будь-коли в налаштуваннях «Екран» у грі.",
+  "Keep off": "Залишити вимкненим",
+  "Drag to compare": "Перетягніть, щоб порівняти"
 }

@@ -1596,5 +1596,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "På din bil, i läget Utforska även för andra spelare: upp till 8 bokstäver och siffror.",
   "Original plate": "Originalskylt",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" är ingen registreringsskylt (bokstäverna A till Z och siffror, högst 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" är ingen registreringsskylt (det läses som ett glåpord)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" är ingen registreringsskylt (det läses som ett glåpord)",
+  "Smoother edges?": "Mjukare kanter?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Kantutjämning jämnar ut taggiga kanter. På en långsammare dator kan den sänka bildfrekvensen. Du kan ändra det när som helst i spelets Bildskärm-inställningar.",
+  "Keep off": "Låt vara av",
+  "Drag to compare": "Dra för att jämföra"
 }

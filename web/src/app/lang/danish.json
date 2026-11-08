@@ -1596,5 +1596,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "På din bil, også for andre spillere i udforsknings-mode: op til 8 bogstaver og tal.",
   "Original plate": "Original nummerplade",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" er ikke en nummerplade (bogstaverne A til Z og tal, højst 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" er ikke en nummerplade (det kan læses som et skældsord)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" er ikke en nummerplade (det kan læses som et skældsord)",
+  "Smoother edges?": "Glattere kanter?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Anti-aliasing glatter takkede kanter ud. På en langsommere computer kan det sænke billedhastigheden. Du kan altid ændre det i spillets Grafik-indstillinger.",
+  "Keep off": "Behold slået fra",
+  "Drag to compare": "Træk for at sammenligne"
 }

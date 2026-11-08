@@ -1515,5 +1515,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "Az autódon, Felfedező módban más játékosoknak is: legfeljebb 8 betű és szám.",
   "Original plate": "Eredeti rendszám",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "„{value}” nem lehet rendszám (A–Z betűk és számjegyek, legfeljebb 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}” nem lehet rendszám (sértésnek tűnik)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}” nem lehet rendszám (sértésnek tűnik)",
+  "Smoother edges?": "Simább élek?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Az élsimítás eltünteti a recés éleket. Lassabb számítógépen csökkentheti a képkockasebességet. Bármikor módosíthatod a játék Képernyő beállításaiban.",
+  "Keep off": "Maradjon kikapcsolva",
+  "Drag to compare": "Húzd az összehasonlításhoz"
 }

@@ -1621,5 +1621,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "Sulla tua auto, anche per gli altri giocatori in modalità Esplora: fino a 8 lettere e cifre.",
   "Original plate": "Targa originale",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" non è una targa (lettere dalla A alla Z e cifre, al massimo 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" non è una targa (sembra un insulto)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" non è una targa (sembra un insulto)",
+  "Smoother edges?": "Bordi più lisci?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "L'anti-aliasing smussa i bordi seghettati. Su un computer più lento può abbassare la frequenza dei fotogrammi. Puoi cambiarlo quando vuoi nelle opzioni Video del gioco.",
+  "Keep off": "Lascia disattivato",
+  "Drag to compare": "Trascina per confrontare"
 }

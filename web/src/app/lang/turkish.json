@@ -1521,5 +1521,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "Arabanda, serbest sürüşte diğer oyuncular da görür: en fazla 8 harf ve rakam.",
   "Original plate": "Orijinal plaka",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "\"{value}\" bir plaka olamaz (A'dan Z'ye harfler ve rakamlar, en fazla 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" bir plaka olamaz (hakaret gibi okunuyor)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "\"{value}\" bir plaka olamaz (hakaret gibi okunuyor)",
+  "Smoother edges?": "Daha pürüzsüz kenarlar?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Kenar yumuşatma tırtıklı kenarları düzeltir. Daha yavaş bir bilgisayarda kare hızını düşürebilir. İstediğin zaman oyunun Görüntü seçeneklerinden değiştirebilirsin.",
+  "Keep off": "Kapalı kalsın",
+  "Drag to compare": "Karşılaştırmak için sürükle"
 }

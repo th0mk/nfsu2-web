@@ -1509,5 +1509,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "あなたの車に表示され、フリーロームでは他のプレイヤーにも見えます: 英字と数字で 8 文字まで。",
   "Original plate": "元のナンバープレート",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "「{value}」はナンバープレートとして使えません（A〜Z の英字と数字、8 文字まで）",
-  "\"{value}\" is not a license plate (it reads as a slur)": "「{value}」はナンバープレートとして使えません（差別的な言葉として読めます）"
+  "\"{value}\" is not a license plate (it reads as a slur)": "「{value}」はナンバープレートとして使えません（差別的な言葉として読めます）",
+  "Smoother edges?": "輪郭をなめらかにしますか？",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "アンチエイリアスはギザギザの輪郭をなめらかにします。遅いパソコンではフレームレートが下がることがあります。ゲームの「画面」オプションでいつでも変更できます。",
+  "Keep off": "オフのままにする",
+  "Drag to compare": "ドラッグして比較"
 }

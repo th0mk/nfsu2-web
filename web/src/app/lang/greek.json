@@ -1536,5 +1536,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "Στο αυτοκίνητό σου, και για τους άλλους παίκτες στην ελεύθερη οδήγηση: έως 8 γράμματα A–Z και ψηφία.",
   "Original plate": "Αρχική πινακίδα",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "Το «{value}» δεν είναι πινακίδα (γράμματα A έως Z και ψηφία, έως 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "Το «{value}» δεν είναι αποδεκτή πινακίδα (εκλαμβάνεται ως προσβλητικός χαρακτηρισμός)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "Το «{value}» δεν είναι αποδεκτή πινακίδα (εκλαμβάνεται ως προσβλητικός χαρακτηρισμός)",
+  "Smoother edges?": "Πιο ομαλές άκρες;",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Η εξομάλυνση λειαίνει τις οδοντωτές άκρες. Σε πιο αργό υπολογιστή μπορεί να μειώσει τον ρυθμό καρέ. Μπορείς να την αλλάξεις όποτε θέλεις στις επιλογές «Εικόνα» του παιχνιδιού.",
+  "Keep off": "Να μείνει ανενεργή",
+  "Drag to compare": "Σύρε για σύγκριση"
 }

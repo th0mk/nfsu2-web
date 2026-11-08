@@ -1654,5 +1654,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "Na tvojom aute, vo voľnej jazde aj pre ostatných hráčov: najviac 8 písmen a číslic.",
   "Original plate": "Pôvodné číslo",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "„{value}“ nie je evidenčné číslo (písmená A až Z a číslice, najviac 8)",
-  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}“ nie je evidenčné číslo (znie ako nadávka)"
+  "\"{value}\" is not a license plate (it reads as a slur)": "„{value}“ nie je evidenčné číslo (znie ako nadávka)",
+  "Smoother edges?": "Hladšie hrany?",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "Vyhladzovanie hrán odstráni zubaté okraje. Na pomalšom počítači môže znížiť počet snímok za sekundu. Zmeniť ho môžeš kedykoľvek v hre v možnostiach Obrazovka.",
+  "Keep off": "Nechať vypnuté",
+  "Drag to compare": "Potiahni a porovnaj"
 }

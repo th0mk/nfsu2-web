@@ -1509,5 +1509,9 @@
   "On your car, also for other players in free roam: up to 8 letters and digits.": "顯示在你的車上，自由漫遊中其他玩家也看得到：最多 8 個字母和數字。",
   "Original plate": "原廠車牌",
   "\"{value}\" is not a license plate (letters A to Z and digits, at most 8)": "「{value}」不能當作車牌（只能用 A 到 Z 的字母和數字，最多 8 個）",
-  "\"{value}\" is not a license plate (it reads as a slur)": "「{value}」不能當作車牌（含有歧視性字眼）"
+  "\"{value}\" is not a license plate (it reads as a slur)": "「{value}」不能當作車牌（含有歧視性字眼）",
+  "Smoother edges?": "讓邊緣更平滑？",
+  "Anti-aliasing smooths jagged edges. On a slower computer it can lower the frame rate. Change it any time in the game's Display options.": "反鋸齒會讓鋸齒狀的邊緣變得平滑。在較慢的電腦上可能會降低影格率。隨時可在遊戲的「顯示」選項中更改。",
+  "Keep off": "保持關閉",
+  "Drag to compare": "拖曳以比較"
 }
