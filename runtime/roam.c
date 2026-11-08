@@ -150,6 +150,40 @@ static void log_cars(const char *why){
                 (double)MRF32(e + 0x60u), (double)MRF32(e + 0x64u), (double)MRF32(e + 0x68u), MR16(e + 0x40cu),
                 (double)MRF32(e + 0x70u), (double)MRF32(e + 0x74u), (double)MRF32(e + 0x78u),
                 MR8(e + 0x5c0u), MR32(e + 0x918u));
+        /* how it is heard (Car +0x968, a state from the sound manager's pools, 0x4690E0: the player's for a record of
+         * kind 1, an AI racer's for kind 2 or one with its byte +0x900 set, as a network race's other players'): the
+         * state's vtable and its children's; an AI engine's (vt 0x78AEE0) or the player's engine's (0x78AF30) engine
+         * played (its state +0x80: an entry of 0x7F0DE0, 0x4C each) and the rpm its control has (+0xB8, +0x128 on the
+         * sound's scale: 1000 idle .. 10000), with the car's own rpm (+0x440) and speed (+0x430) */
+        uint32_t st = MR32(e + 0x968u);
+        char ch[400] = {0}; int at = 0, n = 0;
+        if (guest_ok(st, 0x100) && MR32(st + 0x30u) == e)
+            for (uint32_t c = MR32(st + 0x20u); guest_ok(c, 0x100) && n < 24 && at < (int)sizeof ch - 80; c = MR32(c + 0x50u), n++){
+                uint32_t vt = MR32(c);
+                at += snprintf(ch + at, sizeof ch - (size_t)at, " %08x", vt);
+                if (vt == 0x0078aee0u && guest_ok(c, 0xc4)){
+                    /* the state's +0x8C sound type and +0x94 level (0x4593B0): its own engine is the table 0x7F2230's
+                     * (12 bytes an entry, type x 4 + level); +0xD0 its class, from whose AI engines (0x7ECAA8,
+                     * 0x7ECAE4, 0x7ECB14) 0x463F60 takes one when its own is not among them */
+                    uint32_t s = MR32(c + 0x9cu), d = guest_ok(s, 0xd4) ? MR32(s + 0x80u) : 0, ctl = MR32(c + 0xb8u);
+                    uint32_t own = guest_ok(s, 0xd4) && MR32(s + 0x8cu) < 64u && MR32(s + 0x94u) < 4u ?
+                                   MR32(0x007f2230u + 12u * (MR32(s + 0x8cu) * 4u + MR32(s + 0x94u))) : 0xffffffffu;
+                    at += snprintf(ch + at, sizeof ch - (size_t)at, "(ai engine: its own %d, played %d, class %d, ctl rpm %.0f)",
+                                   (int)own, d >= 0x007f0de0u ? (int)((d - 0x007f0de0u) / 0x4cu) : -1,
+                                   guest_ok(s, 0xd4) ? (int)MR32(s + 0xd0u) : -1,
+                                   guest_ok(ctl, 0x130) ? (double)MRF32(ctl + 0x128u) : -1.0);
+                }
+                if (vt == 0x0078af30u && guest_ok(c, 0xc4)){
+                    uint32_t s = MR32(c + 0x9cu), d = guest_ok(s, 0xd4) ? MR32(s + 0x80u) : 0, ctl = MR32(c + 0xb8u);
+                    at += snprintf(ch + at, sizeof ch - (size_t)at, "(player engine %d, ctl rpm %.0f)",
+                                   d >= 0x007f0de0u ? (int)((d - 0x007f0de0u) / 0x4cu) : -1,
+                                   guest_ok(ctl, 0x130) ? (double)MRF32(ctl + 0x128u) : -1.0);
+                }
+            }
+        fprintf(stderr, "[roam]     sound: rec +0x900 %u, state 0x%08x vt 0x%08x%s, %d children:%s; rpm %.0f speed %.1f\n",
+                guest_ok(rec, 0x904) ? MR8(rec + 0x900u) : 0u, st, guest_ok(st, 4) ? MR32(st) : 0u,
+                guest_ok(st, 0x100) && MR32(st + 0x30u) == e ? "" : " (not its own)", n, ch,
+                (double)MRF32(e + 0x440u), (double)MRF32(e + 0x430u));
     }
 }
 
