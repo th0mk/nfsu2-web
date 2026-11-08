@@ -89,11 +89,12 @@ fn stamp_at(data: &[u8]) -> Option<usize> {
     if data.len() < 16 + 6 || data.len() > TIMED_MAX || data[1] != ROAM_OK {
         return None;
     }
-    let at = 16 + match data[16 + 5] {
-        RC_PING => 16,
-        RC_PONG => 24,
-        _ => return None,
-    };
+    let at = 16
+        + match data[16 + 5] {
+            RC_PING => 16,
+            RC_PONG => 24,
+            _ => return None,
+        };
     (at + 4 + 4 <= data.len()).then_some(at)
 }
 
@@ -110,7 +111,7 @@ pub(crate) fn waited<'a>(data: &'a [u8], us: u32, into: &'a mut [u8; TIMED_MAX])
     }
     let m = &mut into[..data.len()];
     m.copy_from_slice(data);
-    let t =u32::from_le_bytes([m[at], m[at + 1], m[at + 2], m[at + 3]]).wrapping_add(us);
+    let t = u32::from_le_bytes([m[at], m[at + 1], m[at + 2], m[at + 3]]).wrapping_add(us);
     m[at..at + 4].copy_from_slice(&t.to_le_bytes());
     m
 }
@@ -298,7 +299,6 @@ pub(crate) fn entry(buf: &mut Vec<u8>, data: &[u8], src: u32, dst: u32, own: u32
 /// the same; with `fp` too (a page whose hello said "fpred":1) a friend's car state to it goes by its fields
 /// (fpred.rs) when it can, and leaves `refs` alone then; with `others` (its hello said "ldelta":1) any other datagram to
 /// it goes as what changed too (`Refs::other`)
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn entry_fp(
     buf: &mut Vec<u8>,
     data: &[u8],
@@ -832,7 +832,15 @@ pub(crate) mod tests {
                 put(&mut bundle, roam_frame(3, &s, src, own), src, own, 0, &mut want, true);
             }
             if k % 5 == 0 {
-                put(&mut bundle, frame(1, a, own, ROAM_PORT, ROAM_PORT, &roam(RC_PING, &(k as u32).to_le_bytes())), a, own, 3000, &mut want, false);
+                put(
+                    &mut bundle,
+                    frame(1, a, own, ROAM_PORT, ROAM_PORT, &roam(RC_PING, &(k as u32).to_le_bytes())),
+                    a,
+                    own,
+                    3000,
+                    &mut want,
+                    false,
+                );
                 put(&mut bundle, frame(1, b, own, ROAM_PORT, ROAM_PORT, &roam(1, b"a hello")), b, own, 0, &mut want, false);
                 let mut three = body(a, k as u16, t, [1.0; 3], [0.0; 3], k, Some(16));
                 three[12] = 3;
@@ -904,7 +912,11 @@ pub(crate) mod tests {
                 entry_fp(&mut b, f, *src, own, own, Some(&mut r), fp_on.then_some(&mut fp), false);
             }
             bytes += b.len();
-            println!("by fields {fp_on}: {:.0} ns an entry, {:.1} bytes", t.elapsed().as_secs_f64() * 1e9 / n as f64, bytes as f64 / n as f64);
+            println!(
+                "by fields {fp_on}: {:.0} ns an entry, {:.1} bytes",
+                t.elapsed().as_secs_f64() * 1e9 / n as f64,
+                bytes as f64 / n as f64
+            );
         }
     }
 

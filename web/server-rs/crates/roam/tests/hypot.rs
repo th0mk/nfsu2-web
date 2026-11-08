@@ -87,9 +87,9 @@ fn hypot_is_math_hypot() {
     assert_eq!(out.stdout.len(), 8 * hyp.len(), "an answer for each case");
     let bad: Vec<String> = hyp
         .iter()
-        .zip(out.stdout.chunks_exact(8))
+        .zip(out.stdout.as_chunks::<8>().0)
         .filter_map(|(h, b)| {
-            let (a, b) = (hypot(h[0], h[1], h[2]), f64::from_le_bytes(b.try_into().unwrap()));
+            let (a, b) = (hypot(h[0], h[1], h[2]), f64::from_le_bytes(*b));
             (a.to_bits() != b.to_bits()).then(|| format!("hypot({}, {}, {}): rust {a:e}, node {b:e}", h[0], h[1], h[2]))
         })
         .collect();

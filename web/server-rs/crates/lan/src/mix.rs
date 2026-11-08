@@ -15,8 +15,27 @@ use crate::{BROADCAST, KIND_UDP};
 
 /// runtime/roam_core.h RC_MSG_*: a free-roam datagram's type (0: one this does not know)
 const ROAM_TYPES: [&str; 21] = [
-    "?", "hello", "peers", "car state", "car look", "car look ask", "ping", "pong", "bye", "duel", "map ask", "map",
-    "lobby", "lobbies", "race report", "say", "race results", "map delta", "near ask", "near", "crash damage",
+    "?",
+    "hello",
+    "peers",
+    "car state",
+    "car look",
+    "car look ask",
+    "ping",
+    "pong",
+    "bye",
+    "duel",
+    "map ask",
+    "map",
+    "lobby",
+    "lobbies",
+    "race report",
+    "say",
+    "race results",
+    "map delta",
+    "near ask",
+    "near",
+    "crash damage",
 ];
 const R: usize = ROAM_TYPES.len();
 /// a free-roam datagram whose magic, length or CRC did not check out (or another kind 1 on free roam's ports)
@@ -218,7 +237,11 @@ mod tests {
     #[test]
     fn kinds_line_says_each_kind_with_players_a_second_and_each_ones() {
         let k = |kind, players, msgs_in, msgs_out| crate::KindMsgs { kind, players, msgs_in, msgs_out };
-        let kinds = [k("racing or in a race lobby", 10, 30_000, 45_000), k("in Online mode", 0, 0, 0), k("driving in free roam", 4, 24_000, 24_600)];
+        let kinds = [
+            k("racing or in a race lobby", 10, 30_000, 45_000),
+            k("in Online mode", 0, 0, 0),
+            k("driving in free roam", 4, 24_000, 24_600),
+        ];
         assert_eq!(
             kinds_line(&kinds, 300.0).unwrap(),
             "racing or in a race lobby 10: 100 in, 150 out a second (10.0 and 15.0 each); driving in free roam 4: 80 in, 82 out a second (20.0 and 20.5 each)"

@@ -75,20 +75,6 @@ fn checkout_of(exe: &std::path::Path) -> Option<String> {
     Some(dir.parent()?.parent()?.parent()?.to_str()?.to_owned())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::checkout_of;
-    use std::path::Path;
-
-    #[test]
-    fn checkout_of_the_binary() {
-        assert_eq!(checkout_of(Path::new("/home/a/wt/x/out/web/server-rs/nfsu2-server")).as_deref(), Some("/home/a/wt/x"));
-        assert_eq!(checkout_of(Path::new("/home/a/wt/x/out/web/server-rs/target/release/nfsu2-server")), None);
-        assert_eq!(checkout_of(Path::new("/nfsu2-server")), None);
-        assert_eq!(checkout_of(Path::new("/x/myout/web/server-rs/nfsu2-server")), None);
-    }
-}
-
 fn main() {
     let argv: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
     let cwd = std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "/".into());
@@ -111,4 +97,18 @@ fn main() {
         .build()
         .unwrap_or_else(|e| die(&format!("the runtime: {e}")));
     rt.block_on(app::run(o, cores));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checkout_of;
+    use std::path::Path;
+
+    #[test]
+    fn checkout_of_the_binary() {
+        assert_eq!(checkout_of(Path::new("/home/a/wt/x/out/web/server-rs/nfsu2-server")).as_deref(), Some("/home/a/wt/x"));
+        assert_eq!(checkout_of(Path::new("/home/a/wt/x/out/web/server-rs/target/release/nfsu2-server")), None);
+        assert_eq!(checkout_of(Path::new("/nfsu2-server")), None);
+        assert_eq!(checkout_of(Path::new("/x/myout/web/server-rs/nfsu2-server")), None);
+    }
 }

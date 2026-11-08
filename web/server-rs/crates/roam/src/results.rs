@@ -429,7 +429,10 @@ impl Results {
             race.reports.push((reporter, r));
             race.clients.push(client);
             for x in &r.rows[..r.n] {
-                if x.id != 0 && !race.names.contains_key(&x.id) && let Some(w) = who(x.id) {
+                if x.id != 0
+                    && !race.names.contains_key(&x.id)
+                    && let Some(w) = who(x.id)
+                {
                     race.names.insert(x.id, w);
                 }
             }
@@ -661,7 +664,7 @@ mod tests {
         assert_eq!(judged_in(&mut x, &tele(0xA1)), None, "no clean win yet");
         // (3 and 4 win in turn)
         let clean = |k: u32| {
-            let (w, o) = if k % 2 == 0 { (3, 4) } else { (4, 3) };
+            let (w, o) = if k.is_multiple_of(2) { (3, 4) } else { (4, 3) };
             let rows = [(w, true, 180.0 + k as f64, 2.0, 5800.0), (o, true, 185.0 + k as f64, 2.0, 5810.0)];
             [(3, rep_of(0x100 + k, &rows, 3)), (4, rep_of(0x100 + k, &rows, 4))]
         };
@@ -911,10 +914,10 @@ mod tests {
         }
         let mut j = x.judged(0.0);
         j.sort_by_key(|(o, _)| o.heat);
-        assert_eq!(j.iter().map(|(o, v)| (o.heat, o.order[0], v.is_none())).collect::<Vec<_>>(), vec![
-            (1, (1, Some(93.94)), true),
-            (2, (1, Some(187.88)), true)
-        ]);
+        assert_eq!(
+            j.iter().map(|(o, v)| (o.heat, o.order[0], v.is_none())).collect::<Vec<_>>(),
+            vec![(1, (1, Some(93.94)), true), (2, (1, Some(187.88)), true)]
+        );
         assert_eq!(x.best.keys().map(|k| k.2).collect::<std::collections::BTreeSet<_>>(), [1, 2].into(), "each heat's own");
     }
 

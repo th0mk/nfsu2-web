@@ -517,10 +517,7 @@ pub(crate) fn shelf_texts(dir: &Path) -> Vec<String> {
 /// the same lists read and written again
 #[cfg(test)]
 pub(crate) fn shelf_reread(dir: &Path) -> Vec<String> {
-    shelf_texts(dir)
-        .iter()
-        .map(|t| list_json(&list_of_json(crate::jsonparse::parse(t).unwrap().as_object().unwrap()).unwrap()))
-        .collect()
+    shelf_texts(dir).iter().map(|t| list_json(&list_of_json(crate::jsonparse::parse(t).unwrap().as_object().unwrap()).unwrap())).collect()
 }
 
 /// a time the file keeps (ms since 1970, whole)
@@ -1643,7 +1640,8 @@ impl Core {
             .filter(|(k, (_, t))| waits(t) && not_friend(k) && !bs.blocks(&mk, k))
             .map(|(_, (n, _))| n.clone())
             .collect();
-        let sent = l.into_iter().flat_map(|l| l.r.iter()).filter(|(k, (_, t))| waits(t) && not_friend(k)).map(|(_, (n, _))| n.clone()).collect();
+        let sent =
+            l.into_iter().flat_map(|l| l.r.iter()).filter(|(k, (_, t))| waits(t) && not_friend(k)).map(|(_, (n, _))| n.clone()).collect();
         let contact = l.and_then(|l| l.contact.clone());
         FriendReply { me: Some(me), done, friends, asks, sent, mail, contact }
     }
@@ -2440,7 +2438,7 @@ mod tests {
         // a third list pushes the least recently seen out of memory
         s.make_room(&none);
         s.lists.insert("charlie".into(), FriendsList::new("Charlie", "2026-10".into()));
-        assert!(!s.lists.contains_key("alpha") && s.fans.get("bravo").is_none(), "Alpha's list out, and its fan entry");
+        assert!(!s.lists.contains_key("alpha") && !s.fans.contains_key("bravo"), "Alpha's list out, and its fan entry");
         assert!(s.fetch("alpha", 0.0, &none), "back from the shelf");
         let x = s.list("Alpha").unwrap();
         assert_eq!((x.b.keys().map(String::as_str).collect::<Vec<_>>(), x.r.len(), x.owner.as_deref()), (vec!["bravo"], 1, Some(&*a)));

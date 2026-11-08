@@ -289,16 +289,16 @@ impl Impair {
                             heap.pop();
                             let Some(mut d) = held.remove(&s) else { continue };
                             // at the server: the receiver's leg down next (in the order frames got here)
-                            if d.up {
-                                if let Some(im) = &sw.impair {
-                                    d.up = false;
-                                    d.at = im.leg_time(d.to.vip, false, at);
-                                    seq += 1;
-                                    d.seq = seq;
-                                    heap.push(Reverse((d.at, seq)));
-                                    held.insert(seq, d);
-                                    continue;
-                                }
+                            if d.up
+                                && let Some(im) = &sw.impair
+                            {
+                                d.up = false;
+                                d.at = im.leg_time(d.to.vip, false, at);
+                                seq += 1;
+                                d.seq = seq;
+                                heap.push(Reverse((d.at, seq)));
+                                held.insert(seq, d);
+                                continue;
                             }
                             sw.deliver_now(&d.from, &d.to, &d.data, d.dst);
                         }

@@ -171,7 +171,8 @@ async fn what_a_peer_learns_about_the_others() {
     let _s = serial().await;
     let sw = start(opts()).await;
     let mut a = Client::connect(sw.port, "Alice").await;
-    let mut b = Client::with(sw.port, "  B\u{202E}ob\u{0}\u{200B}\n\tthe\u{7} driver with a very long name indeed  ", "", Opts::default()).await;
+    let mut b =
+        Client::with(sw.port, "  B\u{202E}ob\u{0}\u{200B}\n\tthe\u{7} driver with a very long name indeed  ", "", Opts::default()).await;
     a.welcome().await;
     b.welcome().await;
     // bidi, zero-width and control characters gone, spaces folded, 32 characters

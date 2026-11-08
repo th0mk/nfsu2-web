@@ -435,9 +435,8 @@ fn the_game_list_in_one_search() {
     for (i, &h) in hosts.iter().enumerate() {
         w.send(h, "gcre", fields![("NAME", format!("{i}00.Host{i}")), ("CUSTFLAGS", 0x40000f3), ("PARAMS", "TRACK=4011")]);
     }
-    let names = |w: &mut World| -> Vec<String> {
-        w.cm(e).take().iter().filter(|m| m.kind == "+gam").map(|m| m.g("NAME").to_string()).collect()
-    };
+    let names =
+        |w: &mut World| -> Vec<String> { w.cm(e).take().iter().filter(|m| m.kind == "+gam").map(|m| m.g("NAME").to_string()).collect() };
     let search = |s: i32, n: i32| {
         fields![("START", s), ("COUNT", n), ("CUSTFLAGS", 0x40000f3), ("CUSTMASK", 0x40001f3), ("SYSFLAGS", 0), ("SYSMASK", 0xc0000)]
     };

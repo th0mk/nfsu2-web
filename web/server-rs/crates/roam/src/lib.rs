@@ -124,6 +124,8 @@
 //!   snapshot too, so a slice near its limit gets fewer links before its players get them late.
 
 mod hub;
+// (made by tools/map_jumps.py: its rows as the tool writes them)
+#[rustfmt::skip]
 mod jumps;
 mod links;
 mod results;
@@ -516,7 +518,6 @@ fn guard(f: impl FnOnce()) {
 
 /// The hub's thread: what the switch posts, in order, and a tick every tick_ms (the next one a tick_ms after this
 /// one began).  It ends once the RoamHub is gone.
-#[allow(clippy::too_many_arguments)]
 fn run(
     mut hub: Hub,
     rx: mpsc::Receiver<Cmd>,

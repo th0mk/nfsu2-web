@@ -388,9 +388,37 @@ pub struct Own {
 
 /// the game's player car types (CarTypeInfo 0..30 in GLOBAL\GlobalB), for `edited_code`'s
 const CAR_TYPES: [&str; 31] = [
-    "PEUGOT", "FOCUS", "COROLLA", "240SX", "MIATA", "CIVIC", "PEUGOT106", "CORSA", "HUMMER", "NAVIGATOR", "ESCALADE", "TIBURON",
-    "SENTRA", "CELICA", "IS300", "SUPRA", "GOLF", "A3", "RSX", "ECLIPSE", "TT", "RX8", "350Z", "G35", "3000GT", "GTO", "MUSTANGGT",
-    "SKYLINE", "LANCEREVO8", "RX7", "IMPREZAWRX",
+    "PEUGOT",
+    "FOCUS",
+    "COROLLA",
+    "240SX",
+    "MIATA",
+    "CIVIC",
+    "PEUGOT106",
+    "CORSA",
+    "HUMMER",
+    "NAVIGATOR",
+    "ESCALADE",
+    "TIBURON",
+    "SENTRA",
+    "CELICA",
+    "IS300",
+    "SUPRA",
+    "GOLF",
+    "A3",
+    "RSX",
+    "ECLIPSE",
+    "TT",
+    "RX8",
+    "350Z",
+    "G35",
+    "3000GT",
+    "GTO",
+    "MUSTANGGT",
+    "SKYLINE",
+    "LANCEREVO8",
+    "RX7",
+    "IMPREZAWRX",
 ];
 
 /// A rank's code from a game that raced a car whose data is edited (runtime/mprace.c mprace_rank_code: the car type's
@@ -875,7 +903,8 @@ fn race_cheats(
         // its own time, average and way: a finisher's that another game saw finish then, no other finisher close
         let agreed = players[i].seen.iter().any(|&t| (t - o.time).abs() <= AGREE_S);
         let close = players.iter().enumerate().any(|(j, x)| {
-            j != i && x.own.filter(|y| y.finished).map(|y| y.time).into_iter().chain(x.seen.iter().copied()).any(|t| t * CLOSE_SHARE <= o.time)
+            j != i
+                && x.own.filter(|y| y.finished).map(|y| y.time).into_iter().chain(x.seen.iter().copied()).any(|t| t * CLOSE_SHARE <= o.time)
         });
         let taken = !drift && o.finished && agreed && !close;
         if let Some(&min) = MIN_RACE_S.get(kind as usize)
@@ -1988,9 +2017,10 @@ impl Core {
             let lobby = &mut self.lobby;
             let players = &lobby.games.get(&g).or_else(|| lobby.dead.get(&g)).expect("held").players;
             let told = far.is_some()
-                || order.iter().find(|p| p.place == 1).is_some_and(|w| {
-                    players.iter().any(|p| lower(&p.name) == lower(&w.name) && p.own.is_some_and(|o| o.told))
-                });
+                || order
+                    .iter()
+                    .find(|p| p.place == 1)
+                    .is_some_and(|w| players.iter().any(|p| lower(&p.name) == lower(&w.name) && p.own.is_some_and(|o| o.told)));
             let quick = quick_win(&mut lobby.wins, &gname, &r, &order, players, told);
             let gm = self.lobby.game_mut(g).expect("held");
             gm.result = Some(key);
@@ -2012,7 +2042,8 @@ impl Core {
             };
             let rt = REPORT_TYPES[r.kind as usize];
             // (a drift race's line names its track and laps: its points go by them)
-            let at = if drift { format!(", track {}, {} lap{}", r.track, r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
+            let at =
+                if drift { format!(", track {}, {} lap{}", r.track, r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
             self.llog(&format!("[online] \"{gname}\" ({rt}, {}{at}): {line}{tail}", if ranked { "ranked" } else { "unranked" }), s);
         } else {
             if !gm.reports.is_empty() && !gm.reports.iter().any(|(_, k)| finishers_of(k) == decides) {

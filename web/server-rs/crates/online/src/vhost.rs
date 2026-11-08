@@ -172,7 +172,6 @@ impl VHost {
 }
 
 /// one switch frame of a LAN kind
-#[allow(clippy::too_many_arguments)]
 pub fn lan_frame(kind: u8, src: u32, dst: u32, sport: u16, dport: u16, op: u8, cid: u32, data: &[u8]) -> Vec<u8> {
     let mut f = vec![0u8; F_DATA + LAN_HDR + data.len()];
     f[0] = kind;

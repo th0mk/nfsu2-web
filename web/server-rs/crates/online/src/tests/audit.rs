@@ -568,16 +568,30 @@ fn a_racers_own_figures_count_once_another_game_saw_them() {
         }
     };
     // its own game 7 s short (0:17.35 at 99 m/s, 357 km/h; top 89 m/s), the other's 0:24.14
-    race_of(&mut w, "short", "Drag1", "Other1", 2, &[(0, 1, 17.35, 99.2, 89.2, false), (1, 2, 31.3, 60.0, 80.0, false)],
-        Some(&[(0, 1, 24.14, 70.0, 89.2, false), (1, 2, 31.3, 60.0, 80.0, false)]));
+    race_of(
+        &mut w,
+        "short",
+        "Drag1",
+        "Other1",
+        2,
+        &[(0, 1, 17.35, 99.2, 89.2, false), (1, 2, 31.3, 60.0, 80.0, false)],
+        Some(&[(0, 1, 24.14, 70.0, 89.2, false), (1, 2, 31.3, 60.0, 80.0, false)]),
+    );
     // its own report alone (500 km/h on average)
     race_of(&mut w, "alone", "Drag2", "Other2", 2, &[(0, 1, 14.09, 138.9, 96.7, false), (1, 2, 20.0, 60.0, 80.0, false)], None);
     // a close race (388 km/h on average, top 51 m/s), both games agree
     let close: Rows = &[(0, 1, 81.11, 107.8, 50.8, false), (1, 2, 81.3, 30.0, 50.0, false)];
     race_of(&mut w, "close", "Circ1", "Other3", 0, close, Some(close));
     // its own game counted one lap of two: 3087 m in 1:22.13, the other 6418 m; the other's game saw it at 2:35.34
-    race_of(&mut w, "lap", "Circ2", "Other4", 0, &[(0, 1, 82.13, 37.59, 48.6, false), (1, 2, 174.95, 36.68, 50.0, false)],
-        Some(&[(0, 1, 155.34, 41.3, 48.6, false), (1, 2, 174.95, 36.68, 50.0, false)]));
+    race_of(
+        &mut w,
+        "lap",
+        "Circ2",
+        "Other4",
+        0,
+        &[(0, 1, 82.13, 37.59, 48.6, false), (1, 2, 174.95, 36.68, 50.0, false)],
+        Some(&[(0, 1, 155.34, 41.3, 48.6, false), (1, 2, 174.95, 36.68, 50.0, false)]),
+    );
     assert_eq!(cheats(&w), Vec::<String>::new());
     // a circuit won in 0:30.08 at 383 km/h on average (top 113 m/s), the other game saw it too and gave up
     let fast: Rows = &[(0, 1, 30.08, 106.4, 113.0, false), (1, 0, 40.0, 30.0, 50.0, true)];
@@ -639,7 +653,8 @@ fn a_car_that_jumped_is_a_cheat_line() {
         let xs: Vec<_> = cs.iter().zip(who).map(|(&c, n)| login(w, c, n)).collect();
         let auth = race(w, name, &xs, vec![]).unwrap();
         w.advance(61_000.0);
-        let rows: Vec<(u8, u8, f32, f32, bool)> = (0..who.len()).map(|i| (i as u8, i as u8 + 1, 56.49 + 2.0 * i as f32, 29.8, false)).collect();
+        let rows: Vec<(u8, u8, f32, f32, bool)> =
+            (0..who.len()).map(|i| (i as u8, i as u8 + 1, 56.49 + 2.0 * i as f32, 29.8, false)).collect();
         for (&c, code) in xs.iter().zip(codes) {
             let mut f = fields![("AUTH", auth.as_str()), ("RESU", resu_avg(1, &rows))];
             for (i, n) in who.iter().enumerate() {
@@ -711,16 +726,24 @@ fn a_drift_races_points_are_logged_and_an_edited_car_is_a_cheat_line() {
     let t = w.text();
     let has = |want: &str| t.iter().any(|l| l == want);
     assert!(
-        has("[online] \"dh\" (drift, track 4311, 3 laps): Slider's own game: 2 of 2, 310400 points, its biggest drift 42000, top speed 220 km/h, 1:20.50"),
+        has(
+            "[online] \"dh\" (drift, track 4311, 3 laps): Slider's own game: 2 of 2, 310400 points, its biggest drift 42000, top speed 220 km/h, 1:20.50"
+        ),
         "{}",
         t.join("\n")
     );
     assert!(
-        has("[online] \"dh\" (drift, track 4311, 3 laps): Rocket's own game: 1 of 2, 1200000 points, its biggest drift 1150000, top speed 450 km/h, 1:10.00"),
+        has(
+            "[online] \"dh\" (drift, track 4311, 3 laps): Rocket's own game: 1 of 2, 1200000 points, its biggest drift 1150000, top speed 450 km/h, 1:10.00"
+        ),
         "{}",
         t.join("\n")
     );
-    assert!(has("[online] \"dh\" (drift, unranked, track 4311, 3 laps): 1 Rocket 1200000 points, 2 Slider 310400 points"), "{}", t.join("\n"));
+    assert!(
+        has("[online] \"dh\" (drift, unranked, track 4311, 3 laps): 1 Rocket 1200000 points, 2 Slider 310400 points"),
+        "{}",
+        t.join("\n")
+    );
     let cheats: Vec<&String> = t.iter().filter(|l| l.starts_with("[cheat]")).collect();
     assert_eq!(
         cheats,

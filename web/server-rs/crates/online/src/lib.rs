@@ -94,7 +94,6 @@ pub struct OnlineOptions {
     pub state_dir: Option<PathBuf>,
     /// a console line, and the opaque group id of the client that caused it (None: the server's own line); the
     /// server shows at most a few a minute per client (`nfsu2_util::log::limited`, the Online audit's ONL-8)
-    #[allow(clippy::type_complexity)]
     pub log: Arc<dyn Fn(&str, Option<&str>) + Send + Sync>,
     /// the dev trace: sees every frame the host sends (the switch's own tap sees what the browsers send)
     pub tap: Option<Tap>,

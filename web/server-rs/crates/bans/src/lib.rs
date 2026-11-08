@@ -824,7 +824,7 @@ fn hold(l: &mut Vec<Held>, h: &str, until: i64, max: usize, now: i64) -> bool {
 /// a ban's addresses cut to the `ADDRS_MAX` held longest (the ones last seen)
 fn latest_addrs(l: &mut Vec<Held>) {
     if l.len() > ADDRS_MAX {
-        l.sort_by(|a, b| b.until.cmp(&a.until));
+        l.sort_by_key(|h| std::cmp::Reverse(h.until));
         l.truncate(ADDRS_MAX);
     }
 }

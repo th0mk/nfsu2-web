@@ -252,7 +252,11 @@ pub async fn run(o: Options, cores: usize) {
         lan_sndbuf,
         compress_threads,
     ));
-    log::line(if app.lastfm.is_some() { "[lastfm] scrobbles on" } else { "[lastfm] scrobbles off (no NFSU2_LASTFM_KEY and NFSU2_LASTFM_SECRET)" });
+    log::line(if app.lastfm.is_some() {
+        "[lastfm] scrobbles on"
+    } else {
+        "[lastfm] scrobbles off (no NFSU2_LASTFM_KEY and NFSU2_LASTFM_SECRET)"
+    });
     // the pages' friend messages (friends.rs)
     if let Some(f) = &app.friends {
         f.attach();
@@ -409,7 +413,7 @@ pub async fn run(o: Options, cores: usize) {
                     }
                 }
                 ticks += 1;
-                if ticks % (BREAKDOWN_EVERY.as_secs() / DAYS_SWEEP_EVERY.as_secs()) != 0 {
+                if !ticks.is_multiple_of(BREAKDOWN_EVERY.as_secs() / DAYS_SWEEP_EVERY.as_secs()) {
                     continue;
                 }
                 let (_, c) = days.today(now);
@@ -592,8 +596,7 @@ pub async fn run(o: Options, cores: usize) {
         ));
     }
     match o.tls {
-        Tls::None => lines
-            .push("  other PCs : none: they need HTTPS, from --tls-cert/--tls-key or a proxy or tunnel in front".into()),
+        Tls::None => lines.push("  other PCs : none: they need HTTPS, from --tls-cert/--tls-key or a proxy or tunnel in front".into()),
         Tls::Cert => lines.push(format!(
             "  HTTPS     : port {} on {}, certificate {}",
             o.https_port,

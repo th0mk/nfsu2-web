@@ -741,14 +741,7 @@ impl App {
         let all = self.lan.who().await;
         let (removed, out) = self.reach(&all, &ban, now);
         let what = |b: &Ban| format!("{} {}", b.kind.word(), how_long(b.until, now));
-        log::line(&format!(
-            "[ban] changed #{} \"{}\": {} (was {}); {}",
-            id,
-            ban.name,
-            what(&ban),
-            what(&was),
-            reached_log(&removed, &out)
-        ));
+        log::line(&format!("[ban] changed #{} \"{}\": {} (was {}); {}", id, ban.name, what(&ban), what(&was), reached_log(&removed, &out)));
         let mut t = vec![format!("#{id} \"{}\": {} (was {})", ban.name, what(&ban), what(&was))];
         t.extend(reached_lines(&removed, &out));
         Ok(t.join("\n"))

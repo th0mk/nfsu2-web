@@ -208,7 +208,7 @@ fn the_count_passes_over_files_that_go_while_it_runs() {
             while !stop.load(Ordering::Relaxed) {
                 let id = id_of(&(1000 + n % 64).to_le_bytes());
                 match v.meta(&id, T0).unwrap() {
-                    Some(_) if n % 3 == 0 => assert!(v.delete(&id).unwrap()),
+                    Some(_) if n.is_multiple_of(3) => assert!(v.delete(&id).unwrap()),
                     Some(m) => drop(v.put(&id, Cond::Rev(m.cur.rev), &n.to_le_bytes(), T0).unwrap()),
                     None => drop(v.put(&id, Cond::New, b"x", T0).unwrap()),
                 }

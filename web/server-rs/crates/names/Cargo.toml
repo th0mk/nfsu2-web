@@ -6,6 +6,9 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 unicode-normalization.workspace = true
 unicode-general-category.workspace = true

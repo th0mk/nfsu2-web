@@ -19,9 +19,10 @@ mod files;
 mod friends;
 mod kept;
 mod lan;
-mod manifest;
 mod lastfm;
+mod manifest;
 mod names;
+mod outbound;
 mod pool;
 #[cfg(test)]
 mod route_tests;
@@ -29,7 +30,6 @@ mod run;
 pub mod settings_days;
 #[cfg(test)]
 mod testkit;
-mod outbound;
 mod turnstile;
 mod url;
 mod vault;
@@ -259,7 +259,6 @@ fn cache_index(c: Cache) -> usize {
 }
 
 impl App {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         o: Options,
         real_state: String,
@@ -392,7 +391,6 @@ impl App {
 
     /// a short text answer: the code, the text (a newline after it), headers besides the usual ones, the cache rule,
     /// and whether search engines are told to keep out
-    #[allow(clippy::too_many_arguments)]
     pub async fn plain(
         &self,
         q: &Request,
@@ -735,7 +733,8 @@ impl App {
         if let (Some(room), Some(r)) = (room, &self.roam) {
             m.insert("room".into(), serde_json::Value::from(r.in_room(room).min(players)));
         }
-        let rooms: Vec<u32> = u.param("rooms").map_or(Vec::new(), |c| c.split(',').filter_map(|h| h.parse::<u32>().ok()).take(ROOMS_ASKED).collect());
+        let rooms: Vec<u32> =
+            u.param("rooms").map_or(Vec::new(), |c| c.split(',').filter_map(|h| h.parse::<u32>().ok()).take(ROOMS_ASKED).collect());
         if let Some(r) = self.roam.as_ref().filter(|_| !rooms.is_empty()) {
             let n = rooms.iter().map(|&h| serde_json::Value::from(r.in_room(h).min(players))).collect();
             m.insert("rooms".into(), serde_json::Value::Array(n));
@@ -788,10 +787,10 @@ impl App {
         if let (Some(what), Some(id), "GET") = (what, u.param("id"), q.method.as_str()) {
             let now = nfsu2_util::now_ms();
             self.days.seen(&id, what, now);
-            if what == days::Seen::Play {
-                if let Some(r) = settings_days::Report::parse(u.param("k").as_deref(), u.param("s").as_deref()) {
-                    self.days.told(&id, &r, now);
-                }
+            if what == days::Seen::Play
+                && let Some(r) = settings_days::Report::parse(u.param("k").as_deref(), u.param("s").as_deref())
+            {
+                self.days.told(&id, &r, now);
             }
         }
         let h = self.headers(q, Cache::Store, true);

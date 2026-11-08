@@ -51,7 +51,6 @@ fn bench_links(what: &str, players: u32, rooms: u32, area: f64, step: f64, links
 
 /// `crews(i)`: player i's crews (none: a HELLO of before, without the crew flag); players i of one room are the ones
 /// with the same i % rooms; player i is named p<i>, and `blocks(i)` are the names it blocks
-#[allow(clippy::type_complexity)]
 fn bench_with(
     what: &str,
     players: u32,
@@ -148,7 +147,15 @@ fn bench_with(
 /// 4th past it, every 10th past 1 km), to a player who only gets ours (marked TX) by the hub's hints (core 16, `lists`)
 /// or every one (core 15: it knows nothing of where that player is)
 fn copies(k: &Kit, pos: &[[f64; 3]], vip0: u32) -> String {
-    let rate = |d: f64| if d > 1000.0 { 2.0 } else if d > 300.0 { 5.0 } else { 20.0 };
+    let rate = |d: f64| {
+        if d > 1000.0 {
+            2.0
+        } else if d > 300.0 {
+            5.0
+        } else {
+            20.0
+        }
+    };
     let (mut both, mut tx_before, mut tx_after, mut n_tx) = (0.0, 0.0, 0.0, 0u64);
     let (mut list_bytes, mut lists) = (0usize, 0usize);
     for (vip, f) in k.sent.lock().iter() {
@@ -279,7 +286,7 @@ fn bench_4000_players() {
 fn bench_blocks() {
     let blocks = |rooms: u32| {
         move |i: u32| -> Vec<String> {
-            if i % 20 != 0 {
+            if !i.is_multiple_of(20) {
                 return Vec::new();
             }
             (1..=10).map(|k| format!("p{}", (i + k * 37 * rooms) % 2000)).collect()

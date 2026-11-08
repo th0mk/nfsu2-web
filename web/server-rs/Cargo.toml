@@ -63,6 +63,17 @@ mimalloc = { version = "0.1", default-features = false }
 tempfile = "3"
 tokio-tungstenite = "0.27"
 
+# clippy's defaults, but for style the code keeps on purpose
+[workspace.lints.clippy]
+# a tuple or a callback's type written out where it is used once: a name for it would hide its shape
+type_complexity = "allow"
+# handlers and test kits take their parts as plain arguments, not a struct made for one call
+too_many_arguments = "allow"
+# loops over a record's fields by their offsets (wire layouts, counts by column) read as the layout does
+needless_range_loop = "allow"
+# a side effect (a send, a removal) stays in the arm's body, not in a match guard
+collapsible_match = "allow"
+
 [package]
 name = "nfsu2-server"
 version.workspace = true
@@ -73,6 +84,9 @@ publish.workspace = true
 [[bin]]
 name = "nfsu2-server"
 path = "src/main.rs"
+
+[lints]
+workspace = true
 
 [dependencies]
 nfsu2-util.workspace = true

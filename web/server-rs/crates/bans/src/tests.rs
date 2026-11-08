@@ -269,10 +269,7 @@ fn the_file_keeps_hashes_only_and_outlives_a_restart() {
 fn messages_for_the_page() {
     let (_d, b) = bans();
     let (ban, _) = b.add(Kind::Full, "B", &who(&b, None, Some("p"), None), "Bye \"now\"", Some(T0 + DAY), T0).unwrap();
-    assert_eq!(
-        ban.message(Match::Own),
-        format!(r#"{{"t":"ban","id":1,"name":"B","at":{T0},"msg":"Bye \"now\"","until":{}}}"#, T0 + DAY)
-    );
+    assert_eq!(ban.message(Match::Own), format!(r#"{{"t":"ban","id":1,"name":"B","at":{T0},"msg":"Bye \"now\"","until":{}}}"#, T0 + DAY));
     // by the address only: out of races, and the page says why
     assert_eq!(
         ban.message(Match::Addr),

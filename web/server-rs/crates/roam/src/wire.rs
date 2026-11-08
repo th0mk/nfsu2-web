@@ -687,7 +687,6 @@ pub(crate) fn mapd_len(bytes: usize) -> usize {
 /// One MAPD datagram (or, `kind` MSG_NEARD, the minimap's NEARD laid out the same), part `part` of `nparts` of the
 /// answer to question `req` (roam_core.h RC_MSG_MAPD) into `b` (exactly `mapd_len(e.len())` bytes long): what changed
 /// since the answer `base` (0: from nothing), `total` players past the asker and its peers, n entries in `e`.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn write_mapd(
     b: &mut [u8],
     kind: u8,

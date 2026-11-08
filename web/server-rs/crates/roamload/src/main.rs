@@ -7,6 +7,7 @@
 //!     HELLO every second), each as one bundle entry for all of them, as the page sends them (web/src/net TxBundle)
 //!   - idle: free roam on but not driving (in a race, a shop or the menus): only its HELLO to the hub every second,
 //!     with that status, and the page's pings; it holds a place and sends next to nothing
+//!
 //! What it measures, from the players' side:
 //!   - how many friends each has (the hub's lists: 32 when the server keeps up, fewer when its busy cap cuts them)
 //!   - snapshots sent (one per friend) and received, so how many got lost on the way (the switch drops a datagram
@@ -444,7 +445,10 @@ impl Bot {
                 }
                 // its state, byte for byte, as its sender made it
                 self.snaps_seen = self.snaps_seen.wrapping_add(1);
-                if u16::from_le_bytes([m[14], m[15]]) & HF_STATEX != 0 && m.len() >= 22 + STATE && self.snaps_seen % self.check_every == 0 {
+                if u16::from_le_bytes([m[14], m[15]]) & HF_STATEX != 0
+                    && m.len() >= 22 + STATE
+                    && self.snaps_seen.is_multiple_of(self.check_every)
+                {
                     sh.checked.inc();
                     let n = u16::from_le_bytes([m[18], m[19]]) as usize;
                     let mut want = state(n, t, self.spread);
@@ -461,8 +465,14 @@ impl Bot {
                     }
                     if m[22..22 + STATE] != want {
                         let at = (0..STATE).find(|&k| m[22 + k] != want[k]).unwrap_or(0);
-                        sh.bad(|| format!("state via {via} from {src:08x} n {n} t {t} len {}: byte {at} got {:02x?} want {:02x?}", m.len(),
-                            &m[22 + at..(22 + at + 6).min(22 + STATE)], &want[at..(at + 6).min(STATE)]));
+                        sh.bad(|| {
+                            format!(
+                                "state via {via} from {src:08x} n {n} t {t} len {}: byte {at} got {:02x?} want {:02x?}",
+                                m.len(),
+                                &m[22 + at..(22 + at + 6).min(22 + STATE)],
+                                &want[at..(at + 6).min(STATE)]
+                            )
+                        });
                     }
                 }
             }
@@ -801,7 +811,6 @@ async fn run_life(i: usize, a: &Args, sh: &Arc<Shared>, life: Duration) -> End {
 }
 
 /// a bot on the switch until its life is over (or the run, or its connection)
-#[allow(clippy::too_many_arguments)]
 async fn play(
     i: usize,
     n: usize,
@@ -837,8 +846,8 @@ async fn play(
     let until = now + life;
     // the blip, for this bot when it is on the switch then
     let blip_in = a.blip_at - sh.t0.elapsed().as_secs_f64();
-    let mut blip = (a.blip_at > 0.0 && blip_in > 0.0 && nfsu2_util::rand::unit() < a.blip_share)
-        .then(|| now + Duration::from_secs_f64(blip_in));
+    let mut blip =
+        (a.blip_at > 0.0 && blip_in > 0.0 && nfsu2_util::rand::unit() < a.blip_share).then(|| now + Duration::from_secs_f64(blip_in));
     let period = Duration::from_secs_f64(1.0 / a.rate);
     let jitter = |max: Duration| Duration::from_secs_f64(nfsu2_util::rand::unit() * max.as_secs_f64());
     let mut snap_iv = interval_at(now + jitter(period), period);
@@ -1025,8 +1034,7 @@ fn raise_nofile() {
 /// were let in more than a second after one that came into line more than a second after them (none of them dropped)
 fn line_summary(waits: &[Wait]) -> Value {
     let mut secs: Vec<f64> = waits.iter().map(|w| (w.went_in - w.told) / 1000.0).collect();
-    let mut ratio: Vec<f64> =
-        waits.iter().filter_map(|w| w.eta.filter(|e| *e > 0.0).map(|e| (w.went_in - w.told) / 1000.0 / e)).collect();
+    let mut ratio: Vec<f64> = waits.iter().filter_map(|w| w.eta.filter(|e| *e > 0.0).map(|e| (w.went_in - w.told) / 1000.0 / e)).collect();
     let mut clean: Vec<&Wait> = waits.iter().filter(|w| !w.dropped).collect();
     clean.sort_by(|a, b| a.told.total_cmp(&b.told));
     let (mut overtaken, mut j, mut latest) = (0, 0, f64::NEG_INFINITY);

@@ -449,9 +449,7 @@ const PLAYER_TYPES: u8 = 31;
 /// 1,464,225 lobby race reports: every car far past the honest ones' best was an edited save, an edited GlobalB, or a
 /// game whose engine a tool had made 2, 3, 4 or 5 times as strong between two races, the rating left as it was.)
 fn server_bans(c: &CarBans, r: &wire::RaceRep) -> bool {
-    r.players >= 2
-        && r.car_type < PLAYER_TYPES
-        && (c.kw.is_some_and(|kw| r.kw >= kw) || c.rating.is_some_and(|rating| r.rating >= rating))
+    r.players >= 2 && r.car_type < PLAYER_TYPES && (c.kw.is_some_and(|kw| r.kw >= kw) || c.rating.is_some_and(|rating| r.rating >= rating))
 }
 
 /// the honest times of the lobbies' races an edited car's is compared with (`Times`): the last TIMES_KEPT of each race
@@ -1600,7 +1598,9 @@ impl Hub {
             Msg::NearReq { req, max, base, radius } if sender == p.id && !p.seat2 => ask_near = Some((req, max, base, radius)),
             Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids, private, staged, hstage } if sender == p.id => {
                 match op {
-                    wire::LOBBY_ADVERT => p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids, private, staged, hstage }, now)),
+                    wire::LOBBY_ADVERT => {
+                        p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids, private, staged, hstage }, now))
+                    }
                     wire::LOBBY_CLOSE if p.lobby.is_some_and(|(l, _)| l.id == lobby) => p.lobby = None,
                     wire::LOBBY_JOIN => p.join = Some((lobby, now)),
                     _ => {}
@@ -1624,7 +1624,8 @@ impl Hub {
             // (a URL race of heats: one a heat of the lobby, at once)
             Msg::RaceRes(r)
                 if sender == p.id
-                    && p.resulted.is_none_or(|(l, t, heats)| if l == r.lobby { heats & 1 << r.heat == 0 } else { now - t >= REPORT_GAP_MS }) =>
+                    && p.resulted
+                        .is_none_or(|(l, t, heats)| if l == r.lobby { heats & 1 << r.heat == 0 } else { now - t >= REPORT_GAP_MS }) =>
             {
                 let heats = p.resulted.filter(|x| x.0 == r.lobby).map_or(0, |x| x.2);
                 p.resulted = Some((r.lobby, now, heats | 1 << r.heat));
@@ -1956,8 +1957,7 @@ impl Hub {
                             if d2 > k2 || mark.get(it.slot as usize) == Some(&stamp) {
                                 continue;
                             }
-                            if (blocks || own)
-                                && self.player(it.slot).is_some_and(|o| o.vip == vip || self.apart_from(slot, it.slot, p, o))
+                            if (blocks || own) && self.player(it.slot).is_some_and(|o| o.vip == vip || self.apart_from(slot, it.slot, p, o))
                             {
                                 continue;
                             }
@@ -2644,7 +2644,11 @@ impl Hub {
                         Some(Some(q)) => far_code(p, q, now, look_s),
                         _ => 1,
                     };
-                    self.st.tx_only[match code { 1 => 0, 4 => 1, _ => 2 }] += 1;
+                    self.st.tx_only[match code {
+                        1 => 0,
+                        4 => 1,
+                        _ => 2,
+                    }] += 1;
                     if p.hints && code > 1 && k < wire::LIST_MAX {
                         if far == 0 {
                             s.hints.push(0);
@@ -3501,7 +3505,7 @@ impl Gather<'_> {
         };
         std::thread::scope(|sc| {
             for _ in 1..threads {
-                let _ = std::thread::Builder::new().name("roam-oneway".into()).spawn_scoped(sc, &work);
+                let _ = std::thread::Builder::new().name("roam-oneway".into()).spawn_scoped(sc, work);
             }
             work();
         });
@@ -3682,7 +3686,9 @@ const NEAR_SAY_MS: f64 = 300_000.0;
 #[inline(never)]
 fn one_way(slots: &[Option<Player>], list: &[u32], full: bool, o: &RoamOptions, w: &Weigh, s: &mut Scratch) -> u64 {
     let m = list.len();
-    let Scratch { pos, now, speed, soon, ahead, view, deg, newcore, vips, local: at, fresh, dpairs, lpairs, cpairs, bstart, bnext, ow, .. } = s;
+    let Scratch {
+        pos, now, speed, soon, ahead, view, deg, newcore, vips, local: at, fresh, dpairs, lpairs, cpairs, bstart, bnext, ow, ..
+    } = s;
     ow.news.clear();
     ow.news.extend((0..m as u32).filter(|&i| newcore[i as usize]));
     if ow.news.len() < 2 {
@@ -3934,7 +3940,6 @@ impl Walks<'_> {
     /// every place's three walks, in `near`, `near_a` and `near_v` by place, and what each gave so far in `pre` and
     /// `pre_n`; from the view point only where it is not the place soon (else it gives what the first walk gives, and
     /// the links never take it)
-    #[allow(clippy::too_many_arguments)]
     fn read(
         &self,
         threads: usize,
@@ -4373,7 +4378,6 @@ fn map_cand(slot: u32, o: &Player, at: [f64; 2], now: f64) -> MapCand {
 }
 
 /// `map_cand` of a player with that key, id, position, heading and velocity
-#[allow(clippy::too_many_arguments)]
 fn map_cand_of(slot: u32, key: u16, id: u32, p: [f64; 3], heading: u8, v: [f64; 2], at: [f64; 2], parked: bool) -> MapCand {
     let c = |x: f64| (x + 0.5).floor().clamp(-32767.0, 32767.0) as i16;
     let w = |x: f64| x.round().clamp(-127.0, 127.0) as i8;

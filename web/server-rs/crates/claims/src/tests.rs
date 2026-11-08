@@ -113,7 +113,10 @@ fn a_claim_lasts_as_long_as_its_keyphrase() {
     // after a change the old name keeps its grace, the new one holds from the use
     c.claim("Racer", &a, later + 2 * DAY_MS).unwrap();
     c.used(&a, later + 3 * DAY_MS);
-    assert_eq!(c.status("Alex", Some(&a), later + 3 * DAY_MS), Status::Yours { until: later + 2 * DAY_MS + GRACE_DAYS * DAY_MS, current: false });
+    assert_eq!(
+        c.status("Alex", Some(&a), later + 3 * DAY_MS),
+        Status::Yours { until: later + 2 * DAY_MS + GRACE_DAYS * DAY_MS, current: false }
+    );
     assert_eq!(c.mine(&a, later + 3 * DAY_MS).unwrap().until, later + 3 * DAY_MS + HOLD_DAYS * DAY_MS);
 }
 

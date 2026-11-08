@@ -61,8 +61,8 @@ async fn broken_plates_and_slurs_go_on_without_their_plate_a_new_plate_once_per_
     let mut bad = hello(b"N1GGER");
     *bad.last_mut().unwrap() ^= 1;
     send(&bad);
-    let mut want: Vec<Vec<u8>> = broken.iter().map(|t| datagram(0x0200, true, Some(t))).collect();   // the flag off, the rest as it came
-    want.extend(slurs.iter().map(|_| datagram(0x0200, true, None)));                                  // the plate taken out
+    let mut want: Vec<Vec<u8>> = broken.iter().map(|t| datagram(0x0200, true, Some(t))).collect(); // the flag off, the rest as it came
+    want.extend(slurs.iter().map(|_| datagram(0x0200, true, None))); // the plate taken out
     want.extend([hello(b"AB123456"), hello(b"AB123456"), hello(b"AB123456"), hello(b""), bad.clone()]);
     b.until_true(|g| g.frames.len() >= want.len()).await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -70,7 +70,10 @@ async fn broken_plates_and_slurs_go_on_without_their_plate_a_new_plate_once_per_
     assert_eq!(got, want, "what came");
     let l = lines.lock().unwrap().clone();
     assert_eq!(l.len(), 3, "{l:?}");
-    assert!(l[0].starts_with("[plate] ") && l[0].ends_with("\"Ann\" N1GGER: reads as a slur, dropped (its HELLOs go on without it)"), "{l:?}");
+    assert!(
+        l[0].starts_with("[plate] ") && l[0].ends_with("\"Ann\" N1GGER: reads as a slur, dropped (its HELLOs go on without it)"),
+        "{l:?}"
+    );
     assert!(l[1].ends_with("\"Ann\" 1488: reads as a slur, dropped (its HELLOs go on without it)"), "{l:?}");
     assert!(l[2].ends_with("\"Ann\" AB123456"), "{l:?}");
     a.close().await;

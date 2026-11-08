@@ -145,7 +145,11 @@ impl Friends {
             let Some(owner) = claims.holder(to, Self::now()) else { return false };
             let v = json!({ "t": "friend", "op": "mail", "from": m.from, "body": m.body, "at": m.t });
             let v = bytes::Bytes::from(nfsu2_util::json::stringify(&v));
-            lan.vips_of_owner(&owner).into_iter().fold(false, |any, vip| lan.send_text(vip, v.clone()) || any)
+            let mut any = false;
+            for vip in lan.vips_of_owner(&owner) {
+                any |= lan.send_text(vip, v.clone());
+            }
+            any
         }));
     }
 
@@ -259,7 +263,10 @@ impl Friends {
             "kind": kind, "stage": stage,
         });
         let v = bytes::Bytes::from(nfsu2_util::json::stringify(&v));
-        let told = self.lan.vips_of_owner(&theirs).into_iter().fold(false, |any, x| self.lan.send_text(x, v.clone()) || any);
+        let mut told = false;
+        for x in self.lan.vips_of_owner(&theirs) {
+            told |= self.lan.send_text(x, v.clone());
+        }
         (friend, if told { "sent" } else { "away" })
     }
 
@@ -285,7 +292,10 @@ impl Friends {
         }
         let v = json!({ "t": "friend", "op": "crew", "name": me, "crew": crew, "room": room });
         let v = bytes::Bytes::from(nfsu2_util::json::stringify(&v));
-        let told = self.lan.vips_of_owner(&theirs).into_iter().fold(false, |any, x| self.lan.send_text(x, v.clone()) || any);
+        let mut told = false;
+        for x in self.lan.vips_of_owner(&theirs) {
+            told |= self.lan.send_text(x, v.clone());
+        }
         (r, if told { "sent" } else { "away" })
     }
 
@@ -313,9 +323,11 @@ impl Friends {
         (c.vip, c.owner) = (pvip, pown.clone());
         let now = Self::now();
         // its claimed name, the one over its car
-        let Some(peer) = pown.and_then(|p| self.claims.mine(&p, now)).map(|m| m.name).filter(|n| {
-            nfsu2_claims::canonical(n).is_some_and(|n| Some(n) == nfsu2_claims::canonical(name))
-        }) else {
+        let Some(peer) = pown
+            .and_then(|p| self.claims.mine(&p, now))
+            .map(|m| m.name)
+            .filter(|n| nfsu2_claims::canonical(n).is_some_and(|n| Some(n) == nfsu2_claims::canonical(name)))
+        else {
             c.st = "theirs";
             return c;
         };
@@ -409,7 +421,13 @@ impl Friends {
                 let w = o.and_then(|_| at.next().flatten());
                 let mut m = Map::new();
                 m.insert("name".into(), f.name.clone().into());
-                let place = if w.is_some() { "roam" } else if f.online { "online" } else { "" };
+                let place = if w.is_some() {
+                    "roam"
+                } else if f.online {
+                    "online"
+                } else {
+                    ""
+                };
                 m.insert("where".into(), place.into());
                 match w {
                     Some(w) if w.room == 0 => {
@@ -435,8 +453,10 @@ impl Friends {
 /// nfsu2-lan's `clean_name`, a display name's: that one cuts at 32 characters, and makes "player" of an empty name
 /// (the room of everyone) and of one that reads as a slur (refused here instead).
 fn tidy(s: &str) -> String {
-    let format = |c: char| matches!(c, '\u{ad}' | '\u{600}'..='\u{605}' | '\u{61c}' | '\u{6dd}' | '\u{70f}' | '\u{180e}' | '\u{200b}'..='\u{200f}'
-        | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{206f}' | '\u{feff}' | '\u{fff9}'..='\u{fffb}');
+    let format = |c: char| {
+        matches!(c, '\u{ad}' | '\u{600}'..='\u{605}' | '\u{61c}' | '\u{6dd}' | '\u{70f}' | '\u{180e}' | '\u{200b}'..='\u{200f}'
+        | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{206f}' | '\u{feff}' | '\u{fff9}'..='\u{fffb}')
+    };
     let mut t = String::with_capacity(s.len());
     for c in s.chars() {
         if c.is_whitespace() {
@@ -527,7 +547,11 @@ impl App {
                     _ => return self.json(q, s, 400, &json!({ "error": "invalid" })).await,
                 }
             }
-            _ => return self.plain(q, s, 405, "Method not allowed", &[("allow", "GET, POST"), ("connection", "close")], Cache::Store, true).await,
+            _ => {
+                return self
+                    .plain(q, s, 405, "Method not allowed", &[("allow", "GET, POST"), ("connection", "close")], Cache::Store, true)
+                    .await;
+            }
         };
         let asked = match &ask {
             FriendAsk::AskByName(n) | FriendAsk::Answer(n, true) => Some(n.clone()),
@@ -541,4 +565,3 @@ impl App {
         self.json(q, s, 200, &v).await
     }
 }
-

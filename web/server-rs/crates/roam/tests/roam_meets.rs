@@ -25,7 +25,6 @@ fn gets(k: &Kit, i: u32) -> Vec<u32> {
 
 /// the hints at the end of player i's last list (after its marks): the far ones (entry index, its byte) and the cars
 /// gone (id, why); None without
-#[allow(clippy::type_complexity)]
 fn hints(k: &Kit, i: u32) -> Option<(Vec<(u32, u8)>, Vec<(u32, u8)>)> {
     let sent = k.sent.lock();
     let (_, f) = sent.iter().rev().find(|(v, _)| *v == W(i))?;
@@ -72,7 +71,8 @@ fn a_car_near_a_parked_player_stays_30_s() {
     for near in [true, false] {
         let o = RoamOptions { view_m: 1e-9, near_m: if near { 60.0 } else { 1e-9 }, ..RoamOptions::default() };
         let mut k = Kit::new(o);
-        let mut at = vec![([0.0, 0.0, 0.0], [0.0; 3]), ([30.0, 0.0, 0.0], [0.0; 3]), ([0.0, 40.0, 0.0], [0.0; 3]), ([400.0, 0.0, 0.0], [0.0; 3])];
+        let mut at =
+            vec![([0.0, 0.0, 0.0], [0.0; 3]), ([30.0, 0.0, 0.0], [0.0; 3]), ([0.0, 40.0, 0.0], [0.0; 3]), ([400.0, 0.0, 0.0], [0.0; 3])];
         for (i, (p, v)) in at.iter().enumerate() {
             join(&mut k, i as u32, 16, if i == 0 { 2 } else { 8 }, *p, *v);
         }
@@ -103,7 +103,8 @@ fn a_car_near_a_parked_player_stays_30_s() {
 fn a_near_car_that_goes_is_said_why() {
     let o = RoamOptions { view_m: 1e-9, near_hold_ms: 1000.0, hold_ms: 1000.0, ..RoamOptions::default() };
     let mut k = Kit::new(o);
-    let mut at = vec![([0.0, 0.0, 0.0], [0.0; 3]), ([30.0, 0.0, 0.0], [0.0; 3]), ([0.0, 40.0, 0.0], [0.0; 3]), ([400.0, 0.0, 0.0], [0.0; 3])];
+    let mut at =
+        vec![([0.0, 0.0, 0.0], [0.0; 3]), ([30.0, 0.0, 0.0], [0.0; 3]), ([0.0, 40.0, 0.0], [0.0; 3]), ([400.0, 0.0, 0.0], [0.0; 3])];
     for (i, (p, v)) in at.iter().enumerate() {
         join(&mut k, i as u32, 16, if i == 0 { 2 } else { 8 }, *p, *v);
     }
@@ -128,7 +129,9 @@ fn a_near_car_that_goes_is_said_why() {
     {
         let lines = k.lines.lock();
         assert!(
-            lines.iter().any(|l| l == "[roam] cars within 60 m of a player that went in the last 5 min: 1 (0.2 a minute): the player's links full 1"),
+            lines.iter().any(
+                |l| l == "[roam] cars within 60 m of a player that went in the last 5 min: 1 (0.2 a minute): the player's links full 1"
+            ),
             "{lines:?}"
         );
     }
@@ -182,7 +185,8 @@ fn the_ones_far_off_who_only_get_our_car_are_hinted() {
     for core in [16u16, 15] {
         let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
         // player 0 shows 1 car (the nearest, 3 at 200 m); 1 (500 m) and 2 (1500 m) show 64 and get its car
-        let at = [([0.0, 0.0, 0.0], [0.0; 3]), ([500.0, 0.0, 0.0], [0.0; 3]), ([0.0, 1500.0, 0.0], [0.0; 3]), ([200.0, 0.0, 0.0], [0.0; 3])];
+        let at =
+            [([0.0, 0.0, 0.0], [0.0; 3]), ([500.0, 0.0, 0.0], [0.0; 3]), ([0.0, 1500.0, 0.0], [0.0; 3]), ([200.0, 0.0, 0.0], [0.0; 3])];
         for (i, (p, v)) in at.iter().enumerate() {
             join(&mut k, i as u32, core, if i == 0 { 1 } else { 64 }, *p, *v);
         }

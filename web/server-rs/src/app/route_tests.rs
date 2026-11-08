@@ -333,8 +333,14 @@ async fn seen_counts_each_browser_once() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn country_is_the_connections_own() {
     let kit = Kit::start(&[], |_| {}).await;
-    for (cc, want) in [(Some("NL"), r#"{"country":"nl"}"#), (Some(" br "), r#"{"country":"br"}"#), (Some("XX"), r#"{"country":null}"#),
-                       (Some("T1"), r#"{"country":null}"#), (Some("Netherlands"), r#"{"country":null}"#), (None, r#"{"country":null}"#)] {
+    for (cc, want) in [
+        (Some("NL"), r#"{"country":"nl"}"#),
+        (Some(" br "), r#"{"country":"br"}"#),
+        (Some("XX"), r#"{"country":null}"#),
+        (Some("T1"), r#"{"country":null}"#),
+        (Some("Netherlands"), r#"{"country":null}"#),
+        (None, r#"{"country":null}"#),
+    ] {
         let h: Vec<(&str, &str)> = cc.map(|c| ("CF-IPCountry", c)).into_iter().collect();
         let r = kit.get("/country", &h).await;
         assert_eq!(r.status, 200, "{cc:?}");

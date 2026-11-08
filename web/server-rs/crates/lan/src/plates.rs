@@ -12,6 +12,7 @@
 //!  - one whose plate is another than the player's last one within `EVERY_MS` of it goes on with the last one until
 //!    then, so a player who changes plates again and again costs the others a texture's pixels every 10 s at most;
 //!    each plate that goes is a `[plate]` line.
+//!
 //! The HELLO is rewritten for that (`rewrite`: the plate's bytes, the header's flag, the length, the CRC), and only
 //! one whose length and CRC are right: one that is not goes as it came, and every game drops it.  A HELLO without the
 //! flag (an older game's, a player without a plate) is not looked at.

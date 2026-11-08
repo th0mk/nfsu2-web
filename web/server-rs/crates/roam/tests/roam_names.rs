@@ -37,12 +37,9 @@ fn a_game_that_shows_another_name_than_its_pages_is_on_the_console_and_in_who() 
 #[test]
 fn the_games_form_of_the_pages_name_is_no_other_name() {
     let mut k = Kit::new(RoamOptions::default());
-    for (i, page, game) in [
-        (0, "Bob", "BOB"),
-        (1, "player", "Player"),
-        (2, "Zoë", "Zo?"),
-        (3, "A name of twenty-nine letters", "A name of twenty-nine le"),
-    ] {
+    for (i, page, game) in
+        [(0, "Bob", "BOB"), (1, "player", "Player"), (2, "Zoë", "Zo?"), (3, "A name of twenty-nine letters", "A name of twenty-nine le")]
+    {
         k.hub.page_name(V(i), page.into());
         hello(&mut k, i, game);
     }

@@ -164,7 +164,13 @@ fn the_grid_links_as_every_pair_with_the_cars_moving() {
                 *v = [(r.unit() - 0.5) * 120.0, (r.unit() - 0.5) * 120.0, 0.0];
             }
             // some in a shop, some paused (their speeds move nothing, their view points none)
-            let status = if i % 7 == 0 { 4 } else if i % 11 == 0 { 5 } else { 2 };
+            let status = if i % 7 == 0 {
+                4
+            } else if i % 11 == 0 {
+                5
+            } else {
+                2
+            };
             let d = snap_moving(100 + i as u32, *p, *v, r.unit() * 6.0, status);
             every.from(W(i as u32), &d);
             grid.from(W(i as u32), &d);
@@ -223,7 +229,10 @@ fn the_world_map_shows_the_room_in_free_roam_lately() {
     // a player alone in its room: one empty datagram; a stranger (no HELLO): nothing
     k.clear();
     k.from(W(10), &mapreq_base(110, 1, 2048, 0));
-    assert_eq!(mapds(&k).into_iter().map(|(vip, x)| (vip, x.0, x.1, x.2, x.3, x.4, x.5.len())).collect::<Vec<_>>(), [(W(10), 1, 0, 0, 1, 0, 0)]);
+    assert_eq!(
+        mapds(&k).into_iter().map(|(vip, x)| (vip, x.0, x.1, x.2, x.3, x.4, x.5.len())).collect::<Vec<_>>(),
+        [(W(10), 1, 0, 0, 1, 0, 0)]
+    );
     k.clear();
     k.from(W(20), &mapreq_base(120, 1, 2048, 0));
     assert!(mapds(&k).is_empty());
@@ -452,7 +461,8 @@ fn the_world_map_places_a_car_going_straight_once() {
             k.from(W(2), &snap_moving(102, [100.0 + 40.0 * t, 0.0, 0.0], [40.0, 0.0, 0.0], 0.0, 2));
         }
         if step % 4 == 3 {
-            let (p, v) = if t < 2.0 { ([0.0, 100.0 + 30.0 * t, 0.0], [0.0, 30.0, 0.0]) } else { ([30.0 * (t - 2.0), 160.0, 0.0], [30.0, 0.0, 0.0]) };
+            let (p, v) =
+                if t < 2.0 { ([0.0, 100.0 + 30.0 * t, 0.0], [0.0, 30.0, 0.0]) } else { ([30.0 * (t - 2.0), 160.0, 0.0], [30.0, 0.0, 0.0]) };
             k.from(W(3), &snap_moving(103, p, v, 0.0, 2));
         }
         if step % 2 == 0 {
@@ -601,10 +611,12 @@ fn the_world_map_on_the_wire_roam_core_asks_and_takes_the_answer() {
     assert_eq!(mapd_answer(&k), (2, 1, 298, vec![(5, None), (6, Some((-18, 40, 192, 0, 0)))]));
     let got = run(&[vec!["map".to_string()], first, vec!["ask".to_string()], second].concat());
     let mut lines = got.lines();
-    let ask2 = unhex(&lines.nth(1).unwrap_or("").strip_prefix("ask ").unwrap_or("")[..]);
+    let ask2 = unhex(lines.nth(1).unwrap_or("").strip_prefix("ask ").unwrap_or(""));
     assert_eq!((u16::from_le_bytes([ask2[16], ask2[17]]), u16::from_le_bytes([ask2[20], ask2[21]])), (2, 1), "it asks from answer 1");
-    let want: Vec<String> =
-        (2..301).filter(|&i| i != 5).map(|i| if i == 6 { "6:-18,40,192,0,0".to_string() } else { entry(i, -3.0 * i as f64, -((i % 9) as i32)) }).collect();
+    let want: Vec<String> = (2..301)
+        .filter(|&i| i != 5)
+        .map(|i| if i == 6 { "6:-18,40,192,0,0".to_string() } else { entry(i, -3.0 * i as f64, -((i % 9) as i32)) })
+        .collect();
     assert_eq!(lines.next().unwrap_or(""), format!("map 2 298 298 {}", want.join(" ")));
     // the game's question (who is parked, heights, wide: flags 3) for 4096 of 4300, as the hub reads it; its 40
     // datagrams taken in any order (the last first, the halves swapped): 4096 held

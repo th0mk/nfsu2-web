@@ -218,8 +218,16 @@ const NEAR: &[&str] = &[
 
 /// pieces of the made-up names: the lists' words, the near misses, the names this server sees most, digits
 fn pieces() -> Vec<&'static str> {
-    let mut p: Vec<&str> =
-        ANYWHERE.iter().chain(WHOLE).chain(EDGE).chain(EDGE_OK_START).chain(EDGE_OK_END).chain(WHOLE_OK).chain(PID_STEMS).copied().collect();
+    let mut p: Vec<&str> = ANYWHERE
+        .iter()
+        .chain(WHOLE)
+        .chain(EDGE)
+        .chain(EDGE_OK_START)
+        .chain(EDGE_OK_END)
+        .chain(WHOLE_OK)
+        .chain(PID_STEMS)
+        .copied()
+        .collect();
     p.extend(NEAR);
     p.extend([
         "mustafa", "gs", "raccoon", "spice", "spicy", "niger", "pakize", "pakistan", "xx", "gamer", "a", "g", "dani", "hakan", "van",

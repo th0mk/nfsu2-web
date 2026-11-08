@@ -262,7 +262,7 @@ fn run(sc: &Scene, way: &Way) {
         }
         cars.push(c);
     }
-    let watched = |i: usize| (i < MEET_N && (!sc.mix || i % 4 == 0)) || i >= MEET_N + CITY_N;
+    let watched = |i: usize| (i < MEET_N && (!sc.mix || i.is_multiple_of(4))) || i >= MEET_N + CITY_N;
     let mut links_of = vec![SLOTS; n];
     for i in 0..n {
         let links = if !sc.mix {

@@ -584,13 +584,12 @@ async fn breakdown_online_lan_screens_free_roam_leaving_or_starting() {
     let _s = serial().await;
     let in_online = Arc::new(Mutex::new(HashSet::new()));
     let in_roam = Arc::new(Mutex::new(HashSet::new()));
-    let online = Arc::new(FakeHost { vip: 0x0A4D_0001, name: "online".into(), listed: true, vips: in_online.clone(), gone: Default::default() });
+    let online =
+        Arc::new(FakeHost { vip: 0x0A4D_0001, name: "online".into(), listed: true, vips: in_online.clone(), gone: Default::default() });
     let roam = Arc::new(FakeHost { vip: 0x0A4D_00FD, name: String::new(), listed: false, vips: in_roam.clone(), gone: Default::default() });
     let sw = start_full(opts(), "", Some(online), Some(roam), None).await;
     let mut all = Vec::new();
-    for (name, l) in
-        [("Online", Some(1)), ("LanScreens", Some(1)), ("Roamer", Some(0)), ("Roamer2", Some(0)), ("Leaving", Some(0))]
-    {
+    for (name, l) in [("Online", Some(1)), ("LanScreens", Some(1)), ("Roamer", Some(0)), ("Roamer2", Some(0)), ("Leaving", Some(0))] {
         let mut c = Client::with(sw.port, name, "", Opts { lan: l, ..Opts::default() }).await;
         c.welcome().await;
         all.push(c);
@@ -625,11 +624,14 @@ async fn messages_by_kind_racing_first_then_as_the_breakdown_and_taken_each_time
     let _s = serial().await;
     let in_online = Arc::new(Mutex::new(HashSet::new()));
     let in_roam = Arc::new(Mutex::new(HashSet::new()));
-    let online = Arc::new(FakeHost { vip: 0x0A4D_0001, name: "online".into(), listed: true, vips: in_online.clone(), gone: Default::default() });
+    let online =
+        Arc::new(FakeHost { vip: 0x0A4D_0001, name: "online".into(), listed: true, vips: in_online.clone(), gone: Default::default() });
     let roam = Arc::new(FakeHost { vip: 0x0A4D_00FD, name: String::new(), listed: false, vips: in_roam.clone(), gone: Default::default() });
     let sw = start_full(opts(), "", Some(online), Some(roam), None).await;
     let mut all = Vec::new();
-    for (name, l) in [("Racer", Some(1)), ("Online", Some(1)), ("LanScreens", Some(1)), ("Driver", Some(0)), ("Away", Some(0)), ("Leaving", Some(0))] {
+    for (name, l) in
+        [("Racer", Some(1)), ("Online", Some(1)), ("LanScreens", Some(1)), ("Driver", Some(0)), ("Away", Some(0)), ("Leaving", Some(0))]
+    {
         let mut c = Client::with(sw.port, name, "", Opts { lan: l, ..Opts::default() }).await;
         c.welcome().await;
         all.push(c);
@@ -877,10 +879,10 @@ impl Laggy {
                     match op {
                         0x1 => {
                             let m: Value = serde_json::from_slice(&payload).unwrap();
-                            if m["t"] == "welcome" {
-                                if let Some(t) = vtx.take() {
-                                    let _ = t.send(vip_of(&m));
-                                }
+                            if m["t"] == "welcome"
+                                && let Some(t) = vtx.take()
+                            {
+                                let _ = t.send(vip_of(&m));
                             }
                         }
                         0x2 if payload.len() > 21 => c.lock().unwrap()[payload[21] as usize & 15] += 1,
@@ -1035,7 +1037,7 @@ async fn the_probe_times_free_roams_drivers_every_time_the_others_every_tenth() 
     racer.udp(0x0A4D_00FD, 47210, 47210, &d, 1, 0);
     for c in [&mut roamer, &mut racer] {
         c.ping(vec![1]);
-        c.until_true(|g| g.pongs.len() >= 1).await;
+        c.until_true(|g| !g.pongs.is_empty()).await;
     }
     let (r0, m0, c0) = (roamer.got().pings, menus.got().pings, racer.got().pings);
     for _ in 0..20 {
@@ -1108,7 +1110,8 @@ async fn compact_bundles_carry_the_same_frames_in_fewer_bytes() {
     let (bf, bs) = (bytes(&full), bytes(&small));
     assert!(bs * 100 < bf * 85, "fewer bytes: {bs} against {bf}");
     // a client's compact bundle, alone or in a bundle, reaches nobody
-    let before = (small.got().frames.len(), sw.info().await["limited"].as_u64().unwrap());
+    let got = small.got().frames.len();
+    let before = (got, sw.info().await["limited"].as_u64().unwrap());
     let mut fake = vec![33u8, 0, 0, 0, 0x01, 0x01, 0x02, 0x00, 0x04];
     fake.extend_from_slice(b"evil");
     s.binary(frame_of(small.vip, &fake, 33, 47210, 47210));
@@ -1236,7 +1239,10 @@ async fn a_player_not_driving_gets_fewer_messages_and_a_driver_the_same_as_ever(
     // 2 s of a ping every 20 ms to each and 8 car states each tick: messages, and car states, each got
     let burst = || async {
         let (r0, d0) = (racer.frames(), driver.frames());
-        let (rs0, ds0) = (racer.dgrams().iter().filter(|g| g.buf.get(21) == Some(&3)).count(), driver.dgrams().iter().filter(|g| g.buf.get(21) == Some(&3)).count());
+        let (rs0, ds0) = (
+            racer.dgrams().iter().filter(|g| g.buf.get(21) == Some(&3)).count(),
+            driver.dgrams().iter().filter(|g| g.buf.get(21) == Some(&3)).count(),
+        );
         for _ in 0..100 {
             for to in [racer.vip, driver.vip] {
                 s.udp(to, 47210, 47210, &ping, 1, 0);

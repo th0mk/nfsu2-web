@@ -1694,7 +1694,7 @@ impl LanSwitch {
         for p in self.all.load().iter().filter(|p| p.open()) {
             let at = p.roam_at.load(Relaxed);
             let drives = at > 0 && now - (at as f64) < PROBE_ROAM_MS && !p.away.load(Relaxed);
-            if !drives && (round + u64::from(p.vip)) % PROBE_OTHERS != 0 {
+            if !drives && !(round + u64::from(p.vip)).is_multiple_of(PROBE_OTHERS) {
                 continue;
             }
             // a page that echoes: its next compact bundle stamped instead (conn.rs `write_loop`), and a ping only when

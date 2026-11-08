@@ -207,8 +207,8 @@ pub const ANYWHERE: &[&str] = &[
 /// short words that match only as a part of the name on its own
 pub const WHOLE: &[&str] = &[
     "fag", "dyke", "coon", "spic", "paki", "kike", "gook", "chink", "niga", "nyga", "ngga", "neger", "xach", "xoxol", "hohol", "ukrop",
-    "pider", "pedik", "nazi", "taliban", "rape", "nig", "killnig", "fucknig", "hatenig", "pedo", "goy", "hilter", "heilh",
-    "heilah", "heilss", "ssheil", "heilhit", "hitlor", "adolf", "adolph", "reich",
+    "pider", "pedik", "nazi", "taliban", "rape", "nig", "killnig", "fucknig", "hatenig", "pedo", "goy", "hilter", "heilh", "heilah",
+    "heilss", "ssheil", "heilhit", "hitlor", "adolf", "adolph", "reich",
 ];
 /// words that match where they start or end a part of the name (or its letters together)
 pub const EDGE: &[&str] = &["niga", "nyga", "hitla", "hitle", "nazi"];

@@ -142,7 +142,7 @@ impl LanSwitch {
     /// the player's last one), None to send it as it is; the `[plate]` line of a new one or of a slur
     fn plate_fix(&self, peer: &Peer, data: &Bytes, p: plates::Found<'_>) -> Option<Bytes> {
         if !plates::intact(data) {
-            return None;                          // (no game takes it)
+            return None; // (no game takes it)
         }
         let plates::Found::Plate { at, plate, name } = p else {
             return plates::rewrite(data, None, None).map(Bytes::from);
@@ -495,8 +495,8 @@ fn own(data: &Bytes, src: u32, dst: u32) -> Bytes {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{BASE, UDP_SET};
     use crate::{AttachCtx, LanOptions};
+    use crate::{BASE, UDP_SET};
 
     /// a peer on the switch without a socket: its connection's queue only fills
     pub(crate) fn peer(sw: &Arc<LanSwitch>, group: &str) -> (Arc<Conn>, Arc<AttachCtx>, Arc<Peer>) {
@@ -719,7 +719,9 @@ pub(crate) mod tests {
         let sw = LanSwitch::new(LanOptions::default(), "", None, Some(Arc::new(Hub)), None, None);
         let (_ac, _actx, a) = peer(&sw, "a");
         let (_bc, _bctx, b) = peer(&sw, "b");
-        let hello = |bundle: u8| match crate::text::parse_json(format!(r#"{{"t":"hello","name":"x","bundle":{bundle},"compact":{bundle}}}"#).as_bytes()) {
+        let hello = |bundle: u8| match crate::text::parse_json(
+            format!(r#"{{"t":"hello","name":"x","bundle":{bundle},"compact":{bundle}}}"#).as_bytes(),
+        ) {
             Some(serde_json::Value::Object(m)) => m,
             _ => unreachable!(),
         };
@@ -735,11 +737,17 @@ pub(crate) mod tests {
         assert!(matches!(sw.send_to(b.vip, from(hub, b.vip, KIND_UDP), None), nfsu2_util::SendResult::Sent));
         assert!(matches!(sw.send_to(a.vip, from(BASE | 1, a.vip, KIND_STREAM), None), nfsu2_util::SendResult::Sent));
         let kinds = |p: &Peer| {
-            p.conn.out.q.lock().iter().filter_map(|o| match o {
-                Out::Dgram { src, dst, .. } => Some(format!("dgram {src:x}>{dst:x}")),
-                Out::Raw(f) => Some(format!("raw {:x}", u32::from_be_bytes([f[4], f[5], f[6], f[7]]))),
-                _ => None,
-            }).collect::<Vec<_>>()
+            p.conn
+                .out
+                .q
+                .lock()
+                .iter()
+                .filter_map(|o| match o {
+                    Out::Dgram { src, dst, .. } => Some(format!("dgram {src:x}>{dst:x}")),
+                    Out::Raw(f) => Some(format!("raw {:x}", u32::from_be_bytes([f[4], f[5], f[6], f[7]]))),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
         };
         assert_eq!(kinds(&a), [format!("dgram {hub:x}>{:x}", a.vip), format!("raw {:x}", BASE | 1)]);
         assert_eq!(kinds(&b), [format!("raw {hub:x}")]);

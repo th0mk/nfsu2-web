@@ -98,7 +98,7 @@ impl Today {
         let mut t = Today { day, key, sets: Default::default(), settings: Tally::from_json(v.get("settings")), changed: false };
         for (i, k) in KINDS.iter().enumerate() {
             let b = js::from_base64url(v.get(*k).and_then(Value::as_str).unwrap_or(""));
-            t.sets[i] = b.chunks_exact(8).take(MAX_A_DAY).map(|c| u64::from_le_bytes(c.try_into().expect("8 bytes"))).collect();
+            t.sets[i] = b.as_chunks::<8>().0.iter().take(MAX_A_DAY).map(|c| u64::from_le_bytes(*c)).collect();
         }
         Some(t)
     }

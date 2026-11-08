@@ -38,13 +38,11 @@ fn join(k: &mut Kit, i: u32, room: &str, lobbies: bool) {
 }
 
 /// a LOBBY datagram as roam_core.c lays it out (op arg state max, to, lobby, race, x y, t, n, away seconds, ids)
-#[allow(clippy::too_many_arguments)]
 fn lobby(sender: u32, op: u8, to: u32, id: u32, race: u32, x: i16, y: i16, state: u8, max: u8, ids: &[u32]) -> Vec<u8> {
     lobby_t(sender, op, to, id, race, x, y, state, max, ids, 0)
 }
 
 /// `lobby` with its t (an ADVERT's: 0x8000 its counts said, 0x0040 for its host's friends and crew-mates only)
-#[allow(clippy::too_many_arguments)]
 fn lobby_t(sender: u32, op: u8, to: u32, id: u32, race: u32, x: i16, y: i16, state: u8, max: u8, ids: &[u32], t: u16) -> Vec<u8> {
     let mut p = vec![0u8; 24 + 4 * ids.len()];
     p[20..22].copy_from_slice(&t.to_le_bytes());
@@ -338,13 +336,11 @@ fn a_lobbys_host_is_linked_with_its_players_and_the_ones_at_its_start_first() {
 
 /// a RACEREP datagram as roam_core.c lays it out: lobby, race; mode, laps, track; place, players, flags, type, class,
 /// 3 zero bytes; rating, field, factor, kW, kg, km/h, time; the name in 16 bytes
-#[allow(clippy::too_many_arguments)]
 fn racerep(sender: u32, lobby: u32, place: u8, players: u8, flags: u8, rating: f32, name: &[u8], payload_len: usize) -> Vec<u8> {
     racerep_in(sender, lobby, place, players, flags, rating, name, payload_len, 0.0)
 }
 
 /// `racerep` with the reporter's time (s)
-#[allow(clippy::too_many_arguments)]
 fn racerep_in(
     sender: u32,
     lobby: u32,

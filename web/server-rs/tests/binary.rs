@@ -273,7 +273,9 @@ async fn the_binary_starts_counts_its_players_and_stops() {
     );
     // the log files: the console in today's file too, each line after its time; private
     assert!(
-        rust.startup.contains(&"  logs      : the console in <state>/logs too, a file a day (UTC), gzipped once it ended, the last 30 days".to_string()),
+        rust.startup.contains(
+            &"  logs      : the console in <state>/logs too, a file a day (UTC), gzipped once it ended, the last 30 days".to_string()
+        ),
         "{:?}",
         rust.startup
     );
@@ -1049,7 +1051,7 @@ async fn race_bans_renames_and_history_through_the_control_socket() {
     assert!(ch.1.starts_with("#1 \"Cat\": race ban for 7 d (until "), "{}", ch.1);
     // lifted: the one on the switch races again
     let cat = open("192.0.2.1", "Cat", "page-cat").await;
-    assert_eq!(cat.until_ms(3000, races).await["until"].is_i64(), true);
+    assert!(cat.until_ms(3000, races).await["until"].is_i64());
     let cat_vip = nfsu2_util::vip_str(cat.vip);
     assert_eq!(ctl(&state, &["unban", "#1"]), (0, format!("lifted #1 \"Cat\" (race ban); races again: {cat_vip} \"Cat\"")));
     assert_eq!(cat.until_ms(3000, |g| races(g).filter(|m| m["lifted"] == true)).await["lifted"], true);
@@ -1146,7 +1148,8 @@ async fn webhook() -> (String, Arc<Mutex<Vec<(String, String)>>>) {
                 }
             };
             g.lock().unwrap().push((head, body));
-            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await;
+            let _ =
+                s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await;
         }
     });
     (url, got)
@@ -1200,15 +1203,29 @@ async fn a_car_past_the_operators_numbers_is_race_banned_by_the_server() {
     let v: Value = serde_json::from_str(body).unwrap();
     assert_eq!(v["flags"], 32768);
     let parts = v["components"][0]["components"].as_array().unwrap();
-    assert_eq!(parts[0]["content"], "### Race ban #1 · Evl\nRaced a car no tuning makes: **SKYLINE**, **2829 kW**, rated 1451, 1338 kg, 381 km/h");
+    assert_eq!(
+        parts[0]["content"],
+        "### Race ban #1 · Evl\nRaced a car no tuning makes: **SKYLINE**, **2829 kW**, rated 1451, 1338 kg, 381 km/h"
+    );
     let foot = parts[2]["content"].as_str().unwrap();
-    assert!(foot.starts_with("-# Automatic · lobby sprint, 1st of 4 · 2 weeks, until <t:") && foot.ends_with(":D> · c1 · out of races now"), "{foot}");
+    assert!(
+        foot.starts_with("-# Automatic · lobby sprint, 1st of 4 · 2 weeks, until <t:") && foot.ends_with(":D> · c1 · out of races now"),
+        "{foot}"
+    );
 
     assert_eq!(srv.stop().await, Some(0));
     let lines = srv.lines();
     let has = |start: &str| lines.iter().any(|l| l.starts_with(start));
-    assert!(has("[ban] race bans by the server, for 2w: a car of 1500 kW or more or a rating of 3000 or more; posted to Discord"), "{lines:?}");
-    assert!(lines.iter().any(|l| l.starts_with("[cheat] ") && l.contains("\"Evl\": raced in the race of lobby 000000a1") && l.ends_with("(ban c1)")), "{lines:?}");
+    assert!(
+        has("[ban] race bans by the server, for 2w: a car of 1500 kW or more or a rating of 3000 or more; posted to Discord"),
+        "{lines:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("[cheat] ") && l.contains("\"Evl\": raced in the race of lobby 000000a1") && l.ends_with("(ban c1)")),
+        "{lines:?}"
+    );
     assert!(
         lines.iter().any(|l| l.starts_with("[ban] race ban #1 \"Evl\" (c1) for 14 d (until ")
             && l.contains(": \"Cheating in multiplayer races\"; by the server: its SKYLINE (type 27): 2829 kW, 1338 kg, 381 km/h, rated 1451, in a lobby sprint, 1st of 4 (lobby 000000a1, race 1757408b); out of races now: ")),
@@ -1308,7 +1325,10 @@ async fn free_roams_friends_through_the_server() {
         }
     };
     // the start page: its own lists; no keyphrase, another site, a keyphrase without a name
-    assert_eq!(lists('A').await, serde_json::json!({ "me": "Al_", "done": "ok", "friends": [], "asks": [], "sent": [], "mail": [], "contact": null }));
+    assert_eq!(
+        lists('A').await,
+        serde_json::json!({ "me": "Al_", "done": "ok", "friends": [], "asks": [], "sent": [], "mail": [], "contact": null })
+    );
     assert_eq!(http(port, "GET", "/friends", &[], "").await.0, 401);
     assert_eq!(http(port, "GET", "/friends", &[("authorization", &bearer('A')), ("sec-fetch-site", "cross-site")], "").await.0, 403);
     assert_eq!(http(port, "GET", "/friends", &[("authorization", &bearer('A')), ("origin", "https://evil.example")], "").await.0, 403);
@@ -1414,7 +1434,11 @@ async fn free_roams_friends_through_the_server() {
     say(&al, "Bo_", "race later?", 6);
     assert_eq!(done(&al, 6, ka).await["done"], "kept");
     let mail = lists('B').await["mail"].clone();
-    assert_eq!((mail[0]["from"].as_str(), mail[0]["body"].as_str(), mail.as_array().map(Vec::len)), (Some("Al_"), Some("race later?"), Some(1)), "{mail}");
+    assert_eq!(
+        (mail[0]["from"].as_str(), mail[0]["body"].as_str(), mail.as_array().map(Vec::len)),
+        (Some("Al_"), Some("race later?"), Some(1)),
+        "{mail}"
+    );
     assert_eq!(lists('B').await["mail"], serde_json::json!([]));
     // the start page's answers: a removal (friends no more, on both lists), a block, an op that is none
     let post = |c: char, op: &str, name: &str| {
@@ -1426,7 +1450,14 @@ async fn free_roams_friends_through_the_server() {
         }
     };
     let ka = n(&al);
-    let r = http(port, "POST", "/friends", &[("authorization", &bearer('B')), ("content-type", "application/json")], r#"{"op":"msg","name":"Al_","body":"sure"}"#).await;
+    let r = http(
+        port,
+        "POST",
+        "/friends",
+        &[("authorization", &bearer('B')), ("content-type", "application/json")],
+        r#"{"op":"msg","name":"Al_","body":"sure"}"#,
+    )
+    .await;
     assert_eq!((r.0, serde_json::from_str::<Value>(&r.1).unwrap()["done"].clone()), (200, Value::from("sent")), "{}", r.1);
     assert_eq!(first(&al, "mail", ka).await["body"], "sure");
     assert_eq!(post('B', "remove", "Al_").await["done"], "ok");
@@ -1448,7 +1479,11 @@ async fn free_roams_friends_through_the_server() {
     assert_eq!(post('C', "accept", "Al_").await["done"], "none", "no request waits now");
     assert_eq!(post('A', "ask", "Nobody").await["done"], "claim", "a name nobody claimed");
     assert_eq!(post('A', "ask", "al").await["done"], "self");
-    assert_eq!(http(port, "POST", "/friends", &[("authorization", &bearer('A'))], r#"{"op":"befriend","name":"Bo"}"#).await.0, 400, "no such op");
+    assert_eq!(
+        http(port, "POST", "/friends", &[("authorization", &bearer('A'))], r#"{"op":"befriend","name":"Bo"}"#).await.0,
+        400,
+        "no such op"
+    );
     assert_eq!(post('A', "block", "Cy").await["done"], "name", "a name as the lists have it: its Online form");
     assert_eq!(post('A', "block", "Cy_").await["done"], "ok");
     // befriended again in free roam, then a restart: kept
@@ -1458,7 +1493,9 @@ async fn free_roams_friends_through_the_server() {
     let kb = n(&bo);
     ask(&al, "add", "Bo");
     ask(&bo, "add", "Al");
-    let _ = bo.until_ms(4000, move |g| friend_msgs(g, kb).into_iter().find(|m| m["op"] == "list" && m["friends"] == serde_json::json!(["Al_"]))).await;
+    let _ = bo
+        .until_ms(4000, move |g| friend_msgs(g, kb).into_iter().find(|m| m["op"] == "list" && m["friends"] == serde_json::json!(["Al_"])))
+        .await;
     // a Discord username from the start page: Discord's form only; Bo sees it on the start page and in the game
     assert_eq!(post('A', "discord", "Al Races").await["done"], "name");
     let r = post('A', "discord", "@Al.Races").await;
@@ -1559,7 +1596,8 @@ async fn a_rename_takes_no_other_keyphrases_name() {
     let names = |c: char, n: &'static str| {
         let b = format!("Bearer {}", tok(c));
         async move {
-            let (code, body) = http(port, "GET", &format!("/names?name={n}"), &[("authorization", &b), ("sec-fetch-site", "same-origin")], "").await;
+            let (code, body) =
+                http(port, "GET", &format!("/names?name={n}"), &[("authorization", &b), ("sec-fetch-site", "same-origin")], "").await;
             assert_eq!(code, 200, "{body}");
             serde_json::from_str::<Value>(&body).unwrap()
         }
@@ -1601,14 +1639,23 @@ async fn a_rename_takes_no_other_keyphrases_name() {
     assert_ne!(names('V', "V1ct0r1999").await["state"], "blocked", "nor are the names that read the same refused");
     // a lookalike over the car of another player's claimed name, the same
     let rn = ctl(&state, &["rename", "Rude"]);
-    assert!(rn.1.contains(&format!("not taken: \"W3ndy\" (reads as {} \"Wendy\", that player's claimed name)", nfsu2_util::vip_str(wendy.vip))), "{}", rn.1);
+    assert!(
+        rn.1.contains(&format!("not taken: \"W3ndy\" (reads as {} \"Wendy\", that player's claimed name)", nfsu2_util::vip_str(wendy.vip))),
+        "{}",
+        rn.1
+    );
     assert_eq!(rude.until_ms(3000, |g| g.closed.clone()).await, (4004, "rename".into()));
     sleep(300).await;
     assert!(victor.is_open() && wendy.is_open(), "the victims play on");
     let taken = ctl(&state, &["names"]).1;
     assert!(taken.contains("\"Meanie\"") && taken.contains("\"Rude\"") && !taken.contains("Victor") && !taken.contains("ndy"), "{taken}");
     let lines = srv.lines();
-    assert!(lines.iter().any(|l| l.contains("[ban] rename #1 \"Meanie\": \"Meanie\": \"Offensive name\"; not taken: \"Victor\" (another keyphrase's claimed name)")), "{lines:?}");
+    assert!(
+        lines.iter().any(|l| l.contains(
+            "[ban] rename #1 \"Meanie\": \"Meanie\": \"Offensive name\"; not taken: \"Victor\" (another keyphrase's claimed name)"
+        )),
+        "{lines:?}"
+    );
     assert_eq!(srv.stop().await, Some(0));
 }
 

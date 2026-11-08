@@ -532,7 +532,12 @@ pub fn serve<S: Service>(
 /// The same for a Unix socket, plain HTTP: a proxy on this machine reaches the server there without TCP (cloudflared's
 /// `unix:` origin), and each of its connections counts as one from `peer` (the address the proxy would have on TCP,
 /// 127.0.0.1, so it is the trusted proxy it is there).
-pub fn serve_unix<S: Service>(listener: UnixListener, peer: SocketAddr, limits: Arc<Limits>, service: Arc<S>) -> tokio::task::JoinHandle<()> {
+pub fn serve_unix<S: Service>(
+    listener: UnixListener,
+    peer: SocketAddr,
+    limits: Arc<Limits>,
+    service: Arc<S>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(accept_loop(Listener::Unix(listener, peer), None, limits, service))
 }
 

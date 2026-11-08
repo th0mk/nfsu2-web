@@ -236,7 +236,6 @@ impl Switch {
 // ---- frames ---------------------------------------------------------------------------------------------------
 
 /// a frame of the virtual host's TCP (kind 4), UDP (3) or ICMP (5), as nfsu2-online's `vhost::lan_frame` makes one
-#[allow(clippy::too_many_arguments)]
 pub fn lan_frame(kind: u8, src: u32, dst: u32, sport: u16, dport: u16, op: u8, cid: u32, data: &[u8]) -> Vec<u8> {
     let mut f = vec![0u8; 24 + data.len()];
     f[0] = kind;
