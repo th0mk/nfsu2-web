@@ -180,6 +180,7 @@ interface Seen {
   hat: number; shifter: Shifter; mode: ShifterMode; hid: HidPadReader | null;
   others: string;            // a wheel's: the other controllers its map was made with (pedalsBeside)
   oneS: OneS2016Reader | null;   // Xbox's One S with its 2016 firmware under Chrome on Android (hidpad.ts)
+  rs: [number, number]; rsAt: number; rsSaid: boolean;   // the right stick's axes as last seen, since when (stillStick)
 }
 
 /** the controllers besides the wheels and those with the standard mapping, which may be a wheel's pedals on their
@@ -250,6 +251,9 @@ function withTouch(s: PadSnapshot, t: TouchPad): PadSnapshot {
 /** a stick pressed in alone waits this long (ms) for the other, the menu's shortcut, before the game gets it (the horn,
  *  a car's hydraulics); let go before, the game gets it this long */
 const CHORD_MS = 120, TAP_MS = 80;
+/** a right stick held exactly where it is this long, off centre, on a controller without the standard mapping reads
+ *  as let go (PadPoller.stillStick) */
+const STILL_MS = 2000;
 
 /** the left stick as four directions, PAD_D* bits: on past 0.55, off below 0.40 (runtime/dinput_pad.c's hat) */
 function stickDirs(x: number, y: number, prev: number): number {
@@ -436,7 +440,7 @@ export class PadPoller {
       const hid = !wheel && known && !std ? new HidPadReader(known.face, axes0, known.ltFirst, known.maker) : null;
       const oneS = !wheel && oneS2016Android(g) ? new OneS2016Reader() : null;
       k = this.seen = { index: g.index, id: g.id, std, axes0, ends, wheel, map: null, hat: std ? -1 : findHat(axes0),
-        shifter: new Shifter(), mode: 'off', hid, others: '', oneS };
+        shifter: new Shifter(), mode: 'off', hid, others: '', oneS, rs: [0, 0], rsAt: performance.now(), rsSaid: false };
       if (oneS) this.log(`[pad] ${g.id}: read as ${oneS.describe()}`);
       if (g.mapping !== 'standard') {
         this.log(`[pad] ${g.id}: no standard mapping in this browser; ${g.axes.length} axes at ` +
@@ -472,7 +476,26 @@ export class PadPoller {
     }
     const s = mapStandard(g, k.std ? undefined : k.ends);
     if (!k.std && k.hat >= 0) s.buttons |= hatDirs(g.axes[k.hat]);
+    if (g.mapping !== 'standard') this.stillStick(k, g, s);
     return s;
+  }
+
+  /** A controller without the standard mapping (read in its places: Chrome on Android's, or as if it had them) whose
+   *  right stick has not moved at all for STILL_MS off centre reads as having it let go, until it moves.  Some phone
+   *  controllers have a touch pad in its place, which keeps the place of the last touch once the finger is off (a
+   *  player's GT NX under Chrome on Android: axes 2 and 3 stayed at -0.97 after a tap), and the game kept looking round
+   *  the car with it (runtime/look.c springs back only when the stick does).  A thumb on a stick off centre moves it a
+   *  little within that time; one that does hold it exactly gets the view back until the stick moves. */
+  private stillStick(k: Seen, g: Gamepad, s: PadSnapshot) {
+    const x = g.axes[2] ?? 0, y = g.axes[3] ?? 0, now = performance.now();
+    if (x !== k.rs[0] || y !== k.rs[1]) { k.rs = [x, y]; k.rsAt = now; return; }
+    if (now - k.rsAt < STILL_MS || (s.axes[PAD_AXIS_RX] === 0 && s.axes[PAD_AXIS_RY] === 0)) return;
+    if (!k.rsSaid) {
+      k.rsSaid = true;
+      this.log(`[pad] ${g.id}: the right stick stayed at [${x.toFixed(2)} ${y.toFixed(2)}] for ${STILL_MS / 1000} s: ` +
+        'read as let go until it moves (a touch pad in its place?)');
+    }
+    s.axes[PAD_AXIS_RX] = s.axes[PAD_AXIS_RY] = 0;
   }
 
   /** The page's share of the controller: Home, or the second stick pressed in while the other is, opens or closes its
