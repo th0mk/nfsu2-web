@@ -159,7 +159,7 @@
   "Variables set by their own names: {list}": "Μεταβλητές που ορίστηκαν με τα δικά τους ονόματα: {list}",
   "Ignored, only the page sets them: {list}": "Αγνοήθηκαν, επειδή ορίζονται μόνο από τη σελίδα: {list}",
   "{names} were edited with a save editor: values the game wouldn't make can crash it or break the career.": "Τα {names} τροποποιήθηκαν με πρόγραμμα επεξεργασίας αποθηκεύσεων: τιμές που δεν δημιουργεί το παιχνίδι μπορεί να το κάνουν να καταρρεύσει ή να καταστρέψουν την καριέρα.",
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": "Τα {names} περιέχουν τροποποιημένα αυτοκίνητα που λείπουν από αυτό το παιχνίδι: μπορεί να προκαλέσουν κατάρρευση ή να εμφανίζονται λανθασμένα.",
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": "Τα {names} περιέχουν αυτοκίνητα από τροποποιημένο παιχνίδι: εδώ εμφανίζονται ως εργοστασιακά, και η αποθήκευσή σου τα κρατά όπως είναι, εκτός αν τα αλλάξεις εδώ.",
   "Left out, as the game would not load them: {list}.": "Παραλείφθηκαν, επειδή το παιχνίδι δεν θα τα φόρτωνε: {list}.",
   "{n} other files are left out: {list}": "Παραλείπονται {n} άλλα αρχεία: {list}",
   "{n} entries are skipped (unsafe names, or over the size limits): {list}": "Παραλείπονται {n} καταχωρίσεις λόγω μη ασφαλών ονομάτων ή υπέρβασης των ορίων μεγέθους: {list}",

@@ -165,9 +165,9 @@
     "one": "{names} er blevet ændret med en save-editor: værdier, som spillet ikke ville lave, kan få det til at gå ned eller ødelægge karrieren.",
     "other": "{names} er blevet ændret med en save-editor: værdier, som spillet ikke ville lave, kan få det til at gå ned eller ødelægge karrieren."
   },
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": {
-    "one": "{names} har moddede biler, som dette spil ikke har: det kan gå ned eller vise dem forkert.",
-    "other": "{names} har moddede biler, som dette spil ikke har: det kan gå ned eller vise dem forkert."
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": {
+    "one": "{names} har biler fra et modificeret spil: her vises de som standardbiler, og dit gem beholder dem, som de er, medmindre du ændrer dem her.",
+    "other": "{names} har biler fra et modificeret spil: her vises de som standardbiler, og dit gem beholder dem, som de er, medmindre du ændrer dem her."
   },
   "Left out, as the game would not load them: {list}.": {
     "one": "Udeladt, da spillet ikke ville indlæse den: {list}.",

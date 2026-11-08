@@ -168,10 +168,10 @@
     "many": "{names} sono stati modificati con un editor di salvataggi: valori che il gioco non creerebbe possono mandarlo in crash o rovinare la carriera.",
     "other": "{names} sono stati modificati con un editor di salvataggi: valori che il gioco non creerebbe possono mandarlo in crash o rovinare la carriera."
   },
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": {
-    "one": "{names} ha auto di una mod che questo gioco non ha: potrebbe andare in crash o mostrarle in modo sbagliato.",
-    "many": "{names} hanno auto di una mod che questo gioco non ha: potrebbe andare in crash o mostrarle in modo sbagliato.",
-    "other": "{names} hanno auto di una mod che questo gioco non ha: potrebbe andare in crash o mostrarle in modo sbagliato."
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": {
+    "one": "{names} ha auto di un gioco moddato: qui appaiono come auto di serie, e il tuo salvataggio le conserva così come sono, a meno che tu non le modifichi qui.",
+    "many": "{names} hanno auto di un gioco moddato: qui appaiono come auto di serie, e il tuo salvataggio le conserva così come sono, a meno che tu non le modifichi qui.",
+    "other": "{names} hanno auto di un gioco moddato: qui appaiono come auto di serie, e il tuo salvataggio le conserva così come sono, a meno che tu non le modifichi qui."
   },
   "Left out, as the game would not load them: {list}.": {
     "one": "Escluso, perché il gioco non lo caricherebbe: {list}.",

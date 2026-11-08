@@ -156,7 +156,7 @@
   "Variables set by their own names: {list}": "ตัวแปรที่ตั้งด้วยชื่อของตัวเอง: {list}",
   "Ignored, only the page sets them: {list}": "ถูกละเว้น เพราะมีแต่หน้าเว็บที่ตั้งค่าได้: {list}",
   "{names} were edited with a save editor: values the game wouldn't make can crash it or break the career.": "{names} ถูกแก้ไขด้วยโปรแกรมแก้เซฟ: ค่าที่เกมไม่ได้สร้างเองอาจทำให้เกมแครชหรือทำให้โหมดอาชีพเสียหาย",
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": "{names} มีรถจากม็อดที่เกมนี้ไม่มี: เกมอาจแครชหรือแสดงรถเหล่านั้นผิด",
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": "{names} มีรถจากเกมที่ลงม็อด: ที่นี่จะแสดงเป็นรถสต็อก และเซฟจะเก็บรถไว้ตามเดิม เว้นแต่คุณจะเปลี่ยนที่นี่",
   "Left out, as the game would not load them: {list}.": "ไม่ได้นำเข้า เพราะเกมจะโหลดไม่ได้: {list}",
   "{n} other files are left out: {list}": "ไม่ได้นำไฟล์อื่นอีก {n} ไฟล์เข้ามา: {list}",
   "{n} entries are skipped (unsafe names, or over the size limits): {list}": "ข้ามไป {n} รายการ (ชื่อไม่ปลอดภัย หรือเกินขนาดที่กำหนด): {list}",

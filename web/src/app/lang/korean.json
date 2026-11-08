@@ -156,7 +156,7 @@
   "Variables set by their own names: {list}": "변수 이름으로 직접 설정한 변수: {list}",
   "Ignored, only the page sets them: {list}": "무시됨(페이지만 설정함): {list}",
   "{names} were edited with a save editor: values the game wouldn't make can crash it or break the career.": "{names} 프로필은 세이브 에디터로 편집됐어요. 게임이 직접 만들지 않는 값은 게임을 비정상 종료시키거나 커리어를 망가뜨릴 수 있어요.",
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": "{names} 프로필에는 이 게임에 없는 모드 차가 있어요. 게임이 비정상 종료되거나 차를 잘못 표시할 수 있어요.",
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": "{names} 프로필에는 모드를 넣은 게임의 차가 있어요. 여기서는 순정 차로 보이지만, 여기서 바꾸지 않는 한 저장 파일에는 그대로 남아요.",
   "Left out, as the game would not load them: {list}.": "게임이 불러올 수 없어서 제외됨: {list}.",
   "{n} other files are left out: {list}": "다른 파일 {n}개는 제외돼요: {list}",
   "{n} entries are skipped (unsafe names, or over the size limits): {list}": "항목 {n}개를 건너뛰어요(안전하지 않은 이름이거나 크기 제한 초과): {list}",

@@ -171,11 +171,11 @@
     "many": "Profile {names} zostały zmienione edytorem zapisów: wartości, których gra sama by nie utworzyła, mogą spowodować jej awarię lub zepsuć karierę.",
     "other": "Profile {names} zostały zmienione edytorem zapisów: wartości, których gra sama by nie utworzyła, mogą spowodować jej awarię lub zepsuć karierę."
   },
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": {
-    "one": "Profil {names} ma samochody z modów, których ta gra nie ma: gra może ulec awarii albo pokazać je źle.",
-    "few": "Profile {names} mają samochody z modów, których ta gra nie ma: gra może ulec awarii albo pokazać je źle.",
-    "many": "Profile {names} mają samochody z modów, których ta gra nie ma: gra może ulec awarii albo pokazać je źle.",
-    "other": "Profile {names} mają samochody z modów, których ta gra nie ma: gra może ulec awarii albo pokazać je źle."
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": {
+    "one": "Profil {names} ma samochody z gry z modami: tutaj widać je jako seryjne, a twój zapis zachowa je bez zmian, chyba że zmienisz je tutaj.",
+    "few": "Profile {names} mają samochody z gry z modami: tutaj widać je jako seryjne, a twój zapis zachowa je bez zmian, chyba że zmienisz je tutaj.",
+    "many": "Profile {names} mają samochody z gry z modami: tutaj widać je jako seryjne, a twój zapis zachowa je bez zmian, chyba że zmienisz je tutaj.",
+    "other": "Profile {names} mają samochody z gry z modami: tutaj widać je jako seryjne, a twój zapis zachowa je bez zmian, chyba że zmienisz je tutaj."
   },
   "Left out, as the game would not load them: {list}.": {
     "one": "Pominięty, bo gra by go nie wczytała: {list}.",

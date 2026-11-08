@@ -9,7 +9,7 @@
 // it stays on the server.
 
 import { cacheBytes, clearCache, filesOf, pruneSaveDir, UndoPending, writeTogether, type BesideFile, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, UNREADABLE, writeFile, type Entry, type Profile } from './savefs';
-import { AUTOSAVE_SEEN, coverOf, fixedName, GIVE_MAX, isGivenName, isProfileFile, isProfileName, mendedBefore, modCars, profileInside, renameProfile, deleteProfile, sameCareer, sealed, withName, type RenameFiles } from './profile';
+import { AUTOSAVE_SEEN, coverOf, fixedName, GIVE_MAX, isGivenName, isProfileFile, isProfileName, garageModCars, mendedBefore, modCars, profileInside, renameProfile, deleteProfile, sameCareer, sealed, withName, type RenameFiles } from './profile';
 import { listZip, unzip, zip, ZipError, type ZipEntry } from './zip';
 import { downloadBlob, stamp } from './logs';
 import { fmtBytes } from './checks';
@@ -162,13 +162,14 @@ function backupIn(files: FileIn[], skipped: string[], takes: (name: string) => b
   const gone = new Set<string>(), moved = new Map<string, string>();
   const mains = files.filter(e => { const s = e.path.split('/'); return s.length === 3 && s[0] === PROFILES_DIR && lower(s[2]) === lower(s[1]) && !coverOf(s[1]); });
   const mend: { e: FileIn; folder: string; inside: string; edited: boolean }[] = [];
+  const garageOf = (folder: string) => files.find(f => lower(f.path) === lower(`${PROFILES_DIR}/${folder}/GARAGE.DAT`))?.data;
   for (const e of mains) {
     const folder = e.path.split('/')[1], r = profileInside(e.data);
     if ('bad' in r) { out.refused.push({ name: folder, why: r.bad }); gone.add(folder); continue; }
     if (!takes(r.inside) || lower(r.inside) !== lower(folder)) { mend.push({ e, folder, inside: r.inside, edited: r.edited }); continue; }
     out.profiles.push(folder);
     if (r.edited) { out.edited.push(folder); e.data = sealed(e.data); }
-    if (modCars(e.data)) out.modded.push(folder);
+    if (modCars(e.data) || garageModCars(garageOf(folder))) out.modded.push(folder);
   }
   // the names taken: every folder of the profiles' (a profile's, a cover shoot's profile, files without a profile:
   // an orphan GARAGE.DAT), but those of the profiles mended
@@ -185,7 +186,7 @@ function backupIn(files: FileIn[], skipped: string[], takes: (name: string) => b
     e.data = withName(e.data, to);
     out.profiles.push(to); out.repaired.push({ name: folder, to });
     if (edited) out.edited.push(to);
-    if (modCars(e.data)) out.modded.push(to);
+    if (modCars(e.data) || garageModCars(garageOf(folder))) out.modded.push(to);
   }
   out.entries = files.flatMap(e => {
     const s = e.path.split('/');
@@ -213,8 +214,13 @@ function profilesIn(files: FileIn[], skipped: string[], here: string[] = [], tak
   const found = new Map<string, FileIn & { name: string; edited: boolean; mended?: boolean }>();
   const mend: (FileIn & { own: string; inside: string; edited: boolean })[] = [];
   const covers: (FileIn & { profile: string; cover: string })[] = [];
+  // the files a profile's folder has beside it (this page's: slots 6-10, the parts kept beside it), taken with it
+  const sides: (FileIn & { dir: string; name: string })[] = [];
+  const dirOf = (path: string) => lower(path.split('/').slice(0, -1).join('/'));
   for (const e of files) {
     const s = e.path.split('/'), file = s[s.length - 1], folder = s.length > 1 ? s[s.length - 2] : '';
+    const side = SIDE_FILES.find(n => lower(n) === lower(file));
+    if (side && s.length > 1) { sides.push({ ...e, dir: dirOf(e.path), name: side }); continue; }
     const c = coverOf(file);                            // named as its folder; "20CM" too, but no profile
     if (c) { covers.push({ ...e, ...c }); continue; }
     if (!isProfileFile(e.data)) { out.skipped.push(e.path); continue; }
@@ -232,12 +238,17 @@ function profilesIn(files: FileIn[], skipped: string[], here: string[] = [], tak
     found.set(lower(to), { ...m, name: to, data: withName(m.data, to), mended: true });
     out.repaired.push({ name: m.own, to });
   }
+  const took = new Set<FileIn>();
   for (const p of found.values()) {
     out.entries.push({ path: `${PROFILES_DIR}/${p.name}/${p.name}`, data: p.edited && !p.mended ? sealed(p.data) : p.data, mtime: p.mtime });
     out.profiles.push(p.name);
     if (p.edited) out.edited.push(p.name);
-    if (modCars(p.data)) out.modded.push(p.name);
+    // its folder's GARAGE.DAT and MODPARTS.DAT (a profile alone, at the zip's top or picked as a file: none)
+    const dir = p.path.includes('/') ? dirOf(p.path) : null, mine = sides.filter(f => dir !== null && f.dir === dir);
+    for (const f of mine) { out.entries.push({ path: `${PROFILES_DIR}/${p.name}/${f.name}`, data: f.data, mtime: f.mtime }); took.add(f); }
+    if (modCars(p.data) || garageModCars(mine.find(f => f.name === 'GARAGE.DAT')?.data)) out.modded.push(p.name);
   }
+  for (const f of sides) if (!took.has(f)) out.skipped.push(f.path);
   for (const c of covers) {
     const p = found.get(lower(c.profile)) ?? found.get(was.get(lower(c.profile)) ?? '');
     if (!p) { out.skipped.push(c.path); continue; }
@@ -246,6 +257,10 @@ function profilesIn(files: FileIn[], skipped: string[], here: string[] = [], tak
   }
   return out;
 }
+
+/** the files beside a profile in its folder that come with it from a zip of the PC game's folder (a page's save folder
+ *  copied there, played there): slots 6-10 (runtime/garage.c) and the parts kept beside it (runtime/modpacks.c) */
+const SIDE_FILES = ['GARAGE.DAT', 'MODPARTS.DAT'];
 
 /** the restores of the save folder, one at a time: a backup's restore and a cloud take at once pruned what the other
  *  wrote */
@@ -451,8 +466,8 @@ function restoreNotes(r: Restore): string[] {
   const refused = r.refused.map(x => `${x.name}: ${x.why}`).join('; ');
   if (r.edited.length) items.push(tn(r.edited.length, '{names} was edited with a save editor: values the game wouldn\'t make can crash it or break the career.',
     '{names} were edited with a save editor: values the game wouldn\'t make can crash it or break the career.', { names: listOf(r.edited) }));
-  if (r.modded.length) items.push(tn(r.modded.length, '{names} has modded cars this game lacks: it may crash or show them wrong.',
-    '{names} have modded cars this game lacks: it may crash or show them wrong.', { names: listOf(r.modded) }));
+  if (r.modded.length) items.push(tn(r.modded.length, '{names} has cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.',
+    '{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.', { names: listOf(r.modded) }));
   if (refused) items.push(tn(r.refused.length, 'Left out, as the game would not load it: {list}.', 'Left out, as the game would not load them: {list}.', { list: refused }));
   const skipped = r.skipped.slice(0, 3).join(', ') + (r.skipped.length > 3 ? ' …' : '');
   if (r.skipped.length) items.push(r.kind === 'profiles' ? tn(r.skipped.length, '{n} other file is left out: {list}', '{n} other files are left out: {list}', { list: skipped })
@@ -486,6 +501,9 @@ async function addProfilesNow(fs: RenameFiles, r: Restore) {
   const names = new Set(r.profiles.map(lower));
   const written = new Set(r.entries.map(e => e.path.split('/')[1]));
   const paths = new Set(r.entries.map(e => e.path));
+  const folderOf = (path: string) => lower(path.split('/').slice(0, 2).join('/'));
+  // the folders whose MODPARTS.DAT the restore brings (any case): the one here and its MODPARTS.NEW are the old one's
+  const parts = new Set(r.entries.filter(e => lower(e.path.split('/')[2] ?? '') === 'modparts.dat').map(e => folderOf(e.path)));
   const old = new Set<string>(), stale: string[] = [];
   // (read before anything is written: one that does not read refuses the restore whole)
   const seen = await fs.readText(AUTOSAVE_SEEN);
@@ -493,10 +511,12 @@ async function addProfilesNow(fs: RenameFiles, r: Restore) {
     const s = path.split('/');
     if (s.length < 3 || s[0] !== PROFILES_DIR || !names.has(lower(coverOf(s[1])?.profile ?? s[1]))) continue;
     if (!written.has(s[1])) old.add(s[1]);
-    // a folder of the same name, written over: the old profile's MPWINS.DAT and MODPARTS.DAT go too, if the new one
-    // brings none (the old career's wins waiting for its garage, or its cars' mod parts, would go to the new one's; a
-    // GARAGE.DAT has its fingerprint for this)
-    else if (!paths.has(path) && ['mpwins.dat', 'modparts.dat'].includes(lower(s[2]))) stale.push(path);
+    // a folder of the same name, written over: the old profile's MPWINS.DAT goes too, if the new one brings none (the old
+    // career's wins waiting for its garage would go to the new one's); its MODPARTS.DAT and MODPARTS.NEW stay unless the
+    // restore brings its own (each part there is the car's of its fingerprint alone: a part of another car is not put
+    // on), and a GARAGE.DAT has its fingerprint
+    else if (!paths.has(path) && (lower(s[2]) === 'mpwins.dat' ||
+      (['modparts.dat', 'modparts.new'].includes(lower(s[2])) && parts.has(folderOf(path))))) stale.push(path);
   }
   for (const e of r.entries) await fs.writeFile(e.path, e.data);
   for (const f of old) await fs.remove(`${PROFILES_DIR}/${f}`);

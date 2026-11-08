@@ -165,9 +165,9 @@
     "one": "{names} is gewijzigd met een save-editor: waarden die het spel niet zou maken, kunnen het laten crashen of de carrière kapotmaken.",
     "other": "{names} zijn gewijzigd met een save-editor: waarden die het spel niet zou maken, kunnen het laten crashen of de carrière kapotmaken."
   },
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": {
-    "one": "{names} heeft wagens uit mods die dit spel niet heeft: het spel kan crashen of ze verkeerd tonen.",
-    "other": "{names} hebben wagens uit mods die dit spel niet heeft: het spel kan crashen of ze verkeerd tonen."
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": {
+    "one": "{names} heeft wagens uit een gemodde game: hier zie je ze als standaardwagens, en je opslag houdt ze zoals ze zijn, tenzij je ze hier verandert.",
+    "other": "{names} hebben wagens uit een gemodde game: hier zie je ze als standaardwagens, en je opslag houdt ze zoals ze zijn, tenzij je ze hier verandert."
   },
   "Left out, as the game would not load them: {list}.": {
     "one": "Weggelaten, omdat het spel het niet zou laden: {list}.",

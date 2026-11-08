@@ -9,7 +9,7 @@
 // - a profile the game would not load (version, a name its field does not make) is
 //   left out with why, its cover shoots too; one a save editor changed (checksums
 //   that no longer hold) comes in sealed again, as the game would have saved it, and
-//   one with cars a mod added (a car type the game's 31 player cars do not have),
+//   one with cars a mod added (a car type the game's 46 do not have),
 //   each with a warning
 // - adding: a profile of the same name here (in any case) goes with its cover shoots,
 //   the other profiles and files stay, and its autosave-profiles.txt line goes
@@ -72,8 +72,27 @@ test('modCars: none among the game\'s own cars; a car type past them, by index o
   assert.equal(P.modCars(profile('A', { career: ['240SX', 'SKYLINE', 'RX8'], custom: ['GOLF'] })), 0);
   assert.equal(P.modCars(profile('A', { career: ['240SX', 0x1badcafe] })), 1, 'a career car of an unknown type');
   assert.equal(P.modCars(profile('A', { custom: [0xdeadbeef, 'MIATA'] })), 1, 'a customized one');
-  assert.equal(P.modCars(profile('A', { career: ['TAXI'] })), 1, 'a traffic car is no player car');
-  assert.equal(P.modCars(profile('A', { stock: 33 })), 2, 'two car types past the stock list');
+  assert.equal(P.modCars(profile('A', { career: ['TAXI'] })), 0, 'a traffic car is one of the game\'s car types');
+  assert.equal(P.modCars(profile('A', { career: ['HATCHBACK02', 'FIRETRUCK'], custom: ['BUS'] })), 0);
+  assert.equal(P.modCars(profile('A', { stock: 46 })), 0, 'stock cars of every car type, traffic too');
+  assert.equal(P.modCars(profile('A', { stock: 48 })), 2, 'two car types past the game\'s 46');
+});
+
+/** a GARAGE.DAT (slots 6-10, runtime/garage.c): its head, then 5 career cars; cars: [car type, owned] of each */
+function garage(cars = []) {
+  const f = Buffer.alloc(32 + 5 * 2034);
+  f.writeUInt32LE(0x4147324E, 0); f.writeUInt32LE(1, 4);
+  cars.forEach(([c, owned], i) => { f.writeUInt32LE(typeof c === 'number' ? c : P.bStringHash(c), 32 + i * 2034 + 28); f[32 + i * 2034 + 1073] = owned ? 1 : 0; });
+  return new Uint8Array(f.buffer, f.byteOffset, f.length);
+}
+
+test('garageModCars: slots 6-10 of a car type the game does not have', () => {
+  assert.equal(P.garageModCars(undefined), 0);
+  assert.equal(P.garageModCars(garage([['RX7', 1], ['TAXI', 1]])), 0);
+  assert.equal(P.garageModCars(garage([['RX7', 1], [0x1badcafe, 1], [0x5ec0ffee, 0]])), 1, 'an empty slot\'s leftovers are no car');
+  const v2 = garage([[0x1badcafe, 1]]); v2[4] = 2;
+  assert.equal(P.garageModCars(v2), 0, 'another version: not read');
+  assert.equal(P.garageModCars(garage([[0x1badcafe, 1]]).subarray(0, 100)), 0);
 });
 
 test('profileName: the checks of a profile from elsewhere, and why one is refused', () => {
@@ -165,13 +184,15 @@ test('a backup of the page\'s restores in place, without a profile the game woul
     'registry.txt': 'NotFirstTime=1\n', 'settings.ini': 'movies = off\n', 'nfsu2000.tga': new Uint8Array(40), 'autosave-profiles.txt': 'frik\n',
     [at('frik')]: profile('frik'), [at('frik DVD 1')]: cover('g'),
     [at('BAD')]: profile('BAD', { version: 0x10C }), [at('BAD Magazine 1')]: cover('h'), [at('MOD')]: profile('MOD', { custom: [0x12345678] }),
-    [at('EDIT')]: new Uint8Array(edited),
+    [at('EDIT')]: new Uint8Array(edited), [`${DIR}/frik/GARAGE.DAT`]: garage([['GOLF', 1]]),
   }));
   assert.equal(r.kind, 'backup');
   assert.deepEqual(sorted(r.profiles), ['EDIT', 'MOD', 'frik'], 'a cover shoot is no profile');
   assert.deepEqual([r.modded, r.edited], [['MOD'], ['EDIT']]);
+  const g = await readBackup(z({ 'registry.txt': 'x', [at('SIX')]: profile('SIX'), [`${DIR}/SIX/GARAGE.DAT`]: garage([['GOLF', 1], [0x0ddba11, 1]]) }));
+  assert.deepEqual(g.modded, ['SIX'], 'a car in slots 6-10 a mod added');
   assert.deepEqual(r.refused.map(x => x.name), ['BAD']);
-  assert.deepEqual(paths(r), sorted([at('EDIT'), at('MOD'), at('frik'), at('frik DVD 1'), 'autosave-profiles.txt', 'nfsu2000.tga', 'registry.txt', 'settings.ini']));
+  assert.deepEqual(paths(r), sorted([at('EDIT'), at('MOD'), at('frik'), at('frik DVD 1'), `${DIR}/frik/GARAGE.DAT`, 'autosave-profiles.txt', 'nfsu2000.tga', 'registry.txt', 'settings.ini']));
   const e = r.entries.find(x => x.path === at('EDIT')).data;
   assert.deepEqual([P.profileName(e), e[9000]], [{ name: 'EDIT', edited: false }, edited[9000]], 'sealed again, the edit kept');
   // another name inside than its folder's: its folder's written inside (it used to be left out)
@@ -222,13 +243,45 @@ test('adding: a profile of the same name goes with its covers (in any case), all
   assert.deepEqual([...fs2.m.get(at('MEH'))], [...meh]);
   assert.deepEqual(fs2.writes, [at('MEH'), `-${DIR}/MEH Magazine 2`]);
 
-  // ...and the old one's MPWINS.DAT and MODPARTS.DAT go with it (its career wins waiting for its garage, its cars' mod
-  // parts, are not the new one's); its GARAGE.DAT stays (its fingerprint keeps it aside for a profile of other cars)
+  // ...and the old one's MPWINS.DAT goes with it (its career wins waiting for its garage are not the new one's); its
+  // GARAGE.DAT stays (its fingerprint keeps it aside for a profile of other cars), and so do its MODPARTS.DAT and
+  // MODPARTS.NEW when the restore brings none (each part there is put back only on the car of its fingerprint)
   const fs3 = folder({ [at('MEH')]: profile('MEH', { career: ['RX7'] }), [`${DIR}/MEH/MPWINS.DAT`]: 'N2MW', [`${DIR}/MEH/GARAGE.DAT`]: 'G',
-    [`${DIR}/MEH/MODPARTS.DAT`]: 'N2MP' });
+    [`${DIR}/MEH/MODPARTS.DAT`]: 'N2MP', [`${DIR}/MEH/MODPARTS.NEW`]: 'N2MP' });
   await addProfiles(fs3, await readBackup(meh, 'MEH'));
-  assert.deepEqual(sorted(fs3.m.keys()), sorted([at('MEH'), `${DIR}/MEH/GARAGE.DAT`]));
-  assert.deepEqual(fs3.writes, [at('MEH'), `-${DIR}/MEH/MODPARTS.DAT`, `-${DIR}/MEH/MPWINS.DAT`], 'the new profile is written before the old wins and mod parts go');
+  assert.deepEqual(sorted(fs3.m.keys()), sorted([at('MEH'), `${DIR}/MEH/GARAGE.DAT`, `${DIR}/MEH/MODPARTS.DAT`, `${DIR}/MEH/MODPARTS.NEW`]));
+  assert.deepEqual(fs3.writes, [at('MEH'), `-${DIR}/MEH/MPWINS.DAT`], 'the new profile is written before the old wins go; its mod parts stay');
+  // a restore that brings its own MODPARTS.DAT (a zip of the PC game's folder): the one here and its MODPARTS.NEW go
+  const fs4 = folder({ [at('MEH')]: profile('MEH', { career: ['RX7'] }), [`${DIR}/MEH/modparts.dat`]: 'N2MP old', [`${DIR}/MEH/MODPARTS.NEW`]: 'N2MP old' });
+  await addProfiles(fs4, await readBackup(z({ [at('MEH')]: meh, [`${DIR}/MEH/MODPARTS.DAT`]: 'N2MP new' })));
+  assert.deepEqual(sorted(fs4.m.keys()), sorted([at('MEH'), `${DIR}/MEH/MODPARTS.DAT`]));
+  assert.equal(new TextDecoder().decode(fs4.m.get(`${DIR}/MEH/MODPARTS.DAT`)), 'N2MP new');
+});
+
+test('the PC game\'s folder zipped (Compress-Archive, either slash) or a profile alone: its folder\'s GARAGE.DAT and MODPARTS.DAT come with it', async () => {
+  const g = garage([['GOLF', 1], [0x0ddba11, 1]]);
+  for (const sep of ['/', '\\']) {
+    const r = await readBackup(z({
+      [['NFS Underground 2', 'MEH', 'MEH'].join(sep)]: profile('MEH'), [['NFS Underground 2', 'MEH', 'GARAGE.DAT'].join(sep)]: g,
+      [['NFS Underground 2', 'MEH', 'modparts.dat'].join(sep)]: 'N2MP', [['NFS Underground 2', 'MEH', 'MPWINS.DAT'].join(sep)]: 'N2MW',
+      [['NFS Underground 2', 'OTHER', 'MODPARTS.DAT'].join(sep)]: 'N2MP of none',
+    }));
+    assert.equal(r.kind, 'profiles');
+    assert.deepEqual(paths(r), sorted([at('MEH'), `${DIR}/MEH/GARAGE.DAT`, `${DIR}/MEH/MODPARTS.DAT`]), `the side files, named as the game names them (${sep})`);
+    assert.deepEqual(sorted(r.skipped), sorted([`${DIR}/MEH/MPWINS.DAT`, `${DIR}/OTHER/MODPARTS.DAT`]), 'a side file without its profile stays out');
+    assert.deepEqual(r.modded, ['MEH'], 'its GARAGE.DAT\'s car a mod added: the warning');
+  }
+  // a profile mended (its name inside not one the game makes) takes its folder's side files under its new name
+  const m = await readBackup(z({ [`${DIR}/MEH/MEH`]: profile('MEH', { inside: 'BAD NAME!' }), [`${DIR}/MEH/MODPARTS.DAT`]: 'N2MP' }));
+  assert.deepEqual(paths(m), sorted([at(m.profiles[0]), `${DIR}/${m.profiles[0]}/MODPARTS.DAT`]));
+  // the profile's own file alone (picked, or at the zip's top): nothing beside it, and the MODPARTS.DAT here stays
+  const lone = await readBackup(profile('MEH'), 'MEH');
+  assert.deepEqual(paths(lone), [at('MEH')]);
+  const fs5 = folder({ [at('MEH')]: profile('MEH', { career: ['RX7'] }), [`${DIR}/MEH/MODPARTS.DAT`]: 'N2MP here' });
+  await addProfiles(fs5, lone);
+  assert.equal(fs5.m.get(`${DIR}/MEH/MODPARTS.DAT`), 'N2MP here', 'not written over, not removed');
+  const top = await readBackup(z({ MEH: profile('MEH'), 'MODPARTS.DAT': 'N2MP' }));
+  assert.deepEqual(paths(top), [at('MEH')], 'a MODPARTS.DAT at the zip\'s top is no profile folder\'s');
 });
 
 // The game's new-profile box in Chinese starts with its text D6 8B 89 (LANGPACKS/chinese, 0x818F0385), the field

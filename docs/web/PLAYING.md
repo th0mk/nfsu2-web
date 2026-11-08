@@ -516,8 +516,10 @@ World row's list says how many are in each world.
   are added beside the profiles in this browser, with their DVD and magazine covers; one of the same name is
   replaced, after asking. A profile saved by another version is left out, as the game would not load it. One
   changed by a save editor is restored with a warning: a value the game would not make itself may crash it or break
-  the career. One with cars a mod added is restored with a warning too: this game does not have those cars, and may
-  crash or show them wrong.
+  the career. One with cars a mod added is restored with a warning too: this game does not have those cars, so each
+  one shows here as a stock car (a Peugeot 206 with stock parts), and the save keeps the car as it is, for the modded
+  game, unless you change it here (parts, tuning, a trade). A profile folder's GARAGE.DAT and MODPARTS.DAT (slots 6-10,
+  the parts this game keeps beside a profile) come along from a zip of the folder.
 - **Backups are your safety net.** When the disk is nearly full, the browser may clear a site's storage unless it
   promised to keep it. Chrome decides that by itself, and the page cannot see how full the disk is, so it does not warn.
   Firefox asks by the address bar (the Saves section says so while it asks): allow it. Make a backup now and then,

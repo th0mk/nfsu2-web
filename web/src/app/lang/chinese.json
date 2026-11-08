@@ -156,7 +156,7 @@
   "Variables set by their own names: {list}": "以自身名稱設定的變數：{list}",
   "Ignored, only the page sets them: {list}": "已忽略，只有頁面能設定：{list}",
   "{names} were edited with a save editor: values the game wouldn't make can crash it or break the career.": "{names} 曾以存檔編輯器修改：遊戲本身不會產生的數值可能導致遊戲當機或毀損生涯進度。",
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": "{names} 含有本遊戲沒有的模組車輛：遊戲可能會當機或顯示錯誤。",
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": "{names} 含有模組遊戲的車輛：在這裡會顯示為原廠車；除非你在這裡改動它們，存檔會原樣保留。",
   "Left out, as the game would not load them: {list}.": "已略過，因為遊戲無法載入：{list}。",
   "{n} other files are left out: {list}": "已略過其他 {n} 個檔案：{list}",
   "{n} entries are skipped (unsafe names, or over the size limits): {list}": "已跳過 {n} 個項目（名稱不安全或超過大小限制）：{list}",

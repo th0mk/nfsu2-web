@@ -168,10 +168,10 @@
     "many": "{names} se modificaron con un editor de partidas: valores que el juego no crearía pueden bloquearlo o estropear el modo carrera.",
     "other": "{names} se modificaron con un editor de partidas: valores que el juego no crearía pueden bloquearlo o estropear el modo carrera."
   },
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": {
-    "one": "{names} tiene coches de un mod que este juego no tiene: puede bloquearse o mostrarlos mal.",
-    "many": "{names} tienen coches de un mod que este juego no tiene: puede bloquearse o mostrarlos mal.",
-    "other": "{names} tienen coches de un mod que este juego no tiene: puede bloquearse o mostrarlos mal."
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": {
+    "one": "{names} tiene coches de un juego con mods: aquí se ven como coches de serie, y tu partida los conserva tal como están, a menos que los cambies aquí.",
+    "many": "{names} tienen coches de un juego con mods: aquí se ven como coches de serie, y tu partida los conserva tal como están, a menos que los cambies aquí.",
+    "other": "{names} tienen coches de un juego con mods: aquí se ven como coches de serie, y tu partida los conserva tal como están, a menos que los cambies aquí."
   },
   "Left out, as the game would not load them: {list}.": {
     "one": "Se omite, porque el juego no lo cargaría: {list}.",

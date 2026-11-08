@@ -156,7 +156,7 @@
   "Variables set by their own names: {list}": "変数名で直接設定された変数: {list}",
   "Ignored, only the page sets them: {list}": "無視（ページだけが設定する項目）: {list}",
   "{names} were edited with a save editor: values the game wouldn't make can crash it or break the career.": "{names}はセーブエディターで編集されています。ゲーム自体が作らない値があると、ゲームがクラッシュしたり、キャリアが壊れたりするおそれがあります。",
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": "{names}には、このゲームにないMODの車があります。ゲームがクラッシュしたり、正しく表示されなかったりするおそれがあります。",
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": "{names}には、MODを入れたゲームの車があります。ここではノーマルの車として表示されますが、ここで変更しない限り、セーブには元のまま残ります。",
   "Left out, as the game would not load them: {list}.": "ゲームが読み込めないため除外: {list}。",
   "{n} other files are left out: {list}": "ほかのファイル{n}個は除外されます: {list}",
   "{n} entries are skipped (unsafe names, or over the size limits): {list}": "{n}件の項目をスキップします（安全でない名前、またはサイズ上限の超過）: {list}",

@@ -594,11 +594,11 @@
     "many": "Profily {names} boli upravené editorom uložených hier: hodnoty, ktoré by hra sama nevytvorila, ju môžu zhodiť alebo pokaziť kariéru.",
     "other": "Profily {names} boli upravené editorom uložených hier: hodnoty, ktoré by hra sama nevytvorila, ju môžu zhodiť alebo pokaziť kariéru."
   },
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": {
-    "one": "Profil {names} má autá z modov, ktoré táto hra nemá: hra môže spadnúť alebo ich zobraziť zle.",
-    "few": "Profily {names} majú autá z modov, ktoré táto hra nemá: hra môže spadnúť alebo ich zobraziť zle.",
-    "many": "Profily {names} majú autá z modov, ktoré táto hra nemá: hra môže spadnúť alebo ich zobraziť zle.",
-    "other": "Profily {names} majú autá z modov, ktoré táto hra nemá: hra môže spadnúť alebo ich zobraziť zle."
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": {
+    "one": "Profil {names} má autá z upravenej hry: tu sa zobrazia ako sériové a uložená hra si ich ponechá, ako sú, ak ich tu nezmeníš.",
+    "few": "Profily {names} majú autá z upravenej hry: tu sa zobrazia ako sériové a uložená hra si ich ponechá, ako sú, ak ich tu nezmeníš.",
+    "many": "Profily {names} majú autá z upravenej hry: tu sa zobrazia ako sériové a uložená hra si ich ponechá, ako sú, ak ich tu nezmeníš.",
+    "other": "Profily {names} majú autá z upravenej hry: tu sa zobrazia ako sériové a uložená hra si ich ponechá, ako sú, ak ich tu nezmeníš."
   },
   "Left out, as the game would not load them: {list}.": {
     "one": "Vynechaný, pretože hra by ho nenačítala: {list}.",

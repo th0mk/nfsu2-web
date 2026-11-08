@@ -165,9 +165,9 @@
     "one": "{names} wurde mit einem Spielstand-Editor geändert: Werte, die das Spiel nicht erzeugen würde, können es abstürzen lassen oder die Karriere kaputt machen.",
     "other": "{names} wurden mit einem Spielstand-Editor geändert: Werte, die das Spiel nicht erzeugen würde, können es abstürzen lassen oder die Karriere kaputt machen."
   },
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": {
-    "one": "{names} hat Wagen aus Mods, die es in diesem Spiel nicht gibt: Das Spiel kann abstürzen oder sie falsch anzeigen.",
-    "other": "{names} haben Wagen aus Mods, die es in diesem Spiel nicht gibt: Das Spiel kann abstürzen oder sie falsch anzeigen."
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": {
+    "one": "{names} hat Wagen aus einem gemoddeten Spiel: Hier erscheinen sie als Serienwagen, und dein Spielstand behält sie, wie sie sind, solange du sie hier nicht änderst.",
+    "other": "{names} haben Wagen aus einem gemoddeten Spiel: Hier erscheinen sie als Serienwagen, und dein Spielstand behält sie, wie sie sind, solange du sie hier nicht änderst."
   },
   "Left out, as the game would not load them: {list}.": {
     "one": "Weggelassen, da das Spiel es nicht laden würde: {list}.",

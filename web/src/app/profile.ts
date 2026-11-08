@@ -210,28 +210,49 @@ export function mendedBefore(from: string, to: string): boolean {
 //   32770  6 preset cars, 1,076 bytes each (after a u32 at 32766)
 // The customized, career and preset cars hold their type as a name hash at
 // +28 (0: unused), then 170 part hashes.  The hash is bStringHash (0x43db50)
-// of the type's name, as CarTypeInfo +0xd0 holds it.  0x503880 reads an
-// unknown one's CarTypeInfo through a NULL pointer (0x610130 returns 0).
-// Unknown part hashes find no part (0x61b980), so that slot is empty; the page
-// does not check those (the game's part table is 12,000 entries).  Checked
-// against players' profiles: their cars are all of the 31 types below.
+// of the type's name, as CarTypeInfo +0xd0 holds it.  The game reads an
+// unknown one's CarTypeInfo through a NULL pointer (0x503880, 0x610130 returns
+// 0), and a stock car's index past CarTypeInfo out of its bounds: the game here
+// makes such a car the stock car of the first type as the profile loads
+// (runtime/garage.c addon_cars; its own type and parts kept beside the profile
+// in MODPARTS.DAT) and the stock cars the game's own again (overrides.c
+// cars_stock_fix).  Unknown part hashes find no part (0x61b980): the stock
+// part instead; the page does not check those (the game's part table is
+// 12,000 entries).  Checked against players' profiles: their cars are all of
+// the 31 player types below.
 
-/** The player cars, CarTypeInfo 0..30 in GLOBAL/GLOBALB.BUN (chunk 0x34600); 31..45 are traffic. */
-const PLAYER_CARS = ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUGOT106', 'CORSA', 'HUMMER', 'NAVIGATOR',
+/** The game's car types, CarTypeInfo 0..45 in GLOBAL/GLOBALB.BUN (chunk 0x34600): 0..30 the player cars, 31..45 traffic. */
+const CAR_TYPES = ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUGOT106', 'CORSA', 'HUMMER', 'NAVIGATOR',
   'ESCALADE', 'TIBURON', 'SENTRA', 'CELICA', 'IS300', 'SUPRA', 'GOLF', 'A3', 'RSX', 'ECLIPSE', 'TT', 'RX8', '350Z', 'G35',
-  '3000GT', 'GTO', 'MUSTANGGT', 'SKYLINE', 'LANCEREVO8', 'RX7', 'IMPREZAWRX'];
+  '3000GT', 'GTO', 'MUSTANGGT', 'SKYLINE', 'LANCEREVO8', 'RX7', 'IMPREZAWRX',
+  'TAXI', '4DR_SEDAN02', 'AMBULANCE', 'TAXI02', 'PANELVAN', 'COUPE', 'FIRETRUCK', 'PARCELVAN', 'PICKUP', '4DR_SEDAN', 'BUS',
+  'SUV', 'MINIVAN', 'HATCHBACK', 'HATCHBACK02'];
 export const bStringHash = (s: string) => { let h = 0xFFFFFFFF; for (let i = 0; i < s.length; i++) h = (Math.imul(h, 33) + s.charCodeAt(i)) >>> 0; return h; };
-const PLAYER_CAR_HASHES = new Set(PLAYER_CARS.map(bStringHash));
+const CAR_TYPE_HASHES = new Set(CAR_TYPES.map(bStringHash));
 
-/** How many cars in a profile (one profileName took) are of a type the game's player cars do not have: cars a mod added. */
+/**
+ * How many cars in a profile (one profileName took) are of a car type the game does not have (a modded game's
+ * cars): the ones the game shows as a stock car instead.  A traffic car's type is one of the game's.
+ */
 export function modCars(file: Uint8Array): number {
   const at = (o: number) => u32(file, B + o);
   let n = 0;
-  for (let i = 0; i < 48; i++) { const t = at(i * 24 + 20); if (t !== 0xFFFFFFFF && t >= PLAYER_CARS.length) n++; }
-  const typed = (o: number) => { const h = at(o + 28); if (h && !PLAYER_CAR_HASHES.has(h)) n++; };
+  for (let i = 0; i < 48; i++) { const t = at(i * 24 + 20); if (t !== 0xFFFFFFFF && t >= CAR_TYPES.length) n++; }
+  const typed = (o: number) => { const h = at(o + 28); if (h && !CAR_TYPE_HASHES.has(h)) n++; };
   for (let i = 0; i < 20; i++) typed(1156 + i * 1072);
   for (let i = 0; i < 5; i++) typed(22596 + i * 2034);
   for (let i = 0; i < 6; i++) typed(32770 + i * 1076);
+  return n;
+}
+
+/**
+ * How many cars in a GARAGE.DAT (slots 6-10 beside a profile, runtime/garage.c: a 32-byte head, "N2GA" and version 1,
+ * then 5 career cars as the profile has its own) are of a car type the game does not have; 0 for any other file.
+ */
+export function garageModCars(file: Uint8Array | undefined): number {
+  if (!file || file.length !== 32 + 5 * 2034 || u32(file, 0) !== 0x4147324E || u32(file, 4) !== 1) return 0;
+  let n = 0;
+  for (let i = 0; i < 5; i++) { const o = 32 + i * 2034, h = u32(file, o + 28); if (file[o + 1073] && h && !CAR_TYPE_HASHES.has(h)) n++; }
   return n;
 }
 

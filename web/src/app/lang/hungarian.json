@@ -436,7 +436,7 @@
   "Variables set by their own names: {list}": "A saját nevükkel megadott változók: {list}",
   "Ignored, only the page sets them: {list}": "Figyelmen kívül hagyva, ezeket csak az oldal állítja: {list}",
   "{names} were edited with a save editor: values the game wouldn't make can crash it or break the career.": "{names}: mentésszerkesztővel módosították. Olyan értékek, amilyeneket a játék magától nem hozna létre, összeomlaszthatják a játékot, vagy tönkretehetik a karriert.",
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": "{names}: a profilban olyan modolt autók vannak, amelyek ebben a játékban nincsenek meg. A játék összeomolhat, vagy rosszul jelenítheti meg őket.",
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": "{names}: a profilban egy modolt játék autói vannak. Itt gyári autóként jelennek meg, és a mentésed változatlanul megőrzi őket, hacsak itt meg nem változtatod őket.",
   "Left out, as the game would not load them: {list}.": "Kihagyva, mert a játék nem töltené be: {list}.",
   "{n} other files are left out: {list}": "{n} további fájl kimarad: {list}",
   "{n} entries are skipped (unsafe names, or over the size limits): {list}": "{n} bejegyzés kimarad (nem biztonságos név, vagy túllépi a méretkorlátot): {list}",

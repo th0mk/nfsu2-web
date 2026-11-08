@@ -156,7 +156,7 @@
   "Variables set by their own names: {list}": "Kendi adlarıyla ayarlanan değişkenler: {list}",
   "Ignored, only the page sets them: {list}": "Yok sayıldı, bunları yalnızca sayfa ayarlar: {list}",
   "{names} were edited with a save editor: values the game wouldn't make can crash it or break the career.": "{names} bir kayıt düzenleyiciyle değiştirilmiş: oyunun kendi üretmeyeceği değerler oyunu çökertebilir ya da kariyeri bozabilir.",
-  "{names} have modded cars this game lacks: it may crash or show them wrong.": "{names} içinde bu oyunda bulunmayan mod arabaları var: oyun çökebilir ya da onları yanlış gösterebilir.",
+  "{names} have cars from a modded game: here they show as stock cars, and your save keeps them as they are unless you change them here.": "{names} içinde modlu bir oyunun arabaları var: burada stok araba olarak görünürler ve burada değiştirmedikçe kayıt onları olduğu gibi saklar.",
   "Left out, as the game would not load them: {list}.": "Oyun yüklemeyeceği için dışarıda bırakıldı: {list}.",
   "{n} other files are left out: {list}": "{n} başka dosya dışarıda bırakıldı: {list}",
   "{n} entries are skipped (unsafe names, or over the size limits): {list}": "{n} girdi atlandı (güvensiz ad ya da boyut sınırının üstünde): {list}",
