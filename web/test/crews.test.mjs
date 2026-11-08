@@ -171,15 +171,15 @@ test('the Room setting: a name that reads as a slur is refused, as Your name is'
 test('Reset all settings keeps the crews and their colours', () => {
   let ini = S.TEMPLATE;
   for (const [k, v] of [['roam_name', 'Lessis'], ['roam_crew', 'Blue Room, Night Owls'], ['roam_crew_colours', 'ff4646, 3cd2ff'], ['fps', '60'], ['roam_room', 'x']]) ini = S.settingsPut(ini, k, v);
-  const out = S.UI.resetAll(ini);
+  const out = S.resetAll(ini);
   const r = S.resolveEnv(out, {}, {});
   assert.deepEqual(Object.keys(r.byEnv).sort(), ['NFSU2_ROAM_CREW', 'NFSU2_ROAM_CREW_RGB', 'NFSU2_ROAM_NAME']);
   assert.equal(r.env.NFSU2_ROAM_CREW, 'Blue Room, Night Owls');
   assert.equal(r.env.NFSU2_ROAM_CREW_RGB, 'ff4646, 3cd2ff');
   assert.match(out, /^roam_crew = Blue Room, Night Owls\n[^]*^roam_crew_colours = ff4646, 3cd2ff$/m);
-  assert.equal(S.UI.resetAll(out), out, 'nothing more to reset');
+  assert.equal(S.resetAll(out), out, 'nothing more to reset');
   // a refused line is not kept
-  assert.equal(S.UI.resetAll(`roam_crew = ${'y'.repeat(25)}\nroam_crew_colours = #ff4646\n`), S.TEMPLATE);
+  assert.equal(S.resetAll(`roam_crew = ${'y'.repeat(25)}\nroam_crew_colours = #ff4646\n`), S.TEMPLATE);
   assert.ok(S.UI.PANEL_KEYS.includes('roam_crew_colours'), 'the Crews row writes it');
 });
 

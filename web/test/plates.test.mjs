@@ -13,7 +13,7 @@ const load = async contents => {
   const { outputFiles } = await build({ stdin: { contents, resolveDir: ROOT, loader: 'ts' }, bundle: true, format: 'esm', write: false });
   return import('data:text/javascript;base64,' + Buffer.from(outputFiles[0].text).toString('base64'));
 };
-const S = await load("export * from './web/src/app/settings.ts'; export { resetAll } from './web/src/app/settings-ui.ts'; export * from './web/src/app/plates.ts';");
+const S = await load("export * from './web/src/app/settings.ts'; export * from './web/src/app/plates.ts';");
 
 test('a plate: capitals and digits, small letters as capitals, at most 8', () => {
   assert.equal(S.checkSetting('license_plate', 'ab123').value, 'AB123');

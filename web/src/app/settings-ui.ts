@@ -10,8 +10,9 @@
 // are radio groups, the crews a list with buttons), each described by its help
 // line, so a screen reader and the keyboard get them as they are.
 
-import { checkSetting, DEFAULTS, keyDef, resolveEnv, settingsPut, TEMPLATE, type Resolved } from './settings';
-import { NO_SAVE, readText, UNREADABLE, writeFile, writesAreOff } from './savefs';
+import { checkSetting, DEFAULTS, keyDef, putKey, resetAll, resetLine, resolveEnv, TEMPLATE, type Resolved } from './settings';
+import { NO_SAVE, UNREADABLE, writesAreOff } from './savefs';
+import type { SettingsFile } from './settings-store';
 import { plateInput, plateUpper } from './plates';
 import { playHorn, stopHorn } from './horn-preview';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
@@ -389,63 +390,16 @@ function shown(it: Item, v: string): string {
   return c.t === 'num' && c.unit ? `${v} ${c.unit}` : v;
 }
 
-/**
- * settingsPut, and then the key's variable really is what the row asked for: a line that sets the same
- * variable by its own name (NFSU2_ROAM = 1 for roam) and comes first would still win at Play (the first line
- * that sets a variable does), so it goes too.  Lines are found by their line in the file, not by the pieces
- * bundle.m reads a long line in (a long line before them shifted the piece numbers: the audit review's PAGE-2
- * finding, which removed the wrong line).  removed: how many such lines went.
- */
-export function putKey(text: string, key: string, value: string | null): { text: string; removed: number } {
-  let next = settingsPut(text, key, value), removed = 0;
-  const d = keyDef(key);
-  for (let i = 0; d && i < 64; i++) {
-    const by = resolveEnv(next, {}, {}).byEnv[d.env];
-    if (!by || keyDef(by.key)?.key === d.key) break;
-    const lines = next.split('\n'); lines.splice(by.phys - 1, 1); next = lines.join('\n'); removed++;
-  }
-  return { text: next, removed };
-}
-
-/** What "Reset all settings" keeps: the name, flag and license plate the other players know you by, your crews, and the
- *  language (this page's too). */
-const RESET_KEEPS = ['roam_name', 'roam_flag', 'license_plate', 'roam_crew', 'roam_crew_colours', 'language'];
-
-/** "Reset all settings": the template, with the kept settings as the file has them (by their own key, also where
- *  the file sets the variable by its name, if the key reads the value the same).  One the file does not set, or
- *  refuses, is the default. */
-export function resetAll(text: string | null): string {
-  const r = resolveEnv(text, {}, {});
-  let next = TEMPLATE;
-  for (const key of RESET_KEEPS) {
-    const env = keyDef(key)!.env, v = r.env[env], c = checkSetting(key, v ?? '');
-    if (r.source[env] === 'settings.ini' && c?.ok && c.value === v) next = settingsPut(next, key, v);
-  }
-  return next;
-}
-
-/** A line the panel has no row for back to the default, by its line in the file (1-based): an option of the
- *  template gets the template's commented-out line in its place, any other line (a variable by its own name, the
- *  Mac app's options) goes. */
-export function resetLine(text: string, phys: number): string {
-  const lines = text.split('\n');
-  const l = (lines[phys - 1] ?? '').trim();
-  const eq = l.indexOf('=');
-  if (eq < 0 || l[0] === '#' || l[0] === ';') return text;          // not a setting's line: nothing to reset
-  const d = keyDef(l.slice(0, eq).trim());
-  if (d && DEFAULTS.has(d.key)) lines[phys - 1] = `#${d.key} = ${DEFAULTS.get(d.key)}`.replace(/ = $/, ' =');
-  else lines.splice(phys - 1, 1);
-  return lines.join('\n');
-}
-
 export interface SettingsDeps {
-  saveDir: string;
+  /** settings.ini (the panel reads and writes it there) */
+  file: SettingsFile;
   /** the page address's environment (overrides the file) */
   environment: Record<string, string>;
   /** keys whose default is another on this device (device.ts), shown when the file does not set them */
   defaults?: Record<string, string>;
-  /** after every write (it applies at the next Play, which reads the file again) */
-  onSaved?(text: string): void;
+  /** after every write (it applies at the next Play, which reads the file again); was: the file as the game went by it
+   *  before (SettingsFile.forGame) */
+  onSaved?(text: string, was: string | null): void;
   /** true in a tab that does not own the saves: the panel shows the file but does not write it */
   readOnly?(): boolean;
   /** a short message for the page: what was saved, or why not (a Msg: drawn again if the page's language changes) */
@@ -464,7 +418,6 @@ export interface SettingsDeps {
 }
 
 export class SettingsPanel {
-  text: string | null = null;
   private resolved!: Resolved;
   /** the file alone (no page address): what each row shows */
   private fileOnly!: Resolved;
@@ -483,10 +436,13 @@ export class SettingsPanel {
     root.querySelector<HTMLButtonElement>('#settings-reset-all')!.onclick = () => void this.resetAll();
   }
 
+  /** settings.ini as read or written last (SettingsFile.text) */
+  private get text() { return this.deps.file.text; }
+
   /** settings.ini as read last; one that did not read (savefs.ts missing) leaves the copy before, and the panel read-only
    *  until it reads (unread): a change made on the template's copy would be written over the player's file */
   async load(): Promise<string | null> {
-    try { this.text = await readText(this.deps.saveDir, 'settings.ini'); this.unread = null; }
+    try { await this.deps.file.read(); this.unread = null; }
     catch (e) { this.unread = e; }
     this.resolve(this.text);
     return this.text;
@@ -537,10 +493,9 @@ export class SettingsPanel {
     if (this.ro()) { this.deps.say?.(this.roText()); return; }
     let next = this.text ?? TEMPLATE, removed = 0;
     for (const [k, v] of [[key, value] as [string, string | null], ...also]) { const r = putKey(next, k, v); next = r.text; removed += r.removed; }
-    await writeFile(this.deps.saveDir, 'settings.ini', next);
-    this.text = next;
+    const was = await this.deps.file.write(next);
     this.resolve(next);
-    this.deps.onSaved?.(next);
+    this.deps.onSaved?.(next, was);
     // (our controls' rows are the Site tab's, which draws them again itself: sitekeys.ts)
     const site = SITE_KEYS.includes(key);
     if (removed) this.render(); else { if (!site) this.rerow(key); this.syncRaw(); }
@@ -1029,9 +984,9 @@ export class SettingsPanel {
 
   /** settings.ini as a whole (the text editor, a reset), and the panel drawn again */
   private async write(next: string) {
-    await writeFile(this.deps.saveDir, 'settings.ini', next);
-    this.text = next; this.resolve(next);
-    this.deps.onSaved?.(next);
+    const was = await this.deps.file.write(next);
+    this.resolve(next);
+    this.deps.onSaved?.(next, was);
     this.render();
     this.root.dataset.saved = String(++this.saves);
   }

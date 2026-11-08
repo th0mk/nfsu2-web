@@ -150,7 +150,7 @@ test('PAGE-2 (review): a row change removes the line that would still win, by it
   assert.equal(r0.env.NFSU2_ROAM, '1', 'the raw line wins (the first that sets the variable)');
   assert.deepEqual(r0.byEnv.NFSU2_ROAM, { line: 5, phys: 3, key: 'NFSU2_ROAM' }, 'piece 5 as bundle.m counts, line 3 of the file');
   // turning the switch off (it showed on: the raw line applies)
-  const { text, removed } = S.UI.putKey(ini, 'roam', 'off');
+  const { text, removed } = S.putKey(ini, 'roam', 'off');
   const r = S.resolveEnv(text, {}, {});
   console.log(`after "Free-roam multiplayer: off": removed ${removed}; NFSU2_ROAM=${r.env.NFSU2_ROAM} from ${JSON.stringify(r.byEnv.NFSU2_ROAM)}; lines ${JSON.stringify(text.split('\n').map(l => l.length > 40 ? l.slice(0, 12) + '…' : l))}`);
   assert.equal(removed, 1);
@@ -161,11 +161,11 @@ test('PAGE-2 (review): a row change removes the line that would still win, by it
   assert.equal(r.env.NFSU2_FPS, '120');
   assert.ok(text.includes('# ' + 'x'.repeat(3000)), 'the long comment is kept');
   // two raw lines before the row's own: both go; a raw line after it changes nothing (the row's line wins)
-  const two = S.UI.putKey('# ' + 'y'.repeat(2500) + '\nNFSU2_ROAM = 1\nNFSU2_ROAM = 1\nroam = on\nNFSU2_ROAM = 1\n', 'roam', 'off');
+  const two = S.putKey('# ' + 'y'.repeat(2500) + '\nNFSU2_ROAM = 1\nNFSU2_ROAM = 1\nroam = on\nNFSU2_ROAM = 1\n', 'roam', 'off');
   assert.equal(two.removed, 2);
   assert.equal(S.resolveEnv(two.text, {}, {}).env.NFSU2_ROAM, '0');
   assert.ok(two.text.endsWith('roam = off\nNFSU2_ROAM = 1\n'));
   // nothing else to do: the file changes only in the row's line
-  const plain = S.UI.putKey('movies = off\nroam = on\n', 'roam', 'off');
+  const plain = S.putKey('movies = off\nroam = on\n', 'roam', 'off');
   assert.deepEqual(plain, { text: 'movies = off\nroam = off\n', removed: 0 });
 });
