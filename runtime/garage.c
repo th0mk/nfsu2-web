@@ -143,6 +143,15 @@ void modparts_built(int p, uint32_t out, uint64_t fp, const char *name, int kept
 void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const char *name, int kept);
 int modparts_changed(CPU *c, int p);
 void modparts_written(const char *path, uint64_t fp, const char *name);
+int64_t modparts_cartype(uint32_t hash);
+void modparts_stock_keys(CPU *c, uint32_t type, uint32_t *keys);
+void modparts_track(int p, uint32_t r, uint32_t size, uint32_t orig, const uint32_t *keys, int used);
+int modparts_stage(int p, uint64_t fp, const char *name);
+void modparts_raw(CPU *c, uint32_t db, int p, int on);
+void modparts_car_gone(int p, uint32_t r, uint32_t h);
+void modparts_car_moved(int p, uint32_t from, uint32_t hf, uint32_t to, uint32_t ht);
+void modparts_deleted(const char *name);
+int cars_stock_fix(CPU *c, uint32_t db, uint32_t *lost, int max);   /* overrides.c */
 
 static uint32_t g_blk;            /* guest memory: our records (XN a player), a new one, scratch */
 #define X_AT(p)         (g_blk + (p) * XN * REC_SZ)
@@ -188,6 +197,15 @@ static uint32_t xfind(uint32_t db, uint32_t h){
     if (p < 0 || !g_blk || !h) return 0;
     for (unsigned i = 0; i < XN; i++){ uint32_t r = X_AT(p) + i * REC_SZ; if (MR32(r + R_HANDLE) == h) return r; }
     return 0;
+}
+/* whose car the record r is (0, 1: the table's or ours), -1 none of theirs */
+static int record_player(uint32_t r){
+    for (int p = 0; p < 2; p++){
+        uint32_t db = CARS0 + (uint32_t)p * CARS_SZ;
+        if (r >= db && r < db + CARS_SZ) return p;
+        if (g_blk && r >= X_AT(p) && r < X_AT(p) + XN * REC_SZ) return p;
+    }
+    return -1;
 }
 static int xis(uint32_t db, uint32_t r){
     int p = player_of(db);
@@ -499,7 +517,22 @@ void sub_0052a280(CPU *c){
  * target into the function that jumps, so its own copy of 0x52A280 would
  * not be ours. */
 void sub_0052a450_orig(CPU *c);
-void sub_0052a450(CPU *c){ c->ecx += 0x10u; sub_0052a280(c); }
+void sub_0052a450(CPU *c){
+    c->ecx += 0x10u;
+    uint32_t db = c->ecx + PR_CARS, out = MR32(c->esp + 4u), size = MR32(c->esp + 8u);
+    int p = player_of(db);
+    CPU save = *c;
+    sub_0052a280(c);
+    if (p < 0 || !g_blk || size < P_NAME + 32u) return;
+    /* what goes beside the profile written first (MODPARTS.NEW, modpacks.c); when it cannot be, the payload made again
+     * with every car and part as it is: the profile then needs nothing beside it */
+    char name[33]; name_of(out, name);
+    if (modparts_stage(p, fnv(out, CARS_PART), name)) return;
+    *c = save;
+    modparts_raw(c, db, p, 1);
+    payload(c);
+    modparts_raw(c, db, p, 0);
+}
 /* thiscall FEDatabase -> al: anything to save (its payload now against the one it kept) */
 void sub_0052a4c0_orig(CPU *c);
 void sub_0052a4c0(CPU *c){
@@ -559,12 +592,14 @@ void garage_profile_written(const char *path){
 }
 /* fileio.c: a profile file deleted: its GARAGE files go too (the game then removes the folder) */
 void garage_profile_deleted(const char *path){
-    static const char *const files[] = { GARAGE_FILE, GARAGE_OLD, "MODPARTS.DAT" };
+    static const char *const files[] = { GARAGE_FILE, GARAGE_OLD, "MODPARTS.DAT", "MODPARTS.NEW", "MODPARTS.OLD", "MODPARTS.OLD2",
+        "MODPARTS.OLD3", "MODPARTS.OLD4", "MODPARTS.OLD5", "MODPARTS.OLD6", "MODPARTS.OLD7", "MODPARTS.OLD8", "MODPARTS.OLD9" };
     char g[1100]; const char *sl = strrchr(path, '/');
-    for (unsigned i = 0; i < 3u; i++){
+    for (unsigned i = 0; i < sizeof files / sizeof files[0]; i++){
         snprintf(g, sizeof g, "%.*s/%s", sl ? (int)(sl - path) : 1, sl ? path : ".", files[i]);
         if (remove(g) == 0) fprintf(stderr, "[garage] %s deleted with its profile\n", g);
     }
+    modparts_deleted(sl ? sl + 1 : path);        /* (nothing of it waits for a new profile of that name) */
     mpcredit_profile_deleted(path);
 }
 
@@ -635,7 +670,63 @@ static void cars_loaded(CPU *c){
     open_to(db, 2u * open_n(db));
     fprintf(stderr, "[garage] (cars only): no slots 6-10 saved, %u of %u slots open\n", open_n(db), SLOTS);
 }
-/* ... and the cars' mod parts back on them (modpacks.c) */
+/* --- cars of a car type this game has not ----------------------------------
+ * A profile (or its GARAGE file) from a modded game (one with added cars,
+ * Unlimiter's) can name a car type the game does not have: a car's +0x20 is
+ * the bStringHash of its type's name, which 0x503880 looks up (0x610130) and
+ * reads through, null for a name it does not have (the car lot, Customize, a
+ * Quick Race, the world's load, every list of the cars).  Each such car
+ * becomes, as its profile loads, the stock car of the game's first car type
+ * (the profile has the hash alone, no name to match a car of the game's by),
+ * with that car's stock parts; what else it has stays (its handle,
+ * performance, tuning, the money spent on it).  The profile keeps the car as
+ * it is: modpacks.c (modparts_track) puts it back in each payload as long as
+ * its record holds the stand-in untouched.  A car the player changes here is
+ * saved as it then is, and one traded, replaced (the car lot, a new tuned
+ * car in its record: the hooks below) or deleted goes as the game makes it
+ * go.  The load itself is no change to save.  Every car record a profile
+ * loads: the 20 Customize cars, the career's 5 and our 5, and the 6 presets,
+ * of both players. */
+#define R_TYPE          0x20u         /* a car's car type, then +4 x slot each of its 170 parts' keys */
+#define R_KEYS          0x24u
+#define N_KEYS          0xaau
+#define CUSTOM_AT       0x544u        /* the 20 Customize cars (0x434 bytes each) */
+#define CUSTOM_SZ       0x434u
+#define PRESET_AT       0x8130u       /* the 6 presets (0x438) */
+#define PRESET_SZ       0x438u
+#define G_CARTYPES      0x008a1cccu
+static void addon_cars(CPU *c, uint32_t db, int p, const char *name){
+    (void)name;
+    uint32_t types = MR32(G_CARTYPES);
+    if (modparts_cartype(0) < 0) return;                 /* (no car types yet: nothing to tell by) */
+    for (unsigned i = 0; i < 20u + SLOTS + 6u; i++){
+        uint32_t r, size; char what[40]; int car;
+        if (i < 20u){ r = db + CUSTOM_AT + i * CUSTOM_SZ; size = CUSTOM_SZ; snprintf(what, sizeof what, "Customize car %u", i + 1u); car = MR32(r + R_USED) != 0; }
+        else if (i < 20u + SLOTS){
+            unsigned k = i - 20u;
+            if (k >= 5u && !g_blk) continue;
+            r = slot(db, k); size = REC_SZ; snprintf(what, sizeof what, "slot %u", k + 1u); car = MR8(r + R_OWNED) != 0;
+        } else { r = db + PRESET_AT + (i - 20u - SLOTS) * PRESET_SZ; size = PRESET_SZ; snprintf(what, sizeof what, "preset car %u", i - 20u - SLOTS + 1u); car = 1; }
+        uint32_t type = MR32(r + R_TYPE);
+        if (!type || modparts_cartype(type)) continue;
+        static uint32_t was[N_KEYS], now[N_KEYS];
+        for (uint32_t s = 0; s < N_KEYS; s++) was[s] = MR32(r + R_KEYS + 4u * s);
+        uint32_t stand = MR32(types + 0xd0u);
+        char sname[33]; unsigned n = 0;
+        for (; n < 32u && MR8(types + n); n++) sname[n] = (char)MR8(types + n);
+        sname[n] = 0;
+        modparts_stock_keys(c, stand, now);
+        MR32(r + R_TYPE) = stand;
+        for (uint32_t s = 0; s < N_KEYS; s++) MR32(r + R_KEYS + 4u * s) = now[s];
+        modparts_track(p, r, size, type, was, car);
+        fprintf(stderr, "[garage] %s%s: car type 0x%08x unknown (a modded game's?), shown here as %s, kept in the save as it is\n",
+                p ? "player 2's " : "", what, type, sname);
+    }
+}
+/* the stock cars' handles a load took out (cars_stock_fix): the Quick Race car may be one of them */
+static uint32_t g_lost[48]; static int g_nlost;
+/* ... and the cars' mod parts back on them (modpacks.c); cars of a car type this game has not as stand-ins, stock
+ * cars past the game's car types out */
 void sub_00516850(CPU *c){
     uint32_t db = c->ecx, in = MR32(c->esp + 4u), size = MR32(c->esp + 8u);
     cars_loaded(c);
@@ -645,6 +736,10 @@ void sub_00516850(CPU *c){
     /* (0x534770's cars-only load says CARS_PART for the size of a whole profile's payload: its name is there too) */
     if (size >= P_NAME + 32u || (size >= CARS_PART && mem_is_committed(in + P_NAME) && mem_is_committed(in + P_NAME + 31u))) name_of(in, name);
     modparts_loaded(c, db, p, in, size >= CARS_PART ? fnv(in, CARS_PART) : 0, name, in == MR32(FEDB + FEDB_KEPT));
+    addon_cars(c, db, p, name);
+    uint32_t lost[48];
+    int n = cars_stock_fix(c, db, lost, 48);
+    if (n > 0 && !p){ g_nlost = n < 48 ? n : 48; memcpy(g_lost, lost, sizeof(uint32_t) * (size_t)g_nlost); }
 }
 /* modpacks.c: db's car records with parts a player can change, its table's then ours (at most max): the table's
  * 20 Customize cars (48-67, 0x434 bytes) and the career's 5 (68-72); not its 48 stock cars and 12 others (0x1C
@@ -662,6 +757,33 @@ int garage_records(uint32_t db, uint32_t *out, int max){
     }
     for (unsigned i = 0; g_blk && i < XN && n < max; i++) out[n++] = X_AT(p) + i * REC_SZ;
     return n;
+}
+/* modpacks.c: whether db's record r has a car (a Customize car's in use, a slot's has one in it) */
+int garage_car_in_use(uint32_t db, uint32_t r){
+    if (r >= db + CUSTOM_AT && r < db + CUSTOM_AT + 20u * CUSTOM_SZ) return MR32(r + R_USED) != 0;
+    if (r >= db + PRESET_AT && r < db + PRESET_AT + 6u * PRESET_SZ) return 1;
+    return MR8(r + R_OWNED) != 0;
+}
+/* thiscall record (handle, stock car): a new car in the record (the car lot's buy and trade-in, 0x5348E0 and
+ * 0x534950; a tuned car made of a stock car, 0x52A710): the one there before has gone (modpacks.c: a car of a car
+ * type this game has not, there, is saved as the record now is) */
+void sub_00516b90_orig(CPU *c);
+void sub_00516b90(CPU *c){
+    uint32_t r = c->ecx, was = MR32(r + R_HANDLE), h = MR32(c->esp + 4u);
+    sub_00516b90_orig(c);
+    int p = record_player(r);
+    if (p < 0) return;
+    modparts_car_gone(p, r, was);
+    if (h != was) modparts_car_gone(p, 0, h);
+}
+/* thiscall cars (handle, ...) -> a new tuned car (Customize: of a car, or of a stock car), 0 none: in a record of a
+ * tuned car deleted before, perhaps, of the same handle */
+void sub_0052a710_orig(CPU *c);
+void sub_0052a710(CPU *c){
+    uint32_t db = c->ecx;
+    sub_0052a710_orig(c);
+    int p = player_of(db);
+    if (p >= 0 && c->eax && mem_is_committed(c->eax + R_HANDLE)) modparts_car_gone(p, c->eax, MR32(c->eax + R_HANDLE));
 }
 /* thiscall FEDatabase (in, size): a profile loaded (0x4A9850), in
  * [+0x156A8] 4 only the cars of player [+0x20358], by a jump to 0x516850 (a
@@ -688,7 +810,7 @@ static void not_empty(uint32_t at, const char *what){
 void sub_005344d0_orig(CPU *c);
 void sub_005344d0(CPU *c){
     uint32_t db = c->ecx + PR_CARS;
-    g_topup = 0;
+    g_topup = 0; g_nlost = 0;
     sub_005344d0_orig(c);
     if (!g_blk || db != CARS0) return;
     if (g_topup){
@@ -711,6 +833,21 @@ void sub_005344d0(CPU *c){
     }
     not_empty(CAREER + K_CAR, "the career's car");
     not_empty(G_QR_CAR, "the Quick Race car");
+    /* a Quick Race car among the stock cars the load took out (cars_stock_fix): the first stock car */
+    for (int i = 0; i < g_nlost; i++){
+        uint32_t h = MR32(G_QR_CAR);
+        if (h != g_lost[i] || garage_find(CARS0, h)) continue;
+        for (uint32_t k = 0; k < 48u; k++){
+            uint32_t r = CARS0 + k * 0x1cu;
+            if (!MR32(r + 0x10u)) continue;
+            MR32(G_QR_CAR) = MR32(r + R_HANDLE);
+            fprintf(stderr, "[garage] the Quick Race car 0x%08x was a stock car of a car type this game has not: now stock car %u (0x%08x)\n",
+                    h, k + 1u, MR32(G_QR_CAR));
+            break;
+        }
+        break;
+    }
+    g_nlost = 0;
     /* a career past the prologue whose car is in none of the 10 slots, while it has cars: the first car you have.
      * The game never leaves a career so (from the first car bought on it drives one of the slots': CAREER_SLOT_n),
      * but a profile came so (2026-11-05: 10 cars, the career's car none of them): the car lot then took the missing
@@ -790,6 +927,7 @@ static void trade(CPU *c, uint32_t scr){
     uint32_t spent = MR32(r + R_SPENT), pay = (uint32_t)((uint64_t)spent * TRADE_PCT / 100u);
     MR32(CAREER + K_BANK) += pay;
     fresh(r, g_trade, 0);
+    modparts_car_gone(0, r, g_trade);            /* (modpacks.c: the car sold is no car of the profile any more) */
     /* the game counts on slot 1 having a car (the car lot's Back): the last car moves there */
     if (s == 0){
         for (int k = (int)SLOTS - 1; k > 0; k--){
@@ -799,6 +937,7 @@ static void trade(CPU *c, uint32_t scr){
             for (uint32_t o = 4u; o < REC_SZ; o += 4u) if (o != R_HANDLE) MR32(r + o) = MR32(q + o);
             fresh(q, hq, 0);
             handles_move(hq, g_trade);
+            modparts_car_moved(0, q, hq, r, g_trade);   /* (... this one, as it was, in slot 1's record now) */
             fprintf(stderr, "[garage] the car in slot %d moved to slot 1\n", k + 1);
             break;
         }

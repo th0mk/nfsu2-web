@@ -368,16 +368,45 @@ void sub_0050e960(CPU *c){
  * each car slot with a mod's part holds a part of the game's (the stand-in:
  * the mod part's look-alike, tools/modpacks.py, else the slot's stock part,
  * what 0x637040 gives a new ride of that car), and the mod parts go into
- * "NFS Underground 2/<NAME>/MODPARTS.DAT", written when the profile is
- * (fileio.c -> garage.c).  When a profile's cars load (0x516850, garage.c),
- * each goes back on its car where that car is still as it was saved: found
- * by its handle, of the same car type, the stand-in in the slot and its parts
- * as saved (a fingerprint of its 170 keys, the stand-ins among them).  A car
- * changed elsewhere (the original game, a page of before) keeps what it has.
- * A part this game lacks (no MODPACKS) waits and is written again with that
- * profile's next save while its car keeps the stand-in.  The original game, a
- * page of before and a game without MODPACKS see the stand-ins: the stock
- * parts.  The game's "anything to save?" (0x52A4C0) counts a change of them.
+ * "NFS Underground 2/<NAME>/MODPARTS.DAT".  When a profile's cars load
+ * (0x516850, garage.c), each goes back on its car where that car is still as
+ * it was saved: found by its handle, of the same car type, the stand-in in
+ * the slot and its parts as saved (a fingerprint of its 170 keys, the
+ * stand-ins among them).  A car changed elsewhere (the original game, a page
+ * of before) keeps what it has.  A part this game lacks (no MODPACKS) waits
+ * and is written again with that profile's next save while its car keeps the
+ * stand-in.  The original game, a page of before and a game without MODPACKS
+ * see the stand-ins: the stock parts.  The game's "anything to save?"
+ * (0x52A4C0) counts a change of them.  The same for the Japanese release's
+ * vinyls, Art Factory 28-34 (vinylpacks.c, VINYLPACKS): in no profile, the
+ * slot's stock part there (the original game draws no vinyl for a key it
+ * lacks, and its next change to the car saves none); a profile saved before
+ * holds their keys, which load as they are and go out at its next save.
+ *
+ * A car of a car type this game has not (a modded game's, with added cars)
+ * is the stock car of the game's first type here (garage.c addon_cars: the
+ * game reads such a car type's info through a null pointer, 0x503880), and
+ * stays in its profile as it is: g_add keeps its own car type and 170 keys,
+ * and a payload made while its record still holds that stand-in untouched
+ * (the bytes of its parts, tuning and money as made) has the car as it was
+ * loaded.  A car the player changed here (parts, paint, tuning: other bytes),
+ * traded or replaced (garage.c: Trade Car hands it over to the record it
+ * moves into; the car lot's buy and trade-in and a new tuned car, 0x516B90
+ * and 0x52A710, and a car no more in use drop it) is saved as it now is.
+ * Nothing of it is beside the profile: a page or game that has its car type
+ * reads it from the profile itself.
+ *
+ * The order of a save (garage.c 0x52A450): the payload with the stand-ins,
+ * then MODPARTS.NEW, then the profile; only once the profile is written
+ * MODPARTS.NEW becomes MODPARTS.DAT.  When MODPARTS.NEW cannot be written
+ * (a full disk: a new file fails where overwriting works), the payload is
+ * made again with every part as it is, the waiting ones in their slots too:
+ * the profile then holds what a page of before would have, and needs
+ * nothing beside it.  A file's head has a counter of its writes (and its
+ * first entry, of kind 3, the counter and its profile's name), so a load
+ * takes the newer of MODPARTS.DAT and a MODPARTS.NEW of the same profile (a
+ * page closed between the profile and the rename: the browser's rename
+ * takes the old file away first) and finishes that rename.
  *
  * The cars with parts a player can change: the table's 20 Customize cars
  * (+0x544, 0x434 bytes each) and the career's 5 (0x7F8), garage.c's slots
@@ -386,21 +415,30 @@ void sub_0050e960(CPU *c){
  * type, +0xC + 4 x slot each of the 170 slots' part key (0: none), as 0x503880
  * makes a ride of them and 0x503950 writes a ride back.
  *
- * MODPARTS.DAT: 'N2MP', version 1, count, 0, then count entries of 8 words:
- * {handle, car type, slot, the mod part's key, the stand-in's key, the car's
- * fingerprint (2 words), kind}; kind 0 a slot's part.  An entry of another
- * kind (a later page's) is kept as it is and written again; a file this page
- * cannot read (another version, cut short) is never written over or removed:
- * a save with mod parts of its own first keeps it aside as MODPARTS.OLD.  It
- * is written as MODPARTS.NEW, then renamed: never cut short. */
+ * MODPARTS.DAT: 'N2MP', version 1, count, its write counter (0 from a page of
+ * before), then count entries of 8 words: {handle, car type, slot, the mod
+ * part's key, the stand-in's key, the car's fingerprint (2 words), kind};
+ * kind 0 a slot's part, kind 3 the head {'MPHD', bStringHash of the
+ * profile's name in capitals, the write counter, 0 ..., 3} (a page of before
+ * keeps it as another kind; one there with a head word 0 is that page's
+ * write: the newest).  An entry of another kind (a later page's) is kept as
+ * it is and written again; a file this page cannot read (another version,
+ * cut short) is never written over or removed: a save with mod parts of its
+ * own first keeps it aside as MODPARTS.OLD (or .OLD2 ... .OLD9 beside an
+ * older one; all taken: it stays, and ours stays MODPARTS.NEW). */
 int garage_records(uint32_t db, uint32_t *out, int max);
+int garage_car_in_use(uint32_t db, uint32_t r);
 int fileio_resolve_save(const char *win, char *out, size_t outsz);
+int fileio_resolve_save_w(const char *win, char *out, size_t outsz);    /* (a file to write there) */
 void dispatch_indirect(CPU *c, uint32_t addr);
+int vinylpacks_key(uint32_t key);                       /* vinylpacks.c: one of Art Factory 28-34's */
+int vinylpacks_have(void);                              /* ... the car part database has them */
 
 #define MP_MAGIC      0x504d324eu   /* "N2MP" */
 #define MP_FILE       "MODPARTS.DAT"
 #define MP_NEW        "MODPARTS.NEW"
 #define MP_OLD        "MODPARTS.OLD"
+#define MP_OLDS       9             /* .OLD, .OLD2 ... .OLD9 */
 #define MP_MAX        1024
 #define R_HANDLE      0x08u
 #define R_PARTS       0x18u         /* +8 car type, +0xC + 4 x slot: the keys */
@@ -410,6 +448,14 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 #define FN_RIDE_STOCK 0x00637040u   /* thiscall ride (0): every slot its stock part */
 #define RIDE_PARTS    0x590u        /* a ride's parts: +4 x slot */
 #define CARS0_OF(p)   (0x0083ad90u + (uint32_t)(p) * 0xab4cu)   /* a player's cars (garage.c CARS0, CARS_SZ) */
+#define K_PART        0u            /* an entry's kind: a slot's part */
+#define K_HEAD        3u            /* ... the file's head: its profile, its write counter */
+#define HEAD_MAGIC    0x4448504du   /* "MPHD" */
+#define ADDON_MAX     40            /* (20 Customize cars, 10 slots, 6 presets a player) */
+#define G_CARTYPES    0x008a1cccu   /* CarTypeInfo[] (0x890 bytes each: +0 its name, +0xD0 its hash) */
+#define CARTYPE_SZ    0x890u
+#define CARTYPES_N    46u           /* 0x610130 looks a car type up among these */
+#define KEY_AT(r, s)  ((r) + R_PARTS + 0xcu + 4u * (s))
 
 typedef struct { uint32_t w[8]; uint8_t wait; } MPart;  /* w: as the file has it; wait: one of g_wait's */
 #define E_HANDLE(e)   ((e)->w[0])
@@ -420,13 +466,21 @@ typedef struct { uint32_t w[8]; uint8_t wait; } MPart;  /* w: as the file has it
 #define E_FP(e)       ((uint64_t)(e)->w[5] | (uint64_t)(e)->w[6] << 32)
 #define E_KIND(e)     ((e)->w[7])
 typedef struct { MPart e[MP_MAX]; int n; } MList;
+/* a car of a car type this game has not, a stand-in here: its record (size bytes), its own car type and keys, the
+ * stand-in's bytes as made (base, from +0x18 on), whether it was a car (in use) then */
+typedef struct { uint32_t r, size, orig, keys[N_SLOTS]; uint64_t base; int used; } Addon;
 static MList g_wait[2];                                  /* each player's parts not here (no MODPACKS), and other kinds */
 static char g_wait_name[2][33];                          /* ... of that profile */
+static uint32_t g_count[2];                              /* ... the write counter of its file */
+static struct { Addon a[ADDON_MAX]; int n; } g_add[2];   /* each player's cars of car types this game has not */
 static MList g_cur_l;                                    /* the payload being made */
 static struct { uint32_t at, key; } g_hid[MP_MAX * 2]; static int g_nhid;
+static struct { uint32_t r, type, keys[N_SLOTS]; } g_unc[2 * ADDON_MAX]; static int g_nunc;   /* stand-ins, meanwhile */
+static struct { uint32_t at, key; } g_wraw[MP_MAX]; static int g_nwraw;                     /* waiting slots, meanwhile */
 static struct { char name[33]; uint64_t fp; MList l; unsigned seq; } g_mb[4];   /* the payloads made, newest kept */
 static unsigned g_mseq;
 static struct { int on, p; uint64_t fp; MList l; } g_mk;                        /* the one the game keeps */
+static struct { int on, empty; char name[33]; uint64_t fp; uint32_t count; } g_staged;   /* MODPARTS.NEW of a save */
 static char g_foreign[8][33]; static int g_nforeign;    /* profiles whose MODPARTS.DAT this page cannot read */
 static uint32_t g_ride;                                  /* a ride of ours, for the stock parts */
 static struct { uint32_t type, key[N_SLOTS]; } g_stock[16]; static int g_nstock;
@@ -445,6 +499,17 @@ static uint32_t mcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *
 static int mod_key(uint32_t key){
     if (!key || !g_grown) return 0;
     for (int i = 0; i < g.nparts; i++) if (g.p[i].key == key) return 1;
+    return 0;
+}
+/* a part kept beside the profile, never in it: a mod's (with MODPACKS) or one of Art Factory 28-34 (always) */
+static int aside_key(uint32_t key){ return mod_key(key) || vinylpacks_key(key); }
+/* ... and one this game has, to put back */
+static int have_key(uint32_t key){ return mod_key(key) || (vinylpacks_key(key) && vinylpacks_have()); }
+/* a car type's info (0x610130's search, without the call): its CarTypeInfo, 0 none; -1 not known yet (no car types) */
+int64_t modparts_cartype(uint32_t hash){
+    uint32_t t = MR32(G_CARTYPES);
+    if (!ok(t, CARTYPES_N * CARTYPE_SZ)) return -1;
+    for (uint32_t i = 0; hash && i < CARTYPES_N; i++) if (MR32(t + i * CARTYPE_SZ + 0xd0u) == hash) return t + i * CARTYPE_SZ;
     return 0;
 }
 /* a mod part's look-alike among the game's (tools/modpacks.py LOOKALIKES: a rim of the same size), 0: none */
@@ -471,10 +536,25 @@ static uint32_t stock_key(CPU *c, uint32_t type, uint32_t slot){
     }
     return g_stock[i].key[slot];
 }
+/* a part kept beside the profile: what the profile has in its slot */
+static uint32_t stand_in(CPU *c, uint32_t type, uint32_t slot, uint32_t key){
+    uint32_t la = lookalike(key);
+    return la ? la : stock_key(c, type, slot);
+}
 static uint64_t car_fp(uint32_t r){
     uint64_t h = 0xcbf29ce484222325ull;
     for (uint32_t o = 8u; o < 0xcu + 4u * N_SLOTS; o++){ h ^= MR8(r + R_PARTS + o); h *= 0x100000001b3ull; }
     return h;
+}
+/* a record's bytes from +0x18 to its end: its parts, tuning, performance, the money spent on it */
+static uint64_t rec_fp(uint32_t r, uint32_t size){
+    uint64_t h = 0xcbf29ce484222325ull;
+    for (uint32_t o = R_PARTS; o < size; o++){ h ^= MR8(r + o); h *= 0x100000001b3ull; }
+    return h;
+}
+/* garage.c: a car type's stock keys, all 170 (0 where the slot has none) */
+void modparts_stock_keys(CPU *c, uint32_t type, uint32_t *keys){
+    for (uint32_t s = 0; s < N_SLOTS; s++) keys[s] = stock_key(c, type, s);
 }
 static uint32_t car_of(uint32_t db, uint32_t handle, uint32_t type){
     uint32_t r[64]; int n = garage_records(db, r, 64);
@@ -492,6 +572,84 @@ static int is_foreign(const char *name){
     for (int i = 0; i < g_nforeign; i++) if (!strcasecmp(g_foreign[i], name)) return i;
     return -1;
 }
+/* a profile's name its folder can have (the game's field, longer ones of the PC game's, bytes of its fonts): not empty,
+ * no path's separators, no control characters, not "." or ".." */
+static int name_ok(const char *s){
+    if (!s[0] || !strcmp(s, ".") || !strcmp(s, "..")) return 0;
+    for (; *s; s++) if ((uint8_t)*s < 0x20u || *s == '/' || *s == '\\' || *s == ':' || *s == '*' || *s == '?' || *s == '"' ||
+                        *s == '<' || *s == '>' || *s == '|') return 0;
+    return 1;
+}
+/* the head's name: bStringHash of the name in capitals (a folder's name in any case is the same profile's) */
+static uint32_t name_hash(const char *s){
+    uint32_t h = 0xffffffffu;
+    for (; *s; s++) h = h * 33u + (uint8_t)((*s >= 'a' && *s <= 'z') ? *s - 32 : *s);
+    return h;
+}
+
+/* --- the cars of car types this game has not: as they were, in the profile */
+static int addon_of(int p, uint32_t r){
+    for (int i = 0; i < g_add[p].n; i++) if (g_add[p].a[i].r == r) return i;
+    return -1;
+}
+static void addon_drop(int p, int i){ g_add[p].a[i] = g_add[p].a[--g_add[p].n]; }
+/* garage.c: the record r of player p's cars (db; size bytes) was a car (used: in use) of the car type orig, which this
+ * game has not, with these keys (all 170); it is the stand-in now: in each payload as it was while it stays so */
+void modparts_track(int p, uint32_t r, uint32_t size, uint32_t orig, const uint32_t *keys, int used){
+    if (p < 0 || p > 1 || addon_of(p, r) >= 0) return;
+    if (g_add[p].n == ADDON_MAX){ fprintf(stderr, "[mods] more than %d cars of car types this game has not: car type 0x%08x saved as the stand-in\n", ADDON_MAX, orig); return; }
+    Addon *a = &g_add[p].a[g_add[p].n++];
+    memset(a, 0, sizeof *a);
+    a->r = r; a->size = size; a->orig = orig; a->used = used;
+    memcpy(a->keys, keys, sizeof a->keys);
+    a->base = rec_fp(r, size);
+}
+/* the cars as they were for a payload (their stand-ins kept meanwhile, the stand-ins after: reconvert); a car the
+ * player changed here (its bytes not the stand-in's as made, or no more in use) is the player's own now */
+static void unconvert(uint32_t db, int p){
+    for (int i = 0; i < g_add[p].n; i++){
+        Addon *a = &g_add[p].a[i];
+        if (rec_fp(a->r, a->size) != a->base || (a->used && !garage_car_in_use(db, a->r))){
+            fprintf(stderr, "[mods] the car 0x%08x of car type 0x%08x was changed here: saved as it now is\n", MR32(a->r + R_HANDLE), a->orig);
+            addon_drop(p, i--);
+            continue;
+        }
+        if (g_nunc == 2 * ADDON_MAX) continue;
+        g_unc[g_nunc].r = a->r; g_unc[g_nunc].type = MR32(a->r + R_PARTS + 8u);
+        for (uint32_t s = 0; s < N_SLOTS; s++) g_unc[g_nunc].keys[s] = MR32(KEY_AT(a->r, s));
+        MR32(a->r + R_PARTS + 8u) = a->orig;
+        for (uint32_t s = 0; s < N_SLOTS; s++) MR32(KEY_AT(a->r, s)) = a->keys[s];
+        g_nunc++;
+    }
+}
+static void reconvert(void){
+    for (int i = g_nunc - 1; i >= 0; i--){
+        MR32(g_unc[i].r + R_PARTS + 8u) = g_unc[i].type;
+        for (uint32_t s = 0; s < N_SLOTS; s++) MR32(KEY_AT(g_unc[i].r, s)) = g_unc[i].keys[s];
+    }
+    g_nunc = 0;
+}
+/* garage.c: player p's car of the record r (its handle h) has left it (traded; a new car in its place, 0x516B90,
+ * 0x52A710): nothing kept for it any more */
+void modparts_car_gone(int p, uint32_t r, uint32_t h){
+    if (p < 0 || p > 1) return;
+    int i = addon_of(p, r), k = 0, n = 0;
+    if (i >= 0){ fprintf(stderr, "[mods] the car 0x%08x of car type 0x%08x has gone: saved as the record now is\n", h, g_add[p].a[i].orig); addon_drop(p, i); }
+    for (int j = 0; h && j < g_wait[p].n; j++){ if (!E_KIND(&g_wait[p].e[j]) && E_HANDLE(&g_wait[p].e[j]) == h){ n++; continue; } g_wait[p].e[k++] = g_wait[p].e[j]; }
+    if (h) g_wait[p].n = k;
+    if (n) fprintf(stderr, "[mods] the car 0x%08x has gone: its %d waiting part%s not kept any more\n", h, n, n == 1 ? "" : "s");
+}
+/* garage.c (Trade Car): player p's car of the record from (its handle hf) is now in the record to (handle ht), as it
+ * was, byte for byte */
+void modparts_car_moved(int p, uint32_t from, uint32_t hf, uint32_t to, uint32_t ht){
+    if (p < 0 || p > 1 || from == to) return;
+    modparts_car_gone(p, to, 0);
+    int i = addon_of(p, from);
+    if (i >= 0) g_add[p].a[i].r = to;
+    for (int j = 0; j < g_wait[p].n; j++) if (!E_KIND(&g_wait[p].e[j]) && E_HANDLE(&g_wait[p].e[j]) == hf) E_HANDLE(&g_wait[p].e[j]) = ht;
+}
+
+/* --- the parts kept beside the profile */
 /* the cars' mod parts now (hide: the stand-ins put in for the while; every mod part goes out of the cars even when
  * the list is full), the waiting ones with them */
 static void collect(CPU *c, uint32_t db, int p, MList *l, int hide){
@@ -501,10 +659,9 @@ static void collect(CPU *c, uint32_t db, int p, MList *l, int hide){
     for (int i = 0; i < n; i++){
         uint32_t handle = MR32(r[i] + R_HANDLE), type = MR32(r[i] + R_PARTS + 8u);
         for (uint32_t s = 0; s < N_SLOTS; s++){
-            uint32_t at = r[i] + R_PARTS + 0xcu + 4u * s, key = MR32(at);
-            if (!mod_key(key)) continue;
-            uint32_t stand = lookalike(key);
-            if (!stand) stand = stock_key(c, type, s);
+            uint32_t at = KEY_AT(r[i], s), key = MR32(at);
+            if (!aside_key(key)) continue;
+            uint32_t stand = stand_in(c, type, s, key);
             if (l->n < MP_MAX){
                 MPart *e = &l->e[l->n++];
                 memset(e, 0, sizeof *e);
@@ -516,9 +673,10 @@ static void collect(CPU *c, uint32_t db, int p, MList *l, int hide){
     if (full) fprintf(stderr, "[mods] %d mod part%s more than MODPARTS.DAT holds: the stock ones in the profile, not kept\n", full, full == 1 ? "" : "s");
     for (int i = 0; i < g_wait[p].n && l->n < MP_MAX; i++){
         const MPart *w = &g_wait[p].e[i];
+        if (E_KIND(w) == K_HEAD) continue;                                         /* (each file its own) */
         if (E_KIND(w)){ l->e[l->n] = *w; l->e[l->n++].wait = 1; continue; }        /* another kind: as it was */
         uint32_t car = car_of(db, E_HANDLE(w), E_TYPE(w));
-        if (car && MR32(car + R_PARTS + 0xcu + 4u * E_SLOT(w)) == E_STAND(w)){ l->e[l->n] = *w; l->e[l->n++].wait = 1; }
+        if (car && MR32(KEY_AT(car, E_SLOT(w))) == E_STAND(w)){ l->e[l->n] = *w; l->e[l->n++].wait = 1; }
     }
     for (int i = 0; i < l->n; i++){
         if (E_KIND(&l->e[i])) continue;
@@ -534,15 +692,38 @@ static void own_only(MList *l, int p, const char *name){
     for (int i = 0; i < l->n; i++) if (!l->e[i].wait) l->e[k++] = l->e[i];
     l->n = k;
 }
-/* garage.c: a payload is being made of player p's cars (db) */
+/* garage.c: a payload is being made of player p's cars (db): the cars of car types this game has not as they were,
+ * the mod parts' stand-ins */
 void modparts_hide(CPU *c, uint32_t db, int p){
     if (p < 0 || p > 1) return;
+    unconvert(db, p);
     collect(c, db, p, &g_cur_l, 1);
 }
 /* ... the cars as they were */
 void modparts_show(void){
     for (int i = 0; i < g_nhid; i++) MR32(g_hid[i].at) = g_hid[i].key;
     g_nhid = 0;
+    for (int i = 0; i < g_nwraw; i++) MR32(g_wraw[i].at) = g_wraw[i].key;
+    g_nwraw = 0;
+    reconvert();
+}
+/* garage.c, a save whose MODPARTS.NEW could not be written: on, the payload to be made again as a page of before has
+ * it: the cars of car types this game has not as they were, every mod part as it is, each waiting one in its slot
+ * (its car still the stand-in's: the waiting part's own); off, all as before (modparts_show) */
+void modparts_raw(CPU *c, uint32_t db, int p, int on){
+    (void)c;
+    if (p < 0 || p > 1) return;
+    if (!on){ modparts_show(); return; }
+    unconvert(db, p);
+    g_nwraw = 0;
+    for (int i = 0; i < g_wait[p].n && g_nwraw < MP_MAX; i++){
+        const MPart *w = &g_wait[p].e[i];
+        if (E_KIND(w)) continue;
+        uint32_t car = car_of(db, E_HANDLE(w), E_TYPE(w));
+        if (!car || MR32(KEY_AT(car, E_SLOT(w))) != E_STAND(w)) continue;
+        g_wraw[g_nwraw].at = KEY_AT(car, E_SLOT(w)); g_wraw[g_nwraw].key = E_STAND(w); g_nwraw++;
+        MR32(KEY_AT(car, E_SLOT(w))) = E_KEY(w);
+    }
 }
 /* ... and was: its mod parts kept with it (by its cars' fingerprint and the profile's name) */
 void modparts_built(int p, uint32_t out, uint64_t fp, const char *name, int kept){
@@ -557,7 +738,8 @@ void modparts_built(int p, uint32_t out, uint64_t fp, const char *name, int kept
     g_mb[at].fp = fp; g_mb[at].l = g_cur_l; g_mb[at].seq = ++g_mseq;
     if (kept){ g_mk.on = 1; g_mk.p = p; g_mk.fp = fp; g_mk.l = g_cur_l; }
 }
-/* garage.c: anything to save beside the payload: the mod parts now against the kept payload's */
+/* garage.c: anything to save beside the payload: the mod parts now against the kept payload's (a load itself is no
+ * change: the profile as it is loads here) */
 int modparts_changed(CPU *c, int p){
     if (!g_mk.on || g_mk.p != p || p < 0 || p > 1) return 0;
     static MList now;
@@ -566,72 +748,159 @@ int modparts_changed(CPU *c, int p){
     fprintf(stderr, "[mods] the cars' mod parts changed: something to save\n");
     return 1;
 }
-/* fileio.c -> garage.c: the game has written a profile (host path; its cars' fingerprint, its name): its
- * MODPARTS.DAT beside it, from the payload of ours it was made of (none of its cars with a mod part: no file) */
-void modparts_written(const char *path, uint64_t fp, const char *name){
+static int newest_built(uint64_t fp, const char *name){
     int best = -1;
     for (int k = 0; k < 4; k++)
         if (g_mb[k].seq && g_mb[k].fp == fp && !strcasecmp(g_mb[k].name, name) && (best < 0 || g_mb[k].seq > g_mb[best].seq)) best = k;
-    if (best < 0) return;                                /* (garage.c says so) */
-    const MList *l = &g_mb[best].l;
-    char f[1100], t[1100], o[1100]; const char *sl = strrchr(path, '/');
-    int dl = sl ? (int)(sl - path) : 1; const char *dir = sl ? path : ".";
-    snprintf(f, sizeof f, "%.*s/%s", dl, dir, MP_FILE);
-    snprintf(t, sizeof t, "%.*s/%s", dl, dir, MP_NEW);
-    snprintf(o, sizeof o, "%.*s/%s", dl, dir, MP_OLD);
-    int fo = is_foreign(name);
-    if (!l->n){
-        if (fo >= 0){ fprintf(stderr, "[mods] %s: its %s (not one this page reads) left as it is\n", name, MP_FILE); return; }
-        if (remove(f) == 0) fprintf(stderr, "[mods] %s: no mod parts on its cars any more, its %s removed\n", name, MP_FILE);
-        return;
-    }
+    return best;
+}
+static void dir_of(const char *path, char *out, size_t n, const char *file){
+    const char *sl = strrchr(path, '/');
+    snprintf(out, n, "%.*s/%s", sl ? (int)(sl - path) : 1, sl ? path : ".", file);
+}
+/* the list l as a MODPARTS file at t, its head (the profile name's, write counter count) first; 1 written whole */
+static int write_list(const char *t, const MList *l, const char *name, uint32_t count){
     FILE *w = fopen(t, "wb");
-    if (!w){ fprintf(stderr, "[mods] %s: cannot write %s\n", name, t); return; }
-    uint32_t hd[4] = { MP_MAGIC, 1u, (uint32_t)l->n, 0 };
-    int ok = fwrite(hd, sizeof hd, 1, w) == 1;
+    if (!w) return 0;
+    uint32_t hd[4] = { MP_MAGIC, 1u, (uint32_t)l->n + 1u, count }, head[8] = { HEAD_MAGIC, name_hash(name), count, 0, 0, 0, 0, K_HEAD };
+    int ok = fwrite(hd, sizeof hd, 1, w) == 1 && fwrite(head, sizeof head, 1, w) == 1;
     for (int i = 0; i < l->n && ok; i++) ok = fwrite(l->e[i].w, sizeof l->e[i].w, 1, w) == 1;
     ok = fclose(w) == 0 && ok;
-    if (!ok){ remove(t); fprintf(stderr, "[mods] %s: WRITE FAILED, its %s as it was\n", name, MP_FILE); return; }
+    if (!ok) remove(t);
+    return ok;
+}
+/* the next write counter of player p's profile name */
+static uint32_t next_count(int p, const char *name){
+    if (p < 0 || p > 1 || strcasecmp(name, g_wait_name[p])) return 1;
+    return ++g_count[p];
+}
+/* garage.c, a save (0x52A450): MODPARTS.NEW for the payload just made (its cars' fingerprint fp, the profile name),
+ * before the game writes the profile; 1 written (or nothing to keep), 0 not: the payload is to be made again as it is */
+int modparts_stage(int p, uint64_t fp, const char *name){
+    g_staged.on = 0;
+    int best = newest_built(fp, name);
+    if (best < 0 || !name_ok(name)) return 1;            /* (no profile's: nothing beside it) */
+    const MList *l = &g_mb[best].l;
+    snprintf(g_staged.name, sizeof g_staged.name, "%s", name);
+    g_staged.fp = fp; g_staged.empty = !l->n; g_staged.on = 1;
+    if (!l->n) return 1;
+    char win[128], t[1100] = "";
+    snprintf(win, sizeof win, "NFS Underground 2\\%s\\%s", name, MP_NEW);
+    fileio_resolve_save_w(win, t, sizeof t);              /* (0 for a file not there yet: its path all the same) */
+    g_staged.count = next_count(p, name);
+    if (!t[0] || !write_list(t, l, name, g_staged.count)){
+        g_staged.on = 0;
+        fprintf(stderr, "[mods] %s: %s could not be written (no room?): the profile is saved with its parts as they are, "
+                "those waiting too, this once\n", name, MP_NEW);
+        return 0;
+    }
+    return 1;
+}
+/* f aside as the first of MODPARTS.OLD, .OLD2 ... .OLD9 not there yet; 1 kept */
+static int keep_aside(const char *f, const char *path){
+    for (int k = 1; k <= MP_OLDS; k++){
+        char o[1100], nm[24];
+        if (k == 1) snprintf(nm, sizeof nm, "%s", MP_OLD); else snprintf(nm, sizeof nm, "%s%d", MP_OLD, k);
+        dir_of(path, o, sizeof o, nm);
+        FILE *x = fopen(o, "rb");
+        if (x){ fclose(x); continue; }
+        return rename(f, o) == 0;
+    }
+    return 0;
+}
+/* MODPARTS.NEW at t over MODPARTS.DAT at f (a file this page cannot read there: kept aside first); 1 done */
+static int finish(const char *name, const char *f, const char *t, const char *path){
+    int fo = is_foreign(name);
     if (fo >= 0){                                        /* a file this page cannot read: kept aside, never lost */
-        remove(o);
-        int kept = rename(f, o) == 0;
-        fprintf(stderr, "[mods] %s: its %s (not one this page reads) %s\n", name, MP_FILE, kept ? "kept as " MP_OLD : "COULD NOT BE KEPT ASIDE");
-        if (!kept){ remove(t); return; }
+        FILE *x = fopen(f, "rb");
+        if (x){
+            fclose(x);
+            if (!keep_aside(f, path)){
+                fprintf(stderr, "[mods] %s: its %s (not one this page reads) left as it is, %s not made %s (the next load takes "
+                        "it by its counter)\n", name, MP_FILE, MP_NEW, MP_FILE);
+                return 0;
+            }
+            fprintf(stderr, "[mods] %s: its %s (not one this page reads) kept aside as %s\n", name, MP_FILE, MP_OLD "*");
+        }
         g_foreign[fo][0] = 0;
     }
-    if (rename(t, f) != 0){ remove(f); if (rename(t, f) != 0){ fprintf(stderr, "[mods] %s: cannot rename %s\n", name, t); return; } }
-    fprintf(stderr, "[mods] %s: %d mod part%s of its cars kept in %s (the profile has their stock parts)\n",
-            name, l->n, l->n == 1 ? "" : "s", MP_FILE);
+    if (rename(t, f) != 0){ remove(f); if (rename(t, f) != 0){ fprintf(stderr, "[mods] %s: cannot rename %s\n", name, t); return 0; } }
+    return 1;
 }
-/* a profile's MODPARTS.DAT: 1 read (l: its entries), 0 none, -1 one this page cannot read */
-static int read_mp(const char *name, MList *l){
-    char win[128], path[1100];
-    l->n = 0;
-    snprintf(win, sizeof win, "NFS Underground 2\\%s\\%s", name, MP_FILE);
-    if (!fileio_resolve_save(win, path, sizeof path)) return 0;
+/* fileio.c -> garage.c: the game has written a profile (host path; its cars' fingerprint, its name): its MODPARTS.NEW
+ * staged for it becomes MODPARTS.DAT (none of its cars with a mod part: no file) */
+void modparts_written(const char *path, uint64_t fp, const char *name){
+    char f[1100], t[1100];
+    dir_of(path, f, sizeof f, MP_FILE); dir_of(path, t, sizeof t, MP_NEW);
+    int fo = is_foreign(name);
+    if (!g_staged.on || g_staged.fp != fp || strcasecmp(g_staged.name, name)){
+        /* (a payload of ours not staged: a save by another way than 0x52A450; written now, as a page of before did) */
+        int best = newest_built(fp, name);
+        if (best < 0 || !g_mb[best].l.n){ if (best >= 0 && fo < 0 && remove(f) == 0) fprintf(stderr, "[mods] %s: nothing kept beside it any more, its %s removed\n", name, MP_FILE); return; }
+        if (!write_list(t, &g_mb[best].l, name, 0)){ fprintf(stderr, "[mods] %s: WRITE FAILED, its %s as it was\n", name, MP_FILE); return; }
+        g_staged.empty = 0;
+    }
+    g_staged.on = 0;
+    if (g_staged.empty){
+        remove(t);
+        if (fo >= 0){ fprintf(stderr, "[mods] %s: its %s (not one this page reads) left as it is\n", name, MP_FILE); return; }
+        if (remove(f) == 0) fprintf(stderr, "[mods] %s: nothing kept beside it any more, its %s removed\n", name, MP_FILE);
+        return;
+    }
+    if (!finish(name, f, t, path)) return;
+    int best = newest_built(fp, name), parts = 0, n = best >= 0 ? g_mb[best].l.n : 0;
+    for (int i = 0; i < n; i++) parts += E_KIND(&g_mb[best].l.e[i]) == K_PART;
+    fprintf(stderr, "[mods] %s: kept in %s: %d part%s (the profile has their stand-ins)%s\n", name, MP_FILE, parts, parts == 1 ? "" : "s",
+            n > parts ? ", and entries of a later page's" : "");
+}
+/* a MODPARTS file at path: 1 read (l, without its head; its write counter, its head's name hash or 0 for none), 0
+ * none, -1 one this page cannot read */
+static int read_one(const char *path, MList *l, uint32_t *count, uint32_t *nh){
+    l->n = 0; *count = 0; *nh = 0;
     FILE *in = fopen(path, "rb");
     if (!in) return 0;
-    uint32_t hd[4] = { 0 };
-    int ok = fread(hd, sizeof hd, 1, in) == 1 && hd[0] == MP_MAGIC && hd[1] == 1u && hd[2] <= MP_MAX;
+    uint32_t hd[4] = { 0 }, hc = 0;
+    int ok = fread(hd, sizeof hd, 1, in) == 1 && hd[0] == MP_MAGIC && hd[1] == 1u && hd[2] <= MP_MAX + 1u, head = 0;
     for (uint32_t i = 0; ok && i < hd[2]; i++){
-        MPart *e = &l->e[l->n++];
+        MPart *e = &l->e[l->n];
         memset(e, 0, sizeof *e);
         ok = fread(e->w, sizeof e->w, 1, in) == 1 && (E_KIND(e) || E_SLOT(e) < N_SLOTS);
+        if (ok && E_KIND(e) == K_HEAD && e->w[0] == HEAD_MAGIC && !head){ head = 1; *nh = e->w[1]; hc = e->w[2]; continue; }
+        if (ok && l->n == MP_MAX) ok = 0;
+        if (ok) l->n++;
     }
     ok = ok && fgetc(in) == EOF;
     fclose(in);
-    if (!ok){
-        l->n = 0;
-        if (is_foreign(name) < 0){ int k = g_nforeign < 8 ? g_nforeign++ : 7; snprintf(g_foreign[k], sizeof g_foreign[k], "%s", name); }
-        fprintf(stderr, "[mods] %s: its %s is not one this page reads: not used, kept as it is\n", name, MP_FILE);
-        return -1;
-    }
+    if (!ok){ l->n = 0; return -1; }
+    /* the head word: this page's counter; 0 with a head of ours inside: a page of before wrote it last (the newest) */
+    *count = hd[3] ? hd[3] : head ? 0xffffffffu : 0;
+    (void)hc;
     return 1;
 }
-static int name_ok(const char *s){
-    if (!s[0]) return 0;
-    for (; *s; s++) if (!((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z') || (*s >= '0' && *s <= '9') || *s == '_' || *s == '-')) return 0;
-    return 1;
+/* a profile's MODPARTS file: the newer of MODPARTS.DAT and a MODPARTS.NEW of this profile (by their write counters;
+ * a MODPARTS.NEW taken is renamed MODPARTS.DAT now); 1 read (l), 0 none, -1 MODPARTS.DAT is one this page cannot read
+ * (and no MODPARTS.NEW of this profile) */
+static int read_mp(int p, const char *name, MList *l){
+    char win[128], df[1100] = "", nf[1100] = "";
+    static MList nw;
+    uint32_t cd = 0, cn = 0, hd_ = 0, hn = 0;
+    snprintf(win, sizeof win, "NFS Underground 2\\%s\\%s", name, MP_FILE);
+    int d = fileio_resolve_save(win, df, sizeof df) ? read_one(df, l, &cd, &hd_) : 0;
+    if (!d) fileio_resolve_save_w(win, df, sizeof df);
+    snprintf(win, sizeof win, "NFS Underground 2\\%s\\%s", name, MP_NEW);
+    int w = fileio_resolve_save(win, nf, sizeof nf) ? read_one(nf, &nw, &cn, &hn) : 0;
+    if (d < 0 && is_foreign(name) < 0){ int k = g_nforeign < 8 ? g_nforeign++ : 7; snprintf(g_foreign[k], sizeof g_foreign[k], "%s", name); }
+    int mine = w > 0 && hn == name_hash(name) && cn != 0xffffffffu;
+    if (p >= 0 && p <= 1) g_count[p] = (d > 0 && cd != 0xffffffffu ? cd : 0) > (mine ? cn : 0) ? cd : mine ? cn : 0;
+    if (mine && (d <= 0 || (cd != 0xffffffffu && cn > cd))){
+        *l = nw;
+        fprintf(stderr, "[mods] %s: its %s (write %u, the profile's last save: not renamed) taken, renamed %s now\n", name, MP_NEW, cn, MP_FILE);
+        if (df[0]) finish(name, df, nf, df);
+        return 1;
+    }
+    if (d > 0) return 1;
+    if (d < 0){ l->n = 0; fprintf(stderr, "[mods] %s: its %s is not one this page reads: not used, kept as it is\n", name, MP_FILE); return -1; }
+    return 0;
 }
 /* garage.c: player p's cars (db) loaded from a payload (in; its cars' fingerprint, its profile's name, "" if not
  * known; kept: the one the game keeps, going back to it): the mod parts back on their cars, those this game lacks
@@ -639,10 +908,11 @@ static int name_ok(const char *s){
 void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const char *name, int kept){
     (void)c; (void)in;
     if (p < 0 || p > 1) return;
+    g_add[p].n = 0;                                      /* (the cars are the payload's now: garage.c's addon_cars next) */
     static MList l;
     if (kept && g_mk.on && g_mk.p == p && g_mk.fp == fp){ l = g_mk.l; g_wait[p].n = 0; }   /* (the same profile's) */
     else if (!name_ok(name)) return;                     /* (no profile's: nothing of it changed) */
-    else { if (read_mp(name, &l) <= 0) l.n = 0; g_wait[p].n = 0; }
+    else { if (read_mp(p, name, &l) <= 0) l.n = 0; g_wait[p].n = 0; }
     if (name_ok(name)) snprintf(g_wait_name[p], sizeof g_wait_name[p], "%s", name);
     int back = 0, wait = 0, gone = 0;
     static uint32_t at[MP_MAX];
@@ -651,22 +921,34 @@ void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const
         at[i] = 0;
         if (E_KIND(e)) continue;
         uint32_t car = car_of(db, E_HANDLE(e), E_TYPE(e));
-        at[i] = car ? car + R_PARTS + 0xcu + 4u * E_SLOT(e) : 0;
+        at[i] = car ? KEY_AT(car, E_SLOT(e)) : 0;
         if (!car || MR32(at[i]) != E_STAND(e) || car_fp(car) != E_FP(e)){ at[i] = 0; gone++; }   /* changed elsewhere: as it is */
     }
     for (int i = 0; i < l.n; i++){
         const MPart *e = &l.e[i];
+        if (E_KIND(e) == K_HEAD) continue;
         if (E_KIND(e)){ if (g_wait[p].n < MP_MAX) g_wait[p].e[g_wait[p].n++] = *e; continue; }   /* another kind: kept */
         if (!at[i]) continue;
-        if (mod_key(E_KEY(e))){ MR32(at[i]) = E_KEY(e); back++; }
+        if (have_key(E_KEY(e))){ MR32(at[i]) = E_KEY(e); back++; }
         else if (g_wait[p].n < MP_MAX){ g_wait[p].e[g_wait[p].n++] = *e; wait++; }
     }
     if (!l.n) return;
-    fprintf(stderr, "[mods] %s%s: %d mod part%s back on its cars", name[0] ? name : "(the cars)", kept ? " (the kept payload)" : "",
+    fprintf(stderr, "[mods] %s%s: %d part%s back on its cars", name[0] ? name : "(the cars)", kept ? " (the kept payload)" : "",
             back, back == 1 ? "" : "s");
-    if (wait) fprintf(stderr, ", %d this game has not (MODPACKS): the stock ones meanwhile, kept for later", wait);
+    if (wait) fprintf(stderr, ", %d this game has not (MODPACKS, VINYLPACKS): the stand-ins meanwhile, kept for later", wait);
     if (gone) fprintf(stderr, ", %d whose car changed elsewhere: as it is", gone);
     fprintf(stderr, "\n");
+}
+/* garage.c: the profile name deleted: nothing of it waits any more (a new one of that name starts as new) */
+void modparts_deleted(const char *name){
+    for (int p = 0; p < 2; p++){
+        if (strcasecmp(g_wait_name[p], name)) continue;
+        g_wait[p].n = 0; g_wait_name[p][0] = 0; g_count[p] = 0;
+    }
+    for (int k = 0; k < 4; k++) if (!strcasecmp(g_mb[k].name, name)) g_mb[k].seq = 0, g_mb[k].name[0] = 0;
+    int f = is_foreign(name);
+    if (f >= 0) g_foreign[f][0] = 0;
+    if (g_staged.on && !strcasecmp(g_staged.name, name)) g_staged.on = 0;
 }
 
 /* --- other players' cars: the mods' parts, or the game's --------------------

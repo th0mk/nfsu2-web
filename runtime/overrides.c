@@ -1213,30 +1213,39 @@ void sub_0050c2c0(CPU *c){
 #define CARTYPES_N      46u           /* the builder walks 0x189E0 bytes of CarTypeInfo */
 void sub_004df9c0_orig(CPU *c);
 void sub_00516500(CPU *c);
-void sub_004df9c0(CPU *c){
-    uint32_t who = MR32(c->ecx + 0xecu);
-    if (who < 2u){
-        uint32_t db = FECARS + who * FECARS_PLAYER, bad = STOCK_N;
-        for (uint32_t i = 0; i < STOCK_N && bad == STOCK_N; i++){
-            uint32_t r = db + i * STOCK_SZ;
-            if (MR32(r + 0x10u) && MR32(r + 0x18u) >= CARTYPES_N) bad = i;
-        }
-        if (bad < STOCK_N){
-            uint32_t r = db + bad * STOCK_SZ;
-            fprintf(stderr, "[cars] player %u's stock car %u (handle 0x%08x) has car type %u, none of the game's %u: "
-                    "the stock cars made again, as for a new profile\n", who, bad, MR32(r + 8u), MR32(r + 0x18u), CARTYPES_N);
-            CPU save = *c;
-            c->esp = (c->esp - 256u) & ~15u;
-            PUSH32(0u);                           /* its argument, not read */
-            c->ecx = db;
-            PUSH32(0x004df9c0u);                  /* the ret pops it into eip; the state is put back below */
-            sub_00516500(c);
-            *c = save;
-            for (uint32_t i = 0; i < STOCK_N; i++)
-                if (!MR32(db + i * STOCK_SZ + 0x10u)) MR32(db + i * STOCK_SZ + 0x18u) = 0xffffffffu;
-            fprintf(stderr, "[cars] %u stock cars\n", MR32(db + 0x540u));
-        }
+/* db's stock cars made again (as for a new profile) when one in use has a car type past the game's; lost: the handles
+ * of those (at most max), returns how many there were (0: none, nothing changed).  Here before a car list is made,
+ * and in garage.c as a profile's cars load (a Quick Race with such a car as its car, or any list of them, read past
+ * CarTypeInfo too, and the original game's car lot ends the same way: the profile has the game's own list again) */
+int cars_stock_fix(CPU *c, uint32_t db, uint32_t *lost, int max){
+    uint32_t bad = STOCK_N; int n = 0;
+    for (uint32_t i = 0; i < STOCK_N; i++){
+        uint32_t r = db + i * STOCK_SZ;
+        if (!MR32(r + 0x10u) || MR32(r + 0x18u) < CARTYPES_N) continue;
+        if (bad == STOCK_N) bad = i;
+        if (n < max) lost[n] = MR32(r + 8u);
+        n++;
     }
+    if (bad == STOCK_N) return 0;
+    uint32_t r = db + bad * STOCK_SZ;
+    fprintf(stderr, "[cars] %s's stock car %u (handle 0x%08x) has car type %u, none of the game's %u (%d such): "
+            "the stock cars made again, as for a new profile\n", db == FECARS ? "player 1" : "player 2", bad, MR32(r + 8u),
+            MR32(r + 0x18u), CARTYPES_N, n);
+    CPU save = *c;
+    c->esp = (c->esp - 256u) & ~15u;
+    PUSH32(0u);                           /* its argument, not read */
+    c->ecx = db;
+    PUSH32(0x004df9c0u);                  /* the ret pops it into eip; the state is put back below */
+    sub_00516500(c);
+    *c = save;
+    for (uint32_t i = 0; i < STOCK_N; i++)
+        if (!MR32(db + i * STOCK_SZ + 0x10u)) MR32(db + i * STOCK_SZ + 0x18u) = 0xffffffffu;
+    fprintf(stderr, "[cars] %u stock cars\n", MR32(db + 0x540u));
+    return n;
+}
+void sub_004df9c0(CPU *c){
+    uint32_t who = MR32(c->ecx + 0xecu), lost[1];
+    if (who < 2u) cars_stock_fix(c, FECARS + who * FECARS_PLAYER, lost, 0);
     sub_004df9c0_orig(c);
 }
 

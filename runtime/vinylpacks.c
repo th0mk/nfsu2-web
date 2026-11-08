@@ -41,6 +41,7 @@ void sub_00636be0(CPU *c);                     /* the lifted loader */
 uint32_t gheap_alloc(int heap, uint32_t n, int zero);
 void gheap_free(int heap, uint32_t p);
 static uint32_t g_raw;                         /* grown()'s allocation (its copy is aligned in it) */
+static int g_have;                             /* the car part database has the seven */
 int fileio_vinyl_packs(void);
 uint32_t modpacks_grow(uint32_t chunk);
 
@@ -168,10 +169,22 @@ static uint32_t grown(uint32_t chunk){
     }
     MR32(place[S_HDR] + 0x20u) = nattr + 2u * NEW_N;
     MR32(place[S_HDR] + 0x38u) = nparts + NEW_N;
+    g_have = 1;
     fprintf(stderr, "[vinyls] the car part database: %u parts, %d added after ART_F_27 (ART FACTORY %d to %d, the Japanese "
             "release's; textures from VINYLPACKS)\n", nparts + NEW_N, NEW_N, FIRST_NEW, FIRST_NEW + NEW_N - 1);
     return out;
 }
+
+/* runtime/modpacks.c: a profile holds none of the seven (the original game and a page without VINYLPACKS lack
+ * them: the car shows no vinyl there, and the next change to it saves none): each goes beside it in MODPARTS.DAT, the
+ * profile has the slot's stock part, and a load where the car part database has them puts them back */
+int vinylpacks_key(uint32_t key){
+    static uint32_t keys[NEW_N];
+    if (!keys[0]) for (int k = 0; k < NEW_N; k++){ char t[16]; snprintf(t, sizeof t, "ART_F_%d", FIRST_NEW + k); keys[k] = bhash(t); }
+    for (int k = 0; key && k < NEW_N; k++) if (keys[k] == key) return 1;
+    return 0;
+}
+int vinylpacks_have(void){ return g_have; }
 
 /* the loader, cdecl (chunk): given a copy of the car part database's chunk (a new one each time: the loader turns
  * the copy's model names into pointers), with the mod packs' parts too */
