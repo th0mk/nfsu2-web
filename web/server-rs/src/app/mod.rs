@@ -161,6 +161,8 @@ const STATUS: [(u16, &str); 8] = [
 /// /players' `rooms`: at most this many asked at once (the main world, World 1 to 4, a world of the player's own, and
 /// room to spare)
 const ROOMS_ASKED: usize = 8;
+/// /players' `spots`: at most this many (a world's race tracks' spots, nfsu2_roam::TRACK_KEYS, and room to spare)
+const SPOTS_ASKED: usize = 16;
 pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /seen\nDisallow: /lan\nDisallow: /vault\nDisallow: /names\nDisallow: /friends";
 
 /// what a client may ask a file to be sent as
@@ -695,10 +697,13 @@ impl App {
     /// line (a connection without ?queue, which cannot wait: "LAN full"); queue: the pages waiting in line (nfsu2-lan queue.rs); roamBusy: the
     /// hub gives fewer than askCap links a player, so the page does not ask the free-roam question now (false with
     /// --roam-hub off).  ?room=<hash> (roam_core's rc_room_hash of a Room setting, decimal,
-    /// not 0) adds room: how many of roam are in that room (with --roam-hub on).  ?rooms=<hash>,<hash>,... (the
-    /// worlds of the start page's World row and the page menu's: 0 the main world, then World 1 to 4 and a world of
-    /// the player's own; the first ROOMS_ASKED that are numbers) adds rooms: how many of roam are in each, in that
-    /// order (with --roam-hub on, and one of them at least).  ?crews=<hash>,<hash>,... (the
+    /// not 0) adds room: how many of roam are in that room, its race tracks' spots too (with --roam-hub on).
+    /// ?rooms=<hash>,<hash>,... (the worlds of the start page's World row and the page menu's: 0 the main world, then
+    /// World 1 to 4 and a world of the player's own; the first ROOMS_ASKED that are numbers) adds rooms: how many of
+    /// roam are in each world, at its race tracks' spots too (nfsu2_roam::world_count), in that order (with --roam-hub
+    /// on, and one of them at least).  ?spots=<hash>,<hash>,... (the page menu's Tracks: a world's spots' rooms,
+    /// nfsu2_roam::track_room; the first SPOTS_ASKED) adds spots: how many of roam are in each of those rooms, just
+    /// that room, in that order.  ?crews=<hash>,<hash>,... (the
     /// rc_room_hash of each of the Crews setting's words, decimal; the first 4 that are numbers and not 0, the rest
     /// left out) adds crews: how many of roam are in each of those crews, in any room, in that order (with --roam-hub
     /// on, and one of them at least); both as of the hub's last tick, from its counts (nothing waits for its thread)
@@ -731,13 +736,19 @@ impl App {
         m.insert("roamBusy".into(), serde_json::Value::Bool(self.roam.as_ref().is_some_and(|r| r.crowded())));
         let room = u.param("room").and_then(|r| r.parse::<u32>().ok()).filter(|&r| r != 0);
         if let (Some(room), Some(r)) = (room, &self.roam) {
-            m.insert("room".into(), serde_json::Value::from(r.in_room(room).min(players)));
+            m.insert("room".into(), serde_json::Value::from(r.in_world(room).min(players)));
         }
         let rooms: Vec<u32> =
             u.param("rooms").map_or(Vec::new(), |c| c.split(',').filter_map(|h| h.parse::<u32>().ok()).take(ROOMS_ASKED).collect());
         if let Some(r) = self.roam.as_ref().filter(|_| !rooms.is_empty()) {
-            let n = rooms.iter().map(|&h| serde_json::Value::from(r.in_room(h).min(players))).collect();
+            let n = rooms.iter().map(|&h| serde_json::Value::from(r.in_world(h).min(players))).collect();
             m.insert("rooms".into(), serde_json::Value::Array(n));
+        }
+        let spots: Vec<u32> =
+            u.param("spots").map_or(Vec::new(), |c| c.split(',').filter_map(|h| h.parse::<u32>().ok()).take(SPOTS_ASKED).collect());
+        if let Some(r) = self.roam.as_ref().filter(|_| !spots.is_empty()) {
+            let n = spots.iter().map(|&h| serde_json::Value::from(r.in_room(h).min(players))).collect();
+            m.insert("spots".into(), serde_json::Value::Array(n));
         }
         let crews: Vec<u32> = u.param("crews").map_or(Vec::new(), |c| {
             c.split(',').filter_map(|h| h.parse::<u32>().ok()).filter(|&h| h != 0).take(nfsu2_roam::CREWS).collect()

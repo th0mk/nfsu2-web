@@ -1419,12 +1419,13 @@ async fn free_roams_friends_through_the_server() {
     let k = n(&dee);
     say(&dee, "Al_", "hi", 5);
     assert_eq!(done(&dee, 5, k).await["done"], "claim", "Dee has no claimed name");
-    // the start page: Bo plays in free roam, in the room of everyone; then Bo leaves
-    assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "roam", "room": "" }]));
+    // the start page: Bo plays in free roam, in the room of everyone (its hash 0: the city's, no race track's); then Bo
+    // leaves
+    assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "roam", "room": "", "at": 0 }]));
     // ...and the game's page on its link (its notices, the page menu's Friends)
     let k = n(&al);
     al.text(r#"{"t":"friend","op":"where"}"#);
-    assert_eq!(first(&al, "where", k).await["friends"], serde_json::json!([{ "name": "Bo_", "where": "roam", "room": "" }]));
+    assert_eq!(first(&al, "where", k).await["friends"], serde_json::json!([{ "name": "Bo_", "where": "roam", "room": "", "at": 0 }]));
     bo.close().await;
     sleep(1200).await;
     assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "" }]));
@@ -1500,7 +1501,10 @@ async fn free_roams_friends_through_the_server() {
     assert_eq!(post('A', "discord", "Al Races").await["done"], "name");
     let r = post('A', "discord", "@Al.Races").await;
     assert_eq!((r["done"].as_str(), r["contact"].as_str()), (Some("ok"), Some("al.races")), "{r}");
-    assert_eq!(lists('B').await["friends"], serde_json::json!([{ "name": "Al_", "where": "roam", "room": "", "contact": "al.races" }]));
+    assert_eq!(
+        lists('B').await["friends"],
+        serde_json::json!([{ "name": "Al_", "where": "roam", "room": "", "at": 0, "contact": "al.races" }])
+    );
     let kb = n(&bo);
     ask(&bo, "where", "");
     assert_eq!(first(&bo, "where", kb).await["friends"][0]["contact"], "al.races");
@@ -1737,7 +1741,7 @@ async fn a_one_sided_friend_learns_nothing() {
     };
     assert_eq!(post('A', "ask", "Victim").await, "asked");
     assert_eq!(post('V', "accept", "Mallory").await, "friends");
-    assert_eq!(get('A').await["friends"], serde_json::json!([{ "name": "Victim", "where": "roam", "room": "" }]));
+    assert_eq!(get('A').await["friends"], serde_json::json!([{ "name": "Victim", "where": "roam", "room": "", "at": 0 }]));
     for p in [victim, mal] {
         p.close().await;
     }

@@ -153,6 +153,26 @@ pub const ROAM_HUB_VIP: u32 = 0x0A4D_00FD;
 /// the most crews a player is in (roam_core.h RC_CREW_MAX), and so the most /players counts for one question
 pub const CREWS: usize = wire::CREWS;
 
+/// The race tracks' spots a game's free roam can go to (the page menu's Tracks, runtime/travel.c SPOTS), each by its
+/// room's key: on one, a game plays in a room of its own, its world's room with the key mixed in (`track_room`), so
+/// its players meet only the players at the same spot.  A world's count takes its spots' players too (`world_count`).
+pub const TRACK_KEYS: [u32; 9] = [4711, 4701, 4311, 4301, 4201, 4211, 4221, 4601, 4605];
+
+/// the room of the race track's spot of this key in the world of room `base` (runtime/roam_game.c room_at,
+/// web/src/app/tracks.ts trackRoom): never 0, the main world's
+pub fn track_room(base: u32, key: u32) -> u32 {
+    match base ^ key.wrapping_mul(0x9E37_79B1) {
+        0 => 1,
+        r => r,
+    }
+}
+
+/// how many of free roam play in the world of room `room` (counts: `Hub::in_rooms`), its race tracks' spots too
+pub fn world_count(counts: &HashMap<u32, usize>, room: u32) -> usize {
+    let n = |r: u32| counts.get(&r).copied().unwrap_or(0);
+    n(room) + TRACK_KEYS.iter().map(|&k| n(track_room(room, k))).sum::<usize>()
+}
+
 /// The hub's options.  exact_room: a room of at most this many players sorts every pair of them; a larger one takes
 /// the pairs in the same order but only as far as it needs them: each player's nearest one after another (a grid)
 /// until it has its links (every pair of 2000 players in one room took the Node hub 1.5-4.5 s a tick, 1000 players
@@ -447,10 +467,15 @@ impl RoamHub {
         self.in_roam.load(Ordering::Relaxed)
     }
 
-    /// the hub's `in_rooms()` of one room: how many browsers of the room (roam_core's rc_room_hash; 0 the main world)
-    /// drive in free roam, or are paused there (as of the hub's last tick)
+    /// the hub's `in_rooms()` of one room: how many browsers of the room (roam_core's rc_room_hash; 0 the main world;
+    /// a race track's spot's: `track_room`) drive in free roam, or are paused there (as of the hub's last tick)
     pub fn in_room(&self, room: u32) -> usize {
         self.in_rooms.lock().map_or(0, |m| m.get(&room).copied().unwrap_or(0))
+    }
+
+    /// `in_room` of a world's room and of its race tracks' spots, together (`world_count`)
+    pub fn in_world(&self, room: u32) -> usize {
+        self.in_rooms.lock().map_or(0, |m| world_count(&m, room))
     }
 
     /// the hub's `in_crews()`: how many browsers drive in free roam, or are paused there, in each of these crews
@@ -674,6 +699,21 @@ impl Host for RoamHub {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // the spots' rooms as the game makes them (runtime/roam_game.c room_at, uint32 maths), and a world's count with
+    // its spots' players: not another world's, not a spot of another world
+    #[test]
+    fn a_world_counts_its_race_tracks() {
+        assert_eq!(track_room(0, 4711), 2_397_071_415);
+        assert_eq!(track_room(0, 4605), 199_754_989);
+        assert_eq!(track_room(0x1234_5678, 4301), 942_920_901);
+        assert_eq!(track_room(0xFFFF_FFFF, 4201), 2_745_435_750);
+        let w2 = 0xBEEF_0002;
+        let counts = HashMap::from([(0, 5), (track_room(0, 4711), 2), (track_room(0, 4605), 1), (w2, 3), (track_room(w2, 4311), 4)]);
+        assert_eq!(world_count(&counts, 0), 8);
+        assert_eq!(world_count(&counts, w2), 7);
+        assert_eq!(world_count(&counts, 0xBEEF_0003), 0);
+    }
 
     // a hub whose thread is stuck holds MAX_PENDING frames and leaves out the rest; each may keep
     // its reader's block of 16 KiB alive, 128 MiB at most

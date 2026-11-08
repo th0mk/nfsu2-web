@@ -43,8 +43,9 @@
 //! On the start page (and the game's page, for a request from afar: its Friends popup and its line), with the
 //! keyphrase's token as /names takes it (this server's own pages only):
 //! - GET /friends -> {"me":<name>|null,"friends":[{"name","where":"roam"|"online"|"","room":<its room's name, "" for
-//!   the room of everyone; none when not in free roam or its page did not tell it>,"contact":<its Discord username,
-//!   when it gave one>}],"asks":[names],"sent":[names],"mail":[the messages that waited, as above],"contact":<the
+//!   the room of everyone; none when not in free roam or its page did not tell it>,"at":<its room's hash in free roam,
+//!   its world's or a race track's spot's there (nfsu2_roam::track_room)>,"contact":<its Discord username, when it
+//!   gave one>}],"asks":[names],"sent":[names],"mail":[the messages that waited, as above],"contact":<the
 //!   player's own Discord username>|null}
 //! - POST /friends {"op":"accept"|"decline"|"remove"|"block","name":...}, {"op":"msg","name":...,"body":...},
 //!   {"op":"ask","name":<a player's name, as typed>} (a request by name: any claimed name, wherever its player is; its
@@ -429,14 +430,18 @@ impl Friends {
                     ""
                 };
                 m.insert("where".into(), place.into());
-                match w {
+                match &w {
                     Some(w) if w.room == 0 => {
                         m.insert("room".into(), "".into());
                     }
                     Some(nfsu2_roam::Whereabouts { room_name: Some(n), .. }) => {
-                        m.insert("room".into(), n.into());
+                        m.insert("room".into(), n.clone().into());
                     }
                     _ => {}
+                }
+                // its room's hash: its world's, or a race track's spot's there (nfsu2_roam::track_room), for its Join
+                if let Some(w) = &w {
+                    m.insert("at".into(), w.room.into());
                 }
                 if let Some(c) = &f.contact {
                     m.insert("contact".into(), c.clone().into());
