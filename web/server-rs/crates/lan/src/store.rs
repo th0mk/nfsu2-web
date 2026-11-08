@@ -1,11 +1,15 @@
 //! The state folder's lan-addresses.json (the switch's store): `[{"v":"10.77.0.2","h":"<base64url of the token's
 //! SHA-256>"},...]`, the addresses held and then the ones reserved, so that the players come back to the same
-//! addresses after a restart.  Written whole to a .tmp file (mode 0600), then renamed over the old one.
+//! addresses after a restart.  Written whole to a temporary file (mode 0600), then renamed over the old one
+//! (`nfsu2_util::atomic_file`), not synced: it is written again half a second after any change while players come
+//! and go, and a file cut short by a power cut only means new addresses for the players.
 
 use std::path::PathBuf;
 
 use parking_lot::Mutex;
 use serde_json::Value;
+
+use nfsu2_util::atomic_file::Options;
 
 use crate::text::js_string;
 
@@ -47,27 +51,10 @@ impl Store {
         if seq <= *written {
             return;
         }
-        let mut tmp = self.path.clone().into_os_string();
-        tmp.push(".tmp");
-        let tmp = PathBuf::from(tmp);
-        if write_private(&tmp, json.as_bytes()).is_ok() && std::fs::rename(&tmp, &self.path).is_ok() {
+        if Options::new().no_sync().write(&self.path, json.as_bytes()).is_ok() {
             *written = seq;
         }
     }
-}
-
-/// the file written whole, readable by the server's user alone (0600, the mode a file made here gets; one that was
-/// there already keeps its own)
-fn write_private(path: &PathBuf, data: &[u8]) -> std::io::Result<()> {
-    use std::io::Write;
-    let mut o = std::fs::OpenOptions::new();
-    o.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        o.mode(0o600);
-    }
-    o.open(path)?.write_all(data)
 }
 
 #[cfg(test)]

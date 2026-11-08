@@ -345,26 +345,22 @@ pub struct Buddies {
 struct Shelf;
 
 impl Shelf {
-    fn file(dir: &Path, k: &str) -> (PathBuf, PathBuf) {
+    fn file(dir: &Path, k: &str) -> PathBuf {
         let h: String = Sha256::digest(k.as_bytes()).iter().take(16).map(|b| format!("{b:02x}")).collect();
-        let sub = dir.join(SHELF).join(&h[..2]);
-        let file = sub.join(format!("{h}.json"));
-        (sub, file)
+        dir.join(SHELF).join(&h[..2]).join(format!("{h}.json"))
     }
 
     fn read(dir: &Path, k: &str) -> Option<serde_json::Map<String, Value>> {
-        let (_, file) = Shelf::file(dir, k);
-        let bytes = std::fs::read(file).ok()?;
+        let bytes = std::fs::read(Shelf::file(dir, k)).ok()?;
         crate::jsonparse::parse(&String::from_utf8_lossy(&bytes)).ok()?.as_object().cloned()
     }
 
     fn write(dir: &Path, k: &str, body: &str) -> Result<(), String> {
-        let (sub, file) = Shelf::file(dir, k);
-        crate::files::write_atomic(&sub, &file, body.as_bytes())
+        crate::files::write_atomic(&Shelf::file(dir, k), body.as_bytes())
     }
 
     fn remove(dir: &Path, k: &str) {
-        let _ = std::fs::remove_file(Shelf::file(dir, k).1);
+        let _ = std::fs::remove_file(Shelf::file(dir, k));
     }
 }
 
@@ -510,7 +506,7 @@ pub(crate) fn shelf_texts(dir: &Path) -> Vec<String> {
         for f in std::fs::read_dir(sub.path()).unwrap().flatten() {
             let text = std::fs::read_to_string(f.path()).unwrap();
             let name = crate::jsonparse::parse(&text).unwrap()["name"].as_str().unwrap().to_string();
-            assert_eq!(f.path(), Shelf::file(dir, &lower(&name)).1, "{name}'s file is where its name says");
+            assert_eq!(f.path(), Shelf::file(dir, &lower(&name)), "{name}'s file is where its name says");
             out.push((name, text));
         }
     }

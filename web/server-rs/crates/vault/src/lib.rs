@@ -60,13 +60,15 @@
 //! (a lock per id, of 256 stripes); the others run side by side.
 
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use sha2::{Digest, Sha256};
+
+use nfsu2_util::atomic_file::Options;
 
 pub const MAGIC: &[u8; 4] = b"NFV1";
 pub const HEAD: usize = 64;
@@ -216,7 +218,6 @@ pub struct Vault {
     bytes: AtomicI64,
     count: AtomicI64,
     counted: AtomicBool,
-    seq: AtomicU64,
     /// the bytes the saves may add now (`per_day`'s bucket) and when it was last filled up (ms)
     room: Mutex<(f64, i64)>,
 }
@@ -293,7 +294,6 @@ impl Vault {
             bytes: AtomicI64::new(0),
             count: AtomicI64::new(0),
             counted: AtomicBool::new(false),
-            seq: AtomicU64::new(0),
             room: Mutex::new((Self::room_burst(&o), 0)),
             o,
         })
@@ -372,21 +372,8 @@ impl Vault {
 
     /// the whole file in place of the old one: a temporary file beside it (0600), synced, renamed over it
     fn write(&self, p: &Path, bytes: &[u8]) -> io::Result<()> {
-        use std::os::unix::fs::OpenOptionsExt;
-        let dir = p.parent().expect("a keyphrase file is in a folder");
-        mkdir(dir)?;
-        let tmp = PathBuf::from(format!("{}.tmp-{}-{}", p.display(), std::process::id(), self.seq.fetch_add(1, Ordering::Relaxed)));
-        let done = (|| {
-            let mut f = fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
-            f.write_all(bytes)?;
-            f.sync_data()?;
-            drop(f);
-            fs::rename(&tmp, p)
-        })();
-        if done.is_err() {
-            let _ = fs::remove_file(&tmp);
-        }
-        done
+        Options::new().make_folder().write(p, bytes)?;
+        Ok(())
     }
 
     /// What is known of a keyphrase (its file's head), or None; a read: the keyphrase counts as used.

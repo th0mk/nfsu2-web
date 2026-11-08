@@ -30,6 +30,7 @@ use std::time::{Duration, Instant, SystemTime};
 use parking_lot::{Condvar, Mutex};
 use sha2::{Digest, Sha256};
 
+use nfsu2_util::atomic_file::Options;
 use nfsu2_util::cpu::{QuotaBusy, QuotaUse};
 use nfsu2_util::log;
 
@@ -128,7 +129,6 @@ pub struct KeptBlocks {
     sweeps: AtomicU64,
     /// the manifest swept last (its ETag): the same manifest again is not swept again
     swept: Mutex<String>,
-    tmp_n: AtomicU64,
 }
 
 impl KeptBlocks {
@@ -150,7 +150,6 @@ impl KeptBlocks {
             }),
             sweeps: AtomicU64::new(0),
             swept: Mutex::new(String::new()),
-            tmp_n: AtomicU64::new(0),
         });
         k.check_room();
         for i in 0..threads {
@@ -403,22 +402,10 @@ impl KeptBlocks {
     }
 
     fn put(&self, k: &Key, body: &[u8]) -> io::Result<()> {
-        let to = self.path(k);
-        let sub = to.parent().expect("a folder");
-        std::fs::DirBuilder::new().recursive(true).mode(0o700).create(sub)?;
-        let tmp = sub.join(format!(".{}.{}", hex(k), self.tmp_n.fetch_add(1, Ordering::Relaxed)));
-        let r = (|| {
-            let mut w = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
-            w.write_all(body)?;
-            // on the disk before its name: after a power cut a renamed file could come back cut short, and be served
-            // as a whole brotli stream that Cloudflare keeps for good
-            w.sync_all()?;
-            std::fs::rename(&tmp, &to)
-        })();
-        if r.is_err() {
-            let _ = std::fs::remove_file(&tmp);
-        }
-        r?;
+        // synced before its name: after a power cut a renamed file could come back cut short, and be served as a whole
+        // brotli stream that Cloudflare keeps for good; the temporary name starts with a "." (the sweep removes every
+        // other name no block has, and leaves those until they are STALE_TMP old)
+        Options::new().make_folder().hidden().write(&self.path(k), body)?;
         self.bytes.fetch_add(body.len() as u64, Ordering::Relaxed);
         Ok(())
     }

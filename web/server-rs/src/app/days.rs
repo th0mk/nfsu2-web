@@ -20,6 +20,7 @@ use hmac::{Hmac, Mac};
 use parking_lot::Mutex;
 use serde_json::Value;
 
+use nfsu2_util::atomic_file::Options;
 use nfsu2_util::{js, log};
 
 use super::settings_days::{self, Report, Tally};
@@ -192,7 +193,7 @@ impl Days {
             t.changed = false;
             t.to_json()
         };
-        nfsu2_claims::write_atomic(&self.file, body.as_bytes()).map(|_| true)
+        Options::new().make_folder().write(&self.file, body.as_bytes()).map(|_| true).map_err(|e| e.to_string())
     }
 
     /// a day that ended: its line in days.csv (once: a line of that day already there stays the only one) and the

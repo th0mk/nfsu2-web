@@ -14,7 +14,9 @@
 //!   hands them frames and how they send through it
 //! - [`rand`]: random bytes and integers from the OS (Node's `crypto.randomBytes`, `crypto.randomInt`)
 //! - [`idhash`]: a fast hasher for maps by the server's own numbers (virtual addresses, slots, player ids)
+//! - [`atomic_file`]: a file written whole in place of the old one (a temporary file, synced, renamed over it)
 
+pub mod atomic_file;
 pub mod bucket;
 pub mod clock;
 pub mod counter;

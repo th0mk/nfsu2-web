@@ -44,7 +44,7 @@
 //! full ban of one player both stand (the full one ends, the race ban goes on).  A ban whose time is up, one lifted
 //! and one replaced go to the player's history (`Bans::history`), kept [`PAST_MS`] after it ended; so do renames.
 //! What is over goes at the next change or listing; so do marks.  The file is written whole: a temporary file beside
-//! it (0600), renamed over it.  A server from before kinds reads a race ban as a full one (its file has no kind).
+//! it (0600), synced, renamed over it.  A server from before kinds reads a race ban as a full one (its file has no kind).
 
 use std::io::{self, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
@@ -758,13 +758,9 @@ impl Bans {
     /// the file written whole, without what is over
     fn save(&self, f: &mut File, now: i64) -> io::Result<()> {
         prune(f, now);
-        let text = serde_json::to_string_pretty(&*f).map_err(io::Error::other)?;
-        let tmp = self.path.with_extension(format!("json.tmp-{}", std::process::id()));
-        let mut out = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)?;
-        out.write_all(text.as_bytes())?;
-        out.write_all(b"\n")?;
-        out.sync_all()?;
-        std::fs::rename(&tmp, &self.path)
+        let mut text = serde_json::to_string_pretty(&*f).map_err(io::Error::other)?;
+        text.push('\n');
+        nfsu2_util::atomic_file::write(&self.path, text.as_bytes())
     }
 }
 

@@ -14,6 +14,7 @@ use flate2::Compression;
 use flate2::write::GzEncoder;
 use parking_lot::Mutex;
 
+use crate::atomic_file;
 use crate::clock::now_ms;
 use crate::js::iso_string;
 
@@ -114,8 +115,8 @@ pub(crate) fn write(text: &str) {
     }
 }
 
-/// In a thread: each day's file before `today` gzipped (`<day>.log` into `<day>.log.gz`, through a `.part` file, so a
-/// stop on the way leaves the day's file as it was), and the days before the last DAYS_KEPT gone
+/// In a thread: each day's file before `today` gzipped (`<day>.log` into `<day>.log.gz`, through a temporary file, so
+/// a stop on the way leaves the day's file as it was), and the days before the last DAYS_KEPT gone
 fn tidy(dir: PathBuf, today: i64) {
     let shown = dir.display().to_string();
     let spawned = std::thread::Builder::new().name("log-tidy".into()).spawn(move || {
@@ -147,7 +148,8 @@ fn tidy_now(dir: &Path, today: i64) -> io::Result<()> {
     names.sort();
     for name in &names {
         let path = dir.join(name);
-        if name.ends_with(".part") {
+        // a gzip a stop cut short: its temporary file (`.part` as older servers named it)
+        if name.ends_with(".part") || name.contains(".tmp-") {
             let _ = std::fs::remove_file(&path);
             continue;
         }
@@ -164,19 +166,19 @@ fn tidy_now(dir: &Path, today: i64) -> io::Result<()> {
 /// `<day>.log` gzipped onto the end of `<day>.log.gz` (a gzip file of two members, when there was one already: a
 /// day's file made again after it was gzipped), then gone
 fn gzip(dir: &Path, day: &str) -> io::Result<()> {
-    let (log, gz, part) = (dir.join(format!("{day}.log")), dir.join(format!("{day}.log.gz")), dir.join(format!("{day}.log.gz.part")));
-    let mut out = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&part)?;
-    match File::open(&gz) {
-        Ok(mut was) => {
-            io::copy(&mut was, &mut out)?;
+    let (log, gz) = (dir.join(format!("{day}.log")), dir.join(format!("{day}.log.gz")));
+    atomic_file::Options::new().write_with(&gz, |out| {
+        match File::open(&gz) {
+            Ok(mut was) => {
+                io::copy(&mut was, out)?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e),
-    }
-    let mut enc = GzEncoder::new(out, Compression::default());
-    io::copy(&mut File::open(&log)?, &mut enc)?;
-    enc.finish()?.sync_all()?;
-    std::fs::rename(&part, &gz)?;
+        let mut enc = GzEncoder::new(out, Compression::default());
+        io::copy(&mut File::open(&log)?, &mut enc)?;
+        enc.finish().map(drop)
+    })?;
     std::fs::remove_file(&log)
 }
 
@@ -226,6 +228,7 @@ mod tests {
         w("2025-10-01.log.gz", "gone");
         w("2025-09-30.log", "gone");
         w("2025-10-28.log.gz.part", "a stop on the way");
+        w("2025-10-27.log.gz.tmp-1-0", "a stop on the way");
         w("notes.txt", "not ours");
         tidy_now(&d, today).unwrap();
         let mut names: Vec<String> = std::fs::read_dir(&d).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();

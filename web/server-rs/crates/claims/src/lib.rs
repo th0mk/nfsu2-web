@@ -27,10 +27,9 @@
 //!   its own claimant's, as any claim is: an exact claim comes first.
 //!
 //! Kept in <state>/names.json (the names, their owners' hashes, when they were made and last played), written whole
-//! to a temporary file of 0600 and renamed over the old one ([`Claims::save`]).
+//! to a temporary file of 0600, synced and renamed over the old one ([`Claims::save`]).
 
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -38,6 +37,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use parking_lot::RwLock;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+use nfsu2_util::atomic_file::Options;
 
 #[cfg(test)]
 mod tests;
@@ -697,32 +698,11 @@ impl Claims {
             return Ok(false);
         }
         let body = self.serialize(now);
-        write_atomic(path, body.as_bytes()).inspect_err(|_| self.dirty.store(true, Ordering::Relaxed))?;
+        Options::new()
+            .make_folder()
+            .write(path, body.as_bytes())
+            .map_err(|e| e.to_string())
+            .inspect_err(|_| self.dirty.store(true, Ordering::Relaxed))?;
         Ok(true)
     }
-}
-
-/// the folder (0700 when it is made), a temporary file (0600), then the rename over `file`
-pub fn write_atomic(file: &Path, body: &[u8]) -> Result<(), String> {
-    let dir = file.parent().ok_or("no folder")?;
-    let mut b = std::fs::DirBuilder::new();
-    b.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        b.mode(0o700);
-    }
-    b.create(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let tmp = format!("{}.tmp-{}", file.display(), std::process::id());
-    let mut o = std::fs::OpenOptions::new();
-    o.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        o.mode(0o600);
-    }
-    let mut f = o.open(&tmp).map_err(|e| format!("{tmp}: {e}"))?;
-    f.write_all(body).map_err(|e| format!("{tmp}: {e}"))?;
-    drop(f);
-    std::fs::rename(&tmp, file).map_err(|e| format!("{}: {e}", file.display()))
 }

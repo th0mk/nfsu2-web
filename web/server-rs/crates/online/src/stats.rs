@@ -576,7 +576,7 @@ impl Stats {
         }
         self.prune();
         let body = self.serialize();
-        match files::write_atomic(&dir, &dir.join("stats.json"), body.as_bytes()) {
+        match files::write_atomic(&dir.join("stats.json"), body.as_bytes()) {
             Ok(()) => self.dirty = false,
             Err(e) => (self.log)(&format!("[online] the results could not be written: {e}"), None),
         }

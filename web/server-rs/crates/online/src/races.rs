@@ -178,7 +178,7 @@ impl Core {
     /// the started races, for the next start (the server stops: once their players' sessions went)
     pub fn save_races(&mut self) {
         self.races_read = false;
-        let (Some(dir), Some(file)) = (self.state_dir.clone(), self.races_file()) else { return };
+        let Some(file) = self.races_file() else { return };
         let races: Vec<KeptRace> = self
             .lobby
             .games
@@ -224,7 +224,7 @@ impl Core {
         }
         let n = races.len();
         let body = serde_json::to_vec(&Kept { v: VERSION, races }).expect("plain data");
-        match files::write_atomic(&dir, &file, &body) {
+        match files::write_atomic(&file, &body) {
             Ok(()) => (self.log)(&format!("[online] {n} races going on written to {} for the next start", file.display()), None),
             Err(e) => (self.log)(&format!("[online] the races going on could not be written: {e}"), None),
         }
