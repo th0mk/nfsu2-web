@@ -471,7 +471,7 @@ typedef struct { MPart e[MP_MAX]; int n; } MList;
 typedef struct { uint32_t r, size, orig, keys[N_SLOTS]; uint64_t base; int used; } Addon;
 static MList g_wait[2];                                  /* each player's parts not here (no MODPACKS), and other kinds */
 static char g_wait_name[2][33];                          /* ... of that profile */
-static uint32_t g_count[2];                              /* ... the write counter of its file */
+static struct { char name[33]; uint32_t count; } g_cnt[8]; static int g_ncnt;   /* each profile's write counter */
 static struct { Addon a[ADDON_MAX]; int n; } g_add[2];   /* each player's cars of car types this game has not */
 static MList g_cur_l;                                    /* the payload being made */
 static struct { uint32_t at, key; } g_hid[MP_MAX * 2]; static int g_nhid;
@@ -622,6 +622,11 @@ static void unconvert(uint32_t db, int p){
         g_nunc++;
     }
 }
+/* whether r is a car as it was, for the payload being made (so its keys are as the profile had them, all 170) */
+static int unconverted(uint32_t r){
+    for (int i = 0; i < g_nunc; i++) if (g_unc[i].r == r) return 1;
+    return 0;
+}
 static void reconvert(void){
     for (int i = g_nunc - 1; i >= 0; i--){
         MR32(g_unc[i].r + R_PARTS + 8u) = g_unc[i].type;
@@ -651,13 +656,15 @@ void modparts_car_moved(int p, uint32_t from, uint32_t hf, uint32_t to, uint32_t
 
 /* --- the parts kept beside the profile */
 /* the cars' mod parts now (hide: the stand-ins put in for the while; every mod part goes out of the cars even when
- * the list is full), the waiting ones with them */
+ * the list is full; a car of a car type this game has not, as it was for the payload, keeps all its keys), the
+ * waiting ones with them */
 static void collect(CPU *c, uint32_t db, int p, MList *l, int hide){
     uint32_t r[64]; int n = garage_records(db, r, 64), full = 0;
     l->n = 0;
     if (hide) g_nhid = 0;
     for (int i = 0; i < n; i++){
         uint32_t handle = MR32(r[i] + R_HANDLE), type = MR32(r[i] + R_PARTS + 8u);
+        if (unconverted(r[i])) continue;                 /* (a modded game's car as it was: its own keys, a mod's too) */
         for (uint32_t s = 0; s < N_SLOTS; s++){
             uint32_t at = KEY_AT(r[i], s), key = MR32(at);
             if (!aside_key(key)) continue;
@@ -743,7 +750,9 @@ void modparts_built(int p, uint32_t out, uint64_t fp, const char *name, int kept
 int modparts_changed(CPU *c, int p){
     if (!g_mk.on || g_mk.p != p || p < 0 || p > 1) return 0;
     static MList now;
+    unconvert(CARS0_OF(p), p);                           /* (as the payload has them) */
     collect(c, CARS0_OF(p), p, &now, 0);
+    reconvert();
     if (!lists_differ(&now, &g_mk.l)) return 0;
     fprintf(stderr, "[mods] the cars' mod parts changed: something to save\n");
     return 1;
@@ -758,21 +767,34 @@ static void dir_of(const char *path, char *out, size_t n, const char *file){
     const char *sl = strrchr(path, '/');
     snprintf(out, n, "%.*s/%s", sl ? (int)(sl - path) : 1, sl ? path : ".", file);
 }
-/* the list l as a MODPARTS file at t, its head (the profile name's, write counter count) first; 1 written whole */
-static int write_list(const char *t, const MList *l, const char *name, uint32_t count){
+/* the list l as a MODPARTS file at t, its head first (the profile name's, write counter count, the cars' fingerprint
+ * fp of the payload it belongs to); 1 written whole */
+static int write_list(const char *t, const MList *l, const char *name, uint32_t count, uint64_t fp){
     FILE *w = fopen(t, "wb");
     if (!w) return 0;
-    uint32_t hd[4] = { MP_MAGIC, 1u, (uint32_t)l->n + 1u, count }, head[8] = { HEAD_MAGIC, name_hash(name), count, 0, 0, 0, 0, K_HEAD };
+    uint32_t hd[4] = { MP_MAGIC, 1u, (uint32_t)l->n + 1u, count };
+    uint32_t head[8] = { HEAD_MAGIC, name_hash(name), count, (uint32_t)fp, (uint32_t)(fp >> 32), 0, 0, K_HEAD };
     int ok = fwrite(hd, sizeof hd, 1, w) == 1 && fwrite(head, sizeof head, 1, w) == 1;
     for (int i = 0; i < l->n && ok; i++) ok = fwrite(l->e[i].w, sizeof l->e[i].w, 1, w) == 1;
     ok = fclose(w) == 0 && ok;
     if (!ok) remove(t);
     return ok;
 }
-/* the next write counter of player p's profile name */
-static uint32_t next_count(int p, const char *name){
-    if (p < 0 || p > 1 || strcasecmp(name, g_wait_name[p])) return 1;
-    return ++g_count[p];
+static int read_one(const char *path, MList *l, uint32_t *count, uint32_t *nh, uint64_t *fp);
+/* the write counter of the profile name: as its files had it (read the first time it is asked), then as written */
+static uint32_t *count_of(const char *name){
+    for (int i = 0; i < g_ncnt; i++) if (!strcasecmp(g_cnt[i].name, name)) return &g_cnt[i].count;
+    int k = g_ncnt < 8 ? g_ncnt++ : 7;
+    snprintf(g_cnt[k].name, sizeof g_cnt[k].name, "%s", name);
+    g_cnt[k].count = 0;
+    static MList tmp;
+    for (int f = 0; f < 2; f++){
+        char win[128], path[1100]; uint32_t c = 0, nh = 0; uint64_t fp = 0;
+        snprintf(win, sizeof win, "NFS Underground 2\\%s\\%s", name, f ? MP_NEW : MP_FILE);
+        if (fileio_resolve_save(win, path, sizeof path) && read_one(path, &tmp, &c, &nh, &fp) > 0 && c != 0xffffffffu && c > g_cnt[k].count)
+            g_cnt[k].count = c;
+    }
+    return &g_cnt[k].count;
 }
 /* garage.c, a save (0x52A450): MODPARTS.NEW for the payload just made (its cars' fingerprint fp, the profile name),
  * before the game writes the profile; 1 written (or nothing to keep), 0 not: the payload is to be made again as it is */
@@ -787,8 +809,9 @@ int modparts_stage(int p, uint64_t fp, const char *name){
     char win[128], t[1100] = "";
     snprintf(win, sizeof win, "NFS Underground 2\\%s\\%s", name, MP_NEW);
     fileio_resolve_save_w(win, t, sizeof t);              /* (0 for a file not there yet: its path all the same) */
-    g_staged.count = next_count(p, name);
-    if (!t[0] || !write_list(t, l, name, g_staged.count)){
+    (void)p;
+    g_staged.count = ++*count_of(name);
+    if (!t[0] || !write_list(t, l, name, g_staged.count, fp)){
         g_staged.on = 0;
         fprintf(stderr, "[mods] %s: %s could not be written (no room?): the profile is saved with its parts as they are, "
                 "those waiting too, this once\n", name, MP_NEW);
@@ -837,7 +860,7 @@ void modparts_written(const char *path, uint64_t fp, const char *name){
         /* (a payload of ours not staged: a save by another way than 0x52A450; written now, as a page of before did) */
         int best = newest_built(fp, name);
         if (best < 0 || !g_mb[best].l.n){ if (best >= 0 && fo < 0 && remove(f) == 0) fprintf(stderr, "[mods] %s: nothing kept beside it any more, its %s removed\n", name, MP_FILE); return; }
-        if (!write_list(t, &g_mb[best].l, name, 0)){ fprintf(stderr, "[mods] %s: WRITE FAILED, its %s as it was\n", name, MP_FILE); return; }
+        if (!write_list(t, &g_mb[best].l, name, ++*count_of(name), fp)){ fprintf(stderr, "[mods] %s: WRITE FAILED, its %s as it was\n", name, MP_FILE); return; }
         g_staged.empty = 0;
     }
     g_staged.on = 0;
@@ -853,10 +876,10 @@ void modparts_written(const char *path, uint64_t fp, const char *name){
     fprintf(stderr, "[mods] %s: kept in %s: %d part%s (the profile has their stand-ins)%s\n", name, MP_FILE, parts, parts == 1 ? "" : "s",
             n > parts ? ", and entries of a later page's" : "");
 }
-/* a MODPARTS file at path: 1 read (l, without its head; its write counter, its head's name hash or 0 for none), 0
- * none, -1 one this page cannot read */
-static int read_one(const char *path, MList *l, uint32_t *count, uint32_t *nh){
-    l->n = 0; *count = 0; *nh = 0;
+/* a MODPARTS file at path: 1 read (l, without its head; its write counter, its head's name hash and payload's cars'
+ * fingerprint, 0 for none), 0 none, -1 one this page cannot read */
+static int read_one(const char *path, MList *l, uint32_t *count, uint32_t *nh, uint64_t *fp){
+    l->n = 0; *count = 0; *nh = 0; *fp = 0;
     FILE *in = fopen(path, "rb");
     if (!in) return 0;
     uint32_t hd[4] = { 0 }, hc = 0;
@@ -865,7 +888,7 @@ static int read_one(const char *path, MList *l, uint32_t *count, uint32_t *nh){
         MPart *e = &l->e[l->n];
         memset(e, 0, sizeof *e);
         ok = fread(e->w, sizeof e->w, 1, in) == 1 && (E_KIND(e) || E_SLOT(e) < N_SLOTS);
-        if (ok && E_KIND(e) == K_HEAD && e->w[0] == HEAD_MAGIC && !head){ head = 1; *nh = e->w[1]; hc = e->w[2]; continue; }
+        if (ok && E_KIND(e) == K_HEAD && e->w[0] == HEAD_MAGIC && !head){ head = 1; *nh = e->w[1]; hc = e->w[2]; *fp = (uint64_t)e->w[3] | (uint64_t)e->w[4] << 32; continue; }
         if (ok && l->n == MP_MAX) ok = 0;
         if (ok) l->n++;
     }
@@ -877,27 +900,34 @@ static int read_one(const char *path, MList *l, uint32_t *count, uint32_t *nh){
     (void)hc;
     return 1;
 }
-/* a profile's MODPARTS file: the newer of MODPARTS.DAT and a MODPARTS.NEW of this profile (by their write counters;
- * a MODPARTS.NEW taken is renamed MODPARTS.DAT now); 1 read (l), 0 none, -1 MODPARTS.DAT is one this page cannot read
- * (and no MODPARTS.NEW of this profile) */
-static int read_mp(int p, const char *name, MList *l){
+/* a profile's MODPARTS file, for its payload as loaded (its cars' fingerprint fp): MODPARTS.NEW where it belongs to
+ * this very payload (the profile written after it, the rename cut) and is not older than MODPARTS.DAT (by their write
+ * counters: two saves of the same cars), renamed MODPARTS.DAT now; else MODPARTS.DAT, and a MODPARTS.NEW of a payload
+ * not written (a save cut before the profile) removed.  1 read (l), 0 none, -1 MODPARTS.DAT is one this page cannot
+ * read (and no MODPARTS.NEW of this payload) */
+static int read_mp(const char *name, uint64_t fp, MList *l){
     char win[128], df[1100] = "", nf[1100] = "";
     static MList nw;
-    uint32_t cd = 0, cn = 0, hd_ = 0, hn = 0;
+    uint32_t cd = 0, cn = 0, hd_ = 0, hn = 0; uint64_t fd = 0, fnw = 0;
     snprintf(win, sizeof win, "NFS Underground 2\\%s\\%s", name, MP_FILE);
-    int d = fileio_resolve_save(win, df, sizeof df) ? read_one(df, l, &cd, &hd_) : 0;
+    int d = fileio_resolve_save(win, df, sizeof df) ? read_one(df, l, &cd, &hd_, &fd) : 0;
     if (!d) fileio_resolve_save_w(win, df, sizeof df);
     snprintf(win, sizeof win, "NFS Underground 2\\%s\\%s", name, MP_NEW);
-    int w = fileio_resolve_save(win, nf, sizeof nf) ? read_one(nf, &nw, &cn, &hn) : 0;
+    int w = fileio_resolve_save(win, nf, sizeof nf) ? read_one(nf, &nw, &cn, &hn, &fnw) : 0;
     if (d < 0 && is_foreign(name) < 0){ int k = g_nforeign < 8 ? g_nforeign++ : 7; snprintf(g_foreign[k], sizeof g_foreign[k], "%s", name); }
-    int mine = w > 0 && hn == name_hash(name) && cn != 0xffffffffu;
-    if (p >= 0 && p <= 1) g_count[p] = (d > 0 && cd != 0xffffffffu ? cd : 0) > (mine ? cn : 0) ? cd : mine ? cn : 0;
-    if (mine && (d <= 0 || (cd != 0xffffffffu && cn > cd))){
+    int mine = w > 0 && hn == name_hash(name) && fnw == fp && fp;
+    uint32_t *cnt = count_of(name);
+    if (d > 0 && cd != 0xffffffffu && cd > *cnt) *cnt = cd;
+    if (w > 0 && cn != 0xffffffffu && cn > *cnt) *cnt = cn;
+    int dat_too = d > 0 && fd == fp && (cd == 0xffffffffu || cd >= cn);   /* (a later save of the same cars, or a page of before's) */
+    if (mine && !dat_too){
         *l = nw;
-        fprintf(stderr, "[mods] %s: its %s (write %u, the profile's last save: not renamed) taken, renamed %s now\n", name, MP_NEW, cn, MP_FILE);
+        fprintf(stderr, "[mods] %s: its %s (write %u, of the profile as it is: its rename cut) taken, renamed %s now\n", name, MP_NEW, cn, MP_FILE);
         if (df[0]) finish(name, df, nf, df);
         return 1;
     }
+    if (w && !mine && hn == name_hash(name) && remove(nf) == 0)
+        fprintf(stderr, "[mods] %s: its %s (of a save whose profile was not written) removed\n", name, MP_NEW);
     if (d > 0) return 1;
     if (d < 0){ l->n = 0; fprintf(stderr, "[mods] %s: its %s is not one this page reads: not used, kept as it is\n", name, MP_FILE); return -1; }
     return 0;
@@ -912,7 +942,7 @@ void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const
     static MList l;
     if (kept && g_mk.on && g_mk.p == p && g_mk.fp == fp){ l = g_mk.l; g_wait[p].n = 0; }   /* (the same profile's) */
     else if (!name_ok(name)) return;                     /* (no profile's: nothing of it changed) */
-    else { if (read_mp(p, name, &l) <= 0) l.n = 0; g_wait[p].n = 0; }
+    else { if (read_mp(name, fp, &l) <= 0) l.n = 0; g_wait[p].n = 0; }
     if (name_ok(name)) snprintf(g_wait_name[p], sizeof g_wait_name[p], "%s", name);
     int back = 0, wait = 0, gone = 0;
     static uint32_t at[MP_MAX];
@@ -929,7 +959,8 @@ void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const
         if (E_KIND(e) == K_HEAD) continue;
         if (E_KIND(e)){ if (g_wait[p].n < MP_MAX) g_wait[p].e[g_wait[p].n++] = *e; continue; }   /* another kind: kept */
         if (!at[i]) continue;
-        if (have_key(E_KEY(e))){ MR32(at[i]) = E_KEY(e); back++; }
+        /* (a car of a car type this game has not stays as loaded: its part waits, and the payload has it as it was) */
+        if (have_key(E_KEY(e)) && modparts_cartype(E_TYPE(e)) > 0){ MR32(at[i]) = E_KEY(e); back++; }
         else if (g_wait[p].n < MP_MAX){ g_wait[p].e[g_wait[p].n++] = *e; wait++; }
     }
     if (!l.n) return;
@@ -943,9 +974,10 @@ void modparts_loaded(CPU *c, uint32_t db, int p, uint32_t in, uint64_t fp, const
 void modparts_deleted(const char *name){
     for (int p = 0; p < 2; p++){
         if (strcasecmp(g_wait_name[p], name)) continue;
-        g_wait[p].n = 0; g_wait_name[p][0] = 0; g_count[p] = 0;
+        g_wait[p].n = 0; g_wait_name[p][0] = 0;
     }
     for (int k = 0; k < 4; k++) if (!strcasecmp(g_mb[k].name, name)) g_mb[k].seq = 0, g_mb[k].name[0] = 0;
+    for (int k = 0; k < g_ncnt; k++) if (!strcasecmp(g_cnt[k].name, name)) g_cnt[k].count = 0;
     int f = is_foreign(name);
     if (f >= 0) g_foreign[f][0] = 0;
     if (g_staged.on && !strcasecmp(g_staged.name, name)) g_staged.on = 0;

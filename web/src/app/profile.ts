@@ -213,9 +213,10 @@ export function mendedBefore(from: string, to: string): boolean {
 // of the type's name, as CarTypeInfo +0xd0 holds it.  The game reads an
 // unknown one's CarTypeInfo through a NULL pointer (0x503880, 0x610130 returns
 // 0), and a stock car's index past CarTypeInfo out of its bounds: the game here
-// makes such a car the stock car of the first type as the profile loads
-// (runtime/garage.c addon_cars; its own type and parts kept beside the profile
-// in MODPARTS.DAT) and the stock cars the game's own again (overrides.c
+// shows such a car as the stock car of the first type (runtime/garage.c
+// addon_cars), while the profile keeps it as it is (runtime/modpacks.c: each
+// save writes it back as loaded until the player changes it here), and makes
+// the stock cars the game's own again as the profile loads (overrides.c
 // cars_stock_fix).  Unknown part hashes find no part (0x61b980): the stock
 // part instead; the page does not check those (the game's part table is
 // 12,000 entries).  Checked against players' profiles: their cars are all of
