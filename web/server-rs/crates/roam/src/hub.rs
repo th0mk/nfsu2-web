@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use bytes::{Bytes, BytesMut};
+use nfsu2_anticheat::{CAR_KMH, MODE_DRIFT};
 use nfsu2_util::json::num;
 use nfsu2_util::{IdMap, js, vip_str};
 use serde_json::{Value, json};
@@ -424,11 +425,11 @@ fn lobby_notes(r: &wire::RaceRep) -> String {
     s
 }
 
-/// what no car of the game has, however tuned: engine power (kW), top speed (km/h), the game's rating (nfsu2.xyz,
-/// 2026-10-30: of 8,143 cars in lobby races the most were 452 kW, 381 km/h and a rating of 804; an edited save's 350Z
-/// had 2351 kW, 444 km/h and 639 kg, rated 5000, the most a report carries, and won lobby races with it)
+/// what no car of the game has, however tuned: engine power (kW), top speed (km/h: CAR_KMH, the Online mode's too),
+/// the game's rating (nfsu2.xyz, 2026-10-30: of 8,143 cars in lobby races the most were 452 kW, 381 km/h and a rating
+/// of 804; an edited save's 350Z had 2351 kW, 444 km/h and 639 kg, rated 5000, the most a report carries, and won lobby
+/// races with it)
 const CAR_KW: f64 = 600.0;
-const CAR_KMH: f64 = 420.0;
 const CAR_RATING: f64 = 1000.0;
 
 /// whether a race report's car is one no tuning makes (CAR_KW, CAR_KMH, CAR_RATING)
@@ -467,7 +468,6 @@ const LIKE_MIN: usize = 10;
 /// 240SX, a Civic and a Mustang; four beat 11 to 55 % of the honest cars rated like them, the fifth 83 % of any car's,
 /// too few being rated like it).  Every car beats most of any rating's when it is a strong one: that never decides.
 const GAIN_SHARE: f64 = 0.95;
-const MODE_DRIFT: u8 = 3;
 
 /// The honest finishers' times of the lobbies' races, per race (id, laps), the newest last: (rating, s) of each car
 /// whose game data is the game's and whose numbers any tuning makes, in a race of two cars or more, as its own game

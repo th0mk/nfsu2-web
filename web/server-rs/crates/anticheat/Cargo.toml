@@ -1,0 +1,9 @@
+[package]
+name = "nfsu2-anticheat"
+description = "What the free-roam hub's and the Online mode's race checks share: the limits no honest race passes, and a track's quickest racers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

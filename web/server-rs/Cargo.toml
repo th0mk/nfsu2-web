@@ -22,6 +22,7 @@ nfsu2-online = { path = "crates/online" }
 nfsu2-vault = { path = "crates/vault" }
 nfsu2-bans = { path = "crates/bans" }
 nfsu2-claims = { path = "crates/claims" }
+nfsu2-anticheat = { path = "crates/anticheat" }
 
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"

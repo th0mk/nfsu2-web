@@ -61,6 +61,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+// (the limits the Online mode's race checks share: RACE_MPS, THIRD_SHARE, QUICK_WINS, JUMP_M, MODE_DRIFT)
+use nfsu2_anticheat::{JUMP_M, MODE_DRIFT, QUICK_WINS, Quickest, RACE_MPS, THIRD_SHARE, jump_seen};
+
 use crate::wire::{LOBBY_PLAYERS, RS_FINISHED, RS_OURS, RaceRes, ResRow};
 
 /// a race's reports are judged once every racer's came, or this long after the first (ms): every game sends its
@@ -68,8 +71,6 @@ use crate::wire::{LOBBY_PLAYERS, RS_FINISHED, RS_OURS, RaceRes, ResRow};
 pub(crate) const RESULTS_WAIT_MS: f64 = 90_000.0;
 /// the races kept at once (a player's reports are one a lobby, none sooner than 20 s after its last: hub.rs)
 const RACES_KEPT: usize = 4096;
-/// no car of the game averages this over a race (m/s: 350 km/h)
-const RACE_MPS: f64 = 350.0 / 3.6;
 /// a winner who came less than this share of the way by every report finished without driving it
 const DROVE_MIN: f64 = 0.5;
 /// a winner in under this share of the race's quickest clean win (once the race had QUICK_WINS clean wins, by two
@@ -78,22 +79,10 @@ const DROVE_MIN: f64 = 0.5;
 const QUICK_SHARE: f64 = 0.5;
 const BEST_KEPT: usize = 4096;
 const BEST_SEEN: usize = 2;
-/// a winner in under this share of the third quickest other winner's time, once the race had QUICK_WINS clean wins
-/// and no other finisher came close (the winner over this share of its time);
-/// the quickest winners kept of each race (each once, its best: the race's own winner may be one of them)
-const THIRD_SHARE: f64 = 0.7;
-const QUICK_WINS: u32 = 10;
-const TOP_KEPT: usize = 4;
-/// roam_core.h's race mode of a drift race
-const MODE_DRIFT: u8 = 3;
 /// a race ends 30 s after its first finished (mprace.c): the others' rows are that much later, this much at least (s)
 const GAME_END_S: f64 = 25.0;
 /// a winner who drove less than this share of the way: the line says how much it drove
 const DROVE_SHORT: f64 = 0.9;
-/// a car's jump at once (m) that no lag makes, and the other games that had it so (or the only other one).  Honest
-/// races' largest: 18-44 m (a reset to the road, a hit), 31 m after a 1.5 s stall of a test's (racenet.c)
-const JUMP_M: f64 = 150.0;
-const JUMP_SEEN: usize = 2;
 
 /// one race's reports so far: since when, each reporter's, each one's client (the reports' order: `Results::add`), and
 /// its racers as the hub knew them then (their address and name, for the line: they may be gone by the time the race
@@ -186,36 +175,27 @@ pub(crate) struct Results {
     best: HashMap<(u32, u8, u8), Best>,
 }
 
-/// A race's clean wins: how many, the quickest, and the quickest winners (each once, by name, quickest first)
+/// A race's clean wins: how many and the quickest winners (each once, by name, quickest first: `win`), and the
+/// quickest of them, which the Online mode does not keep
 #[derive(Clone, Debug, Default)]
 struct Best {
-    wins: u32,
+    win: Quickest,
     quickest: f64,
-    top: Vec<(String, f64)>,
 }
 
 impl Best {
+    /// a clean win: it counts, its winner's time is one of the quickest
     fn add(&mut self, who: String, time: f64) {
-        self.quickest = if self.wins == 0 { time } else { self.quickest.min(time) };
-        self.wins += 1;
-        match self.top.iter_mut().find(|(w, _)| *w == who) {
-            Some(x) => x.1 = x.1.min(time),
-            None => self.top.push((who, time)),
-        }
-        self.top.sort_by(|a, b| a.1.total_cmp(&b.1));
-        self.top.truncate(TOP_KEPT);
+        self.quickest = if self.win.wins == 0 { time } else { self.quickest.min(time) };
+        self.win.wins += 1;
+        self.win.add(who, time);
     }
 
     /// the quickest clean win, once there were QUICK_WINS of two winners at least (the 2026-11-05 security audit: from
     /// the first, a slow "race" of a race no one had won yet, 33:20, made every honest winner in under half of it with
     /// no car close behind a line, and a win with a line is never a clean win that brings it down)
     fn quick(&self) -> Option<f64> {
-        (self.wins >= QUICK_WINS && self.top.len() >= 2).then_some(self.quickest)
-    }
-
-    /// the third quickest winner's time but `who`'s, once there were QUICK_WINS
-    fn third(&self, who: &str) -> Option<f64> {
-        (self.wins >= QUICK_WINS).then(|| self.top.iter().filter(|(w, _)| w != who).nth(2).map(|x| x.1)).flatten()
+        (self.win.wins >= QUICK_WINS && self.win.top().len() >= 2).then_some(self.quickest)
     }
 }
 
@@ -340,7 +320,7 @@ fn jumped(race: &Race, order: &[(u32, Option<f64>)]) -> Vec<Jump> {
         let mut seen: Vec<f64> =
             others.iter().filter_map(|r| r.rows[..r.n].iter().find(|x| x.id == id)).map(|x| x.jump).filter(|&j| j >= JUMP_M).collect();
         seen.sort_by(|a, b| b.total_cmp(a));
-        if seen.len() >= JUMP_SEEN || (others.len() == 1 && seen.len() == 1) {
+        if jump_seen(seen.len(), others.len() == 1) {
             out.push(Jump { id, seen, others: others.len(), place: t.map(|_| k + 1) });
         }
     }
@@ -553,7 +533,7 @@ fn judge(reports: &[(u32, RaceRes)], best: &HashMap<(u32, u8, u8), Best>, names:
     let close = next.is_some_and(|(_, t)| time >= THIRD_SHARE * t);
     let timed = !close && drove >= DROVE_MIN;
     let quickest = b.and_then(Best::quick).filter(|&q| timed && time < QUICK_SHARE * q);
-    let third = b.and_then(|b| Some((b.third(&racer(names, w))?, b.wins))).filter(|&(t, _)| timed && time < THIRD_SHARE * t);
+    let third = b.and_then(|b| Some((b.win.third(&racer(names, w))?, b.win.wins))).filter(|&(t, _)| timed && time < THIRD_SHARE * t);
     let ended = drove < DROVE_MIN && seen >= 2;
     let cheat = avg.is_some_and(|a| !close && a >= RACE_MPS) || ended || quickest.is_some() || third.is_some();
     let v = Verdict {

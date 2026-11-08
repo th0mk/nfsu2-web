@@ -491,6 +491,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "nfsu2-anticheat"
+version = "0.1.0"
+
+[[package]]
 name = "nfsu2-bans"
 version = "0.1.0"
 dependencies = [
@@ -589,6 +593,7 @@ dependencies = [
  "hmac",
  "indexmap",
  "md-5",
+ "nfsu2-anticheat",
  "nfsu2-claims",
  "nfsu2-names",
  "nfsu2-util",
@@ -608,6 +613,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "crc32fast",
+ "nfsu2-anticheat",
  "nfsu2-claims",
  "nfsu2-names",
  "nfsu2-util",
