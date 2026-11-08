@@ -1,0 +1,35 @@
+# The car lot's trade-in of a kept car of a car type the game does not have (tools/addoncar_seed.py --two --full: ADDA
+# in slot 1, ADDB in slot 2, the garage's other slots locked, so the car lot trades a car in for the one it sells;
+# Career::Trade 0x541540 -> 0x5348E0 -> 0x516B90, runtime/garage.c's hook): a car of another model bought, out of the
+# car lot (Autosave: the career bot says Yes).  The saved tree (tools/addoncar_seed.py --check): the car bought in
+# the record of the one traded in, the other (ADDB) as it was (the log: "[mods] the car 0x... of car type ... has
+# gone").
+#   NFSU2_SAVE_SEED=<tree> node web/tools/run-suite.mjs --base <server> --script career_addon_lot.txt
+#        --marker lot_end --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    expect x:0x840704 == 0x72b2e513          # slot 1: the stand-in, PEUGOT
++0    expect x:0x840efc == 0x72b2e513          # slot 2 too
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave
++0    log GO the car lot
++0    shopgo CC_CAR_LOT_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the car lot
++0    waitfe UI_CareerCarLot.fng 3000
++300  loop 4
++0    tap RIGHT
++40   endloop                         # a car of another model than the PEUGOT
++90   tap RETURN                      # trade for it
++300  fnglist
++0    tap LEFT
++30   tap RETURN                      # Yes
++300  fnglist
++0    bot on                          # what more it asks, and the autosave: Yes, as a player does
++0    waitroam 9000
++0    bot off
++0    peekx 0x840704 1                # slot 1's car type now
++0    peekx 0x840efc 1                # slot 2's
++60   status lot_end
++10   quit

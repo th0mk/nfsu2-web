@@ -1,0 +1,37 @@
+# Cars of car types the game does not have kept in the profile as they are (runtime/modpacks.c modparts_track,
+# runtime/garage.c addon_cars): a save tree with such cars everywhere (every Customize car, career slot, slot 6-10
+# and preset; e.g. the review's seed2.py "all"), loaded: each a stock PEUGOT here (the "[garage] ... unknown (a modded
+# game's?), shown here as PEUGOT, kept in the save as it is" lines); the world loads with the career's car (slot 1's
+# stand-in); an ECU package bought on it in the Performance Shop (garage_drive.txt's way): that car is the player's
+# now; out of the shop, the save (Autosave; the career bot says Yes).  The saved tree against the seed
+# (tools/addoncar_seed.py --compare <seed> <saved>): every record byte for byte as in the seed but slot 1's, which is
+# the stand-in with its package (stock: the review's stockkeys.py finds no key of it the game lacks).
+#   NFSU2_SAVE_SEED=<tree> node web/tools/run-suite.mjs --base <server> --script career_addon_play.txt
+#        --marker play_end --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    expect x:0x840704 == 0x72b2e513          # slot 1: the stand-in, PEUGOT (0x83AD90 +0x5954 +0x20)
++0    poke 0x861e74 200000            # the bank: the package's money
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave
++0    log GO the Performance Shop: an ECU package
++0    shopgo CC_PERF_SHOP
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the shop
++0    waitfe GarageMain.fng 3000
++600  tap RIGHT
++60   tap RETURN                      # ECU
++300  tap RIGHT                       # the first package
++120  tap RETURN
++120  tap LEFT
++30   tap RETURN                      # buy and install: Yes
++300  tap RETURN                      # brands: Continue
++200  tap ESCAPE
++200  tap ESCAPE
++0    bot on                          # back to Explore Mode, the autosave: Yes, as a player does
++0    waitroam 9000
++0    bot off
++0    expect x:0x840704 == 0x72b2e513          # still the stand-in, with its package
++60   status play_end
++10   quit

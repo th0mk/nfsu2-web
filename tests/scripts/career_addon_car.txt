@@ -1,0 +1,54 @@
+# Cars of car types the game does not have, as a modded game's profile has them (runtime/garage.c addon_cars): the
+# save tree tools/addoncar_seed.py makes of a career seed with one car (slot 1's car, Customize car 1 and GARAGE.DAT's
+# slot 6 of car types ADDONCAR1-3; with --badstock, a stock car of car type 60: the "[cars] player 1's stock car 0
+# ... the stock cars made again" line as it loads).  As the career loads, each becomes a stock PEUGOT here (the log's
+# "[garage] slot 1: car type 0x8173accc unknown (a modded game's?), shown here as PEUGOT, kept in the save as it is"
+# lines); the load itself is nothing to save (no question); the world loads with the career's car, the stand-in; the
+# crib's Car Select shows slot 1's and slot 6's cars; out of the crib with a change (the bank, with the game's Save
+# option Autosave: the save, the career bot says Yes); then the car lot opens with its list (lot_end).  The saved tree
+# (--save-out): tools/addoncar_seed.py --compare <tree> <saved> finds every car record as in the tree (the three
+# cars as they were, none changed here), --check the profile's checksums holding and no MODPARTS.DAT.  Good: no
+# [expect] FAIL, lot_end.
+#   tools/addoncar_seed.py <career seed with a car, e.g. work/seed/career/s4_perf2> <tree> --badstock
+#   NFSU2_SAVE_SEED=<tree> node web/tools/run-suite.mjs --base <server> --script career_addon_car.txt --marker lot_end
+#        --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    expect x:0x863480 == 0x319a8ca1          # the career drives slot 1's car
++0    expect x:0x840704 == 0x72b2e513          # ... the stand-in, PEUGOT (slot 1's car type: 0x83AD90 +0x5954 +0x20)
++0    expect x:0x83b2f4 == 0x72b2e513          # Customize car 1's (+0x544 +0x20)
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave
++0    log GO the crib
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++120  tap RIGHT
++40   tap RIGHT
++60   tap RETURN                      # Car Select
++0    waitfe UI_CareerCarSelect.fng 600
++180  fnglist
++0    tap RIGHT                       # the next car: slot 6's
++240  fnglist
++0    tap LEFT
++120  tap ESCAPE                      # back to the crib
++240  tap LEFT
++40   tap LEFT
++60   poke 0x861e74 99999             # the bank: something to save
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    bot on                          # the autosave: Yes, as a player does
++0    waitroam 6000
++0    bot off
++300  log GO the car lot
++0    shopgo CC_CAR_LOT_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the car lot
++0    waitfe UI_CareerCarLot.fng 3000
++300  fnglist
++60   status lot_end
++10   quit

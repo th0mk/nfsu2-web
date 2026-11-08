@@ -1,0 +1,37 @@
+# A career whose car (slot 1's) has VINYL in its vinyl slot once the profile has loaded (0x40: 0x83AD90 +0x5954 +0x24
+# +0x100), saved, and the same after the save: Art Factory 28-34 come back from MODPARTS.DAT where the game has them
+# (career_af28_buy.txt's save: VINYL=0xfb327bf4), wait where it does not (a page of before, a game without
+# VINYLPACKS: 0), and a profile saved before holds the raw key (tools/addoncar_seed.py --af28-only), which loads as it
+# is and goes out at this save (tools/addoncar_seed.py --check on the --save-out tree: the profile's slot empty,
+# MODPARTS.DAT's part ART_F_28).  Any save tree: VINYL=0 for a car without one (career_addon_car.txt's).  The save:
+# the game's Save option Autosave (the crib keeps what it compares with as it opens only then, mprace.c), the bank
+# changed to BANK in the crib (one the profile does not have: something to save), back to Explore Mode, the career
+# bot answers the save as a player does.  Good: saved_end, no [expect] FAIL, the "[garage] CLAUDE: slots 6-10 saved".
+#   NFSU2_SAVE_SEED=<tree> node web/tools/run-suite.mjs --base <server> --script career_save_vinyl.txt
+#        --marker saved_end --env VINYL=<key> --env BANK=<money> --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    expect x:0x840808 == ${VINYL}          # as loaded
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave
++0    log GO the crib
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++120  tap RIGHT
++40   tap RIGHT                       # (Car Select, as garage_reload.txt comes back from it)
++60   tap LEFT
++40   tap LEFT
++60   poke 0x861e74 ${BANK}           # the bank: something to save (after the crib took what it compares with)
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    bot on                          # the autosave's question: the career bot says Yes, as a player does
++0    waitroam 6000
++0    bot off
++0    expect x:0x840808 == ${VINYL}          # the same after the save
++0    expect x:0x861e74 == ${BANK}
++60   status saved_end
++10   quit

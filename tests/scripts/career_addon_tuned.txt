@@ -1,0 +1,34 @@
+# A kept Customize car deleted (tools/addoncar_seed.py's tree: Customize car 1, TUNED_CAR_0, of car type ADDONCAR2,
+# made a stock PEUGOT as the profile loads): its record not in use, as Delete Tuned Car leaves it (poked), then into
+# Customize (the main menu's) and out, the save (Autosave).  The saved tree (tools/addoncar_seed.py --compare):
+# Customize car 1 as the game left it (the stand-in, not in use: "[mods] the car 0x6996c983 of car type 0x8173accd
+# was changed here"), slot 1's and slot 6's cars as they were.  (A new tuned car in that record: runtime/garage.c's
+# 0x52A710 hook, tests/modparts_unit.c trade-in; the car lot's trade-in through 0x516B90: career_addon_lot.txt.)
+#   NFSU2_SAVE_SEED=<tree> node web/tools/run-suite.mjs --base <server> --script career_addon_tuned.txt
+#        --marker tuned_end --save-out <dir>
+0     tapuntil RETURN UI_Main.fng 150 6000
++300  fnglist
++0    expect x:0x83b2f4 == 0x72b2e513          # Customize car 1: the stand-in (0x83AD90 +0x544 +0x20)
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave
++0    poke 0x0083b2e4 0               # Customize car 1 deleted: its record not in use (+0x10)
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++60   tap RIGHT
++120  tap RETURN                      # Customize: its car select
++400  fnglist
++0    tap RETURN
++400  fnglist
++0    tap ESCAPE
++300  fnglist
++0    tap ESCAPE
++300  fnglist
++0    tap ESCAPE
++300  fnglist
++0    loop 6
++0    tap LEFT
++30   tap RETURN                      # each question: Yes (out of Customize, the save)
++300  fnglist
++0    endloop
++60   status tuned_end
++10   quit

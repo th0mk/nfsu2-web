@@ -1,0 +1,53 @@
+# Art Factory 28 (the Japanese release's vinyl, runtime/vinylpacks.c) bought on the career's car and saved: the profile
+# holds the slot's stock part (none), MODPARTS.DAT the vinyl (runtime/modpacks.c).  A career save with a car (e.g.
+# work/seed/career/s4_perf2), everything unlocked, the Graphics shop, Vinyls, the bottom layer, Art Factory, its 28th
+# (vinylpacks_shop.txt's way), applied; out of the shop, save: Yes; the car's vinyl slot (0x40: slot 1's car at
+# 0x83AD90 +0x5954 +0x24 +0x100) has ART_F_28 after the save (the payload had the stock part there for the while).  The saved tree (--save-out):
+# tools/addoncar_seed.py --check shows the profile's vinyl slot empty and MODPARTS.DAT's part ART_F_28; load it again
+# with career_save_vinyl.txt (VINYL=0xfb327bf4: back on the car).  Needs a game folder with VINYLPACKS.
+#   NFSU2_SAVE_SEED=<career save> node web/tools/run-suite.mjs --base <server> --script career_af28_buy.txt
+#        --marker af28_end --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank: room for parts
++0    poke 0x838464 1                 # unlock all
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave (the shop keeps what it compares with only then)
++60   shopgo CC_GRAPHICS
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the shop
++1500 fnglist
++30   tap RIGHT                       # Vinyls
++120  tap RETURN
++600  fnglist
++30   tap RETURN                      # the bottom layer
++600  fnglist
++0    loop 40
++40   tap RIGHT
++0    endloop
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT                        # Art Factory: the fourth from the end (Special, Sponsor, Contest)
++120  fnglist
++30   tap RETURN                      # into Art Factory
++600  fnglist
++0    loop 27
++30   tap DOWN
++0    endloop
++400  fnglist                         # ART FACTORY 28
++30   tap RETURN                      # apply it
++300  fnglist
++30   tap LEFT                        # Yes
++30   tap RETURN
++300  fnglist
++0    loop 2
++60   tap ESCAPE
++200  fnglist
++0    endloop
++0    bot on                          # the career bot leaves the shop as a player does: back to Explore Mode, Yes;
++0    waitroam 9000                   # the autosave, Yes
++0    bot off
++0    expect x:0x840808 == 0xfb327bf4          # ART_F_28 on the car (the shop writes it in as it closes), after the save
++60   status af28_end
++10   quit

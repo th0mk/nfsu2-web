@@ -1,0 +1,40 @@
+# Trade Car with two kept cars of car types the game does not have (tools/addoncar_seed.py --two: ADDA in slot 1,
+# ADDB in slot 2, each made a stock PEUGOT as the career loads, the same stand-in and parts): Trade Car on slot 1
+# (runtime/garage.c trade(): slot 2's car moves into slot 1's record, slot 2 empty), out of the crib (the game's Save
+# option Autosave: the save, the career bot says Yes).  The saved tree (--save-out, tools/addoncar_seed.py --check):
+# the profile's slot 1 is ADDB as it was (key60 b0010060), slot 2 empty, ADDA (the car sold) nowhere.  The log: "[mods]
+# the car 0x319a8ca1 of car type 0x0012b669 has gone".
+#   NFSU2_SAVE_SEED=<tree> node web/tools/run-suite.mjs --base <server> --script career_addon_trade.txt
+#        --marker trade_end --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    expect x:0x840704 == 0x72b2e513          # slot 1: the stand-in, PEUGOT
++0    expect x:0x840efc == 0x72b2e513          # slot 2 too (0x83AD90 +0x5954 +0x7F8 +0x20)
++0    poke 0x00844ad8 0x00010101      # the game's Save option: Autosave
++0    log GO the crib: TRADE slot 1
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++120  tap RIGHT
++40   tap RIGHT
++60   tap RETURN                      # Car Select
++0    waitfe UI_CareerCarSelect.fng 600
++180  tap C                           # Trade Car: the first car
++120  tap LEFT
++30   tap RETURN                      # Yes
++240  expect b:0x840ed9 == 1                # slot 1 has a car (slot 2's)
++0    expect b:0x8416d1 == 0                # slot 2 empty
++0    tap ESCAPE                      # back to the crib
++240  tap LEFT
++40   tap LEFT
++60   tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    bot on                          # the autosave: Yes, as a player does
++0    waitroam 6000
++0    bot off
++60   status trade_end
++10   quit
