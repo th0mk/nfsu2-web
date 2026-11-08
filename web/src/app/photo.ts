@@ -34,6 +34,7 @@ import { N, t, tn } from './i18n';
 import { pageDialog } from './padnav';
 import { padSeen, touchFirst } from './device';
 import { keyName, menuKeyOf, siteKey } from './sitekeys';
+import { localStore, PHOTO_KEPT, PHOTO_MARK } from './prefs';
 
 // runtime/photo.c: the events (PH_*) and the bits of PH_HOLD (HB_*)
 const PH_HELLO = 0, PH_OPEN = 1, PH_HOLD = 2, PH_MOVE = 3, PH_TURN = 4, PH_DRAG = 5, PH_PAN = 6, PH_DOLLY = 7,
@@ -61,7 +62,6 @@ interface Kept {
   show: number; lights: boolean; horns: boolean; weather: number;
   shutter: number; size: number; shiftX: number; shiftY: number; lens: number;
 }
-const KEPT_STORE = 'nfsu2-photo';
 const KEPT0: Kept = {
   tab: 'camera', filter: 'none', exposure: 0, vignette: 0, crop: 'full', grid: false, blur: 0, freeze: true,
   speed: 500, smooth: 0, spin: 0, level: false, invert: false, pathS: 10,
@@ -73,7 +73,7 @@ const SPIN_OFF = 60;
 const clamp = (v: unknown, lo: number, hi: number, d: number) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
 function loadKept(): Kept {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEPT_STORE) ?? '{}') as Partial<Kept> & { cars?: number };
+    const raw = (localStore.getJSON(PHOTO_KEPT) ?? {}) as Partial<Kept> & { cars?: number };
     const k = { ...KEPT0, ...raw } as Kept;
     if (!TABS.includes(k.tab)) k.tab = 'camera';
     if (!(k.filter in FILTERS)) k.filter = 'none';
@@ -119,11 +119,8 @@ const EDGE_PX = 24;
 
 type Hint = [string, string];
 
-const MARK_STORE = 'nfsu2-photo-mark';
 /** F12 pictures carry the site's address in a corner (png-worker.ts), unless the panel's box turned it off */
-export function photoMark(): boolean {
-  try { return localStorage.getItem(MARK_STORE) !== 'off'; } catch { return true; }
-}
+export function photoMark(): boolean { return localStore.get(PHOTO_MARK) !== 'off'; }
 
 export class PhotoMode {
   private root: HTMLElement;
@@ -315,7 +312,7 @@ export class PhotoMode {
   private canvas() { return this.stage.querySelector('canvas'); }
   private send(what: number, a = 0, b = 0): boolean { return !!this.input()?.photo?.(what, a, b); }
   private leave() { if (this.send(PH_OPEN, 0)) this.deps.log('[app] photo mode: leave'); }
-  private keep() { try { localStorage.setItem(KEPT_STORE, JSON.stringify(this.kept)); } catch { /* not kept: a private window */ } }
+  private keep() { localStore.setJSON(PHOTO_KEPT, this.kept); }
 
   /** the tab shown (kept for the next time) */
   private setTab(tab: Tab, keep = true) {
@@ -411,7 +408,7 @@ export class PhotoMode {
     const k = this.kept, c = this.ck, on = x.checked;
     if (x === c.names) { this.send(PH_NAMES, on ? 1 : 0); return; }
     if (x === c.mark) {
-      try { if (on) localStorage.removeItem(MARK_STORE); else localStorage.setItem(MARK_STORE, 'off'); } catch { /* not kept: a private window */ }
+      if (on) localStore.remove(PHOTO_MARK); else localStore.set(PHOTO_MARK, 'off');
       this.deps.log(`[app] photo mode: the site's address on pictures ${on ? 'on' : 'off'}`);
       return;
     }

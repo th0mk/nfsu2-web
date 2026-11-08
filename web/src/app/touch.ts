@@ -61,12 +61,12 @@ import { PAD_A, PAD_DDOWN, PAD_LB, PAD_RB, PAD_X } from '../input/proto';
 import type { GameSession } from './game';
 import { touchFirst } from './device';
 import { N, percent, t } from './i18n';
+import { localStore, MENU_SIZE, TOUCH_LEVEL, TOUCH_NITRO, TOUCH_POSITION, TOUCH_SIZE, TOUCH_STEERING } from './prefs';
 
 export type Steering = 'buttons' | 'stick' | 'tilt';
 export const STEERING: readonly Steering[] = ['buttons', 'stick', 'tilt'];
 const NAMES: Record<Steering, string> = { buttons: N('buttons'), stick: N('thumb stick'), tilt: N('tilt') };
 const LIST_NAMES: Record<Steering, string> = { buttons: N('Buttons'), stick: N('Thumb stick'), tilt: N('Tilt') };
-const STORE = 'nfsu2-touch-steering';
 const HOLD_MS = 150;
 /** a control with a hold (Camera): down this long, it presses the hold's keys instead of its own */
 const LONG_MS = 250;
@@ -78,15 +78,13 @@ const HYD_KEYS = { lift: 'KeyH', bounce: 'KeyJ' } as const;
 const HYD_STOW_MS = 1000;
 
 const STEER_EVENT = 'nfsu2-touch-steering';
-let steeringNow: Steering = (() => {
-  try { const s = localStorage.getItem(STORE) as Steering; return STEERING.includes(s) ? s : 'buttons'; } catch { return 'buttons'; }
-})();
+let steeringNow: Steering = (() => { const s = localStore.get(TOUCH_STEERING) as Steering; return STEERING.includes(s) ? s : 'buttons'; })();
 /** how the touch controls steer: the mode button's choice and the Controls sheet's, kept in this browser */
 export function steering(): Steering { return steeringNow; }
 export function setSteering(to: Steering) {
   if (to === steeringNow || !STEERING.includes(to)) return;
   steeringNow = to;
-  try { localStorage.setItem(STORE, to); } catch { /* not kept: a private window */ }
+  localStore.set(TOUCH_STEERING, to);
   dispatchEvent(new Event(STEER_EVENT));
 }
 /** fn runs when the steering changes */
@@ -113,23 +111,23 @@ export interface SwitchSetting {
   on(fn: () => void): void;
 }
 function switchSetting(store: string, start: boolean): SwitchSetting {
-  let now = (() => { try { const s = localStorage.getItem(store); return s === null ? start : s === 'on'; } catch { return start; } })();
+  let now = (() => { const s = localStore.get(store); return s === null ? start : s === 'on'; })();
   return {
     get: () => now,
     set(on) {
       if (on === now) return;
       now = on;
-      try { localStorage.setItem(store, on ? 'on' : 'off'); } catch { /* not kept: a private window */ }
+      localStore.set(store, on ? 'on' : 'off');
       dispatchEvent(new Event(store));
     },
     on: fn => addEventListener(store, fn),
   };
 }
 /** the level horizon (with tilt): on unless turned off */
-export const levelHorizon = switchSetting('nfsu2-touch-level', true);
+export const levelHorizon = switchSetting(TOUCH_LEVEL, true);
 /** Nitro on the steering's side, for the thumb that is not on Gas (and Start where Nitro was, above Gas): off unless
  *  turned on */
-export const nitroSteerSide = switchSetting('nfsu2-touch-nitro', false);
+export const nitroSteerSide = switchSetting(TOUCH_NITRO, false);
 
 /** a choice kept in this browser, picked from a list in the Controls sheet's touch tab: the first unless another was */
 export interface ListSetting<T extends string | number = string | number> {
@@ -151,17 +149,15 @@ const POSITION_NAMES: Record<Position, string> = {
 /** moved in (more): the px the two groups move in from the screen's sides, as far as that leaves them their room */
 const EDGE_IN = 48, EDGE_IN_MORE = 112;
 export const touchPosition: ListSetting<Position> = (() => {
-  const store = 'nfsu2-touch-position', values: readonly Position[] = ['left', 'left-in', 'left-more', 'right', 'right-in', 'right-more'];
-  let now: Position = (() => {
-    try { const s = localStorage.getItem(store) as Position; return values.includes(s) ? s : 'left'; } catch { return 'left'; }
-  })();
+  const store = TOUCH_POSITION, values: readonly Position[] = ['left', 'left-in', 'left-more', 'right', 'right-in', 'right-more'];
+  let now: Position = (() => { const s = localStore.get(store) as Position; return values.includes(s) ? s : 'left'; })();
   return {
     values,
     get: () => now,
     set(to) {
       if (to === now || !values.includes(to)) return;
       now = to;
-      try { if (to === 'left') localStorage.removeItem(store); else localStorage.setItem(store, to); } catch { /* not kept: a private window */ }
+      if (to === 'left') localStore.remove(store); else localStore.set(store, to);
       dispatchEvent(new Event(store));
     },
     name: v => t(POSITION_NAMES[v]),
@@ -180,9 +176,7 @@ export interface SizeSetting extends ListSetting<Size> {
   check(): void;
 }
 function sizeSetting(store: string, values: readonly Size[], auto: () => number): SizeSetting {
-  let now: Size = (() => {
-    try { const n = Number(localStorage.getItem(store)); return values.includes(n) ? n : 'auto'; } catch { return 'auto'; }
-  })();
+  let now: Size = (() => { const n = Number(localStore.get(store)); return values.includes(n) ? n : 'auto'; })();
   let autoNow = 0;
   const changed = () => dispatchEvent(new Event(store));
   const self: SizeSetting = {
@@ -191,7 +185,7 @@ function sizeSetting(store: string, values: readonly Size[], auto: () => number)
     set(to) {
       if (to === now || !values.includes(to)) return;
       now = to;
-      try { if (to === 'auto') localStorage.removeItem(store); else localStorage.setItem(store, String(to)); } catch { /* not kept: a private window */ }
+      if (to === 'auto') localStore.remove(store); else localStore.set(store, String(to));
       changed();
     },
     scale: () => now === 'auto' ? auto() : now,
@@ -228,7 +222,7 @@ function autoTouchSize(): number {
   return Math.max(0.8, Math.floor(Math.min(want, fit) * 20 + 1e-9) / 20);
 }
 /** the touch controls' size (style.css --ts) */
-export const touchSize = sizeSetting('nfsu2-touch-size', ['auto', 0.8, 0.9, 1, 1.1, 1.25, 1.5], autoTouchSize);
+export const touchSize = sizeSetting(TOUCH_SIZE, ['auto', 0.8, 0.9, 1, 1.1, 1.25, 1.5], autoTouchSize);
 
 /** the game's menus' help bar buttons and scroller arrows, their height in the menus' 640 x 480 units: the bar's
  *  frames, 24 (the arrows are 26) */
@@ -244,7 +238,7 @@ function autoMenuSize(): number {
   return Math.min(2, Math.max(1, Math.floor(MENU_BUTTON_PX / (MENU_BUTTON_UNITS * unit) * 4 + 1e-9) / 4));
 }
 /** the game's menus' small buttons: the help bar's and the scrollers' arrows (runtime/menusize.c) */
-export const menuSize = sizeSetting('nfsu2-menu-size', ['auto', 1, 1.25, 1.5, 1.75, 2], autoMenuSize);
+export const menuSize = sizeSetting(MENU_SIZE, ['auto', 1, 1.25, 1.5, 1.75, 2], autoMenuSize);
 
 /** label: what a screen reader says (English, translated where drawn); text: the words on it, if any; keys: the keys
  *  it holds (two controls may hold the same one: it is down while either is) */

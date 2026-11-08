@@ -3,7 +3,8 @@
 // start page sees the change (a storage event) and says what came of it.  The popup then closes.  Last.fm's pages cut the popup's
 // link to the start page (window.opener is null by then), so this never loads the start page itself: a browser that keeps the
 // window open gets one line saying it can be closed.
-import { keepSession, RESULT_KEY } from './app/lastfm';
+import { keepSession } from './app/lastfm';
+import { LASTFM_RESULT, localStore } from './app/prefs';
 import { lastLanguage, setLanguage, t } from './app/i18n';
 
 async function connect(): Promise<string> {
@@ -18,7 +19,7 @@ async function connect(): Promise<string> {
 }
 
 void connect().then(async result => {
-  try { localStorage.setItem(RESULT_KEY, JSON.stringify({ result, at: Date.now() })); } catch { /* a private window keeps nothing */ }
+  localStore.setJSON(LASTFM_RESULT, { result, at: Date.now() });
   window.close();
   await setLanguage(lastLanguage()).catch(() => false);
   const p = Object.assign(document.createElement('p'), { className: 'hint lastfm-closed',

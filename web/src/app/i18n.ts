@@ -10,8 +10,9 @@
 // Problems and errors carry a fixed code in every language (checks.ts, shell.ts), so a screenshot in any language
 // says which one it is; the log stays English.  web/test/i18n.test.mjs checks every file against the texts in use.
 //
-// This module touches the DOM only when called with it, and imports nothing, so the pure modules (settings.ts) can
-// use it under node.
+// This module touches the DOM and the browser's storage only when called with them, and imports only prefs.ts (which
+// touches nothing until called), so the pure modules (settings.ts) can use it under node.
+import { localStore, PAGE_LANGUAGE } from './prefs';
 
 /** the game's languages (runtime/language.c), settings.ini language's values; english is the default */
 export const LANGUAGES = ['english', 'french', 'german', 'italian', 'spanish', 'dutch', 'swedish', 'danish', 'korean',
@@ -149,7 +150,7 @@ export async function setLanguage(l: string, log?: (s: string) => void): Promise
   }
   if (asked !== want) return false;            // a newer pick came first
   current = want; dict = next; plural = null;
-  try { localStorage.setItem(STORE, want); } catch { /* not kept: the next start shows English until settings.ini is read */ }
+  localStore.set(PAGE_LANGUAGE, want);         // (not kept: the next start shows English until settings.ini is read)
   if (typeof document !== 'undefined') {
     document.documentElement.lang = LOCALE[want];
     translatePage(document);
@@ -161,9 +162,9 @@ export async function setLanguage(l: string, log?: (s: string) => void): Promise
 }
 
 /** the language this browser showed last (the page asks for its file at once, before settings.ini is read) */
-const STORE = 'nfsu2-page-language';
 export function lastLanguage(): Language {
-  try { const v = localStorage.getItem(STORE) ?? ''; return isLanguage(v) ? v : 'english'; } catch { return 'english'; }
+  const v = localStore.get(PAGE_LANGUAGE) ?? '';
+  return isLanguage(v) ? v : 'english';
 }
 
 // ------------------------------------------------------------------------------------------------ the markup --

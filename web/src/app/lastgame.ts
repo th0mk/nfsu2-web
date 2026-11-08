@@ -6,6 +6,7 @@
 // game held then (its textures, friends' cars): Safari gives the page no memory figure, and the renderer's line comes
 // only once a minute.  The copy is kept as it would leave the browser (privacy.ts scrub): no names, no addresses.
 import type { LogRing } from './logs';
+import { LAST_GAME, localStore } from './prefs';
 
 export interface LastGame {
   v: 1;
@@ -22,7 +23,6 @@ export interface LastGame {
   held?: string;
 }
 
-const KEY = 'nfsu2.lastgame.';
 const EVERY_MS = 10_000;
 /** the copy's size: localStorage holds a few MB for the whole page */
 const BUDGET = 160 << 10;
@@ -66,11 +66,10 @@ export class LastGameKeeper {
     if (this.scrub) { r.log = this.scrub(r.log); r.scrubbed = true; }
     // the copy at the end may come after the renderer went: the last figures seen then
     try { r.held = this.held() || r.held || ''; } catch { /* the last ones */ }
-    try { localStorage.setItem(KEY + this.save, JSON.stringify(r)); }
-    catch (e) {
+    localStore.setJSON(LAST_GAME + this.save, r, e => {
       // storage off or full: the log stays in memory as before
       if (!this.failed) { this.failed = true; this.note(`[app] the log's copy for a stopped page could not be kept: ${e}`); }
-    }
+    });
     // it runs on the page's thread, as the picture does: a slow one is a still picture (once a page)
     const ms = performance.now() - t0;
     if (ms > 50 && !this.slow) { this.slow = true; this.note(`[app] the log's copy for a stopped page took ${ms.toFixed(0)} ms`); }
@@ -80,8 +79,7 @@ export class LastGameKeeper {
 /** The last game of this save folder, when it did not end as the game ends (a normal close or a Stop on a page that went
  *  on): stopped with the page, or stopped for a reason (GPU-LOST, a crash) by a page that has been reloaded since. */
 export function lastGameToOffer(save: string): LastGame | null {
-  let r: LastGame | null = null;
-  try { r = JSON.parse(localStorage.getItem(KEY + save) ?? 'null'); } catch { return null; }
+  const r = localStore.getJSON(LAST_GAME + save) as LastGame | null;
   if (!r || r.v !== 1 || typeof r.log !== 'string' || !r.log) return null;
   if (r.ended && r.ended.why === 'exit' && (r.ended.code === 0 || r.ended.code === -1)) return null;
   return r;

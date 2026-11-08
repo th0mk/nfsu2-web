@@ -11,6 +11,7 @@
 //                laptop whose screen also takes touch.
 // The Controls sheet and the hints follow touch first (html[data-touch]).
 import { allPads } from '../input/steampad';
+import { DEVICE_RENDER, localStore } from './prefs';
 
 export function isPhone(): boolean {
   const uad = (navigator as unknown as { userAgentData?: { mobile?: boolean } }).userAgentData;
@@ -74,13 +75,9 @@ export function heapWindow(kind = deviceKind(), ua = navigator.userAgent,
 
 /** the render check's verdict on this phone: in this browser only, like the other device defaults (settings.ini,
  *  and with it the cloud saves, never has it) */
-const RENDER_KEY = 'nfsu2.device.render';
-export function rememberedRender(): string | null {
-  try { return localStorage.getItem(RENDER_KEY); } catch { return null; }
-}
+export function rememberedRender(): string | null { return localStore.get(DEVICE_RENDER); }
 export function rememberRender(v: string | null) {
-  try { if (v) localStorage.setItem(RENDER_KEY, v); else localStorage.removeItem(RENDER_KEY); }
-  catch { /* storage off: the check measures again next time */ }
+  if (v) localStore.set(DEVICE_RENDER, v); else localStore.remove(DEVICE_RENDER);      // (storage off: the check measures again next time)
 }
 
 /** whether the browser shows the page a controller (Chrome: only after a button press on the page) */

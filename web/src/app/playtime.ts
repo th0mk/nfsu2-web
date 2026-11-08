@@ -14,30 +14,27 @@
 // the page says "at least" (playedAtLeast; the browser's first page with this code decides, once).
 import type { GameSession } from './game';
 import { t } from './i18n';
+import { localStore, PLAY_FROM, PLAY_GAMES, PLAY_LAST, PLAY_MS, PLAY_SMS } from './prefs';
 
 export const SMS_AFTER_MS = 2 * 3600_000;
 /** the second message's play, as a multiple of the first's (a test page's playtime= scales both) */
 const HUNDRED_TIMES = 50;
-const PLAYED = 'nfsu2.play.ms', SENT = 'nfsu2.play.sms', GAMES = 'nfsu2.play.games', LAST = 'nfsu2.play.last', FROM = 'nfsu2.play.from';
 const HELLO = 1, HUNDRED = 2;           /* sms.c: "Enjoying the game?", "100 hours!" */
 const IDLE_MS = 5 * 60_000, TICK_MS = 5000;
 
-const read = (key: string): string | null => { try { return localStorage.getItem(key); } catch { return null; } };
-const write = (key: string, v: string) => { try { localStorage.setItem(key, v); } catch { /* not kept */ } };
-
 /** the play counted in this browser so far, in ms (0 without storage) */
-export const playedMs = () => Math.max(0, Number(read(PLAYED)) || 0);
+export const playedMs = () => Math.max(0, Number(localStore.get(PLAY_MS)) || 0);
 /** the games started in this browser so far (counted since 2026-11-03; 0 without storage) */
-export const gamesStarted = () => Math.max(0, Math.floor(Number(read(GAMES)) || 0));
+export const gamesStarted = () => Math.max(0, Math.floor(Number(localStore.get(PLAY_GAMES)) || 0));
 /** the play counted in the latest game in this browser, in ms (0 before a game with this code, or without storage) */
-export const lastGameMs = () => Math.max(0, Number(read(LAST)) || 0);
+export const lastGameMs = () => Math.max(0, Number(localStore.get(PLAY_LAST)) || 0);
 /** whether the count here began before the page showed it, so it may miss play (see the top): decided at the first
  *  call in this browser, by whether there was a count then, and kept */
 export function playedAtLeast(): boolean {
-  const from = read(FROM);
+  const from = localStore.get(PLAY_FROM);
   if (from === 'old' || from === 'new') return from === 'old';
   const old = playedMs() > 0;
-  write(FROM, old ? 'old' : 'new');
+  localStore.set(PLAY_FROM, old ? 'old' : 'new');
   return old;
 }
 /** a count as the page shows it: "45 min", "3 h 20 min"; '' under a minute */
@@ -55,8 +52,8 @@ export class PlayTime {
   private last = performance.now();
   /** the message asked for in this game, 0: none */
   private asked = 0;
-  /** the last message in the game's inbox (SENT: 1 before 2026-11-05 too): after the last, only the count goes on */
-  private sent = Math.max(0, Math.floor(Number(read(SENT)) || 0));
+  /** the last message in the game's inbox (PLAY_SMS: 1 before 2026-11-05 too): after the last, only the count goes on */
+  private sent = Math.max(0, Math.floor(Number(localStore.get(PLAY_SMS)) || 0));
   /** the second message only in a game after the first's (not both at once) */
   private readonly sentBefore = this.sent;
 
@@ -64,8 +61,8 @@ export class PlayTime {
    *  give less), the second's HUNDRED_TIMES that */
   constructor(private s: GameSession, private afterMs: number, private log: (line: string) => void) {
     playedAtLeast();                      // (decided before this game counts)
-    write(GAMES, String(gamesStarted() + 1));
-    write(LAST, '0');
+    localStore.set(PLAY_GAMES, String(gamesStarted() + 1));
+    localStore.set(PLAY_LAST, '0');
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
@@ -74,8 +71,8 @@ export class PlayTime {
     this.last = now;
     if (!document.hidden && input !== null && now - input < IDLE_MS) {
       this.played += dt; this.game += dt;
-      write(PLAYED, String(Math.round(this.played)));
-      write(LAST, String(Math.round(this.game)));
+      localStore.set(PLAY_MS, String(Math.round(this.played)));
+      localStore.set(PLAY_LAST, String(Math.round(this.game)));
     }
     if (this.sent >= HUNDRED) return;
     const due = this.sent < HELLO ? (this.played >= this.afterMs ? HELLO : 0)
@@ -85,7 +82,7 @@ export class PlayTime {
       this.log(`[app] played ${Math.round(this.played / 60_000)} min: the game's phone gets our message ${due} once the player drives in career free roam`);
     }
     if (this.asked && this.s.status?.read()?.get('sms') === this.asked) {
-      write(SENT, String(this.asked));
+      localStore.set(PLAY_SMS, String(this.asked));
       this.sent = this.asked;
       this.log(`[app] our message ${this.asked} is in the game's inbox: not asked for again`);
     }

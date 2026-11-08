@@ -15,6 +15,7 @@
 // The texts and their look follow the page's own rows and dialogs (one line, coloured by its state).
 
 import { dateLocale, t } from './i18n';
+import { CLAIM_TRIED, localStore, NAME_ASKED, NAME_CLAIMED } from './prefs';
 import { digitsFor, GRACE_DAYS, NameClaims, onlineName, readsAsSlur, turnstile, type Claimed, type Mine, type NameInfo } from './claim';
 
 /** a day as the page writes dates: "26 Apr 2027" in the page's language */
@@ -263,8 +264,9 @@ export interface PlayNameDeps {
   claimed?(): string | null;
 }
 
-const asked = (k: string) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
-const ask = (k: string) => { try { localStorage.setItem(k, '1'); } catch { /* storage off: asked again */ } };
+/** the question under key k was asked in this browser (storage off: asked again) */
+const asked = (k: string) => localStore.get(k) === '1';
+const ask = (k: string) => localStore.set(k, '1');
 const para = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
 
 /**
@@ -300,14 +302,14 @@ export async function settleName(d: PlayNameDeps, typed: string, saveDir: string
     case 'old':
       return name;
     case 'default': {
-      const k = `nfsu2-name-asked:${saveDir}`;
+      const k = NAME_ASKED + saveDir;
       if (asked(k)) return alt;
       ask(k);
       return await pick(d, t('Pick your name'),
         [para(t('Other players see your name over your car. {name} is the game\'s default, so pick your own.', { name }))], alt, quiet) ?? alt;
     }
     case 'taken': {
-      const k = `nfsu2-name-claimed:${name.toLowerCase()}`;
+      const k = NAME_CLAIMED + name.toLowerCase();
       if (asked(k)) return alt;
       ask(k);
       return await pick(d, t('{name} is claimed', { name }),
@@ -330,9 +332,9 @@ const RETRY_MS = 7 * 86_400_000;
 
 /** a free name claimed at Play, Cloudflare's check quiet unless it wants a click */
 export async function claimQuietly(d: PlayNameDeps, name: string, info: NameInfo, quiet: (name: string, site: string) => Promise<string | null>): Promise<Mine | null> {
-  const k = `nfsu2-claim-tried:${name.toLowerCase()}`;
-  try { if (Date.now() - Number(localStorage.getItem(k) ?? 0) < RETRY_MS) return null; } catch { /* storage off: tried */ }
-  const later = () => { try { localStorage.setItem(k, String(Date.now())); } catch { /* storage off */ } };
+  const k = CLAIM_TRIED + name.toLowerCase();
+  if (Date.now() - Number(localStore.get(k) ?? 0) < RETRY_MS) return null;      // (storage off: tried)
+  const later = () => localStore.set(k, String(Date.now()));
   const captcha = info.captcha ? await quiet(name, info.captcha) : null;
   if (info.captcha && !captcha) { d.log('[app] claim at Play: Cloudflare\'s check did not pass (not claimed; Play tries again in a week)'); later(); return null; }
   const r = await d.claims.claim(name, captcha);

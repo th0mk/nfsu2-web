@@ -19,6 +19,7 @@ import { t } from './i18n';
 import { siteKey } from './sitekeys';
 import { touchFirst } from './device';
 import { act, block, el } from './cards';
+import { localStore, MESSAGES } from './prefs';
 
 /** an envelope: what marks a line in the log as a friend's message (quick chat's have a speech balloon) */
 export const MSG_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.8 4l6.2 5 6.2-5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
@@ -62,10 +63,8 @@ export class MessageStore {
     this.me = k;
     this.talks = {};
     if (k) {
-      try {
-        const v = JSON.parse(localStorage.getItem(this.storeKey()) ?? '{}');
-        if (v && typeof v === 'object') this.talks = v;
-      } catch { /* none kept */ }
+      const v = localStore.getJSON(this.storeKey());
+      if (v && typeof v === 'object') this.talks = v as Record<string, Talk>;
     }
     for (const [f, tk] of Object.entries(early)) {
       const to = this.talks[f] ??= { name: tk.name, msgs: [], unread: 0 };
@@ -75,7 +74,7 @@ export class MessageStore {
     this.changed(Object.keys(early).length > 0);
   }
 
-  private storeKey() { return `nfsu2.msgs.${this.me}`; }
+  private storeKey() { return MESSAGES + this.me; }
 
   private changed(save = true) {
     if (save && this.me) {
@@ -85,7 +84,7 @@ export class MessageStore {
         const last = (k: string) => this.talks[k].msgs.at(-1)?.t ?? 0;
         for (const k of ks.sort((a, b) => last(a) - last(b)).slice(0, ks.length - KEEP_FRIENDS)) delete this.talks[k];
       }
-      try { localStorage.setItem(this.storeKey(), JSON.stringify(this.talks)); } catch { /* not kept */ }
+      localStore.setJSON(this.storeKey(), this.talks);
     }
     for (const f of this.listeners) f();
   }

@@ -25,6 +25,7 @@ import { contentHash, kept, keeps, keptBy, keysOf, profilesIn, readPhrase, sideO
 import { codeOf, dateLocale, listOf, live, N, t, tn, tvars, type Msg } from './i18n';
 import { canKeep, keepPhrase, keptPhrase, markOf } from './pwkeep';
 import { copyToast } from './copy';
+import { CLOUD_OFFER, KEYPHRASE, KEYPHRASE_KEPT, localStore } from './prefs';
 
 export interface VaultPanelDeps {
   saveDir: string;
@@ -47,15 +48,15 @@ export interface VaultPanelDeps {
 }
 
 /** where a save folder's link is kept (localStorage) */
-const linkKey = (saveDir: string) => `nfsu2-keyphrase:${saveDir}`;
+const linkKey = (saveDir: string) => KEYPHRASE + saveDir;
 /** how long Play waits for the section to know whether this server keeps cloud saves (`started`) */
 const READY_WAIT_MS = 5000;
 /** how often Play offered cloud saves for it, and when last (localStorage, Offer as JSON) */
-const offerKey = (saveDir: string) => `nfsu2-cloud-offer:${saveDir}`;
+const offerKey = (saveDir: string) => CLOUD_OFFER + saveDir;
 /** which phrase the browser was asked to keep in its passwords (pwkeep.ts markOf); 'asked' once the browser was asked
  *  for one with its chooser and gave none, 'no:<mark>' when the player turned down the saves of the one it gave
  *  (localStorage) */
-const keptKey = (saveDir: string) => `nfsu2-keyphrase-kept:${saveDir}`;
+const keptKey = (saveDir: string) => KEYPHRASE_KEPT + saveDir;
 /** Play offers cloud saves again this long after a Not now, and this often at most (2026-10-31: it was once, at the
  *  fifth Play) */
 const OFFER_AGAIN_MS = 7 * 86400_000;
@@ -93,7 +94,7 @@ interface Replaced { at: number; side: Side }
 
 /** A save folder emptied (a test page's &fresh): its link goes too, or the page would sync an empty folder. */
 export function forgetLink(saveDir: string) {
-  try { for (const k of [linkKey, offerKey, keptKey]) localStorage.removeItem(k(saveDir)); } catch { /* storage off */ }
+  for (const k of [linkKey, offerKey, keptKey]) localStore.remove(k(saveDir));
   void removeSaveDir(replacedDir(saveDir));
 }
 
@@ -315,11 +316,9 @@ export class VaultPanel {
     eye.setAttribute('aria-label', this.hidden ? t('Show passphrase') : t('Hide passphrase'));
   }
 
-  private load(): Link | null {
-    try { const t = localStorage.getItem(this.key); return t ? JSON.parse(t) as Link : null; } catch { return null; }
-  }
+  private load(): Link | null { return localStore.getJSON(this.key) as Link | null; }
   private save(l: Link | null) {
-    try { if (l) localStorage.setItem(this.key, JSON.stringify(l)); else localStorage.removeItem(this.key); } catch { /* storage off: this page's link only */ }
+    if (l) localStore.setJSON(this.key, l); else localStore.remove(this.key);      // (storage off: this page's link only)
   }
 
   /** a VaultSync on the link kept now (another tab may have changed it while this one only looked) */
@@ -384,9 +383,8 @@ export class VaultPanel {
     if (this.pwLooked || !s || !canKeep()) return;
     this.pwLooked = true;
     const k = keptKey(this.d.saveDir);
-    const mark = (v: string) => { try { localStorage.setItem(k, v); } catch { /* storage off: asked again at the next page */ } };
-    let was: string | null = null;
-    try { was = localStorage.getItem(k); } catch { /* storage off */ }
+    const mark = (v: string) => localStore.set(k, v);        // (storage off: asked again at the next page)
+    const was = localStore.get(k);
     if (s.link) { if (was !== markOf(s.link.phrase)) this.keep(s.link.phrase); return; }
     // (a save folder that does not answer, savefs.ts missing: as one with profiles, nothing offered over them)
     if ((await listProfiles(this.d.saveDir).catch(() => null))?.length !== 0) return;
@@ -418,7 +416,7 @@ export class VaultPanel {
   private keep(phrase: string) {
     void keepPhrase(phrase).then(ok => {
       if (!ok) return;
-      try { localStorage.setItem(keptKey(this.d.saveDir), markOf(phrase)); } catch { /* asked again at the next page */ }
+      localStore.set(keptKey(this.d.saveDir), markOf(phrase));        // (not kept: asked again at the next page)
       this.d.log('[app] keyphrase: the browser was asked to keep it in its passwords');
     });
   }
@@ -643,19 +641,17 @@ export class VaultPanel {
    *  (games started and play here: playtime.ts; with storage off: never, as no link would be kept either). */
   offerable(games: number, played: number): boolean {
     const s = this.sync;
-    if (!s || s.link || s.state.s === 'working' || !this.d.owner()) return false;
-    try { const o = readOffer(localStorage.getItem(offerKey(this.d.saveDir))); return regularDue(o) || lateDue(o, games, played); }
-    catch { return false; }
+    if (!s || s.link || s.state.s === 'working' || !this.d.owner() || !localStore.usable()) return false;
+    const o = readOffer(localStore.get(offerKey(this.d.saveDir)));
+    return regularDue(o) || lateDue(o, games, played);
   }
   /** Play offered them now: which offer, for the log ("2 of 3", or the once-more one) */
   offered(games: number, played: number): string {
-    try {
-      const k = offerKey(this.d.saveDir), o = readOffer(localStorage.getItem(k)), regular = regularDue(o);
-      // (an offer past the once-more numbers stands for that one too: not asked again at the next Play)
-      const late = o.late || games > LATE_GAMES && played > LATE_MS;
-      localStorage.setItem(k, JSON.stringify({ asked: regular ? o.asked + 1 : o.asked, at: Date.now(), late } satisfies Offer));
-      return regular ? `${o.asked + 1} of ${OFFER_TIMES}` : `once more, ${games} games and ${Math.round(played / 3600_000)} h played here`;
-    } catch { return 'storage off'; }
+    const k = offerKey(this.d.saveDir), o = readOffer(localStore.get(k)), regular = regularDue(o);
+    // (an offer past the once-more numbers stands for that one too: not asked again at the next Play)
+    const late = o.late || games > LATE_GAMES && played > LATE_MS;
+    if (!localStore.setJSON(k, { asked: regular ? o.asked + 1 : o.asked, at: Date.now(), late } satisfies Offer)) return 'storage off';
+    return regular ? `${o.asked + 1} of ${OFFER_TIMES}` : `once more, ${games} games and ${Math.round(played / 3600_000)} h played here`;
   }
   /** what the saves here hold, for Play's question (stakeOf): playedMs, the play counted in this browser */
   async stake(playedMs: number): Promise<HTMLElement> { return stakeOf(sideOf(await this.files()), playedMs); }

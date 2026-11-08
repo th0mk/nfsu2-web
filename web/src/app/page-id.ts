@@ -7,8 +7,8 @@
 // browsers that come each day by it too (seen(): web/server-rs src/app/days.rs).  It says nothing about the player,
 // and the server keeps only a keyed hash of it, in a ban, and in the day's counts with a key of that day.  Without
 // storage (a private window, storage blocked) each load has a new one.
+import { localStore, PAGE_ID, SEEN_SETTINGS } from './prefs';
 
-const KEY = 'nfsu2.net.page-id';
 /** the file at the top of the origin private file system (shell.ts keeps the save folder off its name) */
 export const PAGE_ID_FILE = 'nfsu2.page-id';
 
@@ -23,28 +23,22 @@ let kept: Promise<PageIds> | null = null;
 /** The id now: localStorage's (made and kept there when it has none).  keepPageId, early in a load, may change it
  *  once, to the file's. */
 export function pageId(): string {
-  try {
-    const have = localStorage.getItem(KEY);
-    if (valid(have)) return have;
-    const id = make();
-    localStorage.setItem(KEY, id);
-    return id;
-  } catch { return loose ??= make(); }
+  const have = localStore.get(PAGE_ID);
+  if (valid(have)) return have;
+  const id = make();
+  return localStore.set(PAGE_ID, id) ? id : loose ??= id;
 }
 
 /** The id from both stores, put back in a store that lost it or held another: the file's first (the harder one to
  *  clear alone), else localStorage's, else a new one.  Once a load. */
 export function keepPageId(): Promise<PageIds> {
   return kept ??= (async () => {
-    let local: string | null = null;
-    try { local = localStorage.getItem(KEY); } catch { /* no localStorage */ }
+    let local = localStore.get(PAGE_ID);
     if (!valid(local)) local = null;
     const file = await readFile();
     const id = file ?? local ?? loose ?? make();
     if (file !== id) await writeFile(id);
-    if (local !== id) {
-      try { localStorage.setItem(KEY, id); } catch { loose = id; }
-    }
+    if (local !== id && !localStore.set(PAGE_ID, id)) loose = id;
     return { id, was: local && local !== id ? [local] : [] };
   })();
 }
@@ -52,8 +46,6 @@ export function keepPageId(): Promise<PageIds> {
 /** what a day's first Play tells the server besides: the kind of device, and the settings changed from its defaults
  *  (settings.ts changedSettings: "key=value", the player's own words only as "set") */
 export interface SettingsReport { device: 'pc' | 'phone' | 'tablet'; changed: string[] }
-/** the UTC day this browser last told the server its settings */
-const TOLD_KEY = 'nfsu2.seen.settings';
 
 /** This browser came today, for the server's daily counts (web/server-rs src/app/days.rs): at a load ('page') and at
  *  Play ('play').  At the first Play of a UTC day the settings go along (web/server-rs src/app/settings_days.rs keeps
@@ -62,12 +54,11 @@ const TOLD_KEY = 'nfsu2.seen.settings';
  *  server that does not answer changes nothing. */
 export function seen(at: 'page' | 'play', settings?: SettingsReport): void {
   const day = new Date().toISOString().slice(0, 10);
-  let told: string | null = null;
-  try { told = localStorage.getItem(TOLD_KEY); } catch { /* no localStorage */ }
+  const told = localStore.get(SEEN_SETTINGS);
   const report = settings && told !== day ? `&k=${settings.device}&s=${encodeURIComponent(settings.changed.join(','))}` : '';
   void keepPageId()
     .then(({ id }) => fetch(`/seen?at=${at}&id=${encodeURIComponent(id)}${report}`, { cache: 'no-store', keepalive: true }))
-    .then(r => { if (report && r.ok) try { localStorage.setItem(TOLD_KEY, day); } catch { /* no localStorage */ } })
+    .then(r => { if (report && r.ok) localStore.set(SEEN_SETTINGS, day); })
     .catch(() => {});
 }
 

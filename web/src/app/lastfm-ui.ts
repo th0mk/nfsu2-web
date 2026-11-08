@@ -1,7 +1,8 @@
 // The Game tab's Last.fm row, under the songs' settings: Connect (Last.fm's "allow access" page in a popup, lastfm.ts), then who
 // scrobbles and Disconnect; under it one line about .fmbot, the Discord bot that shows Last.fm stats.  Not there when the server
 // has no Last.fm (its /lastfm is 404).
-import { authLink, keepSession, readSession, RESULT_KEY, type LastfmApi } from './lastfm';
+import { authLink, keepSession, readSession, type LastfmApi } from './lastfm';
+import { LASTFM_RESULT, LASTFM_SESSION, localStore } from './prefs';
 import { t } from './i18n';
 
 export const FMBOT = 'https://fm.bot/';
@@ -22,7 +23,7 @@ export class LastfmRow {
   constructor(private deps: LastfmRowDeps) {
     this.el.dataset.key = 'lastfm';
     // the popup's page (lastfm-callback.ts) keeps the session and its result: this page hears of it here
-    window.addEventListener('storage', e => { if (e.key === RESULT_KEY) this.result(); else if (e.key?.startsWith('nfsu2.lastfm')) this.render(); });
+    window.addEventListener('storage', e => { if (e.key === LASTFM_RESULT) this.result(); else if (e.key?.startsWith(LASTFM_SESSION)) this.render(); });
     void this.askKey();
   }
 
@@ -33,8 +34,8 @@ export class LastfmRow {
 
   /** what the popup did: connected, or why not */
   private result() {
-    let r: { result?: string; at?: number } | null = null;
-    try { r = JSON.parse(localStorage.getItem(RESULT_KEY) ?? 'null'); localStorage.removeItem(RESULT_KEY); } catch { /* nothing kept */ }
+    const r = localStore.getJSON(LASTFM_RESULT) as { result?: string; at?: number } | null;
+    if (r !== null) localStore.remove(LASTFM_RESULT);
     if (!r || !r.at || Date.now() - r.at > RESULT_FRESH_MS) return;
     this.deps.log(`[lastfm] connect: ${r.result}`);
     const s = readSession();

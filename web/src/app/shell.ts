@@ -82,6 +82,7 @@ import type { Packs } from '../host/datacache';
 import type { GameMemory } from '../host/memory';
 import { texSplit } from '../gpu/index';
 import { copyText, copyToast } from './copy';
+import { OTHER_BUILD, PAGE_TAB, sessionStore, UPDATE_FOR } from './prefs';
 
 type Phase = 'boot' | 'ready' | 'error' | 'waiting' | 'starting' | 'playing' | 'exited';
 
@@ -897,13 +898,13 @@ function stopFatal(what: string, code?: string) {
  *  copies (sw.ts) and the module from the server, or from a server swapping its module.  The game is stopped and the
  *  page loaded again from the server: once a tab and module, while the server answers; else as any renderer that
  *  did not start. */
-const OTHER_KEY = 'nfsu2-other-build';
 let reloadAtExit = false;
 function otherBuild(why: string) {
   const s = session, rev = loaded!.info.rev;
   if (!s || s.ended) return;
-  let again = true;
-  try { again = sessionStorage.getItem(OTHER_KEY) === rev; if (!again) sessionStorage.setItem(OTHER_KEY, rev); } catch { /* no storage: no reload that could repeat */ }
+  // (no storage: no reload that could repeat)
+  const again = !sessionStore.usable() || sessionStore.get(OTHER_BUILD) === rev;
+  if (!again) sessionStore.set(OTHER_BUILD, rev);
   if (again || offline) {
     log.add(`[app] this page is of another build than game ${rev} (${why}), ${offline ? 'and the server does not answer' : 'after a reload for that too'}`);
     stopFatal(N('the graphics could not start'), 'GPU-RENDERER');
@@ -2317,7 +2318,7 @@ async function loadModule() {
 // sessionStorage names the version a reload was for: a reload that still came
 // back without it offers it, and is not repeated by itself.  A test page (the
 // address's test settings) only offers it: its tool drives it.
-const NEWER_EVERY_MS = 5 * 60_000, UPDATE_KEY = 'nfsu2-update';
+const NEWER_EVERY_MS = 5 * 60_000;
 let newer: string | null = null;
 /** the version a reload of this tab was for and did not bring */
 let tried: string | null = null;
@@ -2353,8 +2354,7 @@ function netBack() { setTimeout(() => void checkNewer(), Math.random() * 30_000)
 /** Reload for the server's version rev.  sessionStorage names it (afterUpdate); by itself only then (false: not
  *  reloaded), at Play either way. */
 async function reloadFor(rev: string, why: string, byItself: boolean): Promise<boolean> {
-  let marked = false;
-  try { sessionStorage.setItem(UPDATE_KEY, rev); marked = true; } catch { /* no storage here */ }
+  const marked = sessionStore.set(UPDATE_FOR, rev);
   if (byItself && !marked) return false;
   log.add(`[app] the server has game ${rev} now, this page ${loaded!.info.rev}: reloading (${why})`);
   await reload();
@@ -2362,11 +2362,10 @@ async function reloadFor(rev: string, why: string, byItself: boolean): Promise<b
 }
 /** after a reload for a new version: whether it brought it */
 function afterUpdate() {
-  let want: string | null = null;
-  try { want = sessionStorage.getItem(UPDATE_KEY); } catch { /* no storage here */ }
+  const want = sessionStore.get(UPDATE_FOR);
   if (!want || !loaded) return;
   if (want === loaded.info.rev) {
-    try { sessionStorage.removeItem(UPDATE_KEY); } catch { /* no storage here */ }
+    sessionStore.remove(UPDATE_FOR);
     updated = true;
     log.add(`[app] reloaded for game ${want}: this page has it`);
   } else {
@@ -2465,7 +2464,7 @@ export async function boot() {
   void setLanguage(lastLanguage(), logLine);
   // the big panel's tabs (the one open last, or the one the address names: #friends) and About's; the Other tab's
   // contents are at the Game tab's end since the Mods tab came (kept or named, #other opens Game there)
-  bigTabs = panelTabs($('#settings'), { store: 'nfsu2.page.tab', hash: true, moved: { other: { tab: 'game', at: '#game-data' } } });
+  bigTabs = panelTabs($('#settings'), { store: PAGE_TAB, hash: true, moved: { other: { tab: 'game', at: '#game-data' } } });
   panelTabs($('#about'));
   // Last.fm: its row under the songs' settings, and the scrobbles of the songs the game plays (lastfm.ts)
   const lastfmApi = new LastfmApi(), lastfmRow = new LastfmRow({ api: lastfmApi, log: logLine, say: pageToast });

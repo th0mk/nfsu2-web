@@ -29,6 +29,7 @@
 
 import { PAD_A, PAD_B, PAD_BACK, PAD_DDOWN, PAD_DLEFT, PAD_DRIGHT, PAD_DUP, PAD_HOME, PAD_LB, PAD_LS, PAD_RB, PAD_RS,
   PAD_START, PAD_X, PAD_Y } from './proto';
+import { localStore, SHIFTER, WHEEL } from '../app/prefs';
 
 /** a pedal: its axis, its value let go and pressed to the floor (gas and brake on one axis: the two halves); pad: the
  *  Gamepad.id of pedals on their own USB the axis is on, not the wheel's */
@@ -461,12 +462,11 @@ export function describeMap(m: WheelMap, hat: number): string {
 }
 
 // ---- the player's set-up, kept in this browser per model ------------------------------------------------------
-const KEY = 'nfsu2.wheel.', SHIFTER_KEY = 'nfsu2.shifter.';
 /** a model's part of the keys: its USB ids, or its name where the browser gives none */
 const modelKey = (id: string) => { const u = usbIds(id); return u ? `${u.vendor}:${u.product}` : id.slice(0, 80); };
 /** the key a wheel's set-up is kept under */
 export function wheelKey(id: string): string {
-  return KEY + modelKey(id);
+  return WHEEL + modelKey(id);
 }
 /** the model's layout (guessMap) with the player's set-up of its wheel and pedals over it: the buttons and the
  *  shifter stay the model's, so a set-up kept from before a change to those gets it; pedals set up on their own USB
@@ -482,18 +482,18 @@ const shifterPicks = new Map<string, ShifterMode>();
 /** what the player picked for the model's shifter (default push-up) */
 export function loadShifter(id: string): ShifterMode {
   let v: string | null | undefined = shifterPicks.get(modelKey(id));
-  try { v ??= localStorage.getItem(SHIFTER_KEY + modelKey(id)); } catch { /* storage off */ }
+  v ??= localStore.get(SHIFTER + modelKey(id));
   return SHIFTER_MODES.find(m => m === v) ?? 'push-up';
 }
 /** keep the player's pick for the model's shifter; gamepad.ts reads it again on the event */
 export function saveShifter(id: string, mode: ShifterMode) {
   shifterPicks.set(modelKey(id), mode);
-  try { localStorage.setItem(SHIFTER_KEY + modelKey(id), mode); } catch { /* storage off: for this page only */ }
+  localStore.set(SHIFTER + modelKey(id), mode);        // (storage off: for this page only)
   dispatchEvent(new Event(WHEEL_MAP_EVENT));
 }
 export function loadMap(id: string): WheelMap | null {
   try {
-    const m = JSON.parse(localStorage.getItem(wheelKey(id)) ?? 'null') as WheelMap | null;
+    const m = localStore.getJSON(wheelKey(id)) as WheelMap | null;
     const ok = (p: Pedal | null) => p === null ||
       (Number.isInteger(p.axis) && isFinite(p.rest) && isFinite(p.full) && (p.pad === undefined || typeof p.pad === 'string'));
     const sw = (s: Switch) => !!s && SWITCH_PADS[s.pad] !== undefined &&
@@ -505,8 +505,7 @@ export function loadMap(id: string): WheelMap | null {
 }
 /** keep the player's set-up (null: back to the guess); gamepad.ts reads it again on the event */
 export function saveMap(id: string, m: WheelMap | null) {
-  try { if (m) localStorage.setItem(wheelKey(id), JSON.stringify(m)); else localStorage.removeItem(wheelKey(id)); }
-  catch { /* storage off: the guess stays */ }
+  if (m) localStore.setJSON(wheelKey(id), m); else localStore.remove(wheelKey(id));      // (storage off: the guess stays)
   dispatchEvent(new Event(WHEEL_MAP_EVENT));
 }
 export const WHEEL_MAP_EVENT = 'nfsu2-wheel-map';

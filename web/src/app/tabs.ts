@@ -5,6 +5,7 @@
 // where that does not fit either, or on a phone, in rows of three (data-fit="rows").  Every panel's tabs take the same
 // step, so both panels' tabs look alike.
 import { onLanguage } from './i18n';
+import { localStore } from './prefs';
 
 /** the page's tab lists, sized together (fitAll) */
 const lists: { list: HTMLElement; tabs: HTMLButtonElement[] }[] = [];
@@ -85,7 +86,7 @@ export function panelTabs(panel: HTMLElement, opts: { store?: string; hash?: boo
   };
   const pick = (t: string, focus = false) => {
     ui.show(t, focus);
-    if (opts.store) try { localStorage.setItem(opts.store, t); } catch { /* storage off: the first tab next time */ }
+    if (opts.store) localStore.set(opts.store, t);        // (storage off: the first tab next time)
   };
   for (const b of tabs) b.onclick = () => pick(b.dataset.tab!);
   // the arrow keys between the tabs, Home and End to the first and last (a tab list's keys)
@@ -100,7 +101,7 @@ export function panelTabs(panel: HTMLElement, opts: { store?: string; hash?: boo
 
   let first = names[0];
   // (a tab kept that is gone, Other: the tab its contents went to)
-  if (opts.store) try { first = find(localStorage.getItem(opts.store))?.tab ?? first; } catch { /* storage off */ }
+  if (opts.store) first = find(localStore.get(opts.store))?.tab ?? first;
   const fromHash = () => find(location.hash.slice(1));
   if (opts.hash) {
     const h = fromHash();

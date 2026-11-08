@@ -6,6 +6,7 @@
 // What counts as heard is the runtime's (radio_proto.h song_*): the time a song was mixed and not paused, and whether it played to
 // its end.  Last.fm's rules: a track longer than 30 s is scrobbled once it has been heard half its length or 4 minutes.  An EA Trax
 // song's length is not known: it is scrobbled after 4 minutes, or at its end after 30 s.  "Now playing" goes once a song is heard.
+import { LASTFM_QUEUE, LASTFM_SESSION, localStore } from './prefs';
 import type { Lines, RadioLink, Song } from './radio-link';
 
 export interface Session { name: string; sk: string }
@@ -13,20 +14,14 @@ interface Scrobble { artist: string; track: string; album?: string; duration?: n
 /** the Radio's track served last (radio.ts lastTrack) */
 export interface FolderTrack { tags: Promise<Lines>; plaque: Promise<Lines>; seconds: number }
 
-const SESSION_KEY = 'nfsu2.lastfm', QUEUE_KEY = 'nfsu2.lastfm.queue';
-/** what the callback page did last ({result: 'ok' | an error, at}): the row says it */
-export const RESULT_KEY = 'nfsu2.lastfm.result';
 export const AUTH_PAGE = 'https://www.last.fm/api/auth/';
 const MIN_S = 30, ENOUGH_S = 240, QUEUE_MAX = 50, RETRY_MS = 120_000;
 
-const read = <T>(key: string): T | null => { try { return JSON.parse(localStorage.getItem(key) ?? 'null') as T | null; } catch { return null; } };
-const write = (key: string, v: unknown) => { try { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch { /* a private window keeps nothing */ } };
-
 export function readSession(): Session | null {
-  const s = read<Session>(SESSION_KEY);
+  const s = localStore.getJSON(LASTFM_SESSION) as Session | null;
   return s && typeof s.name === 'string' && typeof s.sk === 'string' && s.sk ? s : null;
 }
-export const keepSession = (s: Session | null) => write(SESSION_KEY, s);
+export const keepSession = (s: Session | null) => { if (s === null) localStore.remove(LASTFM_SESSION); else localStore.setJSON(LASTFM_SESSION, s); };
 
 /** /lastfm on this server: its API key (null: the server has no Last.fm), and the calls it signs */
 export class LastfmApi {
@@ -71,7 +66,7 @@ export interface ScrobblerDeps {
 /** Follows the song playing (tick, about once a second while a game runs) and tells Last.fm. */
 export class Scrobbler {
   private cur: Current | null = null;
-  private queue: Scrobble[] = read<Scrobble[]>(QUEUE_KEY)?.filter(s => s && typeof s.artist === 'string') ?? [];
+  private queue: Scrobble[] = (localStore.getJSON(LASTFM_QUEUE) as Scrobble[] | null)?.filter(s => s && typeof s.artist === 'string') ?? [];
   private retryAt = 0;
   private sending = false;
   constructor(private deps: ScrobblerDeps) {}
@@ -135,7 +130,7 @@ export class Scrobbler {
     if (got === 'later' && s.timestamp) {
       this.queue = [...this.queue, s as Scrobble].slice(-QUEUE_MAX);
       this.retryAt = this.now() + RETRY_MS;
-      write(QUEUE_KEY, this.queue);
+      localStore.setJSON(LASTFM_QUEUE, this.queue);
       this.deps.log(`[lastfm] ${this.queue.length} scrobbles kept for later`);
     } else if (got === 'ok' && this.queue.length) void this.flush(session);
   }
@@ -150,7 +145,7 @@ export class Scrobbler {
         const s = this.queue[0];
         if (s.timestamp > this.now() / 1000 - 14 * 86_400 + 60 && await this.post(session, 'scrobble', s) === 'later') break;   // (Last.fm takes two weeks)
         this.queue = this.queue.filter(q => q !== s);
-        write(QUEUE_KEY, this.queue.length ? this.queue : null);
+        if (this.queue.length) localStore.setJSON(LASTFM_QUEUE, this.queue); else localStore.remove(LASTFM_QUEUE);
       }
     } finally { this.sending = false; }
   }

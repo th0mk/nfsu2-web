@@ -20,6 +20,7 @@ import { C, F } from './proto';
 import { Encoder } from './encoder';
 import type { FromPng, ToPng, ToPngEnd, ToPngTile } from './png-worker';
 import { PH_ADD, PH_DONE, PH_NOW, PH_OFF, PLAIN_LOOK, PhotoPicture, type PhotoLook, type PhotoTile } from './photo-picture';
+import { GPU_PIPELINES, localStore } from '../app/prefs';
 export type { PhotoLook } from './photo-picture';
 
 /** how long photo() waits for a whole still picture before it keeps the picture as it is: the camera still moving
@@ -259,8 +260,10 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   for (const id of opts.watchTex ?? []) enc.watchTex.add(id);
   if (opts.trace === 'dumps') enc.traceDumps = true; else for (const f of opts.trace ?? []) enc.traceSeq.add(f);
   // pipelines of earlier sessions, created asynchronously as their shaders arrive
-  const WARM_KEY = 'nfsu2.gpu.pipelines.v1';
-  try { const j = localStorage.getItem(WARM_KEY); if (j) enc.loadWarm(JSON.parse(j)); } catch { /* storage off: no warm-up */ }
+  const warm = localStore.getJSON(GPU_PIPELINES) as Parameters<Encoder['loadWarm']>[0] | null;
+  if (warm) try { enc.loadWarm(warm); } catch { /* not a list of them: no warm-up */ }
+  /** the pipelines made so far, for the next session's warm-up (the latest 4000; full or off: not kept) */
+  const keepWarm = () => { if (enc.warmDirty) localStore.setJSON(GPU_PIPELINES, enc.warmEntries().slice(-4000)); };
   const vw = vreg.ptr >>> 2, vf = vreg.ptr >>> 3;
 
   // page -> game: view size, pixel ratio, features.  The view is the canvas element's box in device pixels (what
@@ -279,10 +282,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     giveUp(new Error(won === P.DETACHED ? 'the game stopped waiting for a renderer just now: start a new game to show it'
       : 'another renderer attached to this game process first'));
   Atomics.notify(i32(), cw + C.attached);
-  const warmTimer = setInterval(() => {
-    if (!enc.warmDirty) return;
-    try { localStorage.setItem(WARM_KEY, JSON.stringify(enc.warmEntries().slice(-4000))); } catch { /* full or off */ }
-  }, 5000);
+  const warmTimer = setInterval(keepWarm, 5000);
   const maxInFlight = opts.maxInFlight ?? 2;
   let imgRect: { x: number; y: number; w: number; h: number } | null = null;
   // quick chat's places of the frame being drawn (onMarks): id, x, y, scale each, the same words as two views
@@ -936,12 +936,12 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     imageRect:() => imgRect ?? { x: 0, y: 0, w: canvas.width, h: canvas.height },
     flush: async () => {
       while (pending.size) await Promise.allSettled([...pending]);
-      if (enc.warmDirty) try { localStorage.setItem(WARM_KEY, JSON.stringify(enc.warmEntries().slice(-4000))); } catch { /* full or off */ }
+      keepWarm();
     },
     detach: () => {
       if (!alive) return;
       alive = false; cancelAnimationFrame(rafId); clearInterval(warmTimer); ro.disconnect();
-      if (enc.warmDirty) try { localStorage.setItem(WARM_KEY, JSON.stringify(enc.warmEntries().slice(-4000))); } catch { /* full or off */ }
+      keepWarm();
       // the game stops recording at its next present instead of waiting for a page
       // that is gone; a waiting present or a full resource queue wakes now
       const I = i32();

@@ -6,8 +6,9 @@
 // (a slow network), the page goes back to what it showed.  Its texts are the page's (lang/*.json): build.mjs puts
 // these few in (i18n-keys.mjs bootTexts), as this cannot fetch a language file.
 
+import { localStore, PAGE_LANGUAGE } from './app/prefs';
+
 declare const BOOT_TEXTS: Record<string, Record<string, string>>;
-export {};
 
 const WAIT_MS = 15_000;
 const N = (s: string) => s;
@@ -19,8 +20,7 @@ function show() {
   const status = document.getElementById('status'), sub = document.getElementById('status-sub'), reload = document.getElementById('reload');
   if (!status || !sub || !reload) return;
   shown = true;
-  let lang = 'english';
-  try { lang = localStorage.getItem('nfsu2-page-language') || lang; } catch { /* no storage: English, as the page */ }
+  const lang = localStore.get(PAGE_LANGUAGE) || 'english';      // (no storage: English, as the page)
   const t = (k: string) => BOOT_TEXTS[lang]?.[k] ?? k;
   const was = [status.textContent, sub.textContent, reload.textContent, reload.hidden] as const;
   status.textContent = t(N('Not loading'));
