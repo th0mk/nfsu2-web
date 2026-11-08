@@ -1,0 +1,57 @@
+# Free roam, the minimap follows the world map's Players (roam_game.c arrows_filter, near_update): crossed on the map,
+# the minimap has no arrow for the other players' cars (the friends' cars shown, the hub's players past them) but a
+# crew-mate's; ticked again, all of them back.  A stage-3 career whose map has 7 kinds of places (7 Downs from the first
+# row reach Players; "world map: legend rows N of the game's": another career needs N Downs) at the new career's start,
+# among roam-crowd.mjs's players there, a few of them in the page's crew:
+#   roam-crowd.mjs --base http://localhost:<port> --n 3 --crew Testcrew --spread 40
+#   roam-crowd.mjs --base http://localhost:<port> --n 40 --first 3 --spread 40
+#   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page play --size 1280x720 --seed <the save tree>
+#        --a Ita:roam_minimap_filter.txt:NFSU2_ROAM=1,NFSU2_ROAM_MAX_CARS=8,NFSU2_ROAM_CREW=Testcrew
+# mp status "minimap: ... N arrows hidden, other players hidden": the cars shown but the crew's; mp near: the crew's
+# peers without a car only, none of the hub's.  The dumps mm_on, mm_off, mm_on_again: the minimap's arrows (bottom left).
+0     bot on
++0    waitroam 6000
++0    bot off
++60   teleport 1695 -884 24.6
++300  roam mp waitpeers 8 6000
++0    roam mp waitcars 8 6000
++900  roam mp near
++0    roam mp status
++0    dump mm_on
++60   tapuntil M UI_InGame_WorldMap.fng 90 1500
++600  roam mp map
++30   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++60   roam mp map                     # Players picked (kind 32)
++30   tap RETURN                      # Players crossed
++90   roam mp map
++60   tapuntil ESCAPE HUD_SingleRace.fng 120 1200
++600  roam mp near
++0    roam mp status
++0    dump mm_off
++60   tap M                           # (tapuntil would match the map seen before)
++120  tap M
++120  tap M
++120  tap M
++600  roam mp map
++30   tap DOWN                        # (the map opens on its first row again)
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++60   roam mp map                     # Players picked
++30   tap RETURN                      # Players ticked again
++90   roam mp map
++60   tapuntil ESCAPE HUD_SingleRace.fng 120 1200
++600  roam mp near
++0    roam mp status
++0    dump mm_on_again
++0    log MINIMAP FILTER DONE
++10   quit

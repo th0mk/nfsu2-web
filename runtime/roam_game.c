@@ -4344,6 +4344,46 @@ static int nr_put(CPU *c, uint32_t icons, int *k, float x, float y, uint16_t hea
     (*k)++;
     return 1;
 }
+/* The world map's Players (its legend's row, g_wmf_on, as it is each frame) on the minimap too: crossed, the friends'
+ * cars' arrows are hidden (icon +0x18 MM_HIDE: the minimap draws none, 0x4CAD3E) but a crew-mate's or a friend's
+ * (the slot's crew, as the map keeps them) and the car of an outrun or drift battle with us, and near_update leaves out
+ * the players past them but our peers of a crew.  The game's AI racers' arrows stay.  Only arrows hidden here are
+ * shown again (the game sets the bit on none of its type). */
+#define MMF_MAX         (NSLOT + 8)
+static struct { int n, on, said; uint32_t icon[MMF_MAX]; } g_mmf;
+static int du_keeps(int k);
+static int mm_players(void){ wmf_load(); return g_wmf_on[WMF_PLAYERS]; }
+/* the friend's car with this racer number (a slot as racer_friend has it), -1: none */
+static int racer_slot(uint32_t w, int16_t rn){
+    for (int k = 0; k < NSLOT; k++){
+        const Slot *sl = &g_sl[k];
+        if (sl->st != SL_FREE && sl->st != SL_PARKED && sl->world == w && ok(sl->car, 0x9e0) && (int16_t)MR16(sl->car + 0xau) == rn) return k;
+    }
+    return -1;
+}
+static void arrows_filter(uint32_t w){
+    uint32_t icons = rd32(G_MM_ICONS), was[MMF_MAX];
+    int on = mm_players(), nwas = g_mmf.n, kept = 0;
+    memcpy(was, g_mmf.icon, (size_t)nwas * sizeof *was);
+    g_mmf.n = 0;
+    for (uint32_t n = ok(icons, 0x1c) ? rd32(icons) : 0, m = 0; n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n), m++){
+        uint32_t v = rd32(n + 0x1cu);
+        if (!ok(v, 8) || MR32(v + 4u) != MM_AIRACER) continue;
+        int k = racer_slot(w, (int16_t)MR32(n + 8u)), ours = 0;
+        for (int i = 0; i < nwas && !ours; i++) ours = was[i] == n;
+        if (k >= 0 && !on && (g_sl[k].crew || du_keeps(k))) kept++;
+        if (k >= 0 && !on && !g_sl[k].crew && !du_keeps(k) && g_mmf.n < MMF_MAX){
+            MR32(n + 0x18u) |= MM_HIDE;
+            g_mmf.icon[g_mmf.n++] = n;
+        } else if (ours) MR32(n + 0x18u) &= ~MM_HIDE;
+    }
+    if (on != g_mmf.on || !g_mmf.said){
+        g_mmf.on = on; g_mmf.said = 1;
+        if (on) rlog("[roam] f=%ld minimap: other players' arrows shown (the world map's Players)\n", rh_frame());
+        else rlog("[roam] f=%ld minimap: other players' arrows hidden (the world map's Players): %d of the cars shown, %d kept (a crew's, "
+                  "friends', an outrun's)\n", rh_frame(), g_mmf.n, kept);
+    }
+}
 static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
     g_auto.wait = 0;
     uint32_t pl = rd32(G_PLAYER1), hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0, icons = rd32(G_MM_ICONS);
@@ -4405,16 +4445,16 @@ static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
         nr_take(n, host);
     }
     /* the arrows: our peers whose car is not shown, then the hub's players (none at a friend's car shown: its arrow
-     * is there); the icons left hidden */
+     * is there; with the world map's Players crossed, only our peers of a crew: arrows_filter); the icons left hidden */
     float cx[NSLOT], cy[NSLOT]; int nc = 0;
     for (int k = 0; k < NSLOT; k++){
         const Slot *s = &g_sl[k];
         if (s->st == SL_ACTIVE && !s->hidden && s->world == w && ok(s->car, 0x9e0)){ cx[nc] = MRF32(s->car + 0x50u); cy[nc] = MRF32(s->car + 0x54u); nc++; }
     }
-    int k = 0, peers = 0, hub = 0;
+    int k = 0, peers = 0, hub = 0, players = mm_players();
     for (int i = 0; i < g_npv; i++){
         const PeerView *v = &g_pv[i];
-        if (!v->have_pose || !v->visible) continue;
+        if (!v->have_pose || !v->visible || (!players && !v->crew)) continue;
         int shown = 0;
         for (int j = 0; j < NSLOT && !shown; j++)
             shown = g_sl[j].peer_id == v->id && g_sl[j].st == SL_ACTIVE && !g_sl[j].hidden && g_sl[j].world == w;
@@ -4424,7 +4464,7 @@ static void near_update(CPU *c, uint32_t w, int64_t host, int in_roam){
         if (!nr_put(c, icons, &k, v->pose.p[0], v->pose.p[1], (uint16_t)(int32_t)a)) break;
         peers++;
     }
-    for (int i = 0; i < g_nr_n; i++){
+    for (int i = 0; players && i < g_nr_n; i++){
         float x, y; nr_where(i, host, &x, &y);
         int same = 0;
         for (int j = 0; j < nc && !same; j++) same = (cx[j] - x) * (cx[j] - x) + (cy[j] - y) * (cy[j] - y) < NEAR_SAME_M * NEAR_SAME_M;
@@ -9823,6 +9863,7 @@ void roam_game_frame(CPU *c){
         if (!g_photo_hold) cars_auto(c, w, host);
         counts_log(host);
         arrows_update(c, w);
+        arrows_filter(w);
         arrow_colours(c, w);
         near_update(c, w, host, 1);
         map_update(c, w, host);
@@ -10160,10 +10201,11 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
                     p->dents ? ", shows crash damage" : "");
         }
         roam_plat_unlock();
-        uint32_t icons = rd32(G_MM_ICONS); int arrows = 0, freev = 0, tinted = 0, wrong = 0, ais = 0, grey = 0, greyf = 0; uint8_t has[256] = {0};
+        uint32_t icons = rd32(G_MM_ICONS); int arrows = 0, freev = 0, tinted = 0, wrong = 0, ais = 0, grey = 0, greyf = 0, hidden = 0;
+        uint8_t has[256] = {0};
         for (uint32_t n = ok(icons, 0x1c) ? rd32(icons) : 0, m = 0; n && n != icons && m < MM_POOL; n = rd32(n), m++)
             if (ok(rd32(n + 0x1cu), 8) && MR32(rd32(n + 0x1cu) + 4u) == MM_AIRACER){
-                arrows++; has[(uint8_t)MR32(n + 8u)] = 1;
+                arrows++; has[(uint8_t)MR32(n + 8u)] = 1; hidden += (MR32(n + 0x18u) & MM_HIDE) != 0;
                 /* (arrows in a crew's colour, and of those the ones whose car is not a crew-mate's; the AI racers'
                  * arrows, those of them grey, and grey ones of a friend's car) */
                 int ct = colour_crew(MR32(rd32(n + 0x1cu))), ai = !racer_friend(world(), (int16_t)MR32(n + 8u)), gr = colour_ai(MR32(rd32(n + 0x1cu)));
@@ -10184,7 +10226,8 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         for (int i = 0; i < g_mm.ncopy; i++) cdrawn += ok(g_mm.copy[i], 0x5c) && MR32(g_mm.copy[i] + 0x58u);
         rlog("[roam]   minimap: %d cars' arrows, %d free, %d copies of AIRACERINDICATOR_0 (%d drawn); %d of %d friends' cars shown have one, "
                         "%d hidden one(s) in the world; %d in a crew's colour (%d of them not a crew-mate's car); %d AI racers', %d of them grey "
-                        "(%d grey friends')\n", arrows, freev, g_mm.ncopy, cdrawn, with, shown, stray, tinted, wrong, ais, grey, greyf);
+                        "(%d grey friends'); %d arrows hidden, other players %s (the world map's Players)\n", arrows, freev, g_mm.ncopy, cdrawn, with,
+                        shown, stray, tinted, wrong, ais, grey, greyf, hidden, g_wmf_on[WMF_PLAYERS] ? "shown" : "hidden");
         for (int k = 0; k < TAG_N; k++)
             if (g_tag.shown[k] && g_tag.obj[k])
                 rlog("[roam]   name %d: \"%s\" colour %06x at %.1f %.1f\n", k, g_tag.text[k], g_tag.rgb[k],
@@ -10390,8 +10433,9 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         uint32_t me = player_car();
         float mx = me ? MRF32(me + 0x50u) : 0.f, my = me ? MRF32(me + 0x54u) : 0.f;
         rlog("[roam] f=%ld mp near: at most %d; %u answers (%d players, within %d m; the minimap reaches %.0f m); %d arrows (%d the hub's players, "
-             "%d friends' without a car), %d icons, %d shown, %d copies (%d drawn)%s\n", f, O.near_max, g_nr.answers, g_nr_n, g_nr.radius,
-             (double)g_nr.reach, g_nr.used, g_nr.hub, g_nr.peers, g_nr.n, shown, g_nr.ncopy, drawn, g_nr.stop ? ", no more icons" : "");
+             "%d friends' without a car), %d icons, %d shown, %d copies (%d drawn)%s%s\n", f, O.near_max, g_nr.answers, g_nr_n, g_nr.radius,
+             (double)g_nr.reach, g_nr.used, g_nr.hub, g_nr.peers, g_nr.n, shown, g_nr.ncopy, drawn, g_nr.stop ? ", no more icons" : "",
+             g_wmf_on[WMF_PLAYERS] ? "" : "; the world map's Players crossed: a crew's only");
         for (int k = 0; k < g_nr.used && (k < 8 || !strcasecmp(a1, "all")); k++){
             uint32_t d = nr_blk(k);
             float dx = MRF32(d + 0x50u) - mx, dy = MRF32(d + 0x54u) - my;
