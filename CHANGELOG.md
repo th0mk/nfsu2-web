@@ -11,8 +11,15 @@ first, then under `### Fixes` what was broken and works now, which the popup kee
 insides, the forum bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about
 before the release, not guessed.
 
-## 2026-11-08 (a79bffd)
+## 2026-11-08 (3902563)
 
+- **Free roam:** Tracks in the page menu (F9): drive the race tracks' own maps with other players, from the Airport Circuit to the drag strips, then back to the city where you left. No traffic there.
+- **Free roam:** Join in the menu's Friends takes you to your friend: their world, their track, then right behind their car.
+- **Mods:** Stance, after Archie (AR4I)'s Stance Mod: each car's camber, wheel offset and tire width in the Body Shop (off by default). Other players see it in free roam.
+- **Mods:** HQ Vinyls & Doorlines, AdrienShadow's mod: the cars' vinyls and doorlines at twice the game's size, sharper up close (computers only, off by default).
+- **Graphics:** the game's anti-aliasing works: smoother edges, on for new players on a computer. Returning players are asked once.
+- **Graphics:** roads and buildings seen at an angle stay sharp on a computer.
+- **Start page:** with free roam on, it says to play the career to meet others.
 - **Mods:** Crash Damage, Chrystian Farias's Crashing Foreign Cars: the racers' cars dent where they are hit, scratch, break their lights and lose loose parts. Only the looks change; in free roam, players who have it on see each other's damage (off by default).
 - **Mods:** Transmission Whine, ropi's mod: NFS Carbon's gearbox whine over your car's engine, for each player's car in split screen (off by default).
 - **Mods:** Rubberbanding, by 007hacky007: your career races' catch-up as in the original game, No boost (rivals ahead still wait, none behind gets faster) or Off.
@@ -24,6 +31,7 @@ before the release, not guessed.
 - **Free roam:** exhaust tips keep their own colour instead of taking on other players' paint as their cars drive by.
 - **Saves:** a profile from a modded game shows its cars this game doesn't have as stock cars, and your save keeps them as they were unless you change them here.
 - **Saves:** Art Factory 28 to 34 vinyls are kept beside your profile, so the profile holds only what the PC game knows; here they come back.
+- **Controllers:** a phone controller with a touch pad no longer keeps the view turned after a tap.
 
 ## 2026-11-07 (b58448b)
 
