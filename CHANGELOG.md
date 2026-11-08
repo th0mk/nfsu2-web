@@ -11,8 +11,11 @@ first, then under `### Fixes` what was broken and works now, which the popup kee
 insides, the forum bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about
 before the release, not guessed.
 
-## 2026-11-08 (3902563)
+## 2026-11-08 (314555b)
 
+- **Races:** other players' cars sound with their own engines in LAN, Online and free-roam races, as in free roam.
+- **Minimap:** with Players crossed out in the world map's legend, the minimap hides their arrows too.
+- **Lobby races:** a Corolla gets a little less power in circuit, sprint and URL races, where it won far more often than cars rated alike.
 - **Free roam:** Tracks in the page menu (F9): drive the race tracks' own maps with other players, from the Airport Circuit to the drag strips, then back to the city where you left. No traffic there.
 - **Free roam:** Join in the menu's Friends takes you to your friend: their world, their track, then right behind their car.
 - **Mods:** Stance, after Archie (AR4I)'s Stance Mod: each car's camber, wheel offset and tire width in the Body Shop (off by default). Other players see it in free roam.
@@ -27,6 +30,11 @@ before the release, not guessed.
 
 ### Fixes
 
+- **Free-roam races:** the race's movie after a career win no longer has the crib's menu drawn over it.
+- **Free-roam races:** the host's Restart on the results works every time, and a slow player is no longer sent to the main menu between a URL race's heats.
+- **Dyno:** Save Profile and Quit Tuning keep the car's setups with autosave off.
+- **Cameras:** after a drift race you get back the view you picked.
+- **Free roam:** other players' nitrous purges keep their kit's colour instead of turning white at a car meet.
 - **Free roam:** error 134 at a race's results, or after an hour in a busy free roam, when other players' cars opened their hoods, trunks and doors is fixed.
 - **Free roam:** exhaust tips keep their own colour instead of taking on other players' paint as their cars drive by.
 - **Saves:** a profile from a modded game shows its cars this game doesn't have as stock cars, and your save keeps them as they were unless you change them here.
