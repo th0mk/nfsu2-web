@@ -100,6 +100,7 @@ static const struct { const char *name; void (*frame)(CPU *c); } k_frames[] = {
     { "optslider",   optslider_frame },        /* our option sliders' copied parts (the pause menu's Horn Volume) */
     { "stance",      stance_frame },           /* the Stance page's look */
     { "drift",       drift_frame },            /* drift mode in free roam (F2) */
+    { "cameras",     cameras_frame },          /* the player's view after a drift event (after drift mode's camera) */
     { "showoff",     showoff_frame },          /* the car's trunk, hood and doors open */
     { "plates",      plates_frame },           /* license plates with the players' own text */
     { "lightkey",    lightkey_frame },         /* the headlights on G (off, high beam), friends' too */

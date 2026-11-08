@@ -1,0 +1,24 @@
+# The camera view after a career drift race (runtime/cameras.c): the drift race drives with its drift camera (view 4,
+# as the game sets it), and back in free roam the view the player had picked before it, not the game's view 3.
+#   NFSU2_SAVE_SEED=<a stage 3 career with an open drift race> node web/tools/run-suite.mjs --script cameras_after_drift_race.txt --marker cameras_drift_race_end
+# Good: every expect passes (the module before: view 3 after the race).
+0     bot on
++0    waitroam 6000
++0    bot off
++60   poke 0x83aa74 0                 # player 1's view (PlayerSettings +0x10)
++30   tap C                           # the player picks view 1
++240  expect i:0x83aa74 == 1
++0    careergo next:drift
++120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitexpr b:0x89e7d9 == 1 6000
++600  waitexpr i:0x8654a4 == 6 12000
++300  expect i:0x83aa74 == 4          # the drift race's own camera
++60   racewin
++0    bot on                          # the post-race screens, the save
++0    waitroam 30000                  # back in free roam
++0    bot off
++60   expect i:0x83aa74 == 1          # the player's view again
++0    log cameras_drift_race_end
++10   quit

@@ -15,6 +15,7 @@
 #define G_RACEPARAMS    0x0089e7a0u   /* the race's parameters, filled before a track loads: +0 the track, +0x10 its type
                                        * (G_RACETYPE), +0x20 local humans, +0x70 the racers' records, +0x74 their count */
 #define G_RACETYPE      0x0089e7b0u   /* the race's type: 0 free roam, 7 an outrun */
+#define G_DRIFTRACE     0x0089e7d9u   /* byte: a drift event (the race's parameters +0x39) */
 #define G_RACE          0x00890118u   /* the race status: +0 its state (3 countdown, 4 racing, free roam too, 6 paused),
                                        * +0x14 its clock (1/4000 s), +0x24 the racers' count, +0x30 the racers (0x1F0 each:
                                        * +0 the car, +0x10 completion), +0xBD0 the racers' entries */
@@ -60,6 +61,9 @@
 #define G_TXT_REC       0x0083a9c4u   /* ... for this record (0: none) */
 #define G_PROFILE_NAME  0x0083a9e0u   /* player 1's profile (FEDatabase +0x10): +0 its name (32 bytes), +0x20 1: one is loaded */
 #define G_VOLUMES       0x0083aa28u   /* the Audio options' volumes (floats 0 .. 1): +0 Master, +0x10 Sound Effects, +0x14 Engine */
+#define G_PSETTINGS     0x0083aa64u   /* PlayerSettings of players 1 and 2, PS_SIZE each (in profiles): +PS_VIEW the camera view */
+#define PS_SIZE         0x28u
+#define PS_VIEW         0x10u         /* 0 .. 3 the camera key's views, 4 the drift camera (cameras.c) */
 #define G_QR_CAR        0x0083aab8u   /* each player's car handle in Quick Race, LAN, Online (+4 player 2) */
 #define G_FE_RIDE       0x008392c0u   /* the front end's ride of the car: +0 car type, +0x590 + 4 x slot its parts */
 #define G_FECARS_SZ     0xab4cu       /* a player's front-end cars: player 2's G_FECARS + this (garage.c CARS_SZ) */

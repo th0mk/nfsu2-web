@@ -1,0 +1,65 @@
+# The camera view after a Quick Race drift race (runtime/cameras.c): the drift race drives with its drift camera (view 4,
+# as the game's setup 0x4FF070 puts it), and the next race, a circuit, with the view the player had before it, not the
+# game's view 3 (its setup 0x4FEF80 turns a view 4 into 3).  No profile; the view as the Options would leave it.
+#   node web/tools/run-suite.mjs --script cameras_quickrace_drift.txt --marker cameras_qr_end
+# Good: every expect passes (the module before: view 3 in the circuit race).
+0     tapuntil RETURN MC_Background.fng 120 4000   # title -> profile prompt
++200  tap RETURN                                   # "No"
++0    waitfng GarageMain.fng 3000
++60   poke 0x83aa74 1                              # player 1's view (PlayerSettings +0x10)
++0    tapuntil ESCAPE UI_Main.fng 150 2400
++300  tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap RIGHT
++90   tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tap LEFT
++20   tap LEFT
++20   tap LEFT
++20   tap LEFT
++20   tap LEFT
++20   tap LEFT                         # Circuit
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT                        # Drift
++60   tapuntil RETURN PC_Loading.fng 120 4000      # track, options, car
++0    waitmem 0x8654a4 6 4000
++300  expect b:0x89e7d9 == 1
++0    expect i:0x83aa74 == 4          # the drift race's own camera
++0    tap ESCAPE                      # the pause menu: Quit, yes
++120  tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++60   tap RETURN
++120  tap LEFT
++60   tap RETURN
++0    waitfng GarageMain.fng 1500
++0    tapuntil ESCAPE UI_Main.fng 150 2400
++300  tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap RIGHT
++90   tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tap LEFT
++20   tap LEFT
++20   tap LEFT
++20   tap LEFT
++20   tap LEFT
++20   tap LEFT                         # Circuit
++60   tapuntil RETURN PC_Loading.fng 120 4000
++0    waitmem 0x8654a4 6 4000
++300  expect b:0x89e7d9 == 0
++0    expect i:0x83aa74 == 1          # the circuit race with the player's view
++0    log cameras_qr_end
++10   quit

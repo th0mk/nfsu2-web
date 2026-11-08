@@ -77,6 +77,7 @@ void racenet_frame(CPU *c);
 void optslider_frame(CPU *c);
 void stance_frame(CPU *c);
 void drift_frame(CPU *c);
+void cameras_frame(CPU *c);
 void showoff_frame(CPU *c);
 void plates_frame(CPU *c);
 void lightkey_frame(CPU *c);

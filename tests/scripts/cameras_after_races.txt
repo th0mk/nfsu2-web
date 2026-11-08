@@ -1,0 +1,46 @@
+# The camera view through career races (runtime/cameras.c): a race's setup turns the drift camera (view 4) into view 3
+# in the game.  From drift mode (X, drift.c: the drift camera while it is on), a circuit race drives with the view the
+# player had before drift mode, and back in free roam X off gives it back; the drift camera picked with the camera key
+# stays the view of the next race and after it.
+#   NFSU2_SAVE_SEED=<a stage 3 career> node web/tools/run-suite.mjs --script cameras_after_races.txt --marker cameras_races_end
+# Good: every expect passes (the module before: view 3 in both races and after them).
+0     bot on
++0    waitroam 6000
++0    bot off
++60   poke 0x83aa74 0                 # player 1's view (PlayerSettings +0x10)
++30   tap C                           # the player picks view 1
++240  expect i:0x83aa74 == 1
++0    tap X                           # drift mode: the drift camera
++120  expect i:0x83aa74 == 4
++0    careergo next:circuit
++120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitexpr i:0x863470 != 0 6000   # the career race set up
++600  waitexpr i:0x8654a4 == 6 12000
++300  expect i:0x83aa74 == 1          # the race with the player's view, not 3
++60   racewin
++0    bot on                          # the post-race screens, the save
++0    waitroam 30000                  # back in free roam, drift mode on again
++0    bot off
++120  expect i:0x83aa74 == 4
++0    tap X                           # drift mode off: the player's view
++120  expect i:0x83aa74 == 1
++0    tap C
++30   tap C
++30   tap C                           # the drift camera picked
++240  expect i:0x83aa74 == 4
++0    careergo next:sprint
++120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitexpr i:0x863470 != 0 6000
++600  waitexpr i:0x8654a4 == 6 12000
++300  expect i:0x83aa74 == 4          # the race with it, not 3
++60   racewin
++0    bot on
++0    waitroam 30000
++0    bot off
++120  expect i:0x83aa74 == 4          # and free roam after it
++0    log cameras_races_end
++10   quit

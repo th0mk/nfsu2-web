@@ -97,7 +97,9 @@
  * (Player 0x5F2FA0: PlayerSettings view, [0x83AA64 + 0x28 n] +0x10, then
  * the camera for it); off, the view the player had, if it is still the
  * drift camera.  A view 4 outside a drift event is the game's own trouble
- * too: free roam's setup puts it back to 3 (0x540599).
+ * too: every race's setup and free roam's put it back to 3 (0x540599), and
+ * cameras.c gives the view the player had before drift mode back then
+ * (drift_camera_view: drift mode's drift camera is not the player's).
  *
  * The music: a drift or drag event has none.  The music manager's tick
  * (0x482180) plays the EA Trax songs in the world only when the race is no
@@ -167,11 +169,9 @@ __attribute__((weak)) int host_status_slot(const char *name){ (void)name; return
 __attribute__((weak)) void host_status_set_n(const int *slot, const double *value, int n){ (void)slot; (void)value; (void)n; }
 
 #define DIK_X          0x2du         /* in none of the game's key maps (its F2 is the map) */
-#define G_DRIFTRACE    0x0089e7d9u   /* byte: a drift event */
 #define G_DRAGRACE     0x0089e7d8u   /* byte: a drag event */
 #define G_FORCEDRIFT   0x00890104u   /* the drift-event switch */
 #define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player* of player 1, then 2: +4 its car, +0x10 its number, +0x9A4 its HUD */
-#define G_PSET         0x0083aa64u   /* PlayerSettings, 0x28 each: +0x10 the camera view */
 #define G_STYLES       0x00864624u   /* the style table: 0x30 each, +7 the modes' mask */
 #define G_STYLEPOOL    0x00864628u
 #define FN_POOL_ALLOC  0x00440e50u   /* cdecl (pool) */
@@ -257,7 +257,7 @@ static int hud_on_top(void){
 }
 static uint32_t view_addr(void){
     uint32_t pl = guest_rd32(G_PLAYER1), n = pl ? guest_rd32(pl + 0x10u) : 9u;
-    return n < 2u ? G_PSET + 0x28u * n + 0x10u : 0;
+    return n < 2u ? G_PSETTINGS + PS_SIZE * n + PS_VIEW : 0;
 }
 
 /* the drift event's styles that the racer's DriftScore lacks (looked for every frame: a new free roam's
@@ -445,6 +445,8 @@ static struct {
     uint32_t xs;                      /* X presses meanwhile */
 } B;
 int drift_wanted(void){ return D.want; }
+/* the view drift mode's drift camera is in (cameras.c: not the player's own), 0 none */
+uint32_t drift_camera_view(void){ return D.cam ? view_addr() : 0; }
 /* the controller's switch (showoff.c: D-pad down held a second while driving), as X */
 void drift_pad(void){ D.pad++; }
 static void nos_off(void){

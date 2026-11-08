@@ -343,9 +343,10 @@ static void swap_out(void){
 }
 void sub_00525ed0_orig(CPU *c);
 void split_create_humans(CPU *c);
-void sub_00525ed0(CPU *c){ swap_in(); split_create_humans(c); swap_out(); }
+void cameras_setup(void);                  /* (a race's setup: the views, cameras.c) */
+void sub_00525ed0(CPU *c){ cameras_setup(); swap_in(); split_create_humans(c); swap_out(); }
 void sub_00526970_orig(CPU *c);
-void sub_00526970(CPU *c){ swap_in(); sub_00526970_orig(c); swap_out(); }
+void sub_00526970(CPU *c){ cameras_setup(); swap_in(); sub_00526970_orig(c); swap_out(); }
 void sub_0053feb0_orig(CPU *c);
 void sub_0053feb0(CPU *c){ swap_in(); sub_0053feb0_orig(c); swap_out(); }
 

@@ -401,7 +401,9 @@ void sub_0050c8e0(CPU *c){
 }
 
 void sub_00581820_orig(CPU *c);
+void cameras_setup(void);
 void sub_00581820(CPU *c){
+    cameras_setup();                                       /* (a load's race setup: the views, cameras.c) */
     int trip = travel_full();                       /* travel.c: a trip to another spot of the race track's map loaded */
     if (coop_reload != 1 && !trip){ sub_00581820_orig(c); return; }
     if (coop_reload == 1) coop_reload = 2;
@@ -1132,9 +1134,10 @@ static void coop_rt_frame(CPU *c){
     coop_rt_go = 1;
     call(c, 0x00499b50u, coop_rt_card, 0, 0, 0);
 }
-/* the free-roam setup: one local human again, human 1's port as it was */
+/* the free-roam setup: one local human again, human 1's port as it was; a race's setup to cameras.c (the view after a drift event) */
 void sub_00540780_orig(CPU *c);
 void sub_00540780(CPU *c){
+    cameras_setup();
     if (MR32(G_GAMEMODE) == 1u && MR32(G_HUMANS) == 2u){ MR32(G_HUMANS) = 1u; fprintf(stderr, "[coop] f=%ld free roam: one local human again\n", autotest_frame()); }
     if (coop_rt_port_kept){ MR32(G_FE_PORT1) = coop_rt_port; coop_rt_port_kept = 0; }
     coop_rt = 0;
