@@ -1,0 +1,39 @@
+# Multiplayer races from free roam, a URL race of 2 heats whose joiner waits long for the host's lobby between the
+# heats (mprace.c step_between), host side, with mprace_heats_b.txt: as mprace_heats_a.txt, but on heat 1's results
+# the host's game stands still for 20 s (a stall holds every guest thread, its LAN server's too), through the
+# joiner's 8 s on its results and its login on the host's lobby after them: that login's "Connecting to lobby..."
+# stays up for 10 s or more (the games' results come up to 2 s apart), as a player's did on the live server.  The
+# joiner waits for it and races heat 2.
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mprace_heats_slow_a.txt
+#        --b Bob:mprace_heats_b.txt --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_URL_3 --env MP_PLAYERS=2
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    mark bank0 i:0x861e74
++0    log LOBBY open
++0    tap RETURN
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 1
++0    autopilot on 6000
++0    waitfng UI_PostRaceResults.fng 40000
++60   log LOBBY the host stands still
++0    stall 20
++0    waitexpr i:0x8654a4 == 3 40000
++0    log LOBBY between the heats
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 2
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

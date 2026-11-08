@@ -1465,23 +1465,35 @@ static int step_between(long f){
     if (!S.between) return 0;
     uint32_t cb = guest_rd32(G_LOBBY + 0xcu);
     if (guest_rd32(G_DLG)){
-        uint32_t nb = guest_rd32(G_DLG_NBUT);
+        uint32_t nb = guest_rd32(G_DLG_NBUT), m1 = guest_rd32(G_DLG_MSG1), m2 = guest_rd32(G_DLG_MSG2), m3 = guest_rd32(G_DLG_MSG3);
         char t[96]; dlg_text(t, sizeof t);
-        int cancel = nb == 1 && (guest_rd32(G_DLG_MSG3) == MSG_LOOK_CANCEL || guest_rd32(G_DLG_LABEL3) == LBL_CANCEL);
-        if (nb == 0 || cancel){
+        /* a "please wait" goes by itself: above all the game's login on the host's lobby again after the heat
+         * ("Connecting to lobby..."; more than 5 s for a joiner on the live server, a player's log), whose Cancel
+         * takes the game out of LAN ("If you cancel connecting to the lobby server, you will be taken offline and
+         * returned to the main menu"): no next heat from there.  Given up after 30 s, as on the way to the first
+         * heat: the series ends there */
+        if (nb == 0 || (nb == 1 && (m3 == MSG_LOOK_CANCEL || guest_rd32(G_DLG_LABEL3) == LBL_CANCEL))){
             if (!M.wait_at) M.wait_at = f;
-            if (cancel && f - M.wait_at > 60 * 5){ dlg_answer(guest_rd32(G_DLG_MSG3)); M.wait_at = 0; M.next = f + 30; }
+            if (f - M.wait_at > 60 * 30){ M.wait_at = 0; fail("the host's lobby did not answer between the heats"); }
             return 1;
         }
         M.wait_at = 0;
+        /* the host's LAN server not listening yet: again, as on the way to the first heat */
+        if (nb == 2 && (m1 == MSG_RETRY || m2 == MSG_RETRY)){
+            if (++M.ndlg > 8){ dlg_answer(m1 == MSG_RETRY ? m2 : m1); fail("the host's LAN server did not answer between the heats"); return 1; }
+            mlog("between the heats, a dialog: \"%s\": retry", t); dlg_answer(MSG_RETRY); M.next = f + 120;
+            return 1;
+        }
         mlog("between the heats, a dialog: \"%s\": yes / OK", t);
-        dlg_answer(nb == 1 ? guest_rd32(G_DLG_MSG3) : guest_rd32(G_DLG_MSG1));
+        dlg_answer(nb == 1 ? m3 : m1);
         M.next = f + 30;
         return 1;
     }
     M.wait_at = 0;
     if (on("UI_PostRaceResults.fng")){ if (f - M.scr_tap >= 60 * 4){ autotest_tap(K_RET, 6); acted(f); } return 1; }
     if (guest_rd32(G_FLOW) != 3u) return 1;                                               /* (the last heat's world going) */
+    /* out of LAN (an error's OK, the host's game gone): the next heat cannot come, the series ends at once */
+    if (on("UI_Main.fng")){ fail("the game left LAN between the heats"); return 1; }
     if (cb == CB_ROOM){ if (act_ok("PC_OL_GameRoom.fng", f)){ autotest_tap(K_ESC, 6); acted(f); } return 1; }
     if (cb == CB_LOBBY || on("UI_OLMAIN.fng")){
         S.between = 0; M.scr = 0;
