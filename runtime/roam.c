@@ -133,8 +133,12 @@ uint32_t travel_room(void);   /* travel.c: on a race track's map (its own free r
 int roam_exploring(void){ return roaming() && (rd32(G_RACEPARAMS) % 1000u == 0 || travel_room()); }
 /* One line per car of the world list (World +0 head; the list node is the
  * car's first two dwords). */
-static void log_cars(const char *why){
+__attribute__((weak)) float racecars_engine_heard(uint32_t car);   /* racecars.c: its own engine played, at this rpm (0: not) */
+/* "roam cars [expect]": the world's cars; with "expect", "[expect] PASS" when every other player's car in a network
+ * race (its record's byte +0x900) has its own engine played (racecars.c) */
+static void log_cars(const char *why, int expect){
     uint32_t w = rd32(G_WORLD);
+    int others = 0, own_heard = 0;
     if (!guest_ok(w, 0x20)){ fprintf(stderr, "[roam] f=%ld cars (%s): no world\n", autotest_frame(), why); return; }
     uint32_t me = player_car();
     fprintf(stderr, "[roam] f=%ld cars (%s): world 0x%08x count %u, player car 0x%08x\n",
@@ -154,8 +158,11 @@ static void log_cars(const char *why){
          * kind 1, an AI racer's for kind 2 or one with its byte +0x900 set, as a network race's other players'): the
          * state's vtable and its children's; an AI engine's (vt 0x78AEE0) or the player's engine's (0x78AF30) engine
          * played (its state +0x80: an entry of 0x7F0DE0, 0x4C each) and the rpm its control has (+0xB8, +0x128 on the
-         * sound's scale: 1000 idle .. 10000), with the car's own rpm (+0x440) and speed (+0x430) */
+         * sound's scale: 1000 idle .. 10000), with the car's own rpm (+0x440) and speed (+0x430); a network race's car
+         * whose own engine racecars.c plays: that engine's rpm, its AI engine "silenced" */
         uint32_t st = MR32(e + 0x968u);
+        float own = racecars_engine_heard ? racecars_engine_heard(e) : 0.f;
+        if (guest_ok(rec, 0x904) && MR8(rec + 0x900u)){ others++; own_heard += own > 0.f; }
         char ch[400] = {0}; int at = 0, n = 0;
         if (guest_ok(st, 0x100) && MR32(st + 0x30u) == e)
             for (uint32_t c = MR32(st + 0x20u); guest_ok(c, 0x100) && n < 24 && at < (int)sizeof ch - 80; c = MR32(c + 0x50u), n++){
@@ -166,12 +173,12 @@ static void log_cars(const char *why){
                      * (12 bytes an entry, type x 4 + level); +0xD0 its class, from whose AI engines (0x7ECAA8,
                      * 0x7ECAE4, 0x7ECB14) 0x463F60 takes one when its own is not among them */
                     uint32_t s = MR32(c + 0x9cu), d = guest_ok(s, 0xd4) ? MR32(s + 0x80u) : 0, ctl = MR32(c + 0xb8u);
-                    uint32_t own = guest_ok(s, 0xd4) && MR32(s + 0x8cu) < 64u && MR32(s + 0x94u) < 4u ?
+                    uint32_t mine = guest_ok(s, 0xd4) && MR32(s + 0x8cu) < 64u && MR32(s + 0x94u) < 4u ?
                                    MR32(0x007f2230u + 12u * (MR32(s + 0x8cu) * 4u + MR32(s + 0x94u))) : 0xffffffffu;
-                    at += snprintf(ch + at, sizeof ch - (size_t)at, "(ai engine: its own %d, played %d, class %d, ctl rpm %.0f)",
-                                   (int)own, d >= 0x007f0de0u ? (int)((d - 0x007f0de0u) / 0x4cu) : -1,
+                    at += snprintf(ch + at, sizeof ch - (size_t)at, "(ai engine: its own %d, played %d, class %d, ctl rpm %.0f%s)",
+                                   (int)mine, d >= 0x007f0de0u ? (int)((d - 0x007f0de0u) / 0x4cu) : -1,
                                    guest_ok(s, 0xd4) ? (int)MR32(s + 0xd0u) : -1,
-                                   guest_ok(ctl, 0x130) ? (double)MRF32(ctl + 0x128u) : -1.0);
+                                   guest_ok(ctl, 0x130) ? (double)MRF32(ctl + 0x128u) : -1.0, own > 0.f ? ", silenced" : "");
                 }
                 if (vt == 0x0078af30u && guest_ok(c, 0xc4)){
                     uint32_t s = MR32(c + 0x9cu), d = guest_ok(s, 0xd4) ? MR32(s + 0x80u) : 0, ctl = MR32(c + 0xb8u);
@@ -180,11 +187,14 @@ static void log_cars(const char *why){
                                    guest_ok(ctl, 0x130) ? (double)MRF32(ctl + 0x128u) : -1.0);
                 }
             }
-        fprintf(stderr, "[roam]     sound: rec +0x900 %u, state 0x%08x vt 0x%08x%s, %d children:%s; rpm %.0f speed %.1f\n",
+        fprintf(stderr, "[roam]     sound: rec +0x900 %u, state 0x%08x vt 0x%08x%s, %d children:%s; rpm %.0f speed %.1f%s",
                 guest_ok(rec, 0x904) ? MR8(rec + 0x900u) : 0u, st, guest_ok(st, 4) ? MR32(st) : 0u,
                 guest_ok(st, 0x100) && MR32(st + 0x30u) == e ? "" : " (not its own)", n, ch,
-                (double)MRF32(e + 0x440u), (double)MRF32(e + 0x430u));
+                (double)MRF32(e + 0x440u), (double)MRF32(e + 0x430u), own > 0.f ? "" : "\n");
+        if (own > 0.f) fprintf(stderr, "; its own engine played (racecars.c) at %.0f\n", (double)own);
     }
+    if (expect) fprintf(stderr, "[expect] %s f=%ld cars: %d of %d other player(s)' car(s) heard with their own engine\n",
+                        others && own_heard == others ? "PASS" : "FAIL", autotest_frame(), own_heard, others);
 }
 
 /* ---- creation probes (NFSU2_ROAM_PROBE=1) ----------------------------------
@@ -786,7 +796,7 @@ static void run_job(CPU *c, const char *line){
         uint32_t r = guest_call(c, fn, ecx, edx, na, arg);
         fprintf(stderr, "[roam] f=%ld call 0x%08x(ecx=0x%08x edx=0x%08x, %d args) -> eax=0x%08x (%d)\n",
                 autotest_frame(), fn, ecx, edx, na, r, (int)r);
-    } else if (!strcasecmp(sub, "cars")) log_cars("script");
+    } else if (!strcasecmp(sub, "cars")) log_cars("script", !strncasecmp(rest, "expect", 6));
     else if (!strcasecmp(sub, "types")) log_types();
     else if (!strcasecmp(sub, "loader")) log_loader("script");
     else if (!strcasecmp(sub, "rewind")) rewind_player();
@@ -822,7 +832,7 @@ void roam_frame(CPU *c){
     ghost_tick(c);
     ride_tick(c);
     spawn_tick(c);
-    if (g_carlog_every > 0 && f >= g_carlog_next){ g_carlog_next = f + g_carlog_every; log_cars("periodic"); }
+    if (g_carlog_every > 0 && f >= g_carlog_next){ g_carlog_next = f + g_carlog_every; log_cars("periodic", 0); }
 }
 void racenet_prestep(CPU *c);                 /* racenet.c: the cars' own places back before the world's step */
 void visualrep_meter(CPU *c);                 /* visualrep.c: no Visual Rating box in the shops */

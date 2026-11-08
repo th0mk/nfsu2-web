@@ -54,11 +54,23 @@
  *    owner's last controls.  One farther off is carried on along its way, up
  *    to CAP_FAR_US.  A correction the interpolator would snap (over 5 m) glides
  *    too;
+ *  - each other car sounds with its own engine, as free roam's friends do
+ *    (roam_game.c, carsfx.c): the game gives the other players' cars an AI
+ *    racer's sound (their records' byte +0x900, 0x4690E0), one engine model
+ *    of its few AI engines (a Focus heard as an S2000's) at an rpm of its own
+ *    (8600 of 10000 with the car standing); so each state carries the engine
+ *    as its owner's game sounds it (roam_game_engine_state: the rpm on the
+ *    sound's scale and the volumes, in the state's extension), and each
+ *    other car's GIN recordings (its car type's and engine upgrades', as
+ *    0x4593B0 picks them: roam_game_engine_files) play at that through
+ *    carsfx.c, the game's AI engine on that car silenced (roam_game.c
+ *    aieng_update, racecars_engine_heard).  A car whose states carry no
+ *    engine (an older game's) keeps the game's;
  *  - a car of an older game (none of these come for it) keeps racenet.c's
  *    way, and an older game drops these (an unknown message on the port).
  *
  * N2RS, version 1 (little-endian):
- *   0 "N2RS", 4 version 1, 5 flags (1: states with the extension), 6 the
+ *   0 "N2RS", 4 version 1, 5 flags (1: states with the extension: the engine), 6 the
  *   sender's race slot, 7 n states (1..NSTATES, newest first), 8 epoch (a
  *   change: its car was put elsewhere, snap), 9 clock epoch (a change: its
  *   stamp clock was set anew, re-sync), 10 status (roam_core.h RC_ST_*), 11 0,
@@ -76,6 +88,7 @@
  * Test knobs (read only with NFSU2_INPUT_SCRIPT set, racenet.c's test_env):
  * NFSU2_RACE_CARS=0 off (the game's and racenet.c's way), NFSU2_RACE_CARS_HZ,
  * NFSU2_RACE_NEAR_M / _FAR_M, NFSU2_RACE_GHOST_MS, NFSU2_RACE_LEAD_MS,
+ * NFSU2_RACE_ENGINES=0 (the game's AI engines on the other cars),
  * NFSU2_RACE_DRIVE=1 (near cars driven, above; 0 the default: all put), NFSU2_RACE_DRIVE_M /
  * _DRIVE_TAU_MS / _DRIVE_TAUR_MS, NFSU2_RACECARS_TRACE=1 (lines on what
  * moved a car: "[rctrace]").
@@ -88,6 +101,7 @@
 #include "guest.h"
 #include "game.h"
 #include "roam_core.h"
+#include "carsfx.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,6 +164,11 @@
 int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n);
 int racenet_race_peers(uint32_t *ip_h, int max);   /* racenet.c: the other racers' addresses */
 int racenet_slot_of(uint32_t ip_h);                /*   and the slot each drives (-1 none, -2 not known) */
+/* roam_game.c: free roam's friends' engines */
+void roam_game_engine_state(uint32_t car, rc_state *s);
+int  roam_game_engine_files(CPU *c, uint32_t ride, char gin[2][32], float *idle, float *most);
+void roam_game_engine_sound(const char (*gin)[32], float idle, float most, const rc_pose *P, carsfx_state *st);
+void roam_game_aieng_patch(void);
 
 static void rd3(uint32_t a, float *o){ o[0] = MRF32(a); o[1] = MRF32(a + 4u); o[2] = MRF32(a + 8u); }
 static int64_t now_us(void){
@@ -187,7 +206,7 @@ static double knob(const char *k, double def, double lo, double hi){
     double v = e && *e ? atof(e) : def;
     return v >= lo && v <= hi ? v : def;
 }
-static struct { int init, on, hz; float near_m, far_m; int64_t ghost_us, lead_us; int drive; float drive_m, drive_tau, drive_tau_r; int trace; } O;
+static struct { int init, on, hz; float near_m, far_m; int64_t ghost_us, lead_us; int drive; float drive_m, drive_tau, drive_tau_r; int trace, engines; } O;
 static void opts(void){
     if (O.init) return;
     O.init = 1;
@@ -201,6 +220,7 @@ static void opts(void){
     O.lead_us = (int64_t)(knob("NFSU2_RACE_LEAD_MS", 0, -500, 500) * 1000.0);
     O.drive = (int)knob("NFSU2_RACE_DRIVE", 0, 0, 1);
     O.trace = (int)knob("NFSU2_RACECARS_TRACE", 0, 0, 1);
+    O.engines = (int)knob("NFSU2_RACE_ENGINES", 1, 0, 1);
     O.drive_m = (float)knob("NFSU2_RACE_DRIVE_M", DRIVE_M, 0, 10000);
     O.drive_tau = (float)knob("NFSU2_RACE_DRIVE_TAU_MS", DRIVE_TAU * 1000.f, 20, 2000) / 1000.f;
     O.drive_tau_r = (float)knob("NFSU2_RACE_DRIVE_TAUR_MS", DRIVE_TAU_R * 1000.f, 20, 2000) / 1000.f;
@@ -300,6 +320,10 @@ typedef struct {
     float tp[3], tm[3]; float th; int thave;      /* NFSU2_RACECARS_TRACE: the place drawn last step, its move, the step */
     float putp[3], putv[3]; int puts;             /*   where we put it this pass, its velocity then, how often */
     float dist;
+    rc_pose eng; int eng_ok;                      /* its engine as drawn last step (eng, its volumes; eng_ok: its states carry one) */
+    char gin[2][32]; float idle, most;            /* its engine's GIN files (roam_game_engine_files) for ... */
+    uint32_t gin_car; int heard;                  /* ... this car; carsfx.c plays it (its AI engine silenced) */
+    uint32_t heard_frames;
     /* for the log */
     uint32_t n, g250, g500; int64_t gap_max;
     uint32_t steps, own_hit, own_stall, glides, snaps, near_steps, far_steps;
@@ -367,6 +391,8 @@ static int own_state(rc_state *s, uint32_t car){
     if (!__builtin_isfinite(s->throttle)) s->throttle = 0;
     if (!__builtin_isfinite(s->brake)) s->brake = 0;
     if (!__builtin_isfinite(s->steer)) s->steer = 0;
+    roam_game_engine_state(car, s);               /* the engine as our game sounds it, in the extension */
+    s->ext = s->eng != 0;
     return 1;
 }
 static void send_frame(void){
@@ -394,14 +420,14 @@ static void send_frame(void){
     for (int k = 0; k < np; k++){
         uint8_t m[24 + NSTATES * (RC_STATE_BYTES + RC_STATEX_BYTES)];
         rc_w w; rc_w_init(&w, m, sizeof m);
-        rc_putb(&w, "N2RS", 4); rc_put8(&w, 1); rc_put8(&w, 0); rc_put8(&w, (uint32_t)slot); rc_put8(&w, 1);
+        rc_putb(&w, "N2RS", 4); rc_put8(&w, 1); rc_put8(&w, s.ext); rc_put8(&w, (uint32_t)slot); rc_put8(&w, 1);
         rc_put8(&w, K.epoch); rc_put8(&w, K.clock); rc_put8(&w, K.paused > 1 ? RC_ST_PAUSED : RC_ST_ROAM); rc_put8(&w, 0);
         rc_put32(&w, (uint32_t)t);
         Rc *r = rc_of_ip(peers[k], 0);
         int fresh = r && r->their_at && t - r->their_at < 2000000;
         rc_put32(&w, fresh ? r->their_tx : 0u);
         rc_put32(&w, fresh ? (uint32_t)(t - r->their_at) : 0u);
-        rc_state_put(&w, &s, 0);
+        rc_state_put(&w, &s, s.ext);
         if (w.err) continue;
         if (vlan_rt_send(HORN_PORT, peers[k], m, (int)w.n)) S.sent_err++;
         else K.ndg++;
@@ -563,6 +589,7 @@ int racecars_step(CPU *c, uint32_t ctl, uint32_t car){
     int64_t off0 = r->mo.off_r;
     uint64_t sn0 = r->mo.n_snap;
     if (!rc_interp_eval(&r->mo, (int64_t)te, fdt, r->delay, reach ? CAP_US : CAP_FAR_US, &o)) return 0;
+    r->eng = o; r->eng_ok = o.ext && o.eng > 0.f;
     /* a correction too big for the interpolator's fade (over 5 m, or its clock offset set anew): it put the car
      * there at once; glide from where it was instead */
     if (r->mo.n_snap != sn0 && r->steps) r->glide = 1;
@@ -683,9 +710,51 @@ drawn:
     return 1;
 }
 
+/* ---- the other cars' engines (above): carsfx.c, heard from the camera ---- */
+static int g_sounding;                            /* carsfx.c was given cars last frame */
+static void engines_frame(CPU *c, int racing){
+    float L[3], f[3] = { 1.f, 0.f, 0.f }, v[3] = {0};
+    uint32_t cam = guest_rd32(G_VIEW1 + 0x40u), me = my_car();
+    int64_t t = now_us();
+    int any = 0;
+    for (int i = 0; i < NCARS; i++){ g_rc[i].heard = 0; any |= g_rc[i].ip && g_rc[i].eng_ok; }
+    if (!racing || !O.engines || !any || !guest_ok(cam, 0x60)){
+        if (g_sounding){ carsfx_begin(0, f, 0); carsfx_end(); g_sounding = 0; }
+        return;
+    }
+    rd3(cam + 0x40u, L); rd3(cam + 0x50u, f);
+    if (guest_ok(me, 0x9e0)) rd3(me + CAR_VEL, v);
+    carsfx_begin(L, f, v);
+    for (int i = 0; i < NCARS; i++){
+        Rc *r = &g_rc[i];
+        if (!r->ip || r->slot < 0 || !r->eng_ok || !guest_ok(r->car, 0x9e0) || t - r->rx_at > STALE_US) continue;
+        if (r->gin_car != r->car){
+            uint32_t ride = guest_rd32(r->car + 0x10u);
+            if (!guest_ok(ride, 0x300) || !roam_game_engine_files(c, ride, r->gin, &r->idle, &r->most)) r->gin[0][0] = 0;
+            r->gin_car = r->car;
+            fprintf(stderr, "[racecars] %s's engine: %s + %s\n", r->name[0] ? r->name : "?", r->gin[0][0] ? r->gin[0] : "-",
+                    r->gin[0][0] ? r->gin[1] : "- (the game's AI engine)");
+        }
+        carsfx_state st; memset(&st, 0, sizeof st);
+        roam_game_engine_sound(r->gin, r->idle, r->most, &r->eng, &st);
+        if (!st.gin[0]) continue;
+        float p[3], cv[3]; rd3(r->car + CAR_POS, p); rd3(r->car + CAR_VEL, cv);
+        carsfx_car(0x4e325253u + (uint32_t)r->slot, r->name, p, cv, &st);   /* ("N2RS" + its slot: one per car) */
+        r->heard = 1; r->heard_frames++;
+        roam_game_aieng_patch();
+    }
+    carsfx_end();
+    g_sounding = 1;
+}
+/* this car's engine is played here, at this rpm on the sound's scale (0: not; roam_game.c's aieng_update silences
+ * the game's AI engine on it; roam.c's "roam cars") */
+float racecars_engine_heard(uint32_t car){
+    for (int i = 0; car && i < NCARS; i++) if (g_rc[i].heard && g_rc[i].car == car) return g_rc[i].eng.eng;
+    return 0.f;
+}
+
 /* every frame, on the game thread (racenet.c's racenet_frame, after the world's step) */
 void racecars_frame(CPU *c){
-    (void)c;
     opts();
     int racing = O.on && in_race();
     uint32_t w = guest_rd32(G_WORLD);
@@ -695,6 +764,7 @@ void racecars_frame(CPU *c){
     }
     clock_frame(racing);
     if (racing) send_frame();
+    engines_frame(c, racing);
     /* NFSU2_RACECARS_TRACE: a car moved between our put (the world's step) and here (before the frame is drawn) */
     if (racing && O.trace) for (int i = 0; i < NCARS; i++){
         Rc *r = &g_rc[i];
@@ -723,11 +793,12 @@ void racecars_log(double secs){
         fprintf(stderr, "[racecars]   car %s (slot %d, %s): %u states (%.1f/s), longest wait %.0f ms, waits over 250/500 ms %u/%u; "
                 "least round trip %.0f ms; its states %.0f ms old on average (at most %.0f); drawn %u steps, %.0f %% near; "
                 "between states %llu, carried on %llu, held %llu; corrections over 5 m %llu (largest %.2f m); on its own after "
-                "%u hits, %u stalls; %u glides back (largest %.1f m), %u snaps; driven %u steps, %u put right\n",
+                "%u hits, %u stalls; %u glides back (largest %.1f m), %u snaps; driven %u steps, %u put right; its own engine heard "
+                "%u frames\n",
                 r->name[0] ? r->name : "?", r->slot, a, r->n, secs > 0 ? r->n / secs : 0., (double)r->gap_max / 1000.0, r->g250, r->g500,
                 (double)rtt_min(r) / 1000.0, r->age_n ? r->age_sum / r->age_n / 1000.0 : 0., (double)r->age_max / 1000.0,
                 r->steps, st ? 100.0 * r->near_steps / st : 0., (unsigned long long)r->mo.n_interp, (unsigned long long)r->mo.n_extrap,
                 (unsigned long long)r->mo.n_hold, (unsigned long long)r->mo.n_snap, (double)r->mo.err_max, r->own_hit, r->own_stall,
-                r->glides, (double)r->glide_max, r->snaps, r->drive_steps, r->drive_snaps);
+                r->glides, (double)r->glide_max, r->snaps, r->drive_steps, r->drive_snaps, r->heard_frames);
     }
 }

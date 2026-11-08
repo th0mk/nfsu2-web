@@ -1,0 +1,36 @@
+# The other racer's engine in a multiplayer race from free roam, host side, with mprace_engines_b.txt: as
+# mprace_lobby_a.txt (a lobby, the trip to the game's LAN race, the AI drives), and in the race "roam cars" says how
+# each car is heard: the other player's car with its own engine's recordings at the rpm its own game sounds it
+# ("its own engine played (racecars.c) at N", against that game's own "player engine ... ctl rpm"), the game's AI
+# engine on it "silenced"; "roam cars expect" passes when every other player's car is heard so (runtime/racecars.c).
+# NFSU2_RACE_ENGINES=0 (test knob): the game's AI engines (the expect fails).
+#   node web/tools/roam-pair.mjs --seed <save tree> --a Ann:mprace_engines_a.txt --b Bob:mprace_engines_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPON_DRIFT_2 --env MP_PLAYERS=2      (seed: a stage 2 career)
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    dump spot_line
++0    log LOBBY open
++0    tap RETURN
++60   dump lobby_line
++0    roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++600  roam cars
++600  roam cars
++600  roam cars expect
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

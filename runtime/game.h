@@ -32,6 +32,7 @@
 #define G_RACESTATUS    0x008900d8u   /* the race status's event machine (FN_POSTEVENT's this): event 10, SwitchTrack, runs
                                        * free roam's setup (0x540780) again and the flow step (0x581820) loads its track */
 #define G_TRACKINFO     0x00883dacu   /* the loaded track's TrackInfo (0x128 bytes: +0 its name, +0x40 its region, L4RA ...) */
+#define G_VIEW1         0x00832e50u   /* eView 1 (player 1's): +0x40 its camera (+0x40 position, +0x50 forward) */
 
 /* ---- the career ---------------------------------------------------------- */
 #define G_CAREER        0x0085ad40u   /* the career: +0x8730 the career race being run (G_CAREER_RACE) */

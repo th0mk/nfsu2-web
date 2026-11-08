@@ -7,7 +7,8 @@
  * The game's memory is a 4 GB reservation of our own with only the pages a
  * test uses marked committed; the virtual LAN and racenet.c's list of the
  * racers are stand-ins, the clock a fake one.  Cases (we are slot 1):
- *   wire       our car goes to every racer: N2RS, our slot, the state as it is
+ *   wire       our car goes to every racer: N2RS, our slot, the state as it is,
+ *              the engine as our game sounds it in its extension
  *   stranger   an N2RS from an address that is not a racer: refused
  *   own-slot   one naming our slot: refused
  *   bound      (an older creator: no word on who drives which slot) a
@@ -25,6 +26,10 @@
  *              time, that car not drawn from its states
  *   honest     then every racer's own slot taken, each car from its own
  *   old-creator slots not known: the first named, as before
+ *   engine     a racer whose states carry its engine sounds with its own
+ *              (carsfx.c, at its rpm; its AI engine to be silenced), one
+ *              whose states carry none (an older game's) keeps the game's;
+ *              and the first stops once its states stop carrying one
  * Every case prints "PASS <case> ..." or "FAIL <case> ..."; exit 1 on a FAIL. */
 #include <stdint.h>
 #include <stdio.h>
@@ -70,6 +75,21 @@ static int g_applies, g_drivens;
 void dispatch_indirect(CPU *c, uint32_t addr);
 #include "../runtime/roam_core.c"
 #include "../runtime/racecars.c"
+/* roam_game.c's engines and carsfx.c (stand-ins): our engine as our game sounds it, a car's GIN files, what is played */
+void roam_game_engine_state(uint32_t car, rc_state *s){ (void)car; s->eng = 4321; s->eng_acc = 200; s->eng_dcl = 10; s->eng_base = 20; }
+int roam_game_engine_files(CPU *c, uint32_t ride, char gin[2][32], float *idle, float *most){
+    (void)c; (void)ride; snprintf(gin[0], 32, "GIN_A.gin"); snprintf(gin[1], 32, "GIN_B.gin"); *idle = 800.f; *most = 7000.f; return 1;
+}
+void roam_game_engine_sound(const char (*gin)[32], float idle, float most, const rc_pose *P, carsfx_state *st){
+    (void)idle; (void)most; st->gin[0] = gin[0]; st->gin[1] = gin[1]; st->eng = P->eng;
+}
+void roam_game_aieng_patch(void){}
+static int g_sfx_cars; static float g_sfx_eng;
+void carsfx_begin(const float *pos, const float *fwd, const float *vel){ (void)pos; (void)fwd; (void)vel; g_sfx_cars = 0; }
+void carsfx_car(uint32_t who, const char *name, const float *p, const float *v, const carsfx_state *st){
+    (void)who; (void)name; (void)p; (void)v; g_sfx_cars++; g_sfx_eng = st->eng;
+}
+void carsfx_end(void){}
 void dispatch_indirect(CPU *c, uint32_t addr){
     if (addr == FN_APPLY){
         uint32_t b = c->ecx, car = MR32(c->esp + 4u);
@@ -85,6 +105,8 @@ void dispatch_indirect(CPU *c, uint32_t addr){
 #define CAR_ME 0x10020000u
 #define CTL_A  0x10014000u   /* car A's network controller */
 #define PL     0x10030000u
+#define CAM    0x10032000u   /* player 1's camera (G_VIEW1 +0x40) */
+#define RIDE_A 0x10034000u   /* car A's ride */
 #define RC     0x10040000u
 #define STACK  0x00130000u
 #define IP_A   0x0a4d0002u
@@ -100,6 +122,8 @@ static void race_setup(void){
     for (unsigned i = 0; i < sizeof g / sizeof g[0]; i++) commit(g[i], 32);
     commit(W, 0x100); commit(CAR_A, 0xa00); commit(CAR_B, 0xa00); commit(CAR_ME, 0xa00); commit(CTL_A, 0x200);
     commit(PL, 16); commit(RC, 0x100); commit(STACK - 0x4000u, 0x8000u);
+    commit(G_VIEW1, 0x60); commit(CAM, 0x60); commit(RIDE_A, 0x900);
+    MR32(G_VIEW1 + 0x40u) = CAM; MR32(CAR_A + 0x10u) = RIDE_A;
     MR32(G_FLOW) = 6; MR32(G_GAMEMODE) = 0x200;
     MR32(G_WORLD) = W; MR32(W) = CAR_A; MR32(CAR_A) = CAR_B; MR32(CAR_B) = CAR_ME; MR32(CAR_ME) = W;
     MR32(G_PLAYER1) = PL; MR32(PL + 4u) = CAR_ME;
@@ -121,15 +145,18 @@ static void frame(void){
         for (uint32_t k = 0; k < 3; k++) MRF32(car + CAR_POS + 4u * k) += MRF32(car + CAR_VEL + 4u * k) * 0.016667f;
     racecars_frame(&g_c);
 }
-/* an N2RS of slot at p moving v (x), its stamp t_us, echoing our stamp echo (held) */
+/* an N2RS of slot at p moving v (x), its stamp t_us, echoing our stamp echo (held); with g_n2rs_eng its engine at
+ * that rpm (the sound's scale) in the extension */
+static uint16_t g_n2rs_eng;
 static int n2rs(uint8_t *m, int slot, uint32_t t_us, float px, float vx, uint32_t tx, uint32_t echo, uint32_t held){
     rc_state s; memset(&s, 0, sizeof s);
     s.t_us = t_us; s.p[0] = px; s.p[1] = 210.f; s.p[2] = 5.f; s.v[0] = vx; s.q[3] = 1.f; s.throttle = 1.f;
+    s.ext = g_n2rs_eng != 0; s.eng = g_n2rs_eng; s.eng_acc = 255;
     rc_w w; rc_w_init(&w, m, 256);
-    rc_putb(&w, "N2RS", 4); rc_put8(&w, 1); rc_put8(&w, 0); rc_put8(&w, (uint32_t)slot); rc_put8(&w, 1);
+    rc_putb(&w, "N2RS", 4); rc_put8(&w, 1); rc_put8(&w, s.ext); rc_put8(&w, (uint32_t)slot); rc_put8(&w, 1);
     rc_put8(&w, 1); rc_put8(&w, 1); rc_put8(&w, RC_ST_ROAM); rc_put8(&w, 0);
     rc_put32(&w, tx); rc_put32(&w, echo); rc_put32(&w, held);
-    rc_state_put(&w, &s, 0);
+    rc_state_put(&w, &s, s.ext);
     return (int)w.n;
 }
 static uint32_t now32(void){ return (uint32_t)(g_fake_ns / 1000u); }
@@ -155,14 +182,14 @@ int main(void){
     int sent_a = 0, sent_b = 0, okm = 1;
     for (int i = 0; i < g_nout; i++){
         sent_a += g_out[i].to == IP_A; sent_b += g_out[i].to == IP_B;
-        okm &= !memcmp(g_out[i].m, "N2RS", 4) && g_out[i].m[4] == 1 && g_out[i].m[6] == 1 && g_out[i].m[7] == 1;
+        okm &= !memcmp(g_out[i].m, "N2RS", 4) && g_out[i].m[4] == 1 && g_out[i].m[5] == 1 && g_out[i].m[6] == 1 && g_out[i].m[7] == 1;
     }
     rc_state s; rc_r rd; int dec = -1;
-    if (g_nout){ rc_r_init(&rd, g_out[g_nout - 1].m + 24, (uint32_t)g_out[g_nout - 1].n - 24u); dec = rc_state_get(&rd, &s, 0); }
+    if (g_nout){ rc_r_init(&rd, g_out[g_nout - 1].m + 24, (uint32_t)g_out[g_nout - 1].n - 24u); dec = rc_state_get(&rd, &s, 1); }
     CHECK(sent_a >= 1 && sent_b >= 1 && okm && dec == RC_OK && fabsf(s.p[0] - MRF32(CAR_ME + CAR_POS)) < 0.01f && fabsf(s.v[0] - 30.f) < 0.5f &&
-          fabsf(s.q[3]) > 0.999f, "wire: to A %d, to B %d, header %d, the state %d at x %.2f (car %.2f), vx %.2f, q.w %.3f",
-          sent_a, sent_b, okm, dec, dec == RC_OK ? (double)s.p[0] : 0., (double)MRF32(CAR_ME + CAR_POS), dec == RC_OK ? (double)s.v[0] : 0.,
-          dec == RC_OK ? (double)s.q[3] : 0.);
+          fabsf(s.q[3]) > 0.999f && s.eng == 4321 && s.eng_acc == 200, "wire: to A %d, to B %d, header %d, the state %d at x %.2f (car %.2f), "
+          "vx %.2f, q.w %.3f, engine %u (pulling %u)", sent_a, sent_b, okm, dec, dec == RC_OK ? (double)s.p[0] : 0., (double)MRF32(CAR_ME + CAR_POS),
+          dec == RC_OK ? (double)s.v[0] : 0., dec == RC_OK ? (double)s.q[3] : 0., dec == RC_OK ? s.eng : 0u, dec == RC_OK ? s.eng_acc : 0u);
     uint32_t our_tx = g_nout ? (uint32_t)g_out[g_nout - 1].m[12] | (uint32_t)g_out[g_nout - 1].m[13] << 8 | (uint32_t)g_out[g_nout - 1].m[14] << 16 |
                                (uint32_t)g_out[g_nout - 1].m[15] << 24 : 0;
 
@@ -305,6 +332,30 @@ int main(void){
     Rc *a3 = rc_ip(IP_A), *b3 = rc_ip(IP_B);
     CHECK(b3 && b3->slot == 2 && a3 && a3->slot == 3, "old-creator: B naming slot 2 first takes it %d, A then slot 3 %d",
           b3 && b3->slot == 2, a3 && a3->slot == 3);
+
+    /* engine: the next race; A's states carry its engine, B's none (an older game's) */
+    MR32(RC) = 0; frame(); MR32(RC) = RC_RACING; frame();
+    for (int k = 0; k < 20; k++){
+        frame();
+        uint32_t t = 5000000 + (uint32_t)k * 16667u;
+        g_n2rs_eng = (uint16_t)(5000 + 10 * k); racecars_heard(m, n2rs(m, 2, t, 120.f + 0.5f * (float)k, 30.f, now32(), 0, 0), IP_A);
+        g_n2rs_eng = 0; racecars_heard(m, n2rs(m, 3, t, 400.f, 0.f, now32(), 0, 0), IP_B);
+        draw(CAR_A, CTL_A); draw(CAR_B, 0);
+    }
+    frame();
+    float ha = racecars_engine_heard(CAR_A), hb = racecars_engine_heard(CAR_B);
+    CHECK(g_sfx_cars == 1 && ha > 5100.f && ha < 5200.f && fabsf(g_sfx_eng - ha) < 0.5f && hb == 0.f,
+          "engine: %d car(s) played, A's at %.0f (its last states 5100 .. 5190), carsfx.c given %.0f; B's %.0f (none)", g_sfx_cars,
+          (double)ha, (double)g_sfx_eng, (double)hb);
+    /* ...then A's states without one (a game of before put on mid-race, say): back to the game's */
+    for (int k = 20; k < 40; k++){
+        frame();
+        racecars_heard(m, n2rs(m, 2, 5000000 + (uint32_t)k * 16667u, 120.f + 0.5f * (float)k, 30.f, now32(), 0, 0), IP_A);
+        draw(CAR_A, CTL_A);
+    }
+    frame();
+    CHECK(g_sfx_cars == 0 && racecars_engine_heard(CAR_A) == 0.f, "engine-off: %d car(s) played, A's %.0f", g_sfx_cars,
+          (double)racecars_engine_heard(CAR_A));
 
     printf("racecars unit tests: %s\n", g_fail ? "FAILED" : "all passed");
     return g_fail;
