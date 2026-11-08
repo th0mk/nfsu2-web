@@ -16,6 +16,9 @@
 //   would not copy), there and in the page menu's Friends
 //   past 20 lines in pages (‹ 1 of 3 › under the list) with Filter on the row's right; the page menu's Friends
 //   names 10 a line in the Online lobby and offline, then how many more
+// - a friend on a race track (tracks.ts): its world as its room's hash has it (the main world's tracks too, whatever
+//   name came with it; none for a name that leads elsewhere), the track in its notice (Join goes there) and in the
+//   lists, a race invite only to one where the player drives
 // - the start page's Your Discord: the server's username in it; one typed is sent as Discord allows one (discordName),
 //   else refused on the page; what the server refused; none takes it away
 // - race invites: an Invite in the page menu's Friends for each friend in free roam in the player's room while the
@@ -40,7 +43,7 @@ import { pickBrowser } from '../tools/browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const js = (await esbuild.build({
-  stdin: { contents: `export * from './web/src/app/friends.ts'; export * from './web/src/app/messages.ts'; export { crewControl } from './web/src/app/settings-ui.ts';`, resolveDir: ROOT, loader: 'ts' },
+  stdin: { contents: `export * from './web/src/app/friends.ts'; export * from './web/src/app/messages.ts'; export { crewControl } from './web/src/app/settings-ui.ts'; export { trackRoom } from './web/src/app/tracks.ts'; export { roomHash } from './web/src/app/players.ts';`, resolveDir: ROOT, loader: 'ts' },
   bundle: true, format: 'iife', globalName: 'F', write: false, platform: 'browser',
 })).outputFiles[0].text;
 
@@ -54,7 +57,7 @@ async function page() {
   await p.addScriptTag({ content: js });
   await p.evaluate(() => {
     const w = /** @type {any} */ (window);
-    w.sent = []; w.toasts = []; w.notices = []; w.placed = 0; w.columned = 0; w.room = ''; w.hosted = null; w.joined = [];
+    w.sent = []; w.toasts = []; w.notices = []; w.placed = 0; w.columned = 0; w.room = ''; w.spot = 0; w.hosted = null; w.joined = [];
     // /friends (its answers and requests by name): what it was asked, and the lists it answers with (null: no answer)
     w.apiActs = []; w.apiLists = { me: 'Al_', friends: [], asks: [], sent: [], mail: [], done: 'friends' }; w.driving = true;
     w.crews = []; w.crewJoins = []; w.crewsChanged = 0; w.crewAsked = []; w.crewDone = 'sent';
@@ -63,7 +66,7 @@ async function page() {
       crew: async (name, crew, room) => { w.crewAsked.push([name, crew, room]); return w.crewDone ? { ...w.apiLists, done: w.crewDone } : null; },
     };
     w.prompt = new w.F.FriendPrompt(document.getElementById('stage'), {
-      send: m => { w.sent.push(m); return true; }, room: () => w.room, log: () => {}, place: () => { w.columned++; },
+      send: m => { w.sent.push(m); return true; }, room: () => w.room, spot: () => w.spot, log: () => {}, place: () => { w.columned++; },
       toast: (s, o) => w.toasts.push(o?.hot ? `[hot] ${s}` : s),
       notice: (name, text, here) => w.notices.push(here ? [name, text, 'here'] : [name, text]), menu: () => 'the menu (F9)', placed: () => { w.placed++; },
       hosted: () => w.hosted, joinLobby: (host, lobby, race) => { w.joined.push([host, lobby, race]); return true; },
@@ -392,6 +395,60 @@ test('where the friends play: notices, and the page menu\'s Friends', async () =
   // asked again when the menu's Friends opens
   await p.evaluate(() => /** @type {any} */ (window).prompt.askWhere());
   assert.deepEqual((await sent(p)).filter(m => m.op === 'where'), [{ op: 'where' }]);
+  await p.close();
+});
+
+test('friends on race tracks: their world, the track in the notice and the menu, Join there, race invites', async () => {
+  const p = await page();
+  await raf(p);
+  await sent(p);
+  await server(p, { op: 'list', me: 'Al_', friends: ['Gus', 'Hal', 'Ivy', 'Jo'], asks: [] });
+  // Gus on the main world's Stadium drift (a server of before named that world "player"), Hal on World 2's Street X
+  // Parkade, Ivy in World 3 under the name of a world it left, Jo in the main world's city
+  const where = await p.evaluate(() => {
+    const F = /** @type {any} */ (window).F, w2 = F.roomHash('World 2');
+    return [
+      { name: 'Gus', where: 'roam', room: 'player', at: F.trackRoom(0, 4311) },
+      { name: 'Hal', where: 'roam', room: 'World 2', at: F.trackRoom(w2, 4605) },
+      { name: 'Ivy', where: 'roam', room: 'Blue Room', at: F.roomHash('World 3') },
+      { name: 'Jo', where: 'roam', room: '', at: 0 },
+    ];
+  });
+  await server(p, { op: 'where', friends: where });
+  assert.deepEqual(await notices(p), [
+    ['Gus', 'Your friend Gus is at Drift: Stadium. Join in the menu (F9)', 'here'],
+    ['Hal', 'Your friend Hal is at Street X: Parkade in World 2. Join in the menu (F9)'],
+    ['Ivy', 'Your friend Ivy is in free roam', 'here'],
+    ['Jo', 'Your friend Jo is in free roam', 'here'],
+  ], 'the main world from its hash, not a world named "player"; a world name that leads elsewhere: none');
+  const pop = () => p.evaluate(() => {
+    const w = /** @type {any} */ (window), box = document.createElement('div'), joins = [];
+    document.body.append(box);
+    w.prompt.drawPlaced(box, f => joins.push([f.name, f.room ?? null, f.at]), true);
+    const rows = [...box.querySelectorAll('.fl li')].map(li => [li.querySelector('.fl-name').firstChild.textContent, li.querySelector('.fl-st').textContent,
+      [...li.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).join('|')]);
+    for (const b of box.querySelectorAll('button[aria-label="Join"]')) b.click();
+    box.remove();
+    return { rows, joins };
+  });
+  const { rows, joins } = await pop();
+  assert.deepEqual(rows, [
+    ['Gus', 'your world · Drift: Stadium', 'Join'], ['Hal', 'World 2 · Street X: Parkade', 'Join'], ['Ivy', 'free roam', 'Join'],
+    ['Jo', 'your world', 'Join'],
+  ]);
+  assert.deepEqual(joins.map(j => j.slice(0, 2)), [['Gus', ''], ['Hal', 'World 2'], ['Ivy', null], ['Jo', '']],
+    'Join takes the world the friend is in (none: the game looks for it where the player is)');
+  // hosting a race: an Invite for the friend where the player drives, the city or a track (the server's hub links
+  // only those)
+  await p.evaluate(() => { /** @type {any} */ (window).hosted = { kind: 'sprint', stage: 2, n: 1, max: 6 }; });
+  const invites = async () => (await pop()).rows.filter(r => r[2].includes('Invite')).map(r => r[0]);
+  assert.deepEqual(await invites(), ['Jo'], 'in the city: Jo, not Gus on its track');
+  await p.evaluate(() => { /** @type {any} */ (window).spot = 3; });
+  assert.deepEqual(await invites(), ['Gus'], 'on the Stadium drift: Gus');
+  // the start page's line for one (as /friends's answer is read: Gus in the main world, Ivy's world none)
+  const lines = await p.evaluate(ws => ws.map(f => /** @type {any} */ (window).F.whereText(f)),
+    where.map(f => f.name === 'Gus' ? { ...f, room: '' } : f.name === 'Ivy' ? { name: f.name, where: f.where, at: f.at } : f));
+  assert.deepEqual(lines, ['free roam · Drift: Stadium', 'free roam · World 2 · Street X: Parkade', 'free roam', 'free roam']);
   await p.close();
 });
 

@@ -2731,8 +2731,8 @@ export async function boot() {
   touch = new TouchControls($('#stage'), { toast, log: logLine, chat: () => quickChat.toggle(), chatOn: () => quickChat.enabled,
     settings: () => openHelp('keys') });
   friendPrompt = new FriendPrompt($('#stage'), {
-    send: m => session?.net?.friend?.(m) ?? false, room: () => roamRoom ?? '', log: logLine, place: placeNotices,
-    toast: (s, o) => toast(o?.name ? named(s, o.name) : s, 5000, false, o?.hot ? 'hot' : ''),
+    send: m => session?.net?.friend?.(m) ?? false, room: () => roamRoom ?? '', spot: () => travelNow()?.at ?? null,
+    log: logLine, place: placeNotices, toast: (s, o) => toast(o?.name ? named(s, o.name) : s, 5000, false, o?.hot ? 'hot' : ''),
     notice: friendNotice, menu: menuName, placed: () => { if (menuOn('friends')) drawPopFriends(); },
     hosted: () => lobbyPanel.hosted(), joinLobby: (host, lobby, race) => session?.input?.lobby?.(LB_JOIN, host, lobby, race) ?? false,
     api: friendsApi, driving: () => quickChat.driving(),

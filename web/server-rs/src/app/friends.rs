@@ -43,10 +43,10 @@
 //! On the start page (and the game's page, for a request from afar: its Friends popup and its line), with the
 //! keyphrase's token as /names takes it (this server's own pages only):
 //! - GET /friends -> {"me":<name>|null,"friends":[{"name","where":"roam"|"online"|"","room":<its room's name, "" for
-//!   the room of everyone; none when not in free roam or its page did not tell it>,"at":<its room's hash in free roam,
-//!   its world's or a race track's spot's there (nfsu2_roam::track_room)>,"contact":<its Discord username, when it
-//!   gave one>}],"asks":[names],"sent":[names],"mail":[the messages that waited, as above],"contact":<the
-//!   player's own Discord username>|null}
+//!   the room of everyone (its city or one of its race tracks: nfsu2_roam::main_world); none when not in free roam or
+//!   its page did not tell it>,"at":<its room's hash in free roam, its world's or a race track's spot's there
+//!   (nfsu2_roam::track_room)>,"contact":<its Discord username, when it gave one>}],"asks":[names],"sent":[names],
+//!   "mail":[the messages that waited, as above],"contact":<the player's own Discord username>|null}
 //! - POST /friends {"op":"accept"|"decline"|"remove"|"block","name":...}, {"op":"msg","name":...,"body":...},
 //!   {"op":"ask","name":<a player's name, as typed>} (a request by name: any claimed name, wherever its player is; its
 //!   open pages hear of it, as of an accepted request, and on friends both players' open pages get their lists), or {"op":"discord","name":<the player's Discord username, as typed; "" none>} (its
@@ -431,7 +431,9 @@ impl Friends {
                 };
                 m.insert("where".into(), place.into());
                 match &w {
-                    Some(w) if w.room == 0 => {
+                    // (the main world's, on one of its race tracks too: its page names it "", which a display name's
+                    // tidying would make "player")
+                    Some(w) if nfsu2_roam::main_world(w.room) => {
                         m.insert("room".into(), "".into());
                     }
                     Some(nfsu2_roam::Whereabouts { room_name: Some(n), .. }) => {

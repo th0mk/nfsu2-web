@@ -3,8 +3,8 @@
 // - a spot's room: the world's room hash with the spot's key mixed in, as roam_game.c room_at makes it (uint32 maths:
 //   these numbers are the C's), never 0; the nine spots' rooms in travel.c's order
 // - the game's status "travel": where the car is and why a trip cannot go now, or no trips at all
-// - a friend's race track from the server's answer (its world's name, its room's hash), and the game's word on a trip
-//   to a friend ("travel_said")
+// - a friend's race track from the server's answer (its world's name, its room's hash), its world's name held against
+//   that hash, and the game's word on a trip to a friend ("travel_said")
 // The module is bundled from web/src with esbuild, as web/test/worlds.test.mjs does.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -60,6 +60,18 @@ test('a friend\'s race track, from its world\'s name and its room\'s hash', () =
   assert.equal(T.friendSpot(undefined, T.trackRoom(0, 4701)), 2, 'no world\'s name: the main world\'s');
   assert.equal(T.friendSpot('World 2', T.trackRoom(0, 4311)), 0, 'another world\'s spot: not this one\'s');
   assert.equal(T.friendSpot('World 2', undefined), 0, 'a server of before: no hash');
+});
+
+test('a friend\'s world, held against its room\'s hash', () => {
+  const w2 = T.P.roomHash('World 2');
+  assert.equal(T.friendRoom('', 0), '', 'the main world\'s city');
+  assert.equal(T.friendRoom('player', T.trackRoom(0, 4311)), '', 'the main world\'s track, whatever name came with it');
+  assert.equal(T.friendRoom(undefined, T.trackRoom(0, 4711)), '', 'the main world\'s track, no name');
+  assert.equal(T.friendRoom('World 2', w2), 'World 2');
+  assert.equal(T.friendRoom('world2', T.trackRoom(w2, 4605)), 'world2', 'its spot, the name as the game hashes it');
+  assert.equal(T.friendRoom('Blue Room', w2), undefined, 'a name that leads elsewhere: none');
+  assert.equal(T.friendRoom(undefined, w2), undefined, 'no name');
+  assert.equal(T.friendRoom('Blue Room', undefined), 'Blue Room', 'a server of before: no hash');
 });
 
 test('the game\'s word on a trip to a friend, once each', () => {

@@ -1426,6 +1426,15 @@ async fn free_roams_friends_through_the_server() {
     let k = n(&al);
     al.text(r#"{"t":"friend","op":"where"}"#);
     assert_eq!(first(&al, "where", k).await["friends"], serde_json::json!([{ "name": "Bo_", "where": "roam", "room": "", "at": 0 }]));
+    // Bo's page names its room, the room of everyone ("", which a display name's tidying makes "player"), and Bo drives
+    // on the main world's Stadium drift: still the room of everyone, at that spot's room (Al's game says its HELLO
+    // again too, as a game does every few seconds: one silent for gone_ms is off the hub)
+    bo.text(r#"{"t":"room","name":""}"#);
+    let drift = nfsu2_roam::track_room(0, 4311);
+    bo.binary(to_hub(&roam_hello_named_in(702, b"Bo", drift)));
+    al.binary(to_hub(&roam_hello_named(701, b"Al")));
+    sleep(1500).await;
+    assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "roam", "room": "", "at": drift }]));
     bo.close().await;
     sleep(1200).await;
     assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "" }]));

@@ -1322,6 +1322,8 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "В свободной езде соприкоснитесь передними бамперами с игроком на 3 с, чтобы добавить его.",
   "Your friend {name} is in free roam": "Ваш друг {name} в свободной езде",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Ваш друг {name} в свободной езде ({world}): присоединиться можно в {menu}",
+  "Your friend {name} is at {track}. Join in {menu}": "Ваш друг {name} на трассе ({track}): присоединиться можно в {menu}",
+  "Your friend {name} is at {track} in {world}. Join in {menu}": "Ваш друг {name} на трассе ({track}, {world}): присоединиться можно в {menu}",
   "None of your friends is in free roam now.": "Никого из ваших друзей сейчас нет в свободной езде.",
   "In the Online lobby: {names}.": "В лобби игры через Интернет: {names}.",
   "Offline: {names}.": "Офлайн: {names}.",

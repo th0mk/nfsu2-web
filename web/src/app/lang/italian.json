@@ -1297,6 +1297,8 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "In modalità Esplora, tocca per 3 s il paraurti anteriore di un giocatore con il tuo per aggiungerlo.",
   "Your friend {name} is in free roam": "Il tuo amico {name} è in modalità Esplora",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Il tuo amico {name} è in modalità Esplora in {world}: raggiungilo tramite {menu}",
+  "Your friend {name} is at {track}. Join in {menu}": "Il tuo amico {name} è sul tracciato {track}. Raggiungilo tramite {menu}",
+  "Your friend {name} is at {track} in {world}. Join in {menu}": "Il tuo amico {name} è sul tracciato {track}, {world}. Raggiungilo tramite {menu}",
   "None of your friends is in free roam now.": "Al momento nessuno dei tuoi amici è in modalità Esplora.",
   "In the Online lobby: {names}.": "Nella sala d'attesa Online: {names}.",
   "Offline: {names}.": "Offline: {names}.",

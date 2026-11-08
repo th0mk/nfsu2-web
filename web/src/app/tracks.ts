@@ -38,6 +38,18 @@ export function friendSpot(room: string | undefined, at: number | undefined): nu
 }
 /** the rooms /players?spots= is asked for, in TRACKS' order, in the world whose room's hash is base */
 export const trackRooms = (base: number): number[] => TRACKS.map(s => trackRoom(base, s.key));
+/** A friend's world as the server's whereabouts name it, held against its room's hash (`at`: its world's, or a race
+ *  track's spot's there): '' the main world (at 0, or one of its spots, whatever name came with it); the name when
+ *  its hash leads to at; none when it does not (a name its page told before it moved on, a server's stand-in for a
+ *  name it would not keep), so no Join takes the player to a world the friend is not in.  Without at (a server of
+ *  before), the name as it came. */
+export function friendRoom(room: string | undefined, at: number | undefined): string | undefined {
+  if (typeof at !== 'number') return room;
+  if (at === 0 || trackRooms(0).includes(at)) return '';
+  if (room === undefined) return undefined;
+  const base = roomHash(room);
+  return base === at || trackRooms(base).includes(at) ? room : undefined;
+}
 
 /** why a trip cannot go now (travel.c WHY_*): 0 it can */
 export const WHY_GOING = 6, WHY_COOP = 7;

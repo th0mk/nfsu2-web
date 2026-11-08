@@ -1272,6 +1272,8 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "I läget Utforska: håll främre stötfångarna mot varandra i 3 s för att lägga till en spelare.",
   "Your friend {name} is in free roam": "Din vän {name} är i läget Utforska",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Din vän {name} är i läget Utforska, {world}: Gå med via {menu}",
+  "Your friend {name} is at {track}. Join in {menu}": "Din vän {name} är på banan {track}. Gå med via {menu}",
+  "Your friend {name} is at {track} in {world}. Join in {menu}": "Din vän {name} är på banan {track}, {world}. Gå med via {menu}",
   "None of your friends is in free roam now.": "Ingen av dina vänner är i läget Utforska nu.",
   "In the Online lobby: {names}.": "I Online-lobbyn: {names}.",
   "Offline: {names}.": "Offline: {names}.",

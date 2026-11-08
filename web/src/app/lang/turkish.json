@@ -1206,6 +1206,8 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "Bir oyuncuyu eklemek için serbest sürüşte ön tamponunu onunkine 3 sn değdir.",
   "Your friend {name} is in free roam": "Arkadaşın {name} serbest sürüşte",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Arkadaşın {name} serbest sürüşte ({world}): {menu} içinden katıl",
+  "Your friend {name} is at {track}. Join in {menu}": "Arkadaşın {name} pistte ({track}): {menu} içinden katıl",
+  "Your friend {name} is at {track} in {world}. Join in {menu}": "Arkadaşın {name} pistte ({track}, {world}): {menu} içinden katıl",
   "None of your friends is in free roam now.": "Şu an hiçbir arkadaşın serbest sürüşte değil.",
   "In the Online lobby: {names}.": "Çevrimiçi lobide: {names}.",
   "Offline: {names}.": "Çevrimdışı: {names}.",

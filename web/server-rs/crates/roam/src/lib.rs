@@ -167,6 +167,12 @@ pub fn track_room(base: u32, key: u32) -> u32 {
     }
 }
 
+/// whether room `room` is in the main world (the room of everyone): its city's, 0, or one of its race tracks' spots'
+/// (`track_room`).  A page names its other worlds' rooms (`Hub::room_name`); this one has no name.
+pub fn main_world(room: u32) -> bool {
+    room == 0 || TRACK_KEYS.iter().any(|&k| track_room(0, k) == room)
+}
+
 /// how many of free roam play in the world of room `room` (counts: `Hub::in_rooms`), its race tracks' spots too
 pub fn world_count(counts: &HashMap<u32, usize>, room: u32) -> usize {
     let n = |r: u32| counts.get(&r).copied().unwrap_or(0);
@@ -713,6 +719,8 @@ mod tests {
         assert_eq!(world_count(&counts, 0), 8);
         assert_eq!(world_count(&counts, w2), 7);
         assert_eq!(world_count(&counts, 0xBEEF_0003), 0);
+        assert!(main_world(0) && main_world(track_room(0, 4711)) && main_world(track_room(0, 4605)));
+        assert!(!main_world(w2) && !main_world(track_room(w2, 4311)));
     }
 
     // a hub whose thread is stuck holds MAX_PENDING frames and leaves out the rest; each may keep

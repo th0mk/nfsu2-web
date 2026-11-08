@@ -1297,6 +1297,8 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "En circulación libre, junta tu parachoques delantero con el de un jugador durante 3 s para añadirlo.",
   "Your friend {name} is in free roam": "Tu amigo {name} está en circulación libre",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Tu amigo {name} está en circulación libre en {world}: únete desde {menu}",
+  "Your friend {name} is at {track}. Join in {menu}": "Tu amigo {name} está en el circuito {track}. Únete desde {menu}",
+  "Your friend {name} is at {track} in {world}. Join in {menu}": "Tu amigo {name} está en el circuito {track}, {world}. Únete desde {menu}",
   "None of your friends is in free roam now.": "Ahora mismo ninguno de tus amigos está en circulación libre.",
   "In the Online lobby: {names}.": "En el punto de encuentro Online: {names}.",
   "Offline: {names}.": "Sin conexión: {names}.",

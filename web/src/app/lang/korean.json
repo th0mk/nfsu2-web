@@ -1197,6 +1197,8 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "자유 주행에서 앞 범퍼를 3초 동안 맞대면 친구로 추가할 수 있어요.",
   "Your friend {name} is in free roam": "친구 {name} 님이 자유 주행 중이에요",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "친구 {name} 님이 {world}에서 자유 주행 중이에요: {menu}에서 참가할 수 있어요",
+  "Your friend {name} is at {track}. Join in {menu}": "친구 {name} 님이 '{track}'에 있어요: {menu}에서 참가할 수 있어요",
+  "Your friend {name} is at {track} in {world}. Join in {menu}": "친구 {name} 님이 {world}의 '{track}'에 있어요: {menu}에서 참가할 수 있어요",
   "None of your friends is in free roam now.": "지금 자유 주행 중인 친구가 없어요.",
   "In the Online lobby: {names}.": "온라인 로비: {names}.",
   "Offline: {names}.": "오프라인: {names}.",

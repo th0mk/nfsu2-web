@@ -145,6 +145,8 @@
   "A friends list is full (250 at most)": "Jeden zo zoznamov priateľov je plný (najviac 250)",
   "Your friend {name} is in free roam": "Tvoj priateľ {name} je vo voľnej jazde",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Tvoj priateľ {name} je vo voľnej jazde ({world}): pridaj sa {menu}",
+  "Your friend {name} is at {track}. Join in {menu}": "Tvoj priateľ {name} je na trati ({track}): pridaj sa {menu}",
+  "Your friend {name} is at {track} in {world}. Join in {menu}": "Tvoj priateľ {name} je na trati ({track}, {world}): pridaj sa {menu}",
   "Checking.": "Kontrolujem.",
   "Join": "Pridať sa",
   "None of your friends is in free roam now.": "Nikto z tvojich priateľov teraz nie je vo voľnej jazde.",

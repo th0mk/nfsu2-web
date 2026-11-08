@@ -1322,6 +1322,8 @@
   "Touch front bumpers in free roam for 3 s to add a player.": "Na przejażdżce zetknij się przednim zderzakiem z graczem na 3 s, aby go dodać.",
   "Your friend {name} is in free roam": "Twój znajomy {name} jest na przejażdżce",
   "Your friend {name} is in free roam in {world}: Join in {menu}": "Twój znajomy {name} jest na przejażdżce ({world}): dołącz w {menu}",
+  "Your friend {name} is at {track}. Join in {menu}": "Twój znajomy {name} jest na torze ({track}): dołącz w {menu}",
+  "Your friend {name} is at {track} in {world}. Join in {menu}": "Twój znajomy {name} jest na torze ({track}, {world}): dołącz w {menu}",
   "None of your friends is in free roam now.": "Nikt z twoich znajomych nie jest teraz na przejażdżce.",
   "In the Online lobby: {names}.": "W poczekalni sieciowej: {names}.",
   "Offline: {names}.": "Offline: {names}.",
