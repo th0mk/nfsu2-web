@@ -1855,14 +1855,8 @@ impl Core {
     fn msg_slur(&mut self, mk: &str, who: &str, body: &str, group: Option<&Arc<str>>) -> bool {
         let Some(word) = nfsu2_names::chat_slur(body).map(str::to_string) else { return false };
         let (now, l) = (self.bnow(), self.lobby.l);
-        let x = self.buddies.msg_slurs.entry(mk.to_string()).or_default();
-        x.0.retain(|t| now - t < l.slur_window_ms);
-        x.0.push(now);
-        let muted = x.0.len() as f64 >= l.slur_lines;
-        if muted {
-            x.1 = now + l.slur_mute_ms;
-            x.0.clear();
-        }
+        let (times, until) = self.buddies.msg_slurs.entry(mk.to_string()).or_default();
+        let muted = l.slur_said(times, until, now);
         let off = nfsu2_util::js::number_to_string(l.slur_mute_ms / 1000.0);
         let then = if muted { format!("; messages off for {off} s") } else { String::new() };
         let word = serde_json::to_string(&word).expect("a string");

@@ -179,6 +179,22 @@ impl Default for Limits {
     }
 }
 
+impl Limits {
+    /// One more line that reads as a slur at `now` (a chat line, a friend's message), `times` its sender's of the last
+    /// slur_window_ms: slur_lines of them mute the sender (`until`: now + slur_mute_ms) and the count starts again.
+    /// True: muted now
+    pub fn slur_said(&self, times: &mut Vec<f64>, until: &mut f64, now: f64) -> bool {
+        times.retain(|t| now - t < self.slur_window_ms);
+        times.push(now);
+        let muted = times.len() as f64 >= self.slur_lines;
+        if muted {
+            *until = now + self.slur_mute_ms;
+            times.clear();
+        }
+        muted
+    }
+}
+
 /// the rooms everyone shares: a lounge and one per race type
 pub const ROOMS: [&str; 7] = ["Lounge", "Circuit", "Sprint", "Drift", "Drag", "StreetX", "URL"];
 const ROOM_LIMIT: usize = 50;
@@ -2260,13 +2276,7 @@ impl Core {
         if let Some(word) = &slur {
             let l = self.lobby.l;
             let x = self.lobby.sm(s);
-            x.slurs.retain(|t| now - t < l.slur_window_ms);
-            x.slurs.push(now);
-            let muted = x.slurs.len() as f64 >= l.slur_lines;
-            if muted {
-                x.mute_until = now + l.slur_mute_ms;
-                x.slurs.clear();
-            }
+            let muted = l.slur_said(&mut x.slurs, &mut x.mute_until, now);
             let then = if muted { format!("; muted for {} s", js::number_to_string(l.slur_mute_ms / 1000.0)) } else { String::new() };
             let word = serde_json::to_string(word).expect("a string");
             self.llog(&format!("[online] {}: a line with {word} in it, shown to no one else{then}", self.who(s)), s);
