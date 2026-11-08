@@ -491,7 +491,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # The game's own Full Scene Anti-Aliasing (Options > Display > Customize
 # Display Settings), drawn at 4 samples: smoother edges for more of the
 # graphics' work; a new player on a computer starts with it on.  off = not
-# offered (the option stays greyed out).  Phones: off.  [NFSU2_FSAA]
+# offered (the option stays greyed out).  Phones, and computers with AMD
+# Vega (GCN-5) or Qualcomm graphics: off.  [NFSU2_FSAA]
 #fsaa = on
 # Sharper textures in the distance (roads, their lines, building fronts):
 # anisotropic filtering where the game asks for it, which the original

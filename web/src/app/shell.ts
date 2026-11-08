@@ -399,7 +399,8 @@ async function askCloud(): Promise<boolean> {
  * playing without saving; at a Play where cloud saves were asked, the next one.
  */
 async function askFsaa() {
-  if (testPage() || deviceKind() !== 'pc') return;
+  // (not where it is not offered: settings.ini's fsaa, or this computer's graphics, device.ts fsaaFails)
+  if (testPage() || deviceKind() !== 'pc' || resolved().env.NFSU2_FSAA === '0') return;
   const text = await readText(SAVE, 'registry.txt').catch(() => null);
   if (text === null || !fsaaAsk(text)) return;
   const body = document.createElement('div');

@@ -129,6 +129,24 @@ test("the guest heap's window: computers only, not Safari, not under 8 GB where 
   assert.equal(heapWindow('pc', chromeWin, 8, 'Windows'), true);
 });
 
+test("the game's Full Scene Anti-Aliasing: not offered on the computers' graphics it broke (AMD GCN-5, Qualcomm)", () => {
+  Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0', maxTouchPoints: 0, hardwareConcurrency: 12 }, configurable: true, writable: true });
+  globalThis.screen = { width: 1366, height: 768 };
+  globalThis.matchMedia = () => ({ matches: false });
+  try {
+    noteGraphics(undefined);
+    assert.equal(deviceDefaults().fsaa, undefined, 'before the graphics are known: the file\'s default');
+    noteGraphics('amd gcn-5');
+    assert.equal(deviceDefaults().fsaa, 'off', 'a Ryzen 5 5600GT: the graphics gone 3 frames in');
+    noteGraphics('qualcomm adreno-7xx');
+    assert.equal(deviceDefaults().fsaa, 'off', 'a Snapdragon laptop: scrambled blocks');
+    for (const g of ['amd rdna-2', 'amd gcn-4', 'nvidia lovelace', 'intel gen-12lp', 'apple metal-3']) {
+      noteGraphics(g);
+      assert.equal(deviceDefaults().fsaa, undefined, g);
+    }
+  } finally { noteGraphics(''); }
+});
+
 test('full screen on a phone, but not where PowerVR B-Series graphics stop in it (POCO M7 Pro: the window works)', () => {
   Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'Mozilla/5.0 (Linux; Android 16; 2412DPC0AG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Mobile Safari/537.36', maxTouchPoints: 5, hardwareConcurrency: 8 }, configurable: true, writable: true });
   globalThis.screen = { width: 393, height: 873 };
