@@ -513,6 +513,7 @@
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Гра вже запущена в іншій вкладці. Перейдіть до неї або закрийте її — тоді керування перейме ця сторінка.",
   "Loading the game.": "Завантаження гри.",
   "Press Play to start.": "Натисніть «Грати», щоб почати.",
+  "Play career to join others in free roam.": "Грайте в кар'єрі, щоб приєднатися до інших у вільній їзді.",
   "Ready": "Готово",
   "No connection to the server: you can play, but not with others. {press}": "Немає зв'язку із сервером: грати можна, але не з іншими. {press}",
   "The game": "Гра",

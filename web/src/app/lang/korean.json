@@ -450,6 +450,7 @@
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "다른 탭에서 게임이 실행 중이에요. 그 탭으로 전환하거나, 닫으면 이 페이지가 이어받아요.",
   "Loading the game.": "게임을 불러오는 중이에요.",
   "Press Play to start.": "'플레이'를 눌러 시작하세요.",
+  "Play career to join others in free roam.": "커리어를 플레이하면 자유 주행에서 다른 플레이어와 함께할 수 있어요.",
   "Ready": "준비 완료",
   "No connection to the server: you can play, but not with others. {press}": "서버에 연결되지 않았어요. 플레이는 할 수 있지만 다른 플레이어와는 할 수 없어요. {press}",
   "The game": "게임",

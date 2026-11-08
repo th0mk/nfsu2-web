@@ -289,8 +289,11 @@ function evaluate() {
   }
   if (pending) { if (phase !== 'exited') setPhase('boot', T('Loading'), () => `${label(pending)}: ${detail(pending)}`); return; }
   if (phase === 'exited') { updatePlay(); return; }
-  const press = N('Press Play to start.');
-  setPhase('ready', T('Ready'), offline ? () => t('No connection to the server: you can play, but not with others. {press}', { press: t(press) }) : T(press));
+  // with free roam with others on, where the others are: new players looked for them in the game's Online menu (its
+  // race rooms) or Quick Race's Free Run
+  const press = N('Press Play to start.'), career = N('Play career to join others in free roam.');
+  setPhase('ready', T('Ready'), offline ? () => t('No connection to the server: you can play, but not with others. {press}', { press: t(press) })
+    : () => t(resolved().env.NFSU2_ROAM === '1' ? career : press));
 }
 
 function updatePlay() {
@@ -306,6 +309,7 @@ async function loadSettings(): Promise<string | null> {
   const text = await settingsFile.load(instance.owner);
   // who plays on this server, asked again with this file's room and crews (the first question went without them)
   players?.now();
+  evaluate();                           // (Ready's line: free roam with others on or off)
   return text;
 }
 /** settings.ini changed by edit, on top of the file as it is now (SettingsFile.edit), and the panel reads it again.
@@ -2073,7 +2077,7 @@ async function applyInvite(given: Invite): Promise<Joined> {
   }
   if (text !== was) {
     await settingsFile.write(text);
-    void settings.refresh(); players?.now(); vault?.changed(); friendsPanel?.render();
+    void settings.refresh(); players?.now(); vault?.changed(); friendsPanel?.render(); evaluate();
   }
   // (the names, for the log as it leaves the browser: privacy.ts)
   if (isOwn(inv.room ?? '')) privacy.name(inv.room, 'room');
@@ -2589,6 +2593,7 @@ export async function boot() {
       if (packsKey() !== packsKey(resolveEnv(was, ENVIRONMENT, {}, DEVICE))) void saves.refresh();
       vault?.changed(); players?.now();
       friendsPanel?.render();
+      evaluate();
       applyLanguage();
       siteKeysNow();
     },

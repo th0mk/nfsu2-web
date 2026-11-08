@@ -450,6 +450,7 @@
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "เกมกำลังรันอยู่ในอีกแท็บหนึ่ง ให้สลับไปที่แท็บนั้น หรือปิดแท็บนั้นแล้วหน้านี้จะรับช่วงต่อ",
   "Loading the game.": "กำลังโหลดเกม",
   "Press Play to start.": "กด “เล่น” เพื่อเริ่ม",
+  "Play career to join others in free roam.": "เล่นโหมดอาชีพเพื่อร่วมขับอิสระกับผู้เล่นคนอื่น",
   "Ready": "พร้อม",
   "No connection to the server: you can play, but not with others. {press}": "ไม่ได้เชื่อมต่อกับเซิร์ฟเวอร์: เล่นได้ แต่เล่นกับผู้อื่นไม่ได้ {press}",
   "The game": "เกม",

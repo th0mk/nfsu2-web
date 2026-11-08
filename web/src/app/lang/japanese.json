@@ -450,6 +450,7 @@
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "別のタブでゲームが実行中です。そのタブに切り替えるか、閉じてください。閉じると、このページが引き継ぎます。",
   "Loading the game.": "ゲームを読み込んでいます。",
   "Press Play to start.": "「プレイ」を押すと始まります。",
+  "Play career to join others in free roam.": "キャリアをプレイすると、フリーロームで他のプレイヤーと合流できます。",
   "Ready": "準備完了",
   "No connection to the server: you can play, but not with others. {press}": "サーバーに接続されていません。プレイはできますが、他のプレイヤーとは遊べません。{press}",
   "The game": "ゲーム",
