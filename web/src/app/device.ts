@@ -41,12 +41,14 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  (runtime/com.c MULTISAMPLING): its 4-sample screen and Z, kept between passes, take four times the screen's memory;
  *  nor on the computers' graphics it broke (fsaaFails).
  *  Anisotropic filtering where the game asks for it on computers only (gpu/encoder.ts aniso): no GPU time measured on an
- *  M4 Pro at 2560x1440 (5.01 against 4.99 ms a frame, 2026-11-08), none measured on a phone's. */
+ *  M4 Pro at 2560x1440 (5.01 against 4.99 ms a frame, 2026-11-08), none measured on a phone's.  HQ vinyls on computers
+ *  (the page can paint them only with BC compression, gpu/hqskin.ts): the game's designs and colours, sharper; up to
+ *  16 skins of 1024 at once (gpu/encoder.ts OVER_MAX), each ~5.3 MB of graphics memory with its mips. */
 export function deviceDefaults(): Record<string, string> {
   const kind = deviceKind();
-  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: fullScreenFails() ? 'off' : 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off', fsaa: 'off', anisotropic: 'off' };
-  if (kind === 'tablet') return { roam_max_cars: '24', coop: 'off', anisotropic: 'off' };
-  return { roam_max_cars: 'auto', anisotropic: 'on', ...fsaaFails() ? { fsaa: 'off' } : {} };
+  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: fullScreenFails() ? 'off' : 'on', hud: '43', roam_max_cars: '16', roam_map_max: '2048', coop: 'off', fsaa: 'off', anisotropic: 'off', hq_vinyls: 'off' };
+  if (kind === 'tablet') return { roam_max_cars: '24', coop: 'off', anisotropic: 'off', hq_vinyls: 'off' };
+  return { roam_max_cars: 'auto', anisotropic: 'on', hq_vinyls: 'on', ...fsaaFails() ? { fsaa: 'off' } : {} };
 }
 
 /** the graphics as the page's check named them (checks.ts checkGpu: "img-tec b-series ..."), '' until it has */

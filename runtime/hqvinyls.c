@@ -1,7 +1,7 @@
 /* hqvinyls.c -- HQ vinyls: the cars' vinyls and doorlines at 1024x1024, as
  * AdrienShadow's "High Quality Vinyls & Doorlines (1024x Upscaled)"
  * (https://nfsmods.xyz/mod/8064) has them.  hq_vinyls = on
- * (NFSU2_HQ_VINYLS=1); off by default, the original game.  In the browser only:
+ * (NFSU2_HQ_VINYLS=1); off here, on from the page on computers.  Browser only:
  * the page does the painting (web/src/gpu/hqskin.ts), on a PC (GW_FEAT_HQSKIN).
  *
  * The game paints a car's skin on the CPU: base paint, its vinyl layers 0-3 and

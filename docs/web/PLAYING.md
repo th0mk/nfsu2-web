@@ -369,7 +369,7 @@ World row's list says how many are in each world.
   louder the faster you go, a short pause at each upshift and a whine of its own in reverse. Every car has it (in split
   screen and co-op each player's), as loud as the game's Engine Volume (times Master) makes it; the world paused, it
   is silent. Its sounds (half a megabyte) download once it is on.
-- **HQ Vinyls & Doorlines** (Mods): off by default. On, as AdrienShadow's
+- **HQ Vinyls & Doorlines** (Mods): on by default on a computer. On, as AdrienShadow's
   [High Quality Vinyls & Doorlines](https://nfsmods.xyz/mod/8064) has them, every car's paint is drawn again at
   1024x1024 from the mod's vinyls and doorlines, twice the game's size: the same designs, colours and shine, sharper
   up close (the garage, the shops, photo mode). Only on your screen, on a computer (a phone keeps the game's). A car

@@ -188,7 +188,7 @@ export const MODS: readonly Mod[] = [
     kind: 'screen', uses: 'data', control: { setting: 'hq_vinyls' },
     line: N('Sharp vinyls and doorlines.'),
     details: 'Every vinyl and doorline of the 31 cars redrawn at 1024x1024, so a car\'s paint stays sharp up close, with the game\'s own designs, colours and shine. A car with one of Art Factory 28 to 34 keeps the game\'s look. On a computer only: phones keep the game\'s. Each car\'s pictures download as you see it, about 100 KB.',
-    online: 'mine', files: ['runtime/hqvinyls.c', 'web/src/gpu/hqskin.ts', 'tools/hqvinyls.py'],
+    online: 'mine', phones: 'off', files: ['runtime/hqvinyls.c', 'web/src/gpu/hqskin.ts', 'tools/hqvinyls.py'],
   },
   {
     id: 'gearbox-whine', name: 'Transmission Whine', mod: 'Underground 2 Transmission Whine',

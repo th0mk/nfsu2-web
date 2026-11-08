@@ -35,7 +35,8 @@ These apply to every change, whatever the area.
 
 - **The original game by default.** Don't change handling or physics, car performance, AI or traffic, career
   progression, rewards or the economy. Multiplayer, quality of life, controls, languages and fixes of the original's
-  bugs are welcome. Graphics enhancements are opt-in; the default look is the original's.
+  bugs are welcome. Graphics enhancements are opt-in; the default look is the original's, except sharper copies of
+  it on computers (Upscaled HUD, anti-aliasing, anisotropic filtering, HQ vinyls).
 - **The single-player career stays available as the original at all times.** A multiplayer feature that touches it
   is something the player chooses.
 - **Saves stay valid in the stock PC game.** Anything extra goes in a file beside the profile (as `GARAGE.DAT` and
