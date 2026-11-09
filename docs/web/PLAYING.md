@@ -133,7 +133,7 @@ While you drive:
 | F10 | Hide the HUD while you drive, and show it again: the names and quick chat lines over other players' cars go with it; the pause menu, the map, messages and a race's results still show. Free roam and races; off again at each Play; no touch button. Another key, or none, in Controls, Site |
 | **F7** | Next song: the game's next EA Trax song, or with Radio on the folder's next track (not while the game is paused) |
 | **F8** | Frame-rate counter: off, on, detailed |
-| **F9** | The page menu, a list with each item's state on the right: World (the one you are in), Ghost mode (off, players, everything), Crews and Friends (in free roam; a lime dot on Friends while a request waits), Radio, Full screen, Controls (a page of the menu: ‹ goes back to the list) and **Quit game**, and Stop waiting: play offline while you wait in line; at the bottom when the game last saved, and Download log. Esc, F9, Close or a controller's B close it. On a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
+| **F9** | The page menu, a list with each item's state on the right: World (the one you are in), Tracks (the race tracks, in career free roam), Ghost mode (off, players, everything), Crews and Friends (in free roam; a lime dot on Friends while a request waits), Radio, Full screen, Controls (a page of the menu: ‹ goes back to the list) and **Quit game**, and Stop waiting: play offline while you wait in line; at the bottom when the game last saved, and Download log. Esc, F9, Close or a controller's B close it. On a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
 | **Hold Esc** | Leave full screen (a short press still goes to the game) |
 
 The start page shows these keys under **Controls**, and F9, Controls shows them while you play.
@@ -292,11 +292,11 @@ World row's list says how many are in each world.
 
 | Where | Settings |
 |---|---|
-| Online | free roam with others, your name (in free roam and online), your horn, world (Main world, World 1 to 4, or a name of your own), ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
+| Online | free roam with others, your name (in free roam and online), your flag, license plate (up to 8 letters and digits on your car, also for other players in free roam), your horn, world (Main world, World 1 to 4, or a name of your own), blocked players; more: ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64, and on a computer Auto, its default: 32, more while the frame rate allows; phones start at 16, tablets at 24), quick chat and your phrases, the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, music in drag and drift races, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
-| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
-| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), Show Hidden Races Mod, Visual Reputation Remover, Mods on other cars (shown or original), Stance, Crash Damage, Rubberbanding (original, no boost or off), Transmission Whine, HQ Vinyls & Doorlines; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
+| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto picks 30, 60, 120 or 240 from the screen: 120 from 119 Hz, 240 from 239 Hz, otherwise 60, so a 75 Hz or 144 Hz screen gets 60 or 120; or 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: pixelated textures (off), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
+| Mods | the mods built in, with their makers (the (i) after a row's name says what it does, who sees it, where it is set and its pages), and the settings of those that have one: Upscaled HUD and Detailed Map (original, map only or upscaled), English Subtitles Fixed (the subtitles), Uncensored & Restored Soundtrack (the songs: uncensored or original), GPS Distance, Show Hidden Races, Visual Reputation Remover, Mods on other cars (shown or original), Stance, Crash Damage, Rubberbanding (original, no boost or off), Transmission Whine, HQ Vinyls & Doorlines; and our changes from the original game, a row per group (Driving, Free roam, Photos and screen, Career and garage, Controls, Saves), whose (i) lists them all |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -331,7 +331,7 @@ World row's list says how many are in each world.
 - **Music in drag and drift races** (Game): off by default: as in the original game, those races have no
   music, so you hear the engine for the shifts. On, the EA Trax songs (or the Radio's tracks) play there too, as in
   the other races, at the game's music volume, in every drag and drift race: the career's, Quick Race, LAN and Online.
-- **Show Hidden Races Mod** (Mods): off by default. The career has 33 hidden races (one in the prologue, then 4, 8, 10
+- **Show Hidden Races** (Mods): off by default. The career has 33 hidden races (one in the prologue, then 4, 8, 10
   and 10 in the later stages) that are not on the map or the radar: in the original game one shows only when you drive
   near it, and once all the others are won the map looks empty. On, as MaxHwoy's [Show Hidden Races
   Mod](https://nfsmods.xyz/mod/1583) has them, they are on the map and the radar like the others (the GPS takes you
@@ -369,7 +369,7 @@ World row's list says how many are in each world.
   louder the faster you go, a short pause at each upshift and a whine of its own in reverse. Every car has it (in split
   screen and co-op each player's), as loud as the game's Engine Volume (times Master) makes it; the world paused, it
   is silent. Its sounds (half a megabyte) download once it is on.
-- **HQ Vinyls & Doorlines** (Mods): on by default on a computer. On, as AdrienShadow's
+- **HQ Vinyls & Doorlines** (Mods): on by default on a computer (off by default before the update after 8 November's). On, as AdrienShadow's
   [High Quality Vinyls & Doorlines](https://nfsmods.xyz/mod/8064) has them, every car's paint is drawn again at
   1024x1024 from the mod's vinyls and doorlines, twice the game's size: the same designs, colours and shine, sharper
   up close (the garage, the shops, photo mode). Only on your screen, on a computer (a phone keeps the game's). A car
@@ -451,6 +451,15 @@ World row's list says how many are in each world.
   40 % to 100 % (the default): only the brightest parts come down, so dark streets stay as they are. Both change the
   picture as you move them, the menus and the HUD too, and stay with the game's options on this device (backups
   carry them, cloud saves do not). F12 screenshots keep the game's own colours.
+- **Anti-aliasing:** the game's own Full Scene Anti-Aliasing, in its Options, Display, Customize Display Settings
+  (also the pause menu's), drawn at 4 samples: smoother edges, for more of the graphics' work, so a slower computer
+  may lose frame rate with it. A new player on a computer starts with it on; a computer that played before is asked
+  once at Play ("Smoother edges?"). Phones are not offered it, tablets start with it off, and computers with AMD's
+  Vega (GCN-5) or Qualcomm graphics are not offered it (it lost their graphics). settings.ini `fsaa = off` greys the
+  option out.
+- **Anisotropic filtering:** roads, their lines and building fronts stay sharp at a distance and at an angle, which
+  the original game never had. On for computers, off on phones and tablets; settings.ini `anisotropic = off` turns it
+  off.
 - **Two tabs:** one browser runs one game at a time. A second tab shows "Open elsewhere" and its Settings are
   read only. It takes over when the first tab closes.
 
@@ -918,9 +927,8 @@ Good to know:
   with how many are in free roam there, on its race tracks too, yours checked; a tap switches at once, back to the game, and your settings
   keep it), or on the start page (Online, **World**, the counts in its list). Arriving, the log on the left says the
   world and how many are there. Friends and crew-mates meet only within one world (the menu's Friends has Join, which
-  takes you to them), and so do race lobbies. An invite link (`#room=`) joins a world too. Worlds came with commit
-  41737add: before it is live the page has only a **Room** name box under Online (the same thing: empty is the main
-  world). A world is a filter between players, not privacy: every browser on the server still sees your name ("Your
+  takes you to them), and so do race lobbies. An invite link (`#room=`) joins a world too. A page from before
+  7 November has a **Room** name box under Online instead (the same thing: empty is the main world): reload it. A world is a filter between players, not privacy: every browser on the server still sees your name ("Your
   name", or the profile name), whether you are in the menus or driving, and the world, and someone with their own
   tools could join it. Play on a server only with
   people you would show your name and car to.
@@ -1098,7 +1106,7 @@ Good to know:
 | `GPU-ANDROID-DRIVER`: "Did not start" | The phone's graphics driver refused the game's picture at its first frame (Chrome on some phones with Adreno 6xx graphics; the log's `[gpu] device lost` line says `VK_ERROR_FORMAT_NOT_SUPPORTED` while "checking external image import support"). Every Play ends the same way on that phone: no setting changes it. A system update for the phone (a newer graphics driver) may; another browser on Android has no WebGPU yet. |
 | `GPU-LOST`: "The game was stopped" | The graphics stopped during the game (the graphics driver reset, or the browser's graphics process crashed): the game cannot go on without them. Press **Play**: the page reloads, which starts the graphics again (Safari gives a page no graphics after that until it reloads), then **Play** starts the game. Your saves and settings stay. Download the log first if you want to keep it: after the reload, Download log has only a shorter copy of that game's. If the page then says `GPU-ADAPTER-AFTER-LOST`, see that. If it keeps happening, restart the browser and update the graphics driver. |
 | "Game module", `MODULE-LOAD`: "The game didn't load" | The game did not load, or the server is not reachable (the log says why). The page tries again by itself, or press **Retry**. If the module is missing, start the server with `web/start.sh`, which builds it. |
-| "A new version of the game is on the server" | Press **Reload** or **Play**: the page loads the new version, and your saves and settings stay. Download the log first if you want to keep it: after the reload, Download log has only a shorter copy of that game's. Before any game the page reloads by itself; during a game it says so over the game, and the start page offers it when you quit. |
+| "A new version is out" | During a game: quit when it suits you (F9, **Quit game**). On the start page, press **Reload** or **Play**: the page loads the new version, and your saves and settings stay. Download the log first if you want to keep it: after the reload, Download log has only a shorter copy of that game's. Before any game the page reloads by itself; during a game it says so over the game, and the start page offers it when you quit. |
 | "Open elsewhere" | The game runs in another tab of this browser. Switch to it, or close it. |
 | "Not loading": "Your antivirus or network is probably blocking the game" | The page's own script never started, 15 seconds after the page opened: an antivirus (Kaspersky flagged the site in November 2026) or a network filter blocks it. Allow `nfsu2.xyz` in it, or try mobile data, then **Reload**. |
 | "The game's files didn't load properly" (error code 1 in the first minute) | The game's program file did not load: the browser's copy is damaged, or the network blocks it (the log shows `no PE signature`, or `HTTP 403` for it). **Game**, **Delete game data** (at the tab's end), then **Play**; your saves stay. If it happens again, try another network. |
