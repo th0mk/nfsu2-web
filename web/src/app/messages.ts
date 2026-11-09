@@ -4,19 +4,23 @@
 // friend's page takes it with its friends list.  The server keeps a message only until it is delivered; the
 // conversations are kept here, in this browser (MessageStore).
 //   in the game  free roam's log on the left (quick chat's place: shell.ts msgLine), an envelope, the name and the
-//                text, wrapping; "I Write back" under the newest.  I opens a card in quick chat's picker place and
-//                look: the answer to the newest message of this game, or (none, or older than REPLY_MS) a friend to
-//                pick first, 1-9.  Enter sends, Esc closes; the game has no keys while the card is open.  On a touch
-//                screen a tap on a message answers it, and quick chat's sheet has "Message a friend".  A message that
-//                comes while the player is not driving in free roam (a race, a shop, a menu) shows once they are.
-//                A friend's notice that it came into the player's room has "I Message" under it: I writes to it then.
+//                text, wrapping, for a few seconds; a message stays unread until its conversation is opened, and an
+//                envelope with the count (under the log: "I Read") stays until then.  I opens a card in quick chat's
+//                picker place and look: the conversation with the friend whose unread message is newest, else with
+//                the sender of the newest message of this game (none, or older than REPLY_MS: a friend to pick first,
+//                1-9): every message kept, and the field.  Enter sends, Tab lists the friends, Esc closes; the game
+//                has no keys while the card is open, and messages from others wait for it to close.  On a touch
+//                screen a tap on a message or the envelope opens it, and quick chat's sheet has "Message a friend".
+//                A message that comes while the player is not driving in free roam (a race, a shop, a menu) shows once
+//                they are.  A friend's notice that it came into the player's room has "I Message" under it: I writes
+//                to it then, unless a message waits to be read.
 //   wire         {"t":"friend","op":"msg","name","body","id"} -> {"op":"msg","id","done"};
 //                {"op":"mail","from","body","at"} and the list's "mail" bring the friends' (friends.rs).
 //   start page   friends.ts FriendsPanel: Message on each friend, the unread ones counted on it; ChatDialog.
 import type { GameSession } from './game';
 import { gameHas, KEY_MESSAGE } from './gamekeys';
 import { t } from './i18n';
-import { siteKey } from './sitekeys';
+import { keyName, siteKey } from './sitekeys';
 import { touchFirst } from './device';
 import { act, block, el } from './cards';
 import { localStore, MESSAGES } from './prefs';
@@ -36,6 +40,9 @@ const REPLY_MS = 120_000;
 const LINE_MS = 8000, LINE_MS_PER_CHAR = 60, LINE_MS_MAX = 15_000;
 /** a message the server has not answered for this long did not go (ms) */
 const SEND_WAIT_MS = 10_000;
+/** the envelope with the unread count: this far under the log's top (HUD units): the log is 88 tall (style.css
+ *  .notices) and starts 72 above the middle, so it sits at 20 below the middle, clear of the radar from 64 */
+const BADGE_BELOW_U = 92;
 /** what the store keeps: messages per friend, friends */
 const KEEP_MSGS = 40, KEEP_FRIENDS = 60;
 /** the friend list's rows at most (keys 1-9) */
@@ -125,6 +132,11 @@ export function mailOf(v: unknown): { from: string; body: string; t: number }[] 
     : [];
 }
 
+/** what became of the player's message, in words ('': nothing to say) */
+function statusNote(m: Msg): string {
+  return m.st === 'wait' ? t('sending') : m.st === 'kept' ? t('gets it when back') : m.st === 'failed' ? t('not sent') : '';
+}
+
 /** what a "done" other than sent or kept says to the player (null: nothing) */
 export function sendTrouble(done: string, name: string): string | null {
   switch (done) {
@@ -145,7 +157,7 @@ export interface FriendMessagesDeps {
   /** a message's line in the log (shell.ts msgLine): its name, text, whether it is the player's, a note after it, how
    *  long it stays, and what a tap on it does (none: nothing); returns the line */
   line(name: string, text: string, out: boolean, note: string, ms: number, tap?: () => void): HTMLElement;
-  /** "I Write back" under the newest message, for ms (shell.ts msgHint), or another word after the key; null: gone */
+  /** the key and text under a friend's notice, for ms (shell.ts msgHint); null: gone */
   hint(ms: number | null, text?: string): void;
   /** the card's place: the log's (shell.ts placeNotices calls place()) */
   placeNow(): void;
@@ -162,6 +174,9 @@ export class FriendMessages {
   private session: GameSession | null = null;
   private on = false;
   private card: HTMLElement;
+  /** the envelope with the count of unread messages, and what it shows now */
+  private badge: HTMLElement;
+  private badgeDrawn = '';
   /** the card: closed, a friend to pick, or a message to `to` */
   private mode: null | 'pick' | 'write' = null;
   private to = '';
@@ -169,6 +184,8 @@ export class FriendMessages {
   /** the friends as the server last listed them, and where each plays */
   private friends: Friend[] = [];
   private listed = false;
+  /** the rows of the friend list as drawn: what 1-9 pick */
+  private drawn: Friend[] = [];
   /** the newest message of this game that was shown, for MSG_KEY */
   private newest: { name: string; at: number } | null = null;
   /** a friend whose notice says it came into free roam (offer), for MSG_KEY until then */
@@ -188,7 +205,12 @@ export class FriendMessages {
       if (row) this.write(row.dataset.friend!);
     });
     c.addEventListener('keydown', e => this.cardKey(e));
-    stage.append(c);
+    // (beside the log, not in it: the log's lines fade and its oldest go)
+    const b = this.badge = document.createElement('div');
+    b.className = 'msg-badge'; b.hidden = true; b.dataset.nfsu2Ui = '';
+    b.addEventListener('click', () => { const f = this.newestUnread(); if (f) this.write(f, true); });
+    stage.append(c, b);
+    store.onChange(() => { this.drawBadge(); if (this.mode === 'write') this.drawThread(); });
     // MSG_KEY, caught before the game's input and quick chat's; taken only while driving in free roam with others
     window.addEventListener('keydown', e => this.key(e), { capture: true });
     stage.addEventListener('pointerdown', e => {
@@ -206,6 +228,7 @@ export class FriendMessages {
     clearInterval(this.timer);
     this.close();
     this.session = null; this.on = false; this.queue = []; this.deps.hint(null);
+    this.drawBadge();
   }
 
   /** the card's place: the log's (shell.ts placeNotices), u: CSS px per HUD unit */
@@ -213,6 +236,9 @@ export class FriendMessages {
     const s = this.card.style;
     s.left = `${left}px`; s.top = `${top}px`;
     s.setProperty('--u', `${u}px`);
+    const b = this.badge.style;
+    b.left = `${left}px`; b.top = `${top + BADGE_BELOW_U * u}px`;
+    b.setProperty('--u', `${u}px`);
   }
 
   /** a friend message from the server (friends.rs): the list (with the messages that waited), a message, an answer */
@@ -246,8 +272,11 @@ export class FriendMessages {
   /** a friend's message: kept, and on the log now or once the player drives in free roam */
   private incoming(from: string, body: string, at: number) {
     this.deps.log(`[msg] from ${from}`);
-    this.store.add(from, { dir: 'in', body, t: at }, true);
-    if (this.on) this.queue.push({ from, body });
+    // (the conversation that is open shows it at once: read, and no line in the log)
+    const open = this.mode === 'write' && keyOf(from) === keyOf(this.to);
+    this.store.add(from, { dir: 'in', body, t: at }, !open);
+    if (open) this.newest = { name: from, at: performance.now() };
+    else if (this.on) this.queue.push({ from, body });
     this.tick();
   }
 
@@ -271,14 +300,51 @@ export class FriendMessages {
       if (now - w.at > SEND_WAIT_MS) { this.waiting.delete(id); this.answered(w, 'timeout'); }
     }
     if (this.mode && !this.deps.driving()) this.close();
-    if (!this.queue.length || !this.deps.driving()) return;
+    this.drawBadge();
+    // (the log steps aside while the card is open: a line would play out unseen)
+    if (this.mode || !this.queue.length || !this.deps.driving()) return;
     for (const { from, body } of this.queue.splice(0)) {
-      const ms = lineMs(body);
-      this.deps.line(from, body, false, '', ms, () => this.write(from, true));
-      this.store.read(from);
-      this.newest = { name: from, at: now }; this.offered = null;
-      this.deps.hint(touchFirst() ? null : ms);
+      this.deps.line(from, body, false, '', lineMs(body), () => this.write(from, true));
+      this.newest = { name: from, at: now };
     }
+    this.offered = null;
+    this.deps.hint(null);
+  }
+
+  /** the friends' unread messages (only friends': a message from one no longer on the list could never be opened) */
+  private unreadCount(): number {
+    return this.friends.reduce((n, f) => n + this.store.unread(f.name), 0);
+  }
+
+  /** the friend whose unread message is the newest (none: undefined) */
+  private newestUnread(): string | undefined {
+    let best: string | undefined, at = -Infinity;
+    for (const f of this.friends) {
+      const last = this.store.unread(f.name) ? this.store.lastIn(f.name)?.t ?? 0 : -Infinity;
+      if (last > at) { at = last; best = f.name; }
+    }
+    return best;
+  }
+
+  /** a message waits to be read and the envelope says so (while driving, the card closed) */
+  private badgeUp(): number {
+    return this.on && !this.mode && this.deps.driving() ? this.unreadCount() : 0;
+  }
+
+  /** the envelope: the count, then the key and "Read" where a key opens it (on a touch screen a tap does) */
+  private drawBadge() {
+    const n = this.badgeUp(), touch = touchFirst();
+    const key = n && !touch && !gameHas(this.session, KEY_MESSAGE) ? msgKey() : null;
+    const sig = `${n}/${key}/${touch}`;
+    if (sig === this.badgeDrawn) return;
+    this.badgeDrawn = sig;
+    const b = this.badge;
+    b.hidden = !n;
+    b.classList.toggle('tap', touch);
+    if (!n) { b.replaceChildren(); return; }
+    const ic = el('span', 'ic');
+    ic.innerHTML = MSG_ICON;
+    b.replaceChildren(ic, el('b', '', String(n)), ...(key ? [el('kbd', '', keyName(key)), el('span', '', t('Read'))] : []));
   }
 
   private key(e: KeyboardEvent) {
@@ -289,8 +355,9 @@ export class FriendMessages {
     if (this.mode || !this.deps.driving() || gameHas(this.session, KEY_MESSAGE)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (e.repeat) return;
-    const n = this.newest, o = this.offered, now = performance.now();
-    if (o && now < o.until) this.write(o.name, false);
+    const u = this.newestUnread(), n = this.newest, o = this.offered, now = performance.now();
+    if (u) this.write(u, false);
+    else if (o && now < o.until) this.write(o.name, false);
     else if (n && now - n.at < REPLY_MS) this.write(n.name, false);
     else this.pick(false);
   }
@@ -301,6 +368,8 @@ export class FriendMessages {
   offer(name: string, ms: number) {
     if (!this.on || this.mode || touchFirst() || !msgKey() || !this.deps.driving() || gameHas(this.session, KEY_MESSAGE)) return;
     this.offered = { name, until: performance.now() + ms };
+    // (the envelope has the key while it shows: I reads first)
+    if (this.badgeUp()) return;
     this.deps.hint(ms, t('Message'));
   }
 
@@ -323,6 +392,7 @@ export class FriendMessages {
     if (!this.deps.driving()) return;
     this.touch = touch; this.mode = 'write'; this.to = name;
     this.deps.hint(null);
+    this.store.read(name);
     this.draw();
     this.card.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
   }
@@ -334,24 +404,53 @@ export class FriendMessages {
     this.card.hidden = true;
     this.card.replaceChildren();
     if (had) this.deps.focusGame();
+    this.drawBadge();
   }
 
   private cardKey(e: KeyboardEvent) {
     if (e.code === 'Escape') { e.preventDefault(); e.stopPropagation(); this.close(); return; }
+    if (e.code === 'Tab') {
+      e.preventDefault();
+      if (this.mode === 'write' && !e.repeat) this.pick(this.touch);
+      return;
+    }
     if (this.mode === 'pick' && !e.repeat) {
       const d = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-      const f = d ? this.sorted()[+d[1] - 1] : undefined;
+      const f = d ? this.drawn[+d[1] - 1] : undefined;
       if (f) { e.preventDefault(); this.write(f.name, false); }
     } else if (this.mode === 'write' && e.code === 'Enter' && !e.isComposing) {
       e.preventDefault();
       this.sendNow();
+    } else if (this.mode === 'write' && (e.code === 'PageUp' || e.code === 'PageDown')) {
+      e.preventDefault();
+      const box = this.card.querySelector<HTMLElement>('.msg-thread');
+      box?.scrollBy(0, (e.code === 'PageUp' ? -0.8 : 0.8) * box.clientHeight);
     }
   }
 
-  /** the friends in the order the card lists them: in free roam, in the Online lobby, then the others */
+  /** the friends in the order the card lists them: with unread messages, in free roam, in the Online lobby, then the
+   *  others */
   private sorted(): Friend[] {
     const rank = (a: string) => a === 'roam' ? 0 : a === 'online' ? 1 : 2;
-    return [...this.friends].sort((a, b) => rank(a.at) - rank(b.at) || a.name.localeCompare(b.name)).slice(0, PICK_MAX);
+    const read = (f: Friend) => this.store.unread(f.name) ? 0 : 1;
+    return [...this.friends].sort((a, b) => read(a) - read(b) || rank(a.at) - rank(b.at) || a.name.localeCompare(b.name)).slice(0, PICK_MAX);
+  }
+
+  /** the conversation in the card: every message kept, opening at the newest; a redraw leaves a player who scrolled back
+   *  where they are */
+  private drawThread() {
+    const box = this.card.querySelector<HTMLElement>('.msg-thread');
+    if (!box) return;
+    const top = box.scrollTop, atEnd = box.scrollHeight - top - box.clientHeight < 8;
+    const msgs = this.store.messages(this.to);
+    box.replaceChildren(...(msgs.length ? msgs.map(m => {
+      const r = el('div', m.dir === 'out' ? 'me' : '');
+      r.append(el('b', '', m.dir === 'in' ? this.to : t('You')), document.createTextNode(` ${m.body}`));
+      const note = statusNote(m);
+      if (note) r.append(el('i', '', ` (${note})`));
+      return r;
+    }) : [el('div', 'ov-dim', t('No messages yet.'))]));
+    box.scrollTop = atEnd ? box.scrollHeight : top;
   }
 
   private sendNow() {
@@ -367,9 +466,9 @@ export class FriendMessages {
     this.close();
   }
 
-  /** the card (cards.ts, quick chat's picker's place): picking, its title, the friends (a key cap, the name, where
-   *  each plays; on a touch screen rows to tap), "Esc closes"; writing, its title, the message answered and the field,
-   *  then what the keys do and the characters left (on a touch screen Send) */
+  /** the card (cards.ts, quick chat's picker's place): picking, its title, the friends (a key cap, the name, the unread
+   *  count, where each plays; on a touch screen rows to tap), "Esc closes"; writing, its title, the conversation and
+   *  the field, then what the keys do and the characters left (on a touch screen Send) */
   private draw() {
     const c = this.card;
     this.deps.placeNow();
@@ -377,13 +476,14 @@ export class FriendMessages {
     const kids: HTMLElement[] = [];
     if (this.mode === 'pick') {
       kids.push(block(el('div', 'ov-title', t('Message a friend'))));
-      const list = this.sorted();
+      const list = this.drawn = this.sorted();
       const rows = list.map((f, i) => {
         const where = f.at === 'roam' ? t('free roam') : f.at === 'online' ? t('Online lobby') : t('offline');
         const name = el('span', '', f.name), at = el('span', 'msg-where' + (f.at ? ' ok' : ''), where);
+        const n = this.store.unread(f.name), extra = n ? [el('b', 'msg-count', String(n)), at] : [at];
         let row: HTMLElement;
-        if (this.touch) { row = el('button', 'msg-friend'); (row as HTMLButtonElement).type = 'button'; row.append(name, at); }
-        else { row = act(String(i + 1), name); row.classList.add('msg-friend'); row.append(at); }
+        if (this.touch) { row = el('button', 'msg-friend'); (row as HTMLButtonElement).type = 'button'; row.append(name, ...extra); }
+        else { row = act(String(i + 1), name); row.classList.add('msg-friend'); row.append(...extra); }
         row.dataset.friend = f.name;
         return row;
       });
@@ -392,13 +492,7 @@ export class FriendMessages {
       if (!this.touch) kids.push(block(el('div', 'ov-small', t('Esc closes'))));
     } else if (this.mode === 'write') {
       kids.push(block(el('div', 'ov-title', t('Message {name}', { name: this.to }))));
-      // what is answered: the friend's message, when it is the conversation's newest
-      const body: HTMLElement[] = [], last = this.store.messages(this.to).at(-1);
-      if (last?.dir === 'in') {
-        const q = el('div', 'msg-quote'), b = el('b', '', this.to);
-        q.append(b, document.createTextNode(` ${last.body}`));
-        body.push(q);
-      }
+      const body: HTMLElement[] = [el('div', 'msg-thread')];
       const input = document.createElement('input');
       input.type = 'text'; input.className = 'msg-input'; input.maxLength = MSG_MAX; input.autocomplete = 'off';
       input.enterKeyHint = 'send'; input.spellcheck = true;
@@ -415,12 +509,14 @@ export class FriendMessages {
         send.addEventListener('click', () => this.sendNow());
         foot.append(send, left);
       } else {
-        foot.append(el('span', '', t('Enter sends · Esc closes')), left);
+        foot.append(el('span', '', t('Enter sends · Tab friends · Esc closes')), left);
       }
       kids.push(block(foot));
     }
     c.replaceChildren(...kids);
     c.hidden = !this.mode;
+    this.drawThread();
+    this.drawBadge();
   }
 
   /** for the page's test hooks */
@@ -482,7 +578,7 @@ export class ChatDialog {
       const who = document.createElement('b');
       who.textContent = m.dir === 'in' ? this.name : t('You');
       const when = document.createElement('span');
-      const st = m.st === 'wait' ? t('sending') : m.st === 'kept' ? t('gets it when back') : m.st === 'failed' ? t('not sent') : '';
+      const st = statusNote(m);
       when.textContent = st ? `${fmt.format(m.t)} · ${st}` : fmt.format(m.t);
       head.append(who, when);
       const body = document.createElement('p');
