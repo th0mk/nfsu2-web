@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { linked } from './faq.mjs';
-import { footOf, General } from './general.mjs';
+import { footOf, General, SCRIPT_OF, scriptsOf } from './general.mjs';
 import { overlap } from './investigate.mjs';
 
 const MODEL = 'claude-haiku-5-5';                // picking one of ~20 answers: the cheapest model is enough
@@ -222,7 +222,10 @@ export class Help {
       return console.log(`[help] ${said}: had that answer today`);
     if (today.some(([, , was]) => was && overlap(line, was) >= REPEAT)) return console.log(`[help] ${said}: says what they had: ${line}`);
     if (this.full(m.channelId)) return console.log(`[help] ${said}: the channel had its answers this hour`);
-    const lang = /^[a-z]{2,3}$/.test(r.lang ?? '') ? r.lang : 'en';
+    let lang = /^[a-z]{2,3}$/.test(r.lang ?? '') ? r.lang : 'en';
+    // a language whose letters are not in their own words is a guess from their name or a picture (English questions
+    // got Russian answers twice, 7 and 8 November): English
+    if (SCRIPT_OF[lang] && !scriptsOf(p.msgs.map(x => x.content ?? '').join('\n')).includes(SCRIPT_OF[lang])) lang = 'en';
     const y = await this.faq.lineIn(x, line, lang);
     const badY = y.length > MAX_TRANSLATED ? 'a translation too long' : unsafe(y, x.a);   // what goes out, checked again
     if (badY) return console.log(`[help] ${said}: not posted, ${badY} (${lang}): ${y}`);

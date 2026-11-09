@@ -22,12 +22,15 @@ and it says something only when it is worth it:
   happens. Only when a full look at the thread is sure; at most once a thread, at most 15 threads a release (the
   threads the bot linked to a matched one as the same problem among them, at most 5; short,
   low-effort looks), threads of the last 14 days, also threads staff wrote in (one the bot never looked at is matched
-  by its title and first post). The thread's record keeps what went live (`fix`).
+  by its title and first post). A commit whose message names where a thread's crash or freeze stops (its first
+  function, or two of them) reaches that thread whatever the model's matching made of the words (at most 8 a
+  release). The thread's record keeps what went live (`fix`).
 
 - **when a suggestion is carried out**, in a suggestion thread (a forum named `suggest…`, or a post the bot took for a
   suggestion) that one of the release's commits does what it asks for: that it was added, since when it is live, where
   to find it, and to reload the page; then it tags the thread Complete. Only when a full look is sure (the whole wish
-  or its main part, not something related); at most once a thread, at most 5 threads a release. A release that takes
+  or its main part, not something related); at most once a thread, at most 10 threads a release and 4 a commit. The
+  matching reads each wish in the poster's words (its first post), the bot's summary after it. A release that takes
   a clear step toward a suggestion without doing it (more quick-chat phrases for a wish for text chat) gets one or
   two sentences on what it adds, once a thread, and the thread stays open. Old suggestions count
   too: at each release the bot reads the suggestion forums' threads, archived ones included (the newest 500 of each),
@@ -126,7 +129,8 @@ month. And the day's share comes as the UTC day goes: by any hour the looks may 
 hours ahead (a quarter at midnight, all of it by 18:00), so the bot answers all day instead of until the morning. A new
 post past that gets a quick pass instead of a look (`firstPass()` with `budget`: Haiku, no tools, a fraction of a cent),
 which posts only an ask for what is missing or an answer at high confidence, and flags and links nothing (on
-2026-11-06 about 40 bug threads posted after 12:30 UTC never heard from the bot). Nothing runs later (there was a
+2026-11-06 about 40 bug threads posted after 12:30 UTC never heard from the bot). Someone talking to the bot past
+the cap below gets the quick pass too, up to two and a half times the day's share. Nothing runs later (there was a
 catch-up at midnight until 2026-11-05). Someone
 talking to the bot (a follow-up, a log, a reply to it, a bump) goes ahead of the clock, up to twice the day's share,
 and what it spends over the share comes out of the days after: on 2026-11-05, 41 of them went unanswered. Staff's
@@ -150,16 +154,22 @@ wrote since the release. The bot's first log line says what the month and the da
   them reading logs, were 15% of the looks and 43% of the money); the look is told the open
   threads opened for a crash or freeze in the same place (two functions in common; the oldest first), so threads link
   by the bug, not by the exit code. A thread keeps the crash it was opened for (the verdict's `crash`, `st.crash`, the
-  first one a look names): its later logs, or another game's crash in its log, never make it match other bugs.
+  first one a look names): its later logs, or another game's crash in its log, never make it match other bugs. The
+  look is also told the commits whose message names where its crash stops, with when each went live (`repo.naming`),
+  so a crash fixed and live gets "reload", not a link to the thread of that crash.
   The rules, the notes, the guide and the code's history up to the live version (the same for every look until the
   next release, or a change to the rules or the notes) are kept an hour in the prompt cache, so a look reads them for
   a tenth of the price instead of sending them again; the newest commits, which change more often, go with the
   thread. Claude reads what it needs through the tools, several calls a turn, at most 8 turns, then returns a verdict
   as JSON: none, ask or answer, and whether to tell the developer. `vet()` drops weak answers and replies that paste code.
-  A reply that links the thread itself, a newer thread or a closed one goes back to the model once, in one more turn
-  without tools, to be written without it (`badLink()`; the thread lists mark closed threads). A new post in a suggestion forum first
+  A reply that links the thread itself, a newer thread or a closed one, or names a version's code or a commit, goes
+  back to the model once, in one more turn without tools, to be written without it (`badReply()`; the thread lists
+  mark closed threads). A reply in another language that names the page's labels in English gets them as the page
+  shows them in that language (`localLabels()` in `tools.mjs`: "Download log" in a Spanish reply is "Descargar
+  registro"). A new post in a suggestion forum first
   gets a quick pass with Haiku and no tools (`firstPass()`): when it finds nothing for the bot to say, its summary,
-  category and tags stand and there is no full look; anything else gets the full look, which writes the reply.
+  category and tags stand and there is no full look, unless its summary says the wish may exist already or can't be
+  done (`EXISTS`); anything else gets the full look, which writes the reply.
 - `tools.mjs`: what Claude can do. It can search and read the code, read the thread's attachments, look at the git
   history (`LIVE` is the live server's commit), search the forums' threads (to point a duplicate to the earlier one)
   and the archive of recent messages (the staff channel's marked private: the model may use them, never repeat them),

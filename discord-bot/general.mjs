@@ -36,10 +36,10 @@ const CHANNEL_MAX_PER_HOUR = 6;
 // a problem in any of the server's languages; how-to questions pass too and the model sorts them out
 export const KINDS = {
   connection: /not connected|offline|server.{0,12}(down|dead)|can['’]?t connect|cannot connect|timed? ?out|won['’]?t load|not loading|desconect|sem conex|sin conexi|fora do ar|не подключ|нет подключ|сервер (упал|лежит)|bağlan|połącz|serwer/i,
-  crash: /crash|freez|frozen|\b134\b|kick(s|ed)? (me )?(back|out)|stuck|black screen|white screen|closes|flicker|trava|travou|fecha|congel|se cierra|pantalla negra|tela preta|вылет|вылета|завис|краш|çök|donuyor|kapanıyor|zawies|wywala|plante|stürzt/i,
+  crash: /crash|freez|frozen|\b134\b|kick(s|ed)? (me )?(back|out)|stuck|black screen|white screen|\bclos(es|ed|ing)\b|flicker|trava|travou|fecha|congel|se cierra|pantalla negra|tela preta|вылет|вылета|завис|краш|çök|donuyor|kapanıyor|zawies|wywala|plante|stürzt/i,
   controller: /controller|gamepad|joystick|8bitdo|gamesir|dualshock|dualsense|controle |mando|геймпад|джойстик|kontrolcü|pad nie/i,
   sound: /\bsound|\baudio|\bsom\b|sonido|звук|dźwięk/i,
-  graphics: /GPU-|PAGE-|webgpu|graphics|isolated|SharedArrayBuffer|error code|\berro\b|\berror|ошибк|\bhata|błąd|\bfps\b|\blag/i,
+  graphics: /GPU-|PAGE-|STORAGE-|SAVES-|webgpu|graphics|isolated|SharedArrayBuffer|SBOX_|error code|\berro\b|\berror|ошибк|\bhata|błąd|\bfps\b|\blag/i,
 };
 export const PROBLEM = new RegExp([
   /bug|broken|glitch|problem|issue|doesn['’]?t work|does not work|don['’]?t work|not work|isn['’]?t working/,
@@ -67,9 +67,24 @@ const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 // `en` is the reply (the model translates it for other languages).  Anything less certain gets the forum pointer.
 const FIXES = {
   'page-not-isolated': {
-    when: 'PAGE-NOT-ISOLATED, "Secure, isolated page": "Something in this browser changes the page, most often an extension" (before 4 November: "The page is not cross-origin isolated (no SharedArrayBuffer)")',
-    re: /PAGE-NOT-ISOLATED|cross.?origin|isolated|changes the page/i,
-    en: 'Something in your browser changes the page, most often an extension: open nfsu2.xyz in a guest or incognito window, and if it works there, turn your extensions off one by one.',
+    when: 'the code PAGE-NOT-ISOLATED: "Something in this browser changes the page, most often an extension" (before 4 November: "The page is not cross-origin isolated (no SharedArrayBuffer)"). Not another PAGE- code under the same "Secure, isolated page" heading (PAGE-NO-SIMD, PAGE-NO-JIT, PAGE-NO-MEMORY)',
+    re: /PAGE-NOT-ISOLATED|cross.?origin|changes the page/i,
+    en: 'Something in your browser changes the page, most often an extension: open nfsu2.xyz in a private window, and if it works there, turn your extensions off one by one.',
+  },
+  'page-no-simd': {
+    when: 'PAGE-NO-SIMD: "This computer\'s processor is too old for the game, or the browser is out of date"',
+    re: /PAGE-NO-SIMD|processor is too old|SIMD/i,
+    en: 'Update the browser. If that doesn\'t help, the processor is too old for the game (no SSE4.1, such as an AMD Phenom II or an Intel Core 2 before Penryn), and no browser can run it there.',
+  },
+  'storage-old': {
+    when: 'STORAGE-OLD on an iPhone, iPad or Mac: "This browser is too old for the game" (Safari before 26)',
+    re: /STORAGE-OLD|too old for the game/i,
+    en: 'Safari before 26 can\'t run the game: update to iOS 26, iPadOS 26 or Safari 26 on a Mac (Settings, General, Software Update).',
+  },
+  'saves-unreadable': {
+    when: 'SAVES-UNREADABLE: "Play without saving?" with "This browser can\'t read or write your saves right now"',
+    re: /SAVES-UNREADABLE|read or write your saves|without saving/i,
+    en: 'The browser\'s storage for the site is failing, and nothing of your saves was changed: restart the computer and check the disk has free space. Play without saving starts the game meanwhile, but keeps nothing of it.',
   },
   'gpu-accel-off': {
     when: 'GPU-ACCEL-OFF: "isn\'t using this computer\'s graphics card" (or "graphics"), naming Chrome, Edge, Opera or Brave',
@@ -77,7 +92,7 @@ const FIXES = {
     en: 'Turn on "Use graphics acceleration when available" in chrome://settings/system, then restart Chrome.',
   },
   'gpu-adapter-android': {
-    when: 'GPU-ADAPTER-ANDROID: "Chrome cannot use the graphics of this phone or tablet yet" (often a Samsung Galaxy)',
+    when: 'GPU-ADAPTER-ANDROID: "Chrome can\'t use this device\'s graphics yet" (often a Samsung Galaxy)',
     re: /GPU-ADAPTER-ANDROID|android|samsung|galaxy|xclipse|exynos|phone|tablet|celular|telefone|m[óo]vil|телефон|smartfon/i,
     en: 'Update Android and Chrome. If that does not help, type chrome://flags/#enable-unsafe-webgpu into Chrome\'s address bar (or open chrome://flags and search "Unsafe WebGPU"), set it to Enabled and tap Relaunch: on some phones, Samsungs among them, the game then runs.',
   },
@@ -87,17 +102,17 @@ const FIXES = {
     en: 'Update the graphics driver (from Intel, AMD or NVIDIA), then quit Chrome completely and start it again; graphics without DirectX 12, such as Intel HD 4000, 4400, 4600 and older, cannot run the game.',
   },
   'gpu-adapter-after-lost': {
-    when: 'GPU-ADAPTER-AFTER-LOST: "The graphics stopped during your last game, and Chrome has not given them back to this page yet"',
+    when: 'GPU-ADAPTER-AFTER-LOST: "The graphics stopped during your last game and Chrome hasn\'t given them back yet"',
     re: /GPU-ADAPTER-AFTER-LOST|given them back/i,
     en: 'Wait a minute or two on the page; if Play stays off, quit Chrome completely (every window) and start it again. If the graphics stop again, update the graphics driver (from Intel, AMD or NVIDIA).',
   },
   'gpu-adapter-win-arm': {
-    when: 'GPU-ADAPTER-WIN-ARM: "On Windows computers with an ARM chip (Snapdragon, for one), Chrome keeps WebGPU off"',
+    when: 'GPU-ADAPTER-WIN-ARM: "On Windows with an ARM chip (such as Snapdragon), Chrome keeps WebGPU off"',
     re: /GPU-ADAPTER-WIN-ARM|snapdragon|\bARM\b/i,
     en: 'Turn on chrome://flags/#enable-unsafe-webgpu, then restart Chrome: on Windows with an ARM chip, Chrome keeps WebGPU off until then.',
   },
   'gpu-adapter-linux': {
-    when: 'GPU-ADAPTER-LINUX: "Chrome could not use this computer\'s graphics. Most likely their Vulkan driver is missing"',
+    when: 'GPU-ADAPTER-LINUX: "Chrome couldn\'t use this computer\'s graphics, most likely because the Vulkan driver is missing"',
     re: /GPU-ADAPTER-LINUX|linux|ubuntu|debian|fedora|arch|mint|vulkan/i,
     en: 'Chrome on Linux runs the game on Vulkan: install the Vulkan driver (mesa-vulkan-drivers on Debian, Ubuntu and Fedora), then quit Chrome completely and start it again.',
   },
@@ -122,7 +137,7 @@ const FIXES = {
     en: 'TV and game console browsers have no WebGPU, which the game needs, so it cannot run there. A PC with Chrome or Firefox, or a phone or tablet with Chrome (Android 12 or newer) or Safari (iOS 26), can play it.',
   },
   'cannot-reach': {
-    when: 'the start page says "This device can\'t reach the server" or "No connection to the server", or the browser cannot open nfsu2.xyz at all ("This site can\'t be reached", an ERR_ code), while others play. Never a problem inside the game: no other players in free roam, a Room, a race that will not join, a controller, the game\'s GPS',
+    when: 'the start page says "This device can\'t reach the server" or "No connection to the server", or the browser cannot open nfsu2.xyz at all ("This site can\'t be reached", an ERR_ code), while others play. Never a problem inside the game: no other players in free roam, a World, a race that will not join, a controller, the game\'s GPS',
     re: /reach|no connection|not connected|ERR_|took too long|timed? ?out|server|servidor|serwer|sunucu|сервер|conex|подключ|соедин|интернет/i,
     en: 'Your network is blocking the server (some providers block Cloudflare; in Spain they do during football matches, and it works again after the match): try mobile data or another Wi-Fi, or turn off an ad blocker, a web filter or private DNS.',
   },
@@ -148,10 +163,10 @@ const FIXES = {
     when: 'the game closes, crashes or goes back to the start page by itself on an iPhone or iPad, after some minutes or after a race or a shop (the start page then says the last game stopped without warning, or GPU-LOST)',
     words: true,
     re: /^(?=[\s\S]*\b(iphone|ipad|ios)\b)(?=[\s\S]*(clos|crash|kick|bounc|exit|quit|back to|start page|stop|GPU-LOST|fech|cierr|sale|cae|вылет|выкид|закр|виліт|çök|kapan|wywal|zamyk|crush))/i,
-    en: 'On iPhone and iPad the browser closes the game when it runs short of memory, and the start page comes back. No setting fixes it yet: follow it in <#1564554732649971802>, and post your log there (start page, Download log, before you press Play again).',
+    en: 'On iPhone and iPad the browser closes the game when it runs short of memory, and the start page comes back. Reload the page first: the updates of 7 November made it rarer. If it still happens, follow it in <#1564554732649971802>, and post your log there (start page, Download log, before you press Play again).',
   },
   'storage-none': {
-    when: 'STORAGE-NONE: "This browser window cannot store files" (a private, incognito or guest window)',
+    when: 'STORAGE-NONE: "This window can\'t store files (a guest or private window?), so saves won\'t work."',
     re: /STORAGE-NONE|cannot store|can't store|private|incognito|guest/i,
     en: 'A private, incognito or guest window can\'t keep saves: open nfsu2.xyz in a normal window.',
   },
@@ -186,7 +201,7 @@ const SCRIPTS = {
   Arabic: /\p{Script=Arabic}/u, Hebrew: /\p{Script=Hebrew}/u, Devanagari: /\p{Script=Devanagari}/u,
 };
 export const scriptsOf = text => Object.keys(SCRIPTS).filter(k => SCRIPTS[k].test(text));
-const SCRIPT_OF = { ru: 'Cyrillic', uk: 'Cyrillic', bg: 'Cyrillic', sr: 'Cyrillic', el: 'Greek', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', th: 'Thai', ar: 'Arabic', he: 'Hebrew', hi: 'Devanagari' };
+export const SCRIPT_OF = { ru: 'Cyrillic', uk: 'Cyrillic', bg: 'Cyrillic', sr: 'Cyrillic', el: 'Greek', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', th: 'Thai', ar: 'Arabic', he: 'Hebrew', hi: 'Devanagari' };
 const ASKS = new RegExp(Object.values(ANSWERS).map(a => a.re.source).join('|'), 'i');
 
 const SORT = {

@@ -17,9 +17,10 @@ import { General, scriptsOf } from './general.mjs';
 import { Help } from './help.mjs';
 import { COMMAND as FAQ, Faq, PREFIX as FAQ_BUTTON } from './faq.mjs';
 import { blocks, firstPass, investigate, newClient, overlap, picture, replyPass, vet } from './investigate.mjs';
+import { localLabels } from './tools.mjs';
 import { Repo, defaultSource } from './repo.mjs';
 import { logGist } from './logs.mjs';
-import { crashOf, folderTops, samePlace } from './sigs.mjs';
+import { crashOf, fnsOf, folderTops, samePlace } from './sigs.mjs';
 import { Spend, metered } from './spend.mjs';
 import { Tags } from './tags.mjs';
 import { COMMAND as TRANSLATE, Translator } from './translate.mjs';
@@ -66,7 +67,11 @@ const RELEASE_CHECK_MS = 5 * 60_000;             // how often the bot checks whe
 const FIX_DAYS = 14, FIX_MAX = 15;               // a release is checked against threads of the last 14 days, 15 looks at most
 const FIX_EFFORT = 'low', FIX_TURNS = 8;          // a fix check reads one commit against one thread: a short look
 const LINKED_MAX = 5;                            // threads linked to a fixed one that get its 'fix live' look too, a release
-const FEATURE_MAX = 5;                           // a release is checked against every open suggestion, 5 looks at most
+/** a suggestion's summary that says what it asks for may be there already, or can't be: a full look answers those */
+const EXISTS = /\b(exists?|already|built[- ]in|in the (start page|game's options|f9|mods)|browsers? (can't|cannot|has no)|no force feedback|ghost mode)\b/i;
+const FEATURE_MAX = 10, FEATURE_PER_COMMIT = 4;  // a release is checked against the open suggestions: 10 looks at most, 4 a commit
+const WISHES_MAX = 600;                          // the open suggestions a release's matching reads, the most active first
+const CRASH_MAX = 8;                             // threads a release reaches because a commit names where their crash stops
 const SUGGESTIONS = /suggest/i;                  // the suggestion forums, by name
 const SUGGESTION_INDEX = 500;                    // a release reads the newest 500 archived threads of each of them
 const SUGGESTION_DAYS = 365;                     // suggestions are kept in threads.json this long, other threads 30 days
@@ -218,15 +223,13 @@ async function look(threadId, why, extra) {
   // staff asked, or a release's notice (a few cents each, at most FIX_MAX + FEATURE_MAX a release): a look past the
   // budget too.  Someone talking to the bot (the log or the answer it asked for, a reply to it, a bump) goes ahead of
   // the clock, up to a guard (spend.underCap), and what it spends over the day's share comes out of the days after:
-  // on 5 November, 41 of them were dropped while the day's share was spent.  A new post waits for none: past what the
-  // day may have spent by now (spend.mjs), it is skipped
-  if (!byStaff && !fix && (bumped || logged || talk) && !spend.underCap()) {
-    return say(`skipped: $${spend.today.toFixed(2)} spent today, the most a day may spend on answers to the bot`);
-  }
-  // a new post past what the day may have spent by now: a quick pass with the cheapest model and no tools
-  // (investigate.mjs BUDGET_PASS) instead of nothing, under the same guard as the answers to the bot
-  const cheap = !byStaff && !fix && !(bumped || logged || talk) && !spend.allows();
-  if (cheap && (why !== 'new post' || !spend.underCap())) {
+  // on 5 November, 41 of them were dropped while the day's share was spent.  A new post waits for none.
+  // A new post past what the day may have spent by now, and someone talking to the bot past the cap: a quick pass with
+  // the cheapest model and no tools (investigate.mjs BUDGET_PASS, a fraction of a cent) instead of nothing, up to
+  // spend.quickRoom() (7 November: posters who sent the log the bot asked for heard nothing)
+  const ahead = bumped || logged || talk;
+  const cheap = !byStaff && !fix && (ahead ? !spend.underCap() : !spend.allows());
+  if (cheap && ((!ahead && why !== 'new post') || !spend.quickRoom())) {
     return say(`skipped: $${spend.today.toFixed(2)} spent today, $${spend.allowance().toFixed(2)} of today's $${spend.share().toFixed(2)} allowed by now`);
   }
   if (cheap) say(`$${spend.today.toFixed(2)} spent today, $${spend.allowance().toFixed(2)} allowed by now: a quick pass only`);
@@ -261,14 +264,8 @@ async function look(threadId, why, extra) {
   const tops = folderTops(workDir);
   if (tops.length) st.tops = tops; else delete st.tops;
   const context = { repo, guild: thread.guildId, thread: text, images, threads: recentThreads(threadId), reports: flaggedList(threadId),
-    places: placesOf(tops, threadId) };
+    places: await placesOf(tops, threadId) };
   let res = null, first = null;
-  if (cheap) {
-    first = await firstPass({ client: anthropic, ...context, budget: true }).catch(e => { say(`quick pass failed: ${e.message}`); return null; });
-    if (!first) return done();
-    say(`quick pass: ${first.verdict?.action ?? 'no verdict'} (${first.verdict?.confidence ?? '-'})${first.cost != null ? ` ($${first.cost.toFixed(4)})` : ''}`);
-    res = { verdict: first.verdict, turns: 1, cost: first.cost, usage: first.usage, log: ['quick pass only: the day\'s full looks were spent'] };
-  }
   // someone answering the bot: a quick pass first (investigate.mjs replyPass), no full look for "thanks, works now"
   if (talk) {
     const pass = await replyPass({ client: anthropic, thread: text }).catch(e => { say(`reply pass failed: ${e.message}`); return null; });
@@ -280,17 +277,27 @@ async function look(threadId, why, extra) {
       return done();
     }
   }
+  if (cheap) {
+    first = await firstPass({ client: anthropic, ...context, budget: true }).catch(e => { say(`quick pass failed: ${e.message}`); return null; });
+    if (!first) return done();
+    say(`quick pass: ${first.verdict?.action ?? 'no verdict'} (${first.verdict?.confidence ?? '-'})${first.cost != null ? ` ($${first.cost.toFixed(4)})` : ''}`);
+    res = { verdict: first.verdict, turns: 1, cost: first.cost, usage: first.usage, log: ['quick pass only: the day\'s full looks were spent'] };
+  }
   // a new suggestion: a quick pass first (investigate.mjs firstPass), and a full look only when it sees something to say
   if (!res && why === 'new post' && SUGGESTIONS.test(st.forum ?? '')) {
     first = await firstPass({ client: anthropic, ...context }).catch(e => { say(`first pass failed: ${e.message}`); return null; });
     if (first) say(`first pass: ${first.verdict?.action ?? 'no verdict'}${first.cost != null ? ` ($${first.cost.toFixed(4)})` : ''}, ` +
       `${first.quiet ? 'nothing to say, no full look' : 'a full look'}`);
-    if (first?.quiet) res = { verdict: first.verdict, turns: 1, cost: first.cost, usage: first.usage, log: ['first pass only'] };
+    // its summary says it may exist already or can't be done: a full look checks that, whatever the pass decided (8
+    // November: "Friend list", "Traffic" and force-feedback wishes stopped here with the answer in their summaries)
+    const answerable = EXISTS.test(first?.verdict?.summary ?? '');
+    if (first?.quiet && answerable) say('first pass: its summary says it may exist or can\'t be done, a full look');
+    if (first?.quiet && !answerable) res = { verdict: first.verdict, turns: 1, cost: first.cost, usage: first.usage, log: ['first pass only'] };
   }
   if (!res) try {
     res = await investigate({
       client: anthropic, model: CFG.model, effort: fix ? FIX_EFFORT : CFG.effort, maxTurns: fix ? FIX_TURNS : undefined, ...context,
-      archive, workDir, threadIndex: () => threadIndex(threadId), check: v => badLink(v.reply ?? '', threadId), step: say,
+      archive, workDir, threadIndex: () => threadIndex(threadId), check: v => badReply(v.reply ?? '', threadId), step: say,
     });
     if (first) res.cost = res.cost == null || first.cost == null ? null : res.cost + first.cost;
   } catch (e) {
@@ -316,8 +323,10 @@ async function look(threadId, why, extra) {
     .filter(k => !scriptsOf([thread.name, ...msgs.filter(m => m.author.id !== client.user.id).map(m => m.content)].join('\n')).includes(k)) : [];
   if (foreign.length) { post = null; outcome = `a reply in ${foreign.join(', ')}, which nobody in the thread writes`; }
   // a quick pass can't be sent back to write it again (investigate's check): a bad link drops its reply
-  const linkWrong = cheap && post && badLink(post, threadId);
-  if (linkWrong) { post = null; outcome = `a quick pass's reply with a bad link: ${linkWrong}`; }
+  const linkWrong = cheap && post && badReply(post, threadId);
+  if (linkWrong) { post = null; outcome = `a quick pass's reply the bot can tell is wrong: ${linkWrong}`; }
+  // the page's labels as the page shows them in the reply's language, where it named them in English
+  if (post && v?.language) post = localLabels(post, v.language, repo.dir);
   // the bot asks twice in a thread at most (system.md "Decide"); the look is told how often it did (standingOf)
   if (post && v.action === 'ask' && !byStaff && (st.asks ?? 0) >= MAX_ASKS) { post = null; outcome = `a third ask (${st.asks} before)`; }
   // stepping back is silent: no last word, never another round of the argument (nothing is passed on to anyone)
@@ -545,18 +554,36 @@ async function checkRelease() {
     if (m) t.snippet = m.content.replace(/\s+/g, ' ').slice(0, 200);
   }
   save();
+  const crashOfThread = t => t.crash?.length ? t.crash : t.tops ?? [];
   const candidates = reports
-    .map(([id, t]) => ({ id, line: `${id} | #${t.forum} | ${t.created.slice(0, 10)} | ${t.category ?? '?'} | ${t.title} | ${t.summary || t.snippet || ''}` }));
+    .map(([id, t]) => ({ id, line: `${id} | #${t.forum} | ${t.created.slice(0, 10)} | ${t.category ?? '?'} | ${t.title} | ${t.summary || t.snippet || ''}` +
+      (crashOfThread(t).length ? ` | stops in: ${crashOfThread(t).join('; ')}` : '') }));
   await indexSuggestions().catch(e => console.error(`[release] reading the suggestions: ${e.message}`));
+  // what the poster asked for in their words (the first post), with the bot's summary after it: a summary that called
+  // the wish "a change to the original game" hid it from the matching (rubberbanding, 8 November)
   const wishes = Object.entries(threads).filter(([, t]) => isSuggestion(t) && open(t) && !t.decided)
-    .sort(byActivity).slice(0, 400)
-    .map(([id, t]) => ({ id, line: `${id} | #${t.forum} | ${t.created.slice(0, 10)} | ${t.title} | ${t.summary || t.snippet || ''}` }));
+    .sort(byActivity).slice(0, WISHES_MAX)
+    .map(([id, t]) => ({ id, line: `${id} | ${t.created.slice(0, 10)} | ${t.title} | ${(t.first ?? t.snippet ?? '').slice(0, 160)}` +
+      (t.summary ? ` | bot: ${t.summary.slice(0, 120)}` : '') }));
   const n = commits.split('\ncommit ').length;
   console.log(`[release] live ${last} -> ${rev}: ${n} commit(s), checking ${candidates.length} thread(s) and ${wishes.length} suggestion(s)`);
   const o = { client: anthropic, model: CFG.model, effort: CFG.effort, commits: commits.slice(0, 60_000) };
   const [fixes, features] = await Promise.all([matchFixes({ ...o, candidates }), matchFeatures({ ...o, candidates: wishes })]);
   if (fixes.error || features.error) return console.log(`[release] matching failed, again at the next check: ${fixes.error || features.error}`);
   seen();
+  // a commit whose message names where a thread's crash stops (its first function, or two of them) is a match whatever
+  // the model made of the words: e1345bd0 named the stack of four threads' error 134 and reached none (8 November)
+  const shown = new Set(fixes.matches.map(m => m.thread));
+  const bodies = commits.split(/\n(?=commit )/).map(c => ({ commit: c.slice(7).split(' ')[0], text: c }));
+  const byCrash = reports.filter(([id, t]) => !shown.has(id) && crashOfThread(t).length).flatMap(([id, t]) => {
+    const hit = bodies.find(b => crashOfThread(t).some(top => {
+      const fns = fnsOf(top);
+      return b.text.includes(fns[0]) || fns.filter(f => b.text.includes(f)).length >= 2;
+    }));
+    return hit ? [{ thread: id, commit: hit.commit, why: `the commit's message names where this thread's crash or freeze stops (${crashOfThread(t).join('; ')})` }] : [];
+  });
+  if (byCrash.length) console.log(`[release] ${byCrash.length} thread(s) whose crash a commit names: ${byCrash.map(m => m.thread).join(', ')}`);
+  fixes.matches.push(...byCrash.slice(0, CRASH_MAX));
   const list = ms => ms.length ? `: ${ms.map(m => `${m.thread} (${m.commit}${m.part ? ', a step' : ''})`).join(', ')}` : '';
   console.log(`[release] ${fixes.matches.length} thread(s) may be fixed${list(fixes.matches)}; ` +
     `${features.matches.length} suggestion(s) may be carried out or get a step toward them${list(features.matches)}`);
@@ -570,7 +597,11 @@ async function checkRelease() {
     .map(([id]) => ({ thread: id, commit: m.commit, why: `the bot linked it to ${m.thread} as the same problem; that one: ${m.why}` })))
     .filter((m, i, all) => all.findIndex(x => x.thread === m.thread) === i).slice(0, LINKED_MAX);
   if (linked.length) console.log(`[release] ${linked.length} thread(s) linked to them: ${linked.map(m => m.thread).join(', ')}`);
-  for (const [ms, max, why] of [[[...fixes.matches, ...linked], FIX_MAX, 'fix live'], [wished, FEATURE_MAX, 'implemented']]) {
+  // a few looks a commit, so one feature's duplicates don't take every look of a release that brought several (8
+  // November: Stance, plates, HQ vinyls and Tracks in one release, 5 looks for all)
+  const perCommit = new Map();
+  const wishedFew = wished.filter(m => { const n = (perCommit.get(m.commit) ?? 0) + 1; perCommit.set(m.commit, n); return n <= FEATURE_PER_COMMIT; });
+  for (const [ms, max, why] of [[[...fixes.matches, ...linked], FIX_MAX, 'fix live'], [wishedFew, FEATURE_MAX, 'implemented']]) {
     for (const m of ms.slice(0, max)) {
       const what = why === 'fix live' ? "this thread's problem"
         : m.part ? 'a step toward what this suggestion asks for, not all of it' : 'what this suggestion asks for';
@@ -621,6 +652,7 @@ async function countVotes(t, st) {
   if (!m) return 0;                                // the first post was deleted
   st.votes = Object.fromEntries((m.reactions ?? []).map(r => [r.emoji.name ?? r.emoji.id, r.count]));
   if (!st.snippet && !st.summary) st.snippet = (m.content ?? '').replace(/\s+/g, ' ').slice(0, 200);
+  st.first = (m.content ?? '').replace(/\s+/g, ' ').slice(0, 200);   // the wish in the poster's words, for a release's matching
   st.counted = new Date().toISOString();
   return 1;
 }
@@ -655,6 +687,15 @@ function badLink(reply, threadId, known = threads) {
   }
   return '';
 }
+/** a version's code or a commit's hash in a reply (system.md "Write": "your page is older than the fix"): a Russian
+ *  reply said "версия b58448bb" after the rule was live (7 November).  Hex of 7 to 12 with a digit and a letter, not in
+ *  a link, a timestamp or a code block's word */
+const REV = /(?<![\w/:.#<@-])(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,12}(?![\w/:>.-])/;
+function badReply(reply, threadId) {
+  const rev = REV.exec(reply.replace(/https?:\/\/\S+/g, ''));
+  if (rev) return `Your reply names a version's code or a commit (${rev[0]}): players never see those. Say "your page is older than the fix", "on the live version" or "a fix is live, reload the page" instead.`;
+  return badLink(reply, threadId);
+}
 /** the threads active last, for the context */
 function recentThreads(except) {
   return Object.entries(threads).filter(([id]) => id !== except).sort(byActivity).slice(0, 30).map(e => threadLine(e, 160, false)).join('\n');
@@ -673,14 +714,17 @@ function flaggedList(except) {
 }
 /** for a look: where this thread's logs crash or freeze, and the open threads opened for a crash or freeze in the same
  *  place (st.crash: the one each was opened for, never a later log's), the oldest first: the thread to point to */
-function placesOf(tops, threadId) {
+async function placesOf(tops, threadId) {
   if (!tops.length) return '';
   const same = Object.entries(threads)
     .filter(([id, t]) => id !== threadId && !t.closed && t.crash?.some(a => tops.some(b => samePlace(a, b))))
     .sort((a, b) => a[1].created.localeCompare(b[1].created)).slice(0, 5)
     .map(([id, t]) => `${id} (${t.created.slice(0, 10)}${t.fixed ? ', a fix went live for it' : ''}) ${t.title}`);
+  const named = await repo.naming(tops.map(fnsOf));
   return `Where this thread's logs crash or freeze (the functions at the top of the stack): ${tops.join('; ')}\n` +
-    `Open threads opened for a crash or freeze in the same place, the oldest first: ${same.length ? same.join('; ') : 'none'}`;
+    `Open threads opened for a crash or freeze in the same place, the oldest first: ${same.length ? same.join('; ') : 'none'}\n` +
+    `Commits whose message names those functions, newest first (a fix of this crash only when it describes it; one ` +
+    `that went live before their version means a new problem, one after it that they need to reload): ${named ? `\n${named}` : 'none'}`;
 }
 /** every known thread, for the search_threads tool: [{ line, text }] */
 function threadIndex(except) {

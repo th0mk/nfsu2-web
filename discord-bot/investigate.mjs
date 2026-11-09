@@ -105,7 +105,12 @@ const BUDGET_PASS = 'This is a quick pass without tools: the full looks are paus
   'happens; no device or browser). Answer only when the guide or the notes give the answer for exactly this case ' +
   '(a code the page shows, a known problem the notes name with its thread, something that exists already and how ' +
   'to use it), with confidence high. Anything that needs the code, a search or a closer reading of a log: none, ' +
-  'with the summary and notes as usual.';
+  'with the summary and notes as usual. When your summary names such an answer (the code\'s fix, the known problem ' +
+  'and its thread, the setting or the key, a fix that is live), that answer is the reply: don\'t leave the player ' +
+  'with nothing while the summary has it. The rules most often broken here: the title and the posts count as given ' +
+  '(never ask for the device, the model or what happens when they say it); F9 is a keyboard\'s, on a phone or a ' +
+  'tablet the page\'s menu is the ☰ button; never a version\'s code from a log (`game 1a2b3c4d`) or a commit\'s hash; ' +
+  'the page\'s labels in the reader\'s language, as the guide and the notes name them.';
 
 /**
  * A quick pass over a new post in a suggestion forum, with the cheapest model and no tools: most of them are wishes for

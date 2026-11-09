@@ -149,6 +149,25 @@ export class Repo {
     return lines.map(([full, rest]) => `${rest}${since.has(full) ? ` · ${since.get(full)}` : ''}`).join('\n');
   }
 
+  /** the commits whose message names where a crash or a freeze stops (stacks: each one's functions, the top first):
+   *  its first function, or two of them, as a release's matching (bot.mjs checkRelease); newest first, as the model
+   *  reads them.  A look at a crash that a commit fixed (e1345bd0 names its stack) linked it to the open thread of that
+   *  crash instead of saying it was fixed (8 November).  One shared function alone is no match: tags_update is in
+   *  the messages of the name tags' commits */
+  async naming(stacks, n = 5) {
+    const ok = f => /^[A-Za-z_]\w{3,}$/.test(f);
+    const tops = stacks.map(fns => fns.filter(ok)).filter(fns => fns.length);
+    const names = [...new Set(tops.flatMap(fns => fns.slice(0, 2)))];
+    if (!names.length) return '';
+    const raw = await this.git(['log', '--no-merges', '-n', '40', '-E', `--grep=(${names.join('|')})`, '--format=%H%x00%B%x01'])
+      .catch(() => '');
+    const hits = raw.split('\x01').map(x => x.trim()).filter(Boolean).map(x => x.split('\x00'))
+      .filter(([, body = '']) => tops.some(fns => body.includes(fns[0]) || fns.filter(f => body.includes(f)).length >= 2))
+      .slice(0, n).map(([hash]) => hash);
+    if (!hits.length) return '';
+    return this.withLive(await this.git(['log', '--no-walk=sorted', LOG_DATE, `--format=${LOG_FORMAT}`, ...hits]));
+  }
+
   /** the releases of the history, newest first, as the model reads them */
   releaseList(n = 15) {
     return this.releases.slice(-n).reverse().map(r => `${r.rev} ${r.at ? `went live ${when(r.at)}` : '(when unknown)'}`).join('\n');

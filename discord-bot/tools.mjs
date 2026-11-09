@@ -79,6 +79,28 @@ const LANG_FILES = { pt: 'portuguese', es: 'spanish', pl: 'polish', ru: 'russian
   cs: 'czech', sk: 'slovak', el: 'greek', fr: 'french', de: 'german', it: 'italian', nl: 'dutch', sv: 'swedish', da: 'danish',
   zh: 'chinese', ja: 'japanese', ko: 'korean', th: 'thai' };
 
+// labels a reply in another language still named in English (es, th, ru, pt replies of 7-8 November said "F9,
+// Download log"): ones of several words, which no sentence in another language has by chance
+const SWAPPED = ['Download log', 'Download backup', 'Cloud saves', 'Free roam with others', 'Delete game data',
+  'More controller settings', 'More display settings', 'More game settings', 'Full screen on Play', "Players' cars shown",
+  'Resolution scale', 'Trigger full press', 'Stop syncing', 'Main world'];
+/** a reply in `language` with those labels in English put as the page shows them in that language: its text, as is
+ *  when the language has no page file or a label no translation.  repoDir: the code copy */
+export function localLabels(text, language, repoDir) {
+  const l = String(language ?? '').trim().toLowerCase().split(/[-_]/)[0];
+  const file = LANG_FILES[l];
+  if (!file || !SWAPPED.some(x => text.includes(x))) return text;
+  let texts;
+  try { texts = JSON.parse(fs.readFileSync(path.join(repoDir, 'web/src/app/lang', `${file}.json`), 'utf8')); } catch { return text; }
+  let out = text;
+  for (const x of SWAPPED) {
+    const y = (texts[x] ?? '').replace(/<[^>]*>/g, '').trim();
+    // not where the reply quotes the English beside the translation ("Download log ('Pobierz dziennik')")
+    if (y && y !== x && !out.includes(y)) out = out.split(x).join(y);
+  }
+  return out;
+}
+
 function cut(s, n = MAX_OUT) {
   return s.length <= n ? s : s.slice(0, n) + `\n[... cut: ${s.length - n} more characters: read a smaller range, or search]`;
 }

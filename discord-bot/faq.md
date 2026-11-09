@@ -27,14 +27,16 @@ label: Devices and browsers
 label: It won't start
 <!-- for: problems -->
 The start page says what is wrong, with a code. The most common:
-- `GPU-ACCEL-OFF`: turn on "Use graphics acceleration when available" in `chrome://settings/system`, then restart Chrome. It was on already? Update the graphics driver.
-- `PAGE-NOT-ISOLATED`: an extension changes the page. Try a guest window; if it starts there, turn your extensions off one by one.
+- `GPU-ACCEL-OFF`: turn on "Use graphics acceleration when available" in `chrome://settings/system`, then restart Chrome. It was on already? Update Chrome and the graphics driver.
+- `PAGE-NOT-ISOLATED`: an extension changes the page. Open the page in a private window; if it works there, turn your extensions off one by one.
 - `GPU-ADAPTER-WIN`: your graphics have no Direct3D 12 driver. Update the graphics driver; older graphics (Intel HD 4000, 4400, 4600 and older) can't run it.
 - `GPU-ADAPTER-ANDROID`: update Android and Chrome. Then turn on `chrome://flags/#enable-unsafe-webgpu` and restart Chrome.
 - `GPU-ADAPTER-FIREFOX`: update the graphics driver and Firefox, or play in Chrome or Edge.
 - `STORAGE-NONE`: a private or guest window can't keep saves. Open the page in a normal window.
 - `Error code 1` right after Play: on the start page, Game, **Delete game data** (at the tab's end), then reload and Play. Your saves stay.
-- `MODULE-LOAD` with "Wasm SIMD unsupported": the processor is too old (no SSE4.1, such as an AMD Phenom II). No browser can run the game on it.
+- `PAGE-NO-SIMD`: update the browser. If that doesn't help, the processor is too old (no SSE4.1, such as an AMD Phenom II) and no browser can run the game on it.
+- `STORAGE-OLD` on an iPhone or iPad: update to iOS 26 or iPadOS 26.
+- `SAVES-UNREADABLE`: restart the computer, and check the disk has free space.
 It worked yesterday? Reload the page (Ctrl+F5 on a PC). Something else: post a screenshot of the message in #bug-reports.
 
 ### The site or the server can't be reached
@@ -79,7 +81,7 @@ Yes. Zip the folder `%LOCALAPPDATA%\NFS Underground 2` (type that into Explorer'
 ### My progress isn't saved
 label: Progress not saved
 <!-- for: problems -->
-A new profile starts on the game's Save = Prompt: its "save?" question opens on **No**, so tapping through skips the save. Pick **Yes** there, or set the game's Options, Gameplay, Save to **Autosave**. "Progress saved" shows over the game each time it saves.
+A new profile starts on the game's Save = Prompt: its "save?" question opens on **No**, so tapping through skips the save. Pick **Yes** there, or set the game's Options, Gameplay, Save to **Autosave**. On the start page, Game, **Autosave** (on by default) sets every profile still on Prompt to Autosave once, at the next Play. "Progress saved" shows over the game each time it saves.
 
 ## Career
 ### There are no races left on my map
@@ -87,16 +89,17 @@ label: No races left
 <!-- for: problems -->
 1. Press **T** or **F4** (D-pad Down on a controller): Career Status says what the stage still needs.
 2. Most often it is your car's stars. A sponsor's DVD shoot only shows once your car has enough: add body kits, paint, vinyls, rims, neons, tint, hydraulics or audio.
-3. Still nothing? The game's hidden races only show on the street when you drive near. On the start page, Mods, **Show Hidden Races Mod** puts them on the map.
+3. Still nothing? The game's hidden races only show on the street when you drive near. On the start page, Mods, **Show Hidden Races** puts them on the map.
 
 ### How do I get wide body kits?
 label: Wide body kits
+<!-- for: problems -->
 - **Before Caleb:** as in the original game. In stage 5, 11 outrun wins put a star on the map; the car you drive there gets its wide body. One car only.
-- **After beating Caleb:** every shop has the wide body kits and the other unique parts for every car of your career, free. Body Shop, the last category.
+- **After beating Caleb:** the shops have the unique visual parts for every car of your career, free: the wide body kits in the Body Shop's last category, the unique hoods, spoilers, rims and vinyls in their own shops. The unique performance parts stay one per stage.
 
 ### Can I unlock everything or get more money?
 label: Unlock everything
-Cars and parts unlock as you win a stage's races, and money comes from races, as in the original game: there's no unlock-all or money cheat. A save you have goes in with Saves, **Restore** on the start page. Profiles changed by a save editor may crash the game or break the career.
+Have a save with everything? On the start page, Saves, **Restore**, and pick it. Otherwise cars and parts unlock as you win a stage's races, and money comes from races, as in the original game: there's no unlock-all or money cheat. Profiles changed by a save editor may crash the game or break the career.
 
 ### Do races with other players count in my career?
 label: Online wins in the career
@@ -106,11 +109,11 @@ Yes. In free roam, win a race of your stage you haven't won yet in a lobby, and 
 ### How do I play with other players?
 label: Play with others
 1. Start page, Online: turn on **Free roam with others**, and set **Your name**.
-2. Drive in your career's free roam: the other players are there. Alone there? Pick **Main world** under **World** (start page, Online, or the **F9** menu; on an older page leave **Room** empty): you see only the players in your world.
-3. To find your friends: add them in the **F9** menu, **Friends** (by name; both need a claimed name), or type the same crew name in Friends & crews, **Crews**. You always see each other. A friend in free roam can be invited to your crew from their line in Friends (the two-people icon); they press **Z** to join.
+2. Drive in your career's free roam: the other players are there. Alone there? Pick **Main world** under **World** (start page, Online, or the **F9** menu): you see only the players in your world.
+3. To find your friends: add them in the **F9** menu, **Friends** (by name; both need a claimed name), or type the same crew name in Friends & crews, **Crews**. You always see each other in the same world, and **Join** on a friend's line (F9, **Friends**) takes you right behind their car. A friend in free roam can be invited to your crew from their line in Friends (the two-people icon); they press **Z** to join.
 4. To race: drive to a race's start, press **Enter** and pick **Multiplayer**. The others join your lobby.
 
-Cars in your way? **Ghost mode** (on the start page, Online, or in the **F9** menu): **Players** lets the other players' cars pass through yours, **Everything** also the traffic and the game's tuners in free roam.
+Cars in your way? **Ghost mode** (on the start page, Online, or in the **F9** menu): **Players** lets the other players' cars pass through yours, **Everything** also the traffic and the game's tuners in free roam. World 4 keeps it off for everyone.
 
 ### Is there chat?
 label: Chat
@@ -125,11 +128,12 @@ label: Controller
 - Press a button on it with the game's page in front: the browser shows a pad only after that.
 - On the start page, Controls, **Controller**, More controller settings: **Controller** must be **On** (the default) or **Hotplug**, not **Off**.
 - Close Steam, DS4Windows and other pad software. Still nothing? Try Edge.
-- A Steam Controller or a Steam Deck: start page, Controls, **Controller**, **Connect a Steam Controller** (Chrome or Edge on a computer).
+- A Steam Controller or a Steam Deck: start page, Controls, **Controller**, **Connect a Steam Controller** (Chrome or Edge on a computer). In Firefox: add Firefox to Steam as a non-Steam game with a gamepad layout and start it through Steam.
 - Steering wheels work too, without force feedback: start page, Controls, **Controller**, **Set up the wheel**.
 
 ### How do I change my controller's buttons?
 label: Controller buttons
+<!-- for: problems -->
 In the game: **Options**, **Controls**. It opens on Keyboard Configuration: go **Up** to that title at the top, then press **Right** for **Joypad Configuration**, your controller's buttons.
 - Press a button on the controller before you open Controls, or the game doesn't list it.
 - They're kept with your profile: leave Options to save them.
@@ -138,15 +142,16 @@ In the game: **Options**, **Controls**. It opens on Keyboard Configuration: go *
 label: Keys
 - **Alt** nitrous, **B** look back, **R** respawn, **T** career status, **M** map, **X** drift mode, **N** horn
 - **O** parked in free roam: the hood, pressed again the trunk, then the doors, then all of them (on a controller hold D-pad Down a second), **H** / **J** hydraulics
-- **F7** next song, **F8** frame-rate counter, **F10** hides the HUD (and the names over cars), **F12** photo mode, **F9** the page menu: log, radio, controls, full screen
-- The whole list: start page, **Controls**.
+- **F7** next song, **F8** frame-rate counter, **F10** hides the HUD (and the names over cars), **F12** photo mode, **F9** the page menu: worlds, the race tracks, ghost mode, crews, friends, radio, controls, the log
+- The whole list: start page, **Controls**. The site's own keys (drift mode, horn, photo mode, next song and the others) are changed there, under **Site**; the game's own in its Options, Controls.
 
 ## More
 ### Can I add mods or my own music?
 label: Mods and music
 - **Music:** F9, **Radio** plays a folder of your own songs in place of the game's (not on iPhone or iPad).
 - **The game's songs:** start page, Mods, **Uncensored & Restored Soundtrack**: Uncensored (the default, some in longer versions) or Original, as the game shipped them. **F7** plays the next song.
-- **Mods:** you can't add your own. The ones built in are in the start page's **Mods** tab, with their makers and settings.
+- **Mods:** you can't add your own. The ones built in are in the start page's **Mods** tab, with their makers and settings: Stance (camber, offset and tire width in the Body Shop), Crash Damage, HQ Vinyls & Doorlines, Rubberbanding, Transmission Whine and more.
+- **Your license plate:** start page, Online, **License plate**.
 - **Other games:** this project is Underground 2. Nothing else has been announced.
 
 ### How do I report a bug?
@@ -175,14 +180,15 @@ Someone else claimed or was using your name, so you play as it with four digits 
 
 ### How do I rename or delete a profile?
 label: Rename or delete a profile
-- **Rename:** start page, Saves, **Rename** beside the profile.
+<!-- for: problems -->
+- **Rename:** start page, Saves, the pencil beside the profile.
 - **Delete:** start page, Saves, the bin beside the profile (or the game's main menu, Profile Manager, Delete).
 - **Start over:** a new profile, or Career, Start New Career.
 
 ### I don't see other players in free roam
 label: No other players
 <!-- for: problems -->
-On the start page, Online: turn on **Free roam with others**, set **Your name** and pick **Main world** under **World** (on an older page leave **Room** empty: you see only your world's players), then load your career and drive in its free roam. Quick Race's Free Run has no other players. Still alone in your career? Post in #bug-reports with the log (F9, **Download log**).
+On the start page, Online: turn on **Free roam with others**, set **Your name** and pick **Main world** under **World** (you see only your world's players), then load your career and drive in its free roam. Quick Race's Free Run has no other players. Still alone in your career? Post in #bug-reports with the log (F9, **Download log**).
 
 ### How do I turn off vibration?
 label: Vibration
@@ -194,11 +200,12 @@ label: Screenshots
 
 ### Where are the shops? They're not on my map.
 label: Shops on the map
+<!-- for: problems -->
 As in the original game, a shop shows on the map only once you've found it: drive around the city, the newer areas too.
 
 ### How do I look around my car?
 label: Look around
-A controller's right stick looks round the car while you drive. A keyboard and the touch controls have only the game's look back.
+A controller's right stick looks round the car while you drive. A keyboard and the touch controls have only the game's look back. Start page, Controls, Site, **Free look** Off gives the game's own camera back.
 
 ### The game's data doesn't fit on my drive
 label: Game data space
@@ -221,4 +228,17 @@ Add visual parts: body kits, paint, vinyls, rims, neons, tint, hydraulics or aud
 ### Free roam is too busy. Is there a quieter one?
 label: Quieter free roam
 <!-- for: problems -->
-Yes: in the **F9** menu, **World**, pick **World 1** to **World 4**; each shows how many play there, one tap switches at once, and **Main world** takes you back. In **World 4** nobody can use Ghost mode. The start page has the same list (Online, **World**). Friends and crews meet only in the same world. Your page still shows **Room** instead? Worlds come with the next update.
+Yes: in the **F9** menu, **World**, pick **World 1** to **World 4**; each shows how many play there, one tap switches at once, and **Main world** takes you back. In **World 4** nobody can use Ghost mode. The start page has the same list (Online, **World**). Friends and crews meet only in the same world. No **World** in F9? Reload the page (Ctrl+F5 on a PC). The race tracks with other players: F9, **Tracks**.
+
+### How do I turn anti-aliasing (smoother edges) off or on?
+label: Anti-aliasing
+<!-- for: problems -->
+In the game: **Options**, **Display**, **Customize Display Settings**, **Full Scene Anti-Aliasing**. It smooths jagged edges, and on a slower computer it can lower the frame rate. Phones don't have it.
+
+### Can I play only with my friends?
+label: Only with friends
+In the **F9** menu, **World**, **Own name**: everyone types the same uncommon name, and only those players are there, races too. **Main world** takes you back. It isn't private: anyone who types the name gets in.
+
+### Is there a download or an app?
+label: Download or app
+No: the game plays in the browser, and the browser keeps the game's data as you play. On an iPhone or iPad, Safari's Share, **Add to Home Screen** opens it without the browser's bars; that copy has its own saves, and cloud saves bring them over.

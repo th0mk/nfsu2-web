@@ -44,6 +44,7 @@ export function metered(client, onCost) {
 // the part of a day's share the looks may spend ahead of the clock: at 00:00 a quarter, by 18:00 all of it
 const AHEAD = 0.25;
 const CAP = 2;                                   // underCap(): never more than twice the day's share
+const QUICK_CAP = 2.5;                           // quickRoom(): the quick passes past that, to two and a half
 
 /** the month's spending (UTC), kept in a file over restarts */
 export class Spend {
@@ -78,6 +79,8 @@ export class Spend {
   /** for the looks that go ahead of the clock (someone talking to the bot): a guard against a flood of them, at
    *  CAP times the day's share; what they spend over the share comes out of the days after (share()) */
   underCap() { return this.roll().today < CAP * this.share(); }
+  /** for the quick passes (a fraction of a cent each) past the full looks' limits */
+  quickRoom() { return this.roll().today < QUICK_CAP * this.share(); }
   get today() { return this.roll().today; }
   get month() { return this.roll().spent; }
 }
