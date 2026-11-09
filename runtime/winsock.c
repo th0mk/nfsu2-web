@@ -2039,10 +2039,9 @@ static uint32_t ws_netbios(CPU *c){
  * 0x753492) closes an open link whose last datagram is over 120 s old,
  * computed tick - stamp UNSIGNED: a stamp read on one thread a millisecond
  * ahead of a later tick on the other reads as 2^32 ms of silence, and the
- * update sends DISC and drops the race link.  (Most Wanted's CommUDP has the
- * same check; there the step-backs between threads dropped about half of the
- * loaded LAN races.)  A read behind the latest answer gets the latest
- * (compared modulo 2^32); the first five, and every 1000th, are logged.
+ * update sends DISC and drops the race link.  A read behind the latest answer
+ * gets the latest (compared modulo 2^32); the first five, and every 1000th,
+ * are logged.
  * Test switches (L-063): NFSU2_TEST_NETTICK_BACK=1 answers each thread's own
  * clock as before; NFSU2_TEST_NETTICK_SKEW=N puts every second thread to
  * call NetTick N ms ahead, as a worker whose clock was set N ms off. */

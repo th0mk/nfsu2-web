@@ -1,5 +1,21 @@
 # Need for Speed: Underground 2 in the browser
 
+> [!IMPORTANT]
+> This repository is archived. nfsu2.xyz keeps running and getting updates, but from 9 November 2026 development
+> continues privately.
+>
+> With how development works now I don't have the time and energy to also run this as an open-source project and
+> properly review all outside contributions. I've also seen people present this work and my updates as their own, and
+> I want to build future updates and projects on this code without them being copied the same way.
+>
+> The code here stays available under the MIT license: you're free to use, change and share it. Please keep the
+> license notices and credit this project, the projects it's based on (NFSU2Recomp in particular) and the authors of
+> the included mods and translations, all listed in the README.
+>
+> Issues and pull requests stay readable here but won't get replies. Thanks to everyone who contributed translations,
+> fixes and features. Questions, bug reports, suggestions and new translations:
+> [Discord](https://discord.gg/25zXmQ2Ua9).
+
 A fan project that runs the PC game *Need for Speed: Underground 2* (2004) in Google Chrome and Firefox. The game's
 x86 code is translated to C ahead of time and compiled to WebAssembly. Direct3D 9 runs on WebGPU and the sound on
 Web Audio. You bring your own copy of the game.

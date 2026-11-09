@@ -1,8 +1,6 @@
 # The game and everything made from it never go in the repo:
 # the game folder (SPEED2.EXE and its data, EA's copyrighted content),
 /Need for Speed Underground 2*/
-# and the Most Wanted copy for that port (its folder and zip)
-/mw/
 # the C translated from SPEED2.EXE (tools/reloc2.py, tools/genall.py, tools/argcount.py),
 /gen/
 # and the compiled modules, apps and distribution zip.
